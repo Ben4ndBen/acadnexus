@@ -22,10 +22,10 @@ export function LogoutButton() {
     <button
       onClick={handleLogout}
       disabled={isPending}
-      className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-slate-700 hover:text-red-600 bg-slate-100 hover:bg-red-50 rounded-xl transition-all duration-200 border border-slate-200 hover:border-red-100 disabled:opacity-50"
+      className="flex items-center gap-2 px-4 py-2 text-sm font-bold text-stone-700 hover:text-[#7A151A] bg-stone-100 hover:bg-amber-50 rounded-xl transition-all duration-200 border border-stone-200 hover:border-amber-200 disabled:opacity-50"
     >
       {isPending ? (
-        <Loader2 className="w-4 h-4 animate-spin text-red-500" />
+        <Loader2 className="w-4 h-4 animate-spin text-[#7A151A]" />
       ) : (
         <LogOut className="w-4 h-4" />
       )}
