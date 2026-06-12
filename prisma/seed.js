@@ -276,6 +276,91 @@ async function main() {
     },
   });
 
+  // Exam 4: Draft (Quiz 2 - Database Systems)
+  const draftExam = await prisma.examination.create({
+    data: {
+      title: "Quiz 2 - SQL Joins and Aggregations",
+      course_id: dbCourse.course_id,
+      faculty_id: faculty.faculty_id,
+      tos_file_path: "/uploads/tos/db_quiz2.pdf",
+      time_limit_minutes: 20,
+      randomize_items: true,
+      current_status: "Draft",
+      questionBank: {
+        create: [
+          {
+            question_text: "Which SQL join returns all records when there is a match in either left or right table?",
+            question_type: "Multiple_Choice",
+            correct_answer: "FULL OUTER JOIN",
+            points: 10,
+          },
+        ],
+      },
+    },
+  });
+
+  // Exam 5: Pending Chair (Midterm Software Engineering)
+  const pendingChairExam = await prisma.examination.create({
+    data: {
+      title: "Midterm Exam - Software Development Lifecycle",
+      course_id: seCourse.course_id,
+      faculty_id: faculty.faculty_id,
+      tos_file_path: "/uploads/tos/se_midterm.pdf",
+      time_limit_minutes: 60,
+      randomize_items: true,
+      current_status: "Pending_Chair",
+      questionBank: {
+        create: [
+          {
+            question_text: "Describe the differences between Agile and Waterfall methodologies.",
+            question_type: "Identification",
+            correct_answer: "Agile is iterative while Waterfall is linear.",
+            points: 20,
+          },
+        ],
+      },
+      approvalWorkflow: {
+        create: {
+          reviewed_by_chair_id: chair.chair_id,
+          chair_review_status: "Pending",
+          di_review_status: "Hold",
+        },
+      },
+    },
+  });
+
+  // Exam 6: Returned (Midterm AI)
+  const returnedExam = await prisma.examination.create({
+    data: {
+      title: "Midterm Exam - Search Algorithms and Heuristics",
+      course_id: aiCourse.course_id,
+      faculty_id: faculty.faculty_id,
+      tos_file_path: "/uploads/tos/ai_midterm.pdf",
+      time_limit_minutes: 90,
+      randomize_items: true,
+      current_status: "Returned",
+      questionBank: {
+        create: [
+          {
+            question_text: "A* search is always optimal. True or False?",
+            question_type: "True_False",
+            correct_answer: "True",
+            points: 10,
+          },
+        ],
+      },
+      approvalWorkflow: {
+        create: {
+          reviewed_by_chair_id: chair.chair_id,
+          chair_review_status: "Returned",
+          chair_comments: "Please rewrite Question 1. The true/false statement needs clarification regarding the admissibility of the heuristic function.",
+          chair_action_timestamp: new Date(),
+          di_review_status: "Hold",
+        },
+      },
+    },
+  });
+
   // Create completed student exam record
   await prisma.studentExam.create({
     data: {

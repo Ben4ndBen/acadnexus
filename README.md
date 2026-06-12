@@ -11,6 +11,8 @@ AcadNexus is a secure, role-based academic portal designed for Batanes State Col
 3. **Supabase Auth Integration:** Client and server-side authentication flows. Derives a synthetic email (`${id}@acadnexus.bsc.edu.ph`) to authenticate users seamlessly while storing credentials in the local database.
 4. **Role-Based Access Control (RBAC):** Middleware route protection that automatically directs users to their respective portals based on their account type (`Student`, `Faculty`, `Chair`, `Director`) and prevents unauthorized access to other dashboards.
 5. **Local Mock Auth Fallback:** A built-in safety net. If `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` is not defined in `.env`, the system automatically shifts to a cookie-based mock session using the local database. This enables immediate testing of login pages, dashboards, and redirects offline.
+6. **Faculty Profile & Information Management (Task 11):** Interactive Settings tab in the Faculty Portal enabling instructors to update their personal profile info (First/Last name), which is instantly written to the database and logged in the system audits.
+7. **Examination Workflow Tracker (Task 12):** Comprehensive dashboard component that groups, filters, and displays the status of all examinations created by the faculty. Utilizes semantic status badges (`Draft`, `Pending Chair`, `Pending DI`, `Approved`, `Returned`), highlights Chair/DI comments for returned exams, displays a step-by-step progress timeline, and enables interactive state transitions (e.g. submit draft, reset returned).
 
 ---
 
@@ -19,7 +21,7 @@ AcadNexus is a secure, role-based academic portal designed for Batanes State Col
 ```
 ├── prisma/
 │   ├── schema.prisma     # Main Prisma schema defining USERS and profiles
-│   └── seed.js           # Database seeding script to set up mock accounts
+│   └── seed.js           # Database seeding script to set up mock accounts with status variations
 ├── src/
 │   ├── middleware.ts     # Next.js route protection & session refresh logic
 │   ├── lib/
@@ -30,10 +32,12 @@ AcadNexus is a secure, role-based academic portal designed for Batanes State Col
 │   ├── app/
 │   │   ├── page.tsx      # BSC-branded login interface (Server Component)
 │   │   ├── actions/
-│   │   │   └── auth.ts   # Server Actions (loginAction, logoutAction)
+│   │   │   ├── auth.ts   # Server Actions (loginAction, logoutAction)
+│   │   │   └── faculty.ts # Server Actions (updateFacultyProfile, updateExamStatus)
 │   │   ├── components/
 │   │   │   ├── LoginForm.tsx    # Handles validation states & input UI (Client Component)
-│   │   │   └── LogoutButton.tsx # Client-side Sign Out handler
+│   │   │   ├── LogoutButton.tsx # Client-side Sign Out handler
+│   │   │   └── FacultyDashboardClient.tsx # Multi-tab faculty portal dashboard (Client Component)
 │   │   └── dashboard/    # Portals for each individual role
 │   │       ├── student/
 │   │       ├── faculty/
