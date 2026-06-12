@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import db from "@/lib/db";
+import Link from "next/link";
 import { LogoutButton } from "@/app/components/LogoutButton";
 import { GraduationCap, BookOpen, Calendar, Award, ShieldAlert, Clock, CheckCircle, Hourglass, ArrowRight } from "lucide-react";
 
@@ -299,9 +300,9 @@ export default async function StudentDashboard() {
                           <Clock className="w-3.5 h-3.5" /> Time Limit: {exam.time_limit_minutes} minutes
                         </p>
                       </div>
-                      <button className="bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs px-5 py-3 rounded-xl flex items-center gap-2 transition-all shadow-sm hover:shadow-md self-start sm:self-auto">
+                      <Link href={`/dashboard/student/exam/${exam.exam_id}`} className="bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs px-5 py-3 rounded-xl flex items-center gap-2 transition-all shadow-sm hover:shadow-md self-start sm:self-auto text-center">
                         Start Exam <ArrowRight className="w-4 h-4" />
-                      </button>
+                      </Link>
                     </div>
                   ))}
                 </div>

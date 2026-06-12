@@ -18,6 +18,7 @@ AcadNexus is a secure, role-based academic portal designed for Batanes State Col
 10. **Real-Time Live Sync & Contrast Tuning:** Configured routes with `force-dynamic` to completely bypass caching for real-time live database updates via Prisma, and tuned color contrast schemas (`text-slate-800` fields) across all dashboard forms and search bars for accessibility.
 11. **Interactive Exam Builder Wizard (Task 15):** A multi-step configuration wizard for faculty supporting custom examination titles, course mappings, strict duration timers, item order randomization toggles, and Table of Specifications (TOS) document uploads.
 12. **Comprehensive Question Bank (Task 16):** Modular questionnaire builder that handles Multiple Choice, True/False, Identification, and Matching Type questions. Enables dynamic reordering, points configuration, correct answer references, and a high-fidelity printable exam paper preview sheet.
+13. **Secure Test-Taking Interface (Card 8: Tasks 17, 18, 19):** Distraction-free examination workspace that hides default navbars/footers. Features a synchronized countdown timer, one-question-at-a-time pagination, and a collapsible color-coded question status grid. Enforces strict anti-cheating window focus and fullscreen monitors (gives up to 2 warnings before auto-submitting under `Cheating_Lockout` and creating audit logs). Implements a low-overhead background auto-save routine checking dirty answer states every 15 seconds. Includes objective question auto-grading.
 
 ---
 
@@ -40,16 +41,20 @@ AcadNexus is a secure, role-based academic portal designed for Batanes State Col
 │   │   │   ├── auth.ts   # Server Actions (loginAction, logoutAction)
 │   │   │   ├── faculty.ts # Server Actions (profile info, exam status, exam/question creation & deletion)
 │   │   │   ├── chair.ts  # Server Actions (reviewExamByChair, verifySyllabusAndTOS)
-│   │   │   └── director.ts # Server Actions (reviewExamByDirector)
+│   │   │   ├── director.ts # Server Actions (reviewExamByDirector)
+│   │   │   └── student.ts  # Server Actions (exam state, saves, submission, warning logs)
 │   │   ├── components/
 │   │   │   ├── LoginForm.tsx    # Handles validation states & input UI (Client Component)
 │   │   │   ├── LogoutButton.tsx # Client-side Sign Out handler
 │   │   │   ├── FacultyDashboardClient.tsx  # Multi-tab faculty portal (Client Component)
 │   │   │   ├── ChairDashboardClient.tsx    # Multi-tab chair portal (Client Component)
 │   │   │   ├── DirectorDashboardClient.tsx # Multi-tab director portal (Client Component)
-│   │   │   └── ExamBuilderWizard.tsx       # 3-step interactive exam creator (Client Component)
+│   │   │   ├── ExamBuilderWizard.tsx       # 3-step interactive exam creator (Client Component)
+│   │   │   └── TakeExamClient.tsx          # Distraction-free exam student component (Client Component)
 │   │   └── dashboard/    # Portals for each individual role
 │   │       ├── student/
+│   │       │   ├── page.tsx
+│   │       │   └── exam/[examId]/page.tsx # Student secure exam taker route
 │   │       ├── faculty/
 │   │       │   ├── page.tsx
 │   │       │   └── exams/[id]/builder/page.tsx # Interactive Exam Builder route
