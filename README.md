@@ -16,6 +16,8 @@ AcadNexus is a secure, role-based academic portal designed for Batanes State Col
 8. **Department Chair Portal (Task 13):** Dynamic multi-tab portal for verifying drafted syllabi and test layouts. Includes an interactive Faculty Progress Tracker (monitoring compliance rates), a Pending Review Queue (for approving or returning exams with feedback comments), and a Syllabus/TOS Verification Checklist tool.
 9. **Director for Instruction Portal (Task 14):** Institutional dashboard with a School-Wide Compliance Map tracking department-level compliance metrics, a final-round clearing queue for approving pending examinations, and a searchable Global System Action Log pulling audit events directly from the database.
 10. **Real-Time Live Sync & Contrast Tuning:** Configured routes with `force-dynamic` to completely bypass caching for real-time live database updates via Prisma, and tuned color contrast schemas (`text-slate-800` fields) across all dashboard forms and search bars for accessibility.
+11. **Interactive Exam Builder Wizard (Task 15):** A multi-step configuration wizard for faculty supporting custom examination titles, course mappings, strict duration timers, item order randomization toggles, and Table of Specifications (TOS) document uploads.
+12. **Comprehensive Question Bank (Task 16):** Modular questionnaire builder that handles Multiple Choice, True/False, Identification, and Matching Type questions. Enables dynamic reordering, points configuration, correct answer references, and a high-fidelity printable exam paper preview sheet.
 
 ---
 
@@ -36,7 +38,7 @@ AcadNexus is a secure, role-based academic portal designed for Batanes State Col
 │   │   ├── page.tsx      # BSC-branded login interface (Server Component)
 │   │   ├── actions/
 │   │   │   ├── auth.ts   # Server Actions (loginAction, logoutAction)
-│   │   │   ├── faculty.ts # Server Actions (updateFacultyProfile, updateExamStatus)
+│   │   │   ├── faculty.ts # Server Actions (profile info, exam status, exam/question creation & deletion)
 │   │   │   ├── chair.ts  # Server Actions (reviewExamByChair, verifySyllabusAndTOS)
 │   │   │   └── director.ts # Server Actions (reviewExamByDirector)
 │   │   ├── components/
@@ -44,10 +46,13 @@ AcadNexus is a secure, role-based academic portal designed for Batanes State Col
 │   │   │   ├── LogoutButton.tsx # Client-side Sign Out handler
 │   │   │   ├── FacultyDashboardClient.tsx  # Multi-tab faculty portal (Client Component)
 │   │   │   ├── ChairDashboardClient.tsx    # Multi-tab chair portal (Client Component)
-│   │   │   └── DirectorDashboardClient.tsx # Multi-tab director portal (Client Component)
+│   │   │   ├── DirectorDashboardClient.tsx # Multi-tab director portal (Client Component)
+│   │   │   └── ExamBuilderWizard.tsx       # 3-step interactive exam creator (Client Component)
 │   │   └── dashboard/    # Portals for each individual role
 │   │       ├── student/
 │   │       ├── faculty/
+│   │       │   ├── page.tsx
+│   │       │   └── exams/[id]/builder/page.tsx # Interactive Exam Builder route
 │   │       ├── chair/
 │   │       └── director/
 └── public/

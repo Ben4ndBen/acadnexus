@@ -104,3 +104,271 @@ export async function updateExamStatus(examId: number, status: ExamStatus, userI
     return { error: err.message || "Failed to update exam status." };
   }
 }
+
+export async function createExamDraft(facultyId: number, courseId?: number) {
+  try {
+    // If courseId is not provided, find the first course in the database
+    let targetCourseId = courseId;
+    if (!targetCourseId) {
+      const firstCourse = await db.course.findFirst();
+      if (!firstCourse) {
+        return { error: "No courses found in the database. Please contact an admin." };
+      }
+      targetCourseId = firstCourse.course_id;
+    }
+
+    const newExam = await db.examination.create({
+      data: {
+        title: "New Examination Draft",
+        course_id: targetCourseId,
+        faculty_id: facultyId,
+        tos_file_path: "", // starts empty
+        time_limit_minutes: 60, // default time limit
+        randomize_items: true,
+        current_status: "Draft",
+      },
+    });
+
+    // Create a corresponding audit log
+    await db.auditLog.create({
+      data: {
+        user_id: facultyId,
+        action_performed: `Created exam draft: "${newExam.title}" (ID: ${newExam.exam_id})`,
+        ip_address: "127.0.0.1",
+      },
+    });
+
+    revalidatePath("/dashboard/faculty");
+    return { success: true, exam_id: newExam.exam_id };
+  } catch (err: any) {
+    console.error("Error in createExamDraft:", err);
+    return { error: err.message || "Failed to create examination draft." };
+  }
+}
+
+export async function saveExamConfig(formData: FormData) {
+  try {
+    const { writeFile, mkdir } = await import("fs/promises");
+    const { join } = await import("path");
+
+    const examId = Number(formData.get("examId"));
+    const facultyId = Number(formData.get("facultyId"));
+    const title = formData.get("title") as string;
+    const courseId = Number(formData.get("courseId"));
+    const timeLimitMinutes = Number(formData.get("timeLimitMinutes"));
+    const randomizeItems = formData.get("randomizeItems") === "true";
+    const tosFile = formData.get("tosFile") as File | null;
+
+    if (!examId || !facultyId || !title || !courseId || !timeLimitMinutes) {
+      return { error: "Missing required configuration fields." };
+    }
+
+    // Verify ownership
+    const exam = await db.examination.findUnique({
+      where: { exam_id: examId },
+    });
+
+    if (!exam) {
+      return { error: "Examination not found." };
+    }
+    if (exam.faculty_id !== facultyId) {
+      return { error: "Unauthorized operation." };
+    }
+
+    let tosFilePath = exam.tos_file_path; // Default to existing path
+
+    if (tosFile && tosFile.size > 0 && tosFile.name !== "undefined") {
+      const bytes = await tosFile.arrayBuffer();
+      const buffer = Buffer.from(bytes);
+      const uploadDir = join(process.cwd(), "public", "uploads");
+      await mkdir(uploadDir, { recursive: true });
+      const uniqueFilename = `${Date.now()}-${tosFile.name.replace(/[^a-zA-Z0-9.-]/g, "_")}`;
+      const absolutePath = join(uploadDir, uniqueFilename);
+      await writeFile(absolutePath, buffer);
+      tosFilePath = `/uploads/${uniqueFilename}`;
+    }
+
+    const updatedExam = await db.examination.update({
+      where: { exam_id: examId },
+      data: {
+        title,
+        course_id: courseId,
+        time_limit_minutes: timeLimitMinutes,
+        randomize_items: randomizeItems,
+        tos_file_path: tosFilePath,
+      },
+    });
+
+    // Log audit
+    await db.auditLog.create({
+      data: {
+        user_id: facultyId,
+        action_performed: `Updated exam config for "${title}" (ID: ${examId})`,
+        ip_address: "127.0.0.1",
+      },
+    });
+
+    revalidatePath("/dashboard/faculty");
+    revalidatePath(`/dashboard/faculty/exams/${examId}/builder`);
+
+    return { success: true, exam: updatedExam };
+  } catch (err: any) {
+    console.error("Error in saveExamConfig:", err);
+    return { error: err.message || "Failed to save exam configurations." };
+  }
+}
+
+export async function saveExamQuestions(examId: number, questions: any[], facultyId: number) {
+  try {
+    // Verify ownership
+    const exam = await db.examination.findUnique({
+      where: { exam_id: examId },
+    });
+
+    if (!exam) {
+      return { error: "Examination not found." };
+    }
+    if (exam.faculty_id !== facultyId) {
+      return { error: "Unauthorized operation." };
+    }
+
+    // Sync questions in a database transaction
+    await db.$transaction(async (tx) => {
+      // Get existing questions in DB
+      const existingQuestions = await tx.questionBank.findMany({
+        where: { exam_id: examId },
+        select: { question_id: true },
+      });
+      const existingIds = existingQuestions.map((q) => q.question_id);
+
+      const incomingIds = questions
+        .map((q) => q.question_id)
+        .filter((id) => typeof id === "number" && id > 0) as number[];
+
+      // Identify IDs to delete
+      const idsToDelete = existingIds.filter((id) => !incomingIds.includes(id));
+
+      if (idsToDelete.length > 0) {
+        await tx.questionBank.deleteMany({
+          where: {
+            question_id: { in: idsToDelete },
+          },
+        });
+      }
+
+      // Insert or update incoming questions
+      for (const q of questions) {
+        const data = {
+          exam_id: examId,
+          question_text: q.question_text,
+          question_type: q.question_type,
+          correct_answer: q.correct_answer,
+          points: Number(q.points) || 1,
+        };
+
+        if (q.question_id && existingIds.includes(q.question_id)) {
+          // Update
+          await tx.questionBank.update({
+            where: { question_id: q.question_id },
+            data,
+          });
+        } else {
+          // Create new
+          await tx.questionBank.create({
+            data,
+          });
+        }
+      }
+    });
+
+    // Log audit
+    await db.auditLog.create({
+      data: {
+        user_id: facultyId,
+        action_performed: `Saved ${questions.length} questions for exam ID: ${examId}`,
+        ip_address: "127.0.0.1",
+      },
+    });
+
+    revalidatePath("/dashboard/faculty");
+    revalidatePath(`/dashboard/faculty/exams/${examId}/builder`);
+
+    return { success: true };
+  } catch (err: any) {
+    console.error("Error in saveExamQuestions:", err);
+    return { error: err.message || "Failed to save examination questions." };
+  }
+}
+
+export async function getExamWithQuestions(examId: number) {
+  try {
+    const exam = await db.examination.findUnique({
+      where: { exam_id: examId },
+      include: {
+        course: true,
+        questionBank: {
+          orderBy: { question_id: "asc" },
+        },
+      },
+    });
+
+    if (!exam) {
+      return { error: "Examination not found." };
+    }
+
+    return { success: true, exam };
+  } catch (err: any) {
+    console.error("Error in getExamWithQuestions:", err);
+    return { error: err.message || "Failed to retrieve examination." };
+  }
+}
+
+export async function deleteExam(examId: number, facultyId: number) {
+  try {
+    const exam = await db.examination.findUnique({
+      where: { exam_id: examId },
+    });
+
+    if (!exam) {
+      return { error: "Examination not found." };
+    }
+    if (exam.faculty_id !== facultyId) {
+      return { error: "Unauthorized operation." };
+    }
+
+    // Delete child dependencies in transaction, then delete the exam itself
+    await db.$transaction(async (tx) => {
+      await tx.questionBank.deleteMany({
+        where: { exam_id: examId },
+      });
+      await tx.approvalWorkflow.deleteMany({
+        where: { exam_id: examId },
+      });
+      await tx.examTarget.deleteMany({
+        where: { exam_id: examId },
+      });
+      await tx.studentExam.deleteMany({
+        where: { exam_id: examId },
+      });
+      await tx.examination.delete({
+        where: { exam_id: examId },
+      });
+    });
+
+    // Log audit
+    await db.auditLog.create({
+      data: {
+        user_id: facultyId,
+        action_performed: `Deleted examination draft: "${exam.title}" (ID: ${examId})`,
+        ip_address: "127.0.0.1",
+      },
+    });
+
+    revalidatePath("/dashboard/faculty");
+    return { success: true };
+  } catch (err: any) {
+    console.error("Error in deleteExam:", err);
+    return { error: err.message || "Failed to delete examination." };
+  }
+}
+

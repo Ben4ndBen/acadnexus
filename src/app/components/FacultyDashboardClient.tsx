@@ -4,9 +4,10 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { 
   BookOpen, Award, FileText, ClipboardList, PenTool, CheckCircle, 
-  User, Shield, Settings, Activity, Send, RotateCcw, AlertCircle, RefreshCw, Mail
+  User, Shield, Settings, Activity, Send, RotateCcw, AlertCircle, RefreshCw, Mail,
+  Plus, Trash2
 } from "lucide-react";
-import { updateFacultyProfile, updateExamStatus } from "@/app/actions/faculty";
+import { updateFacultyProfile, updateExamStatus, createExamDraft, deleteExam } from "@/app/actions/faculty";
 
 interface FacultyDashboardClientProps {
   faculty: {
@@ -30,6 +31,9 @@ interface FacultyDashboardClientProps {
         chair_review_status: string;
         di_review_status: string;
       } | null;
+      _count?: {
+        questionBank: number;
+      };
     }>;
     facultyPortfolios: Array<{
       portfolio_id: number;
@@ -54,9 +58,40 @@ export function FacultyDashboardClient({ faculty, institutionalId }: FacultyDash
 
   // Status transition loading state
   const [transitioningExamId, setTransitioningExamId] = useState<number | null>(null);
+
+  // Draft Creation & Deletion loading states
+  const [isCreatingExam, setIsCreatingExam] = useState(false);
+  const [deletingExamId, setDeletingExamId] = useState<number | null>(null);
   
   // Tracker Filter State
   const [trackerFilter, setTrackerFilter] = useState<string>("ALL");
+
+  const handleCreateExam = async () => {
+    setIsCreatingExam(true);
+    const res = await createExamDraft(faculty.faculty_id);
+    setIsCreatingExam(false);
+    
+    if (res.error) {
+      alert(res.error);
+    } else if (res.exam_id) {
+      router.push(`/dashboard/faculty/exams/${res.exam_id}/builder`);
+    }
+  };
+
+  const handleDeleteExam = async (examId: number) => {
+    if (!confirm("Are you sure you want to permanently delete this examination draft? All associated questions will be removed.")) {
+      return;
+    }
+    setDeletingExamId(examId);
+    const res = await deleteExam(examId, faculty.faculty_id);
+    setDeletingExamId(null);
+    
+    if (res.error) {
+      alert(res.error);
+    } else {
+      router.refresh();
+    }
+  };
 
   const handleProfileSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -263,25 +298,61 @@ export function FacultyDashboardClient({ faculty, institutionalId }: FacultyDash
                 <span className="w-1.5 h-6 bg-emerald-600 rounded-full" />
                 Recent Examinations
               </h2>
-              <button className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-2 rounded-xl shadow-sm transition-all hover:scale-105 duration-300">
-                + Create Exam
+              <button
+                disabled={isCreatingExam}
+                onClick={handleCreateExam}
+                className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold px-3 py-2 rounded-xl shadow-sm transition-all hover:scale-105 duration-300 flex items-center gap-1"
+              >
+                {isCreatingExam ? (
+                  <RefreshCw className="w-3 h-3 animate-spin" />
+                ) : (
+                  <Plus className="w-3 h-3" />
+                )}
+                Create Exam
               </button>
             </div>
 
             {faculty.examinations && faculty.examinations.length > 0 ? (
               <div className="divide-y divide-slate-100">
                 {faculty.examinations.slice(0, 5).map((exam) => (
-                  <div key={exam.exam_id} className="py-4 flex justify-between items-center first:pt-0 last:pb-0">
-                    <div className="space-y-1">
-                      <p className="text-sm font-extrabold text-slate-800">{exam.title}</p>
-                      <div className="flex items-center gap-2 text-xs text-slate-400 font-medium">
+                  <div key={exam.exam_id} className="py-4 flex justify-between items-center first:pt-0 last:pb-0 gap-4">
+                    <div className="space-y-1 min-w-0 flex-1">
+                      <p className="text-sm font-extrabold text-slate-800 truncate">{exam.title}</p>
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-400 font-medium">
                         <span>{exam.course.course_code} - {exam.course.course_title}</span>
                         <span>•</span>
                         <span>{exam.time_limit_minutes} min</span>
+                        <span>•</span>
+                        <span className="font-bold text-slate-500">
+                          {exam._count?.questionBank ?? 0} Questions
+                        </span>
                       </div>
                     </div>
-                    <div>
+                    <div className="flex items-center gap-2 shrink-0">
                       {renderStatusBadge(exam.current_status)}
+                      {(exam.current_status === "Draft" || exam.current_status === "Returned") && (
+                        <>
+                          <button
+                            onClick={() => router.push(`/dashboard/faculty/exams/${exam.exam_id}/builder`)}
+                            className="p-1.5 rounded-lg border border-slate-200 text-slate-500 hover:text-slate-800 hover:bg-slate-50 transition-colors"
+                            title="Edit in Builder"
+                          >
+                            <PenTool className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            disabled={deletingExamId === exam.exam_id}
+                            onClick={() => handleDeleteExam(exam.exam_id)}
+                            className="p-1.5 rounded-lg border border-slate-200 text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors disabled:opacity-50"
+                            title="Delete Exam"
+                          >
+                            {deletingExamId === exam.exam_id ? (
+                              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <Trash2 className="w-3.5 h-3.5" />
+                            )}
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -349,11 +420,38 @@ export function FacultyDashboardClient({ faculty, institutionalId }: FacultyDash
                         </div>
                         <p className="text-xs text-emerald-700 font-semibold mt-1">
                           {exam.course.course_code} - {exam.course.course_title}
+                          <span className="text-slate-400 mx-2">•</span>
+                          <span className="text-slate-500 font-bold">
+                            {exam._count?.questionBank ?? 0} Questions
+                          </span>
                         </p>
                       </div>
 
                       {/* Interactive Actions for testing and state transitions */}
                       <div className="flex items-center gap-2">
+                        {(exam.current_status === "Draft" || exam.current_status === "Returned") && (
+                          <>
+                            <button
+                              onClick={() => router.push(`/dashboard/faculty/exams/${exam.exam_id}/builder`)}
+                              className="inline-flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-300/65 text-slate-700 text-xs font-bold px-3 py-2 rounded-xl shadow-sm transition-all duration-300"
+                            >
+                              <PenTool className="w-3.5 h-3.5" />
+                              Edit Builder
+                            </button>
+                            <button
+                              disabled={deletingExamId === exam.exam_id}
+                              onClick={() => handleDeleteExam(exam.exam_id)}
+                              className="inline-flex items-center justify-center p-2 bg-slate-100 hover:bg-rose-50 border border-slate-300/65 hover:border-rose-200 text-slate-400 hover:text-rose-600 rounded-xl shadow-sm transition-all duration-300 disabled:opacity-50"
+                              title="Delete Exam"
+                            >
+                              {deletingExamId === exam.exam_id ? (
+                                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <Trash2 className="w-3.5 h-3.5" />
+                              )}
+                            </button>
+                          </>
+                        )}
                         {exam.current_status === "Draft" && (
                           <button
                             disabled={isTransitioning}

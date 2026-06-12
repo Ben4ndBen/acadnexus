@@ -36,6 +36,9 @@ export default async function FacultyDashboard() {
             include: {
               course: true,
               approvalWorkflow: true,
+              _count: {
+                select: { questionBank: true }
+              }
             },
             orderBy: {
               exam_id: "desc",

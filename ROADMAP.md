@@ -38,8 +38,8 @@
 
 #### EPIC 3: Examination Engine Development (Phase 3)
 ##### **Card 7: Exam Creation (Faculty Component)**
-- [ ] **Task 15:** Build the interactive exam builder wizard for configuration settings (titles, strict time limits, and Table of Specifications (TOS) file attachment uploads).
-- [ ] **Task 16:** Develop a comprehensive Question Bank system supporting Multiple Choice, True/False, Identification, and Matching Type questions, with a structural metadata toggle to randomize items.
+- [x] **Task 15:** Build the interactive exam builder wizard for configuration settings (titles, strict time limits, and Table of Specifications (TOS) file attachment uploads).
+- [x] **Task 16:** Develop a comprehensive Question Bank system supporting Multiple Choice, True/False, Identification, and Matching Type questions, with a structural metadata toggle to randomize items.
 
 ##### **Card 8: Secure Test-Taking Interface (Student Component)**
 - [ ] **Task 17:** Build a distraction-free examination UI featuring a synchronized countdown timer, one-question-at-a-time pagination, and a color-coded question status navigation sidebar.
@@ -88,3 +88,4 @@
 | 2026-06-12 | Task 9b, 10 | Implemented Student Portal with academic summary cards (metrics: subjects enrolled, exams completed, average performance) and a dynamically targeted examination feed split into active, upcoming, and completed lists. | Completed |
 | 2026-06-12 | Task 11, 12 | Built Faculty Portal Profile and Information Management form and implemented the Examination Workflow Tracker with interactive transitions, status badges, timelines, and review comments. | Completed |
 | 2026-06-12 | Task 13, 14 | Built Department Chair and Director for Instruction (DI) dashboards featuring Faculty Progress Tracker, Review Queues, Syllabus/TOS Verification Tool, Compliance Map, and System Action Logs. | Completed |
+| 2026-06-12 | Task 15, 16 | Implemented interactive Exam Creator Wizard (Step 1 Configuration with TOS Upload) and Question Bank Builder (Step 2 MCQ/TF/ID/Matching, Step 3 Preview & Submit) under `/exams/[id]/builder`. | Completed |
