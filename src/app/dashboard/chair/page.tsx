@@ -2,7 +2,11 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import db from "@/lib/db";
 import { LogoutButton } from "@/app/components/LogoutButton";
-import { ClipboardCheck, Users, ShieldAlert, Award, FileText, CheckSquare } from "lucide-react";
+import { ClipboardCheck } from "lucide-react";
+import { ChairDashboardClient } from "@/app/components/ChairDashboardClient";
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export default async function ChairDashboard() {
   const supabase = await createClient();
@@ -32,13 +36,27 @@ export default async function ChairDashboard() {
               faculty: {
                 include: {
                   examinations: true,
+                  facultyPortfolios: {
+                    orderBy: {
+                      academic_year: "desc",
+                    },
+                    take: 1
+                  }
                 },
               },
             },
           },
           approvals: {
+            where: {
+              chair_review_status: "Pending"
+            },
             include: {
-              exam: true,
+              exam: {
+                include: {
+                  course: true,
+                  faculty: true
+                }
+              },
             },
           },
         },
@@ -46,8 +64,47 @@ export default async function ChairDashboard() {
     },
   });
 
-  const chair = dbUser?.chair;
+  if (!dbUser) {
+    redirect("/");
+  }
+
+  const chair = dbUser.chair;
   const department = chair?.department;
+
+  if (!chair || !department) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col justify-center items-center font-sans p-6">
+        <div className="bg-white border border-slate-200 rounded-3xl p-8 max-w-md w-full text-center space-y-4 shadow-sm">
+          <div className="bg-amber-50 text-amber-600 p-4 rounded-full w-16 h-16 flex items-center justify-center mx-auto border border-amber-100">
+            <ClipboardCheck className="w-8 h-8" />
+          </div>
+          <h2 className="text-xl font-extrabold text-slate-800">No Chair Profile Found</h2>
+          <p className="text-slate-500 text-xs leading-relaxed">
+            Your user account is registered as Chair, but no associated department record was found in the database.
+          </p>
+          <div className="pt-2">
+            <LogoutButton />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Format faculty members to ensure compliance_percentage is a string/number
+  const formattedFaculty = department.faculty.map(f => ({
+    ...f,
+    facultyPortfolios: f.facultyPortfolios.map(p => ({
+      ...p,
+      compliance_percentage: p.compliance_percentage.toString()
+    }))
+  }));
+
+  // Format pending approvals to ensure decimal/dates are serializable if needed
+  // (In this case, dates and decimals are handled or not present in the essential payload)
+  const formattedApprovals = chair.approvals;
+
+  // Extract all department exams
+  const departmentExams = department.faculty.flatMap(f => f.examinations);
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
@@ -68,7 +125,7 @@ export default async function ChairDashboard() {
           <div className="flex items-center gap-4">
             <div className="hidden sm:block text-right">
               <p className="text-sm font-semibold text-slate-800">
-                {chair ? `Chair (${dbUser?.institutional_id})` : "Department Chair"}
+                Chair ({dbUser?.institutional_id})
               </p>
               <p className="text-xs text-slate-500">{institutionalId}</p>
             </div>
@@ -92,80 +149,14 @@ export default async function ChairDashboard() {
           </div>
         </div>
 
-        {/* Dashboard Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Left panel: Department status */}
-          <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-6">
-            <h2 className="text-lg font-bold text-slate-800 border-b border-slate-100 pb-3 flex items-center gap-2">
-              <span className="w-1.5 h-6 bg-amber-600 rounded-full" />
-              Department Overview
-            </h2>
-            <div className="space-y-4">
-              <div>
-                <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Department Name</p>
-                <p className="text-sm font-bold text-slate-800 mt-0.5">
-                  {department?.department_name || "Not Seeded"}
-                </p>
-                <p className="text-xs text-slate-500 mt-0.5">Batanes State College</p>
-              </div>
-              <div className="grid grid-cols-2 gap-4 border-t border-slate-100 pt-4">
-                <div>
-                  <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Faculty Members</p>
-                  <p className="text-lg font-extrabold text-slate-800 mt-0.5">
-                    {department?.faculty ? department.faculty.length : 0}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Review Pipeline</p>
-                  <p className="text-lg font-extrabold text-slate-800 mt-0.5">
-                    {chair?.approvals ? chair.approvals.filter(a => a.chair_review_status === "Pending").length : 0} Pending
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Right panel: approvals workflow */}
-          <div className="lg:col-span-2 bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-6">
-            <h2 className="text-lg font-bold text-slate-800 border-b border-slate-100 pb-3 flex items-center gap-2">
-              <span className="w-1.5 h-6 bg-amber-600 rounded-full" />
-              Pending Approval Workflows
-            </h2>
-
-            {chair?.approvals && chair.approvals.length > 0 ? (
-              <div className="divide-y divide-slate-100">
-                {chair.approvals.map((approval) => (
-                  <div key={approval.workflow_id} className="py-4 flex justify-between items-center first:pt-0 last:pb-0">
-                    <div className="space-y-1">
-                      <p className="text-sm font-bold text-slate-800">{approval.exam.title}</p>
-                      <p className="text-xs text-slate-400">
-                        Status: <span className="font-semibold text-yellow-600">{approval.chair_review_status}</span>
-                      </p>
-                    </div>
-                    <div className="flex gap-2">
-                      <button className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm transition-colors">
-                        Approve
-                      </button>
-                      <button className="bg-red-50 hover:bg-red-100 text-red-700 text-xs font-bold px-3 py-1.5 rounded-lg transition-colors">
-                        Return
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center py-16 text-center border-2 border-dashed border-slate-100 rounded-2xl">
-                <div className="bg-slate-50 p-4 rounded-full text-slate-400 mb-4">
-                  <CheckSquare className="w-8 h-8" />
-                </div>
-                <h3 className="font-bold text-slate-800 text-base">All clear!</h3>
-                <p className="text-slate-500 text-xs max-w-xs mt-1">
-                  There are no examination approvals waiting for your review. Excellent work!
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
+        {/* Render the interactive client component */}
+        <ChairDashboardClient
+          chairUserId={dbUser.user_id}
+          departmentName={department.department_name}
+          facultyMembers={formattedFaculty as any}
+          pendingApprovals={formattedApprovals as any}
+          departmentExams={departmentExams as any}
+        />
       </main>
 
       {/* Footer */}

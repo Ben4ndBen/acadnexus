@@ -5,6 +5,9 @@ import { LogoutButton } from "@/app/components/LogoutButton";
 import { BookOpen } from "lucide-react";
 import { FacultyDashboardClient } from "@/app/components/FacultyDashboardClient";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export default async function FacultyDashboard() {
   const supabase = await createClient();
   const {

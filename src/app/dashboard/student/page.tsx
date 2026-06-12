@@ -4,6 +4,9 @@ import db from "@/lib/db";
 import { LogoutButton } from "@/app/components/LogoutButton";
 import { GraduationCap, BookOpen, Calendar, Award, ShieldAlert, Clock, CheckCircle, Hourglass, ArrowRight } from "lucide-react";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export default async function StudentDashboard() {
   const supabase = await createClient();
   const {
