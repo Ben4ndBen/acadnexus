@@ -2,7 +2,11 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import db from "@/lib/db";
 import { LogoutButton } from "@/app/components/LogoutButton";
-import { ShieldCheck, BarChart3, Landmark, BookOpen, AlertCircle } from "lucide-react";
+import { ShieldCheck } from "lucide-react";
+import { DirectorDashboardClient } from "@/app/components/DirectorDashboardClient";
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export default async function DirectorDashboard() {
   const supabase = await createClient();
@@ -18,6 +22,14 @@ export default async function DirectorDashboard() {
   const institutionalId = user.user_metadata?.institutional_id;
 
   if (role !== "Director") {
+    redirect("/");
+  }
+
+  const dbUser = await db.user.findUnique({
+    where: { institutional_id: institutionalId },
+  });
+
+  if (!dbUser) {
     redirect("/");
   }
 
@@ -37,10 +49,68 @@ export default async function DirectorDashboard() {
       exam: {
         include: {
           faculty: true,
+          course: true,
         },
       },
     },
   });
+
+  // Fetch departments data with compliance scoring
+  const rawDepartments = await db.department.findMany({
+    include: {
+      faculty: {
+        include: {
+          examinations: true,
+          facultyPortfolios: {
+            orderBy: { academic_year: "desc" },
+            take: 1
+          }
+        }
+      }
+    }
+  });
+
+  const departmentsData = rawDepartments.map(dept => {
+    let totalScore = 0;
+    let portfolioCount = 0;
+
+    dept.faculty.forEach(f => {
+      if (f.facultyPortfolios && f.facultyPortfolios.length > 0) {
+        totalScore += Number(f.facultyPortfolios[0].compliance_percentage);
+        portfolioCount++;
+      }
+    });
+
+    const averageCompliance = portfolioCount > 0 ? Math.round(totalScore / portfolioCount) : 0;
+    
+    return {
+      department_id: dept.department_id,
+      department_name: dept.department_name,
+      compliance_score: averageCompliance,
+      total_faculty: dept.faculty.length,
+      total_exams: dept.faculty.reduce((sum, f) => sum + f.examinations.length, 0),
+    };
+  });
+
+  // Fetch global audit logs
+  const auditLogs = await db.auditLog.findMany({
+    orderBy: { timestamp: "desc" },
+    take: 100, // Limit to recent 100 logs
+    include: {
+      user: {
+        select: {
+          institutional_id: true,
+          role: true,
+        }
+      }
+    }
+  });
+
+  // Convert BigInt to string to pass to client
+  const serializedLogs = auditLogs.map(log => ({
+    ...log,
+    log_id: log.log_id.toString(),
+  }));
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
@@ -83,67 +153,19 @@ export default async function DirectorDashboard() {
           </div>
         </div>
 
-        {/* Statistical Summary Row */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
-          <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-2">
-            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Departments</span>
-            <p className="text-2xl font-extrabold text-slate-800">{totalDepartments}</p>
-          </div>
-          <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-2">
-            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Active Faculty</span>
-            <p className="text-2xl font-extrabold text-slate-800">{totalFaculty}</p>
-          </div>
-          <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-2">
-            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Enrolled Students</span>
-            <p className="text-2xl font-extrabold text-slate-800">{totalStudents}</p>
-          </div>
-          <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-2">
-            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Examinations</span>
-            <p className="text-2xl font-extrabold text-slate-800">{totalExams}</p>
-          </div>
-        </div>
-
-        {/* Action Panel */}
-        <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-6">
-          <h2 className="text-lg font-bold text-slate-800 border-b border-slate-100 pb-3 flex items-center gap-2">
-            <span className="w-1.5 h-6 bg-indigo-600 rounded-full" />
-            Final Institutional Approval Queue
-          </h2>
-
-          {pendingApprovals.length > 0 ? (
-            <div className="divide-y divide-slate-100">
-              {pendingApprovals.map((approval) => (
-                <div key={approval.workflow_id} className="py-4 flex justify-between items-center first:pt-0 last:pb-0">
-                  <div className="space-y-1">
-                    <p className="text-sm font-bold text-slate-800">{approval.exam.title}</p>
-                    <p className="text-xs text-slate-400">
-                      Author: {approval.exam.faculty.first_name} {approval.exam.faculty.last_name} &bull; Chair Status:{" "}
-                      <span className="font-semibold text-emerald-600">{approval.chair_review_status}</span>
-                    </p>
-                  </div>
-                  <div className="flex gap-2">
-                    <button className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm transition-colors">
-                      Final Approve
-                    </button>
-                    <button className="bg-red-50 hover:bg-red-100 text-red-700 text-xs font-bold px-3 py-1.5 rounded-lg transition-colors">
-                      Return
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="flex flex-col items-center justify-center py-16 text-center border-2 border-dashed border-slate-100 rounded-2xl">
-              <div className="bg-slate-50 p-4 rounded-full text-slate-400 mb-4">
-                <BarChart3 className="w-8 h-8" />
-              </div>
-              <h3 className="font-bold text-slate-800 text-base">No pending approvals</h3>
-              <p className="text-slate-500 text-xs max-w-xs mt-1">
-                All examination and syllabus workflows are currently fully resolved. Nice work!
-              </p>
-            </div>
-          )}
-        </div>
+        {/* Render interactive client dashboard */}
+        <DirectorDashboardClient
+          directorUserId={dbUser.user_id}
+          stats={{
+            totalStudents,
+            totalFaculty,
+            totalDepartments,
+            totalExams,
+          }}
+          pendingApprovals={pendingApprovals as any}
+          departmentsData={departmentsData as any}
+          auditLogs={serializedLogs as any}
+        />
       </main>
 
       {/* Footer */}

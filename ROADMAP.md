@@ -31,8 +31,8 @@
 - [x] **Task 12:** Create the Examination Workflow Tracker UI using semantic status badges (`Draft`, `Pending Chair`, `Pending DI`, `Approved`, `Returned`).
 
 ##### **Card 6: Administrative Portals**
-- [ ] **Task 13:** Build the Department Chair dashboard (incorporating a Faculty Progress Tracker, Pending Review Queue, and Syllabus/TOS Verification Tool).
-- [ ] **Task 14:** Build the Director for Instruction (DI) dashboard (featuring a School-Wide Compliance Map and global System Action Logs).
+- [x] **Task 13:** Build the Department Chair dashboard (incorporating a Faculty Progress Tracker, Pending Review Queue, and Syllabus/TOS Verification Tool).
+- [x] **Task 14:** Build the Director for Instruction (DI) dashboard (featuring a School-Wide Compliance Map and global System Action Logs).
 
 ---
 
@@ -87,3 +87,4 @@
 | 2026-06-12 | Task 11 | Created Faculty Portal profile card and compliance portfolio layout powered by actual database relations. | Completed |
 | 2026-06-12 | Task 9b, 10 | Implemented Student Portal with academic summary cards (metrics: subjects enrolled, exams completed, average performance) and a dynamically targeted examination feed split into active, upcoming, and completed lists. | Completed |
 | 2026-06-12 | Task 11, 12 | Built Faculty Portal Profile and Information Management form and implemented the Examination Workflow Tracker with interactive transitions, status badges, timelines, and review comments. | Completed |
+| 2026-06-12 | Task 13, 14 | Built Department Chair and Director for Instruction (DI) dashboards featuring Faculty Progress Tracker, Review Queues, Syllabus/TOS Verification Tool, Compliance Map, and System Action Logs. | Completed |
