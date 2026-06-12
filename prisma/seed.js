@@ -99,7 +99,7 @@ async function main() {
     },
   });
 
-  await prisma.faculty.create({
+  const faculty = await prisma.faculty.create({
     data: {
       faculty_id: facultyUser.user_id,
       first_name: "Mark",
@@ -117,7 +117,7 @@ async function main() {
     },
   });
 
-  await prisma.chair.create({
+  const chair = await prisma.chair.create({
     data: {
       chair_id: chairUser.user_id,
       department_id: csDept.department_id,
@@ -136,6 +136,155 @@ async function main() {
   await prisma.director.create({
     data: {
       director_id: directorUser.user_id,
+    },
+  });
+
+  // 5. Seed Courses
+  console.log("Seeding courses...");
+  const dbCourse = await prisma.course.create({
+    data: {
+      course_code: "CS411",
+      course_title: "Advanced Database Systems",
+    },
+  });
+
+  const seCourse = await prisma.course.create({
+    data: {
+      course_code: "CS412",
+      course_title: "Software Engineering II",
+    },
+  });
+
+  const aiCourse = await prisma.course.create({
+    data: {
+      course_code: "CS413",
+      course_title: "Artificial Intelligence",
+    },
+  });
+
+  // 6. Seed Examinations, QuestionBank, and ExamTargets
+  console.log("Seeding examinations...");
+
+  // Exam 1: Active (Midterm Database Systems)
+  const activeExam = await prisma.examination.create({
+    data: {
+      title: "Midterm Examination in Database Systems",
+      course_id: dbCourse.course_id,
+      faculty_id: faculty.faculty_id,
+      tos_file_path: "/uploads/tos/db_midterm.pdf",
+      time_limit_minutes: 60,
+      randomize_items: true,
+      current_status: "Approved",
+      questionBank: {
+        create: [
+          {
+            question_text: "What does SQL stand for?",
+            question_type: "Multiple_Choice",
+            correct_answer: "Structured Query Language",
+            points: 5,
+          },
+          {
+            question_text: "A primary key can contain null values. True or False?",
+            question_type: "True_False",
+            correct_answer: "False",
+            points: 5,
+          },
+        ],
+      },
+      examTargets: {
+        create: [
+          {
+            program_id: bscsProg.program_id,
+            year_level: 4,
+            section: "A",
+            scheduled_date: new Date(),
+            start_time: new Date(new Date().setHours(0, 0, 0, 0)),
+            end_time: new Date(new Date().setHours(23, 59, 59, 999)),
+          },
+        ],
+      },
+    },
+  });
+
+  // Exam 2: Upcoming (Final Software Engineering)
+  const upcomingExam = await prisma.examination.create({
+    data: {
+      title: "Final Examination in Software Engineering II",
+      course_id: seCourse.course_id,
+      faculty_id: faculty.faculty_id,
+      tos_file_path: "/uploads/tos/se_final.pdf",
+      time_limit_minutes: 120,
+      randomize_items: false,
+      current_status: "Approved",
+      questionBank: {
+        create: [
+          {
+            question_text: "What is CI/CD?",
+            question_type: "Identification",
+            correct_answer: "Continuous Integration and Continuous Deployment",
+            points: 10,
+          },
+        ],
+      },
+      examTargets: {
+        create: [
+          {
+            program_id: bscsProg.program_id,
+            year_level: 4,
+            section: "A",
+            scheduled_date: new Date(new Date().setDate(new Date().getDate() + 2)), // 2 days from now
+            start_time: new Date(new Date().setHours(9, 0, 0, 0)),
+            end_time: new Date(new Date().setHours(12, 0, 0, 0)),
+          },
+        ],
+      },
+    },
+  });
+
+  // Exam 3: Completed (Quiz 1 - AI)
+  const completedExam = await prisma.examination.create({
+    data: {
+      title: "Quiz 1 - Introduction to AI",
+      course_id: aiCourse.course_id,
+      faculty_id: faculty.faculty_id,
+      tos_file_path: "/uploads/tos/ai_quiz1.pdf",
+      time_limit_minutes: 30,
+      randomize_items: true,
+      current_status: "Approved",
+      questionBank: {
+        create: [
+          {
+            question_text: "Who is known as the father of AI?",
+            question_type: "Multiple_Choice",
+            correct_answer: "John McCarthy",
+            points: 10,
+          },
+        ],
+      },
+      examTargets: {
+        create: [
+          {
+            program_id: bscsProg.program_id,
+            year_level: 4,
+            section: "A",
+            scheduled_date: new Date(new Date().setDate(new Date().getDate() - 1)), // yesterday
+            start_time: new Date(new Date().setHours(10, 0, 0, 0)),
+            end_time: new Date(new Date().setHours(11, 0, 0, 0)),
+          },
+        ],
+      },
+    },
+  });
+
+  // Create completed student exam record
+  await prisma.studentExam.create({
+    data: {
+      student_id: studentUser.user_id,
+      exam_id: completedExam.exam_id,
+      started_at: new Date(new Date().setDate(new Date().getDate() - 1)),
+      submitted_at: new Date(new Date().setDate(new Date().getDate() - 1)),
+      total_score: 10, // 100% score
+      submission_trigger: "Manual",
     },
   });
 
