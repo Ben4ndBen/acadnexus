@@ -73,25 +73,25 @@ Before every code modification, generation, or structural architectural shift, y
 
 #### EPIC 1: System Design & Database Setup (Phases 1 & 2)
 ##### **Card 2: Database Modeling (Prisma Schema)**
-- [ ] **Task 4:** Implement Table-per-Type (TPT) or optimized polymorphic role structure in Prisma for the `USERS` table, extending roles to `STUDENTS`, `FACULTY`, `CHAIRS`, and `DIRECTORS`.
-- [ ] **Task 5:** Create relational tables for the Academic Hierarchy (`DEPARTMENTS`, `ACADEMIC_PROGRAMS`, `COURSES`).
-- [ ] **Task 6a:** Create the Examination Engine tables (`EXAMINATIONS`, `EXAM_TARGETS`, `QUESTION_BANK`).
-- [ ] **Task 6b:** Set up performance, workflow, and system logs (`STUDENT_EXAMS`, `STUDENT_ANSWERS`, `FACULTY_PORTFOLIOS`, `APPROVAL_WORKFLOWS`, `AUDIT_LOGS`).
+- [x] **Task 4:** Implement Table-per-Type (TPT) or optimized polymorphic role structure in Prisma for the `USERS` table, extending roles to `STUDENTS`, `FACULTY`, `CHAIRS`, and `DIRECTORS`.
+- [x] **Task 5:** Create relational tables for the Academic Hierarchy (`DEPARTMENTS`, `ACADEMIC_PROGRAMS`, `COURSES`).
+- [x] **Task 6a:** Create the Examination Engine tables (`EXAMINATIONS`, `EXAM_TARGETS`, `QUESTION_BANK`).
+- [x] **Task 6b:** Set up performance, workflow, and system logs (`STUDENT_EXAMS`, `STUDENT_ANSWERS`, `FACULTY_PORTFOLIOS`, `APPROVAL_WORKFLOWS`, `AUDIT_LOGS`).
 
 ---
 
 #### EPIC 2: Central Authentication & Portals (Phase 3)
 ##### **Card 3: Central Login & Security**
-- [ ] **Task 7:** Build a polished login UI with unified Batanes State College (BSC) branding.
-- [ ] **Task 8:** Implement Supabase Auth integrated with the Prisma `USERS` table to verify institutional IDs and credentials.
-- [ ] **Task 9a:** Add robust server-side and client-side role-based redirection logic to route users dynamically to their respective dashboards upon login.
+- [x] **Task 7:** Build a polished login UI with unified Batanes State College (BSC) branding.
+- [x] **Task 8:** Implement Supabase Auth integrated with the Prisma `USERS` table to verify institutional IDs and credentials.
+- [x] **Task 9a:** Add robust server-side and client-side role-based redirection logic to route users dynamically to their respective dashboards upon login.
 
 ##### **Card 4: Student Portal**
 - [ ] **Task 9b:** Build the student header dashboard and core metrics/academic summary cards (enrolled subjects, average examination performance).
 - [ ] **Task 10:** Create the **Dynamic Examination Feed** targeting logic (only fetch/display exams matching the student's exact program, year level, section, and enrolled courses).
 
 ##### **Card 5: Faculty Portal**
-- [ ] **Task 11:** Build the Profile and Information Management section.
+- [x] **Task 11:** Build the Profile and Information Management section.
 - [ ] **Task 12:** Create the Examination Workflow Tracker UI using semantic status badges (`Draft`, `Pending Chair`, `Pending DI`, `Approved`, `Returned`).
 
 ##### **Card 6: Administrative Portals**
@@ -146,6 +146,8 @@ Before every code modification, generation, or structural architectural shift, y
 
 | Date | Task ID | Description of Changes / Implementation Details | Status |
 | :--- | :--- | :--- | :--- |
-| *YYYY-MM-DD* | *Initial* | *Awaiting project scanning to capture existing state.* | *Pending* |
+| 2026-06-12 | Task 4, 5, 6a, 6b | Initialized Prisma database schema containing polymorphic users, academic hierarchy, examination engine, and workflows. Successful PostgreSQL remote sync. | Completed |
+| 2026-06-12 | Task 7, 8, 9a | Implemented BSC-branded high-fidelity login interface with role-based redirection middleware. Set up local cookie-based mock session fallback for offline development. | Completed |
+| 2026-06-12 | Task 11 | Created Faculty Portal profile card and compliance portfolio layout powered by actual database relations. | Completed |
 
 ```
