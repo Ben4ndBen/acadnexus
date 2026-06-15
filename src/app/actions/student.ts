@@ -66,7 +66,16 @@ export async function startStudentExam(examId: number, studentId: number) {
     const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
 
     const scheduledDate = new Date(target.scheduled_date);
-    const isToday = scheduledDate >= todayStart && scheduledDate <= todayEnd;
+    
+    // Prisma returns @db.Date as YYYY-MM-DDT00:00:00.000Z
+    const localScheduledDate = new Date(
+      scheduledDate.getUTCFullYear(),
+      scheduledDate.getUTCMonth(),
+      scheduledDate.getUTCDate(),
+      0, 0, 0
+    );
+    
+    const isToday = localScheduledDate.getTime() >= todayStart.getTime() && localScheduledDate.getTime() <= todayEnd.getTime();
 
     if (!isToday) {
       return { error: "This examination is not scheduled for today." };
@@ -76,11 +85,12 @@ export async function startStudentExam(examId: number, studentId: number) {
     const end = new Date(target.end_time);
 
     const currentMin = now.getHours() * 60 + now.getMinutes();
-    const startMin = start.getHours() * 60 + start.getMinutes();
-    const endMin = end.getHours() * 60 + end.getMinutes();
+    // Prisma @db.Time is returned as 1970-01-01T[HH]:[MM]:[SS]Z
+    const startMin = start.getUTCHours() * 60 + start.getUTCMinutes();
+    const endMin = end.getUTCHours() * 60 + end.getUTCMinutes();
 
     if (currentMin < startMin) {
-      return { error: `Examination has not started yet. It is scheduled to start at ${start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.` };
+      return { error: `Examination has not started yet. It is scheduled to start at ${start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })}.` };
     }
     if (currentMin > endMin) {
       return { error: "Examination window has already closed." };

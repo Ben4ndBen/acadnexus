@@ -372,3 +372,54 @@ export async function deleteExam(examId: number, facultyId: number) {
   }
 }
 
+export async function scheduleExamTarget(
+  facultyId: number,
+  examId: number,
+  programId: number,
+  yearLevel: number,
+  section: string,
+  scheduledDate: string,
+  startTime: string,
+  endTime: string
+) {
+  try {
+    const exam = await db.examination.findUnique({
+      where: { exam_id: examId },
+    });
+
+    if (!exam) return { error: "Examination not found." };
+    if (exam.faculty_id !== facultyId) return { error: "Unauthorized operation." };
+    if (exam.current_status !== "Approved") return { error: "Only approved examinations can be scheduled." };
+
+    const dateObj = new Date(`${scheduledDate}T00:00:00.000Z`);
+    const startObj = new Date(`1970-01-01T${startTime}:00.000Z`);
+    const endObj = new Date(`1970-01-01T${endTime}:00.000Z`);
+
+    await db.examTarget.create({
+      data: {
+        exam_id: examId,
+        program_id: programId,
+        year_level: yearLevel,
+        section: section,
+        scheduled_date: dateObj,
+        start_time: startObj,
+        end_time: endObj,
+      },
+    });
+
+    await db.auditLog.create({
+      data: {
+        user_id: facultyId,
+        action_performed: `Scheduled exam target for "${exam.title}" (ID: ${examId}) on ${scheduledDate}`,
+        ip_address: "127.0.0.1",
+      },
+    });
+
+    revalidatePath("/dashboard/faculty");
+    return { success: true };
+  } catch (err: any) {
+    console.error("Error in scheduleExamTarget:", err);
+    return { error: err.message || "Failed to schedule the examination." };
+  }
+}
+

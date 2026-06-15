@@ -86,6 +86,8 @@ export default async function FacultyDashboard() {
     facultyPortfolios: sanitizedPortfolios,
   };
 
+  const programs = await db.academicProgram.findMany();
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
       {/* Navbar */}
@@ -130,7 +132,7 @@ export default async function FacultyDashboard() {
         </div>
 
         {/* Render interactive Faculty Dashboard Client */}
-        <FacultyDashboardClient faculty={sanitizedFaculty as any} institutionalId={institutionalId} />
+        <FacultyDashboardClient faculty={sanitizedFaculty as any} institutionalId={institutionalId} programs={programs} />
       </main>
 
       {/* Footer */}

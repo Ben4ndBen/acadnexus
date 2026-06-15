@@ -70,6 +70,12 @@ export default async function StudentDashboard() {
     },
   });
 
+  console.log("=== DEBUG PORTAL ===");
+  console.log("User:", institutionalId, "Role:", role);
+  console.log("Student Data:", student.program_id, student.year_level, student.section);
+  console.log("Targets found:", targets.length);
+  console.log("====================");
+
   // 2. Fetch completed student exams
   const completedExams = await db.studentExam.findMany({
     where: {
@@ -115,6 +121,7 @@ export default async function StudentDashboard() {
   const completedExamIds = new Set(completedExams.map(se => se.exam_id));
   const activeExams: any[] = [];
   const upcomingExams: any[] = [];
+  const missedExams: any[] = [];
 
   const now = new Date();
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
@@ -126,16 +133,26 @@ export default async function StudentDashboard() {
     }
 
     const scheduledDate = new Date(t.scheduled_date);
-    const isToday = scheduledDate >= todayStart && scheduledDate <= todayEnd;
-    const isFuture = scheduledDate > todayEnd;
+    
+    // Prisma returns @db.Date as YYYY-MM-DDT00:00:00.000Z
+    const localScheduledDate = new Date(
+      scheduledDate.getUTCFullYear(),
+      scheduledDate.getUTCMonth(),
+      scheduledDate.getUTCDate(),
+      0, 0, 0
+    );
+    
+    const isToday = localScheduledDate.getTime() >= todayStart.getTime() && localScheduledDate.getTime() <= todayEnd.getTime();
+    const isFuture = localScheduledDate.getTime() > todayEnd.getTime();
 
     if (isToday) {
       const start = new Date(t.start_time);
       const end = new Date(t.end_time);
 
       const currentMin = now.getHours() * 60 + now.getMinutes();
-      const startMin = start.getHours() * 60 + start.getMinutes();
-      const endMin = end.getHours() * 60 + end.getMinutes();
+      // Prisma @db.Time is returned as 1970-01-01T[HH]:[MM]:[SS]Z
+      const startMin = start.getUTCHours() * 60 + start.getUTCMinutes();
+      const endMin = end.getUTCHours() * 60 + end.getUTCMinutes();
 
       if (currentMin >= startMin && currentMin <= endMin) {
         activeExams.push({
@@ -147,9 +164,19 @@ export default async function StudentDashboard() {
           ...t.exam,
           target: t
         });
+      } else {
+        missedExams.push({
+          ...t.exam,
+          target: t
+        });
       }
     } else if (isFuture) {
       upcomingExams.push({
+        ...t.exam,
+        target: t
+      });
+    } else {
+      missedExams.push({
         ...t.exam,
         target: t
       });
@@ -338,10 +365,10 @@ export default async function StudentDashboard() {
                         </p>
                         <div className="bg-slate-50 p-2.5 rounded-lg text-xs space-y-1">
                           <p className="text-slate-600 font-semibold">
-                            Date: {new Date(exam.target.scheduled_date).toLocaleDateString()}
+                            Date: {new Date(exam.target.scheduled_date).toLocaleDateString([], { timeZone: 'UTC' })}
                           </p>
                           <p className="text-slate-500">
-                            Time: {new Date(exam.target.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - {new Date(exam.target.end_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            Time: {new Date(exam.target.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })} - {new Date(exam.target.end_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })}
                           </p>
                         </div>
                       </div>
@@ -389,6 +416,41 @@ export default async function StudentDashboard() {
                   </div>
                 )}
               </div>
+            </div>
+
+            {/* Missed Examinations */}
+            <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-6">
+              <h2 className="text-md font-bold text-slate-800 border-b border-slate-100 pb-3 flex items-center gap-2">
+                <ShieldAlert className="w-4 h-4 text-rose-600" />
+                Missed Exams
+              </h2>
+
+              {missedExams.length > 0 ? (
+                <div className="space-y-4">
+                  {missedExams.map((exam) => (
+                    <div key={exam.exam_id} className="border border-slate-100 p-4 rounded-xl space-y-2 bg-slate-50 opacity-75">
+                      <div className="flex justify-between items-start">
+                        <h4 className="font-bold text-slate-800 text-sm line-through">{exam.title}</h4>
+                        <span className="text-[10px] font-bold bg-rose-100 text-rose-700 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                          Missed
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500">
+                        {exam.course.course_title}
+                      </p>
+                      <div className="text-xs space-y-1">
+                        <p className="text-slate-500">
+                          Scheduled: {new Date(exam.target.scheduled_date).toLocaleDateString([], { timeZone: 'UTC' })}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-slate-400 text-xs">
+                  No missed exams. Great job!
+                </div>
+              )}
             </div>
           </div>
         </div>
