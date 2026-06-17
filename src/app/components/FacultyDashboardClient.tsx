@@ -5,9 +5,9 @@ import { useRouter } from "next/navigation";
 import { 
   BookOpen, Award, FileText, ClipboardList, PenTool, CheckCircle, 
   User, Shield, Settings, Activity, Send, RotateCcw, AlertCircle, RefreshCw, Mail,
-  Plus, Trash2
+  Plus, Trash2, Calendar
 } from "lucide-react";
-import { updateFacultyProfile, updateExamStatus, createExamDraft, deleteExam } from "@/app/actions/faculty";
+import { updateFacultyProfile, updateExamStatus, createExamDraft, deleteExam, scheduleExamTarget } from "@/app/actions/faculty";
 
 interface FacultyDashboardClientProps {
   faculty: {
@@ -44,9 +44,10 @@ interface FacultyDashboardClientProps {
     }>;
   };
   institutionalId: string;
+  programs?: Array<{ program_id: number; program_code: string; program_name: string; department_id: number }>;
 }
 
-export function FacultyDashboardClient({ faculty, institutionalId }: FacultyDashboardClientProps) {
+export function FacultyDashboardClient({ faculty, institutionalId, programs = [] }: FacultyDashboardClientProps) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<"overview" | "tracker" | "profile">("overview");
   
@@ -65,6 +66,58 @@ export function FacultyDashboardClient({ faculty, institutionalId }: FacultyDash
   
   // Tracker Filter State
   const [trackerFilter, setTrackerFilter] = useState<string>("ALL");
+
+  // Schedule Exam Modal State
+  const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
+  const [selectedExamForSchedule, setSelectedExamForSchedule] = useState<{exam_id: number, title: string} | null>(null);
+  const [scheduleForm, setScheduleForm] = useState({
+    program_id: "",
+    year_level: "1",
+    section: "A",
+    scheduled_date: "",
+    start_time: "",
+    end_time: ""
+  });
+  const [isScheduling, setIsScheduling] = useState(false);
+
+  const handleOpenScheduleModal = (examId: number, title: string) => {
+    setSelectedExamForSchedule({ exam_id: examId, title });
+    setScheduleModalOpen(true);
+    setScheduleForm({
+      program_id: programs.length > 0 ? String(programs[0].program_id) : "",
+      year_level: "1",
+      section: "A",
+      scheduled_date: new Date().toISOString().split("T")[0],
+      start_time: "09:00",
+      end_time: "10:00"
+    });
+  };
+
+  const handleScheduleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedExamForSchedule) return;
+
+    setIsScheduling(true);
+    const res = await scheduleExamTarget(
+      faculty.faculty_id,
+      selectedExamForSchedule.exam_id,
+      Number(scheduleForm.program_id),
+      Number(scheduleForm.year_level),
+      scheduleForm.section,
+      scheduleForm.scheduled_date,
+      scheduleForm.start_time,
+      scheduleForm.end_time
+    );
+    setIsScheduling(false);
+
+    if (res.error) {
+      alert(res.error);
+    } else {
+      setScheduleModalOpen(false);
+      router.refresh();
+      alert("Examination scheduled successfully!");
+    }
+  };
 
   const handleCreateExam = async () => {
     setIsCreatingExam(true);
@@ -480,6 +533,15 @@ export function FacultyDashboardClient({ faculty, institutionalId }: FacultyDash
                             Revise & Reset to Draft
                           </button>
                         )}
+                        {exam.current_status === "Approved" && (
+                          <button
+                            onClick={() => handleOpenScheduleModal(exam.exam_id, exam.title)}
+                            className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-2 rounded-xl shadow-sm transition-all duration-300"
+                          >
+                            <Calendar className="w-3.5 h-3.5" />
+                            Schedule Exam
+                          </button>
+                        )}
                       </div>
                     </div>
 
@@ -660,6 +722,111 @@ export function FacultyDashboardClient({ faculty, institutionalId }: FacultyDash
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* SCHEDULE MODAL */}
+      {scheduleModalOpen && selectedExamForSchedule && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl border border-slate-200">
+            <div className="flex justify-between items-start mb-6">
+              <div>
+                <h3 className="text-xl font-bold text-slate-900">Schedule Examination</h3>
+                <p className="text-xs text-emerald-700 font-bold mt-1">{selectedExamForSchedule.title}</p>
+              </div>
+              <button onClick={() => setScheduleModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+                <span className="text-xl leading-none">&times;</span>
+              </button>
+            </div>
+
+            <form onSubmit={handleScheduleSubmit} className="space-y-4">
+              <div>
+                <label className="text-xs font-bold text-slate-600 block mb-1">Target Program</label>
+                <select 
+                  required
+                  value={scheduleForm.program_id}
+                  onChange={e => setScheduleForm({...scheduleForm, program_id: e.target.value})}
+                  className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 text-sm font-medium text-slate-900 placeholder:text-slate-500 px-4 py-2.5 rounded-xl transition-all duration-300"
+                >
+                  <option value="" disabled>Select Program</option>
+                  {programs.map(p => (
+                    <option key={p.program_id} value={p.program_id}>{p.program_code} - {p.program_name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-bold text-slate-600 block mb-1">Year Level</label>
+                  <select 
+                    required
+                    value={scheduleForm.year_level}
+                    onChange={e => setScheduleForm({...scheduleForm, year_level: e.target.value})}
+                    className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 text-sm font-medium text-slate-900 placeholder:text-slate-500 px-4 py-2.5 rounded-xl transition-all duration-300"
+                  >
+                    {[1, 2, 3, 4, 5].map(y => <option key={y} value={y}>{y}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-600 block mb-1">Section</label>
+                  <input 
+                    type="text" required
+                    value={scheduleForm.section}
+                    onChange={e => setScheduleForm({...scheduleForm, section: e.target.value})}
+                    placeholder="e.g. A"
+                    className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 text-sm font-medium text-slate-900 placeholder:text-slate-500 px-4 py-2.5 rounded-xl transition-all duration-300"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-600 block mb-1">Scheduled Date</label>
+                <input 
+                  type="date" required
+                  value={scheduleForm.scheduled_date}
+                  onChange={e => setScheduleForm({...scheduleForm, scheduled_date: e.target.value})}
+                  className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 text-sm font-medium text-slate-900 placeholder:text-slate-500 px-4 py-2.5 rounded-xl transition-all duration-300"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-bold text-slate-600 block mb-1">Start Time</label>
+                  <input 
+                    type="time" required
+                    value={scheduleForm.start_time}
+                    onChange={e => setScheduleForm({...scheduleForm, start_time: e.target.value})}
+                    className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 text-sm font-medium text-slate-900 placeholder:text-slate-500 px-4 py-2.5 rounded-xl transition-all duration-300"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-600 block mb-1">End Time</label>
+                  <input 
+                    type="time" required
+                    value={scheduleForm.end_time}
+                    onChange={e => setScheduleForm({...scheduleForm, end_time: e.target.value})}
+                    className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 text-sm font-medium text-slate-900 placeholder:text-slate-500 px-4 py-2.5 rounded-xl transition-all duration-300"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-4 flex justify-end gap-3">
+                <button 
+                  type="button" onClick={() => setScheduleModalOpen(false)}
+                  className="px-5 py-2.5 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit" disabled={isScheduling}
+                  className="px-5 py-2.5 text-xs font-extrabold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl flex items-center gap-2 disabled:opacity-50"
+                >
+                  {isScheduling ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Calendar className="w-4 h-4" />}
+                  Confirm Schedule
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>
