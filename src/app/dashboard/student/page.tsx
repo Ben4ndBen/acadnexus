@@ -123,54 +123,38 @@ export default async function StudentDashboard() {
   const upcomingExams: any[] = [];
   const missedExams: any[] = [];
 
-  const now = new Date();
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
-  const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+  const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
 
   targets.forEach(t => {
     if (completedExamIds.has(t.exam_id)) {
       return;
     }
 
-    const scheduledDate = new Date(t.scheduled_date);
-    
-    // Prisma returns @db.Date as YYYY-MM-DDT00:00:00.000Z
-    const localScheduledDate = new Date(
-      scheduledDate.getUTCFullYear(),
-      scheduledDate.getUTCMonth(),
-      scheduledDate.getUTCDate(),
-      0, 0, 0
+    // Construct start and end dates in the Asia/Manila timezone-relative context
+    const examStart = new Date(
+      t.scheduled_date.getUTCFullYear(),
+      t.scheduled_date.getUTCMonth(),
+      t.scheduled_date.getUTCDate(),
+      t.start_time.getUTCHours(),
+      t.start_time.getUTCMinutes(),
+      0
     );
-    
-    const isToday = localScheduledDate.getTime() >= todayStart.getTime() && localScheduledDate.getTime() <= todayEnd.getTime();
-    const isFuture = localScheduledDate.getTime() > todayEnd.getTime();
 
-    if (isToday) {
-      const start = new Date(t.start_time);
-      const end = new Date(t.end_time);
+    const examEnd = new Date(
+      t.scheduled_date.getUTCFullYear(),
+      t.scheduled_date.getUTCMonth(),
+      t.scheduled_date.getUTCDate(),
+      t.end_time.getUTCHours(),
+      t.end_time.getUTCMinutes(),
+      0
+    );
 
-      const currentMin = now.getHours() * 60 + now.getMinutes();
-      // Prisma @db.Time is returned as 1970-01-01T[HH]:[MM]:[SS]Z
-      const startMin = start.getUTCHours() * 60 + start.getUTCMinutes();
-      const endMin = end.getUTCHours() * 60 + end.getUTCMinutes();
-
-      if (currentMin >= startMin && currentMin <= endMin) {
-        activeExams.push({
-          ...t.exam,
-          target: t
-        });
-      } else if (currentMin < startMin) {
-        upcomingExams.push({
-          ...t.exam,
-          target: t
-        });
-      } else {
-        missedExams.push({
-          ...t.exam,
-          target: t
-        });
-      }
-    } else if (isFuture) {
+    if (now >= examStart && now <= examEnd) {
+      activeExams.push({
+        ...t.exam,
+        target: t
+      });
+    } else if (now < examStart) {
       upcomingExams.push({
         ...t.exam,
         target: t
@@ -314,7 +298,7 @@ export default async function StudentDashboard() {
               {activeExams.length > 0 ? (
                 <div className="space-y-4">
                   {activeExams.map((exam) => (
-                    <div key={exam.exam_id} className="flex flex-col sm:flex-row sm:items-center justify-between border border-slate-100 p-5 rounded-2xl bg-gradient-to-r from-rose-50/20 to-transparent hover:border-rose-100 transition-all gap-4">
+                    <div key={exam.target.target_id} className="flex flex-col sm:flex-row sm:items-center justify-between border border-slate-100 p-5 rounded-2xl bg-gradient-to-r from-rose-50/20 to-transparent hover:border-rose-100 transition-all gap-4">
                       <div className="space-y-1">
                         <span className="text-[10px] font-bold bg-rose-100 text-rose-700 px-2 py-0.5 rounded-full uppercase tracking-wider">
                           Live Now
@@ -358,7 +342,7 @@ export default async function StudentDashboard() {
                 {upcomingExams.length > 0 ? (
                   <div className="space-y-4">
                     {upcomingExams.map((exam) => (
-                      <div key={exam.exam_id} className="border border-slate-100 p-4 rounded-xl space-y-2">
+                      <div key={exam.target.target_id} className="border border-slate-100 p-4 rounded-xl space-y-2">
                         <h4 className="font-bold text-slate-800 text-sm">{exam.title}</h4>
                         <p className="text-xs text-slate-500">
                           {exam.course.course_title}
@@ -428,7 +412,7 @@ export default async function StudentDashboard() {
               {missedExams.length > 0 ? (
                 <div className="space-y-4">
                   {missedExams.map((exam) => (
-                    <div key={exam.exam_id} className="border border-slate-100 p-4 rounded-xl space-y-2 bg-slate-50 opacity-75">
+                    <div key={exam.target.target_id} className="border border-slate-100 p-4 rounded-xl space-y-2 bg-slate-50 opacity-75">
                       <div className="flex justify-between items-start">
                         <h4 className="font-bold text-slate-800 text-sm line-through">{exam.title}</h4>
                         <span className="text-[10px] font-bold bg-rose-100 text-rose-700 px-2 py-0.5 rounded-full uppercase tracking-wider">

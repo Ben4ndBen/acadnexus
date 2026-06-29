@@ -21,7 +21,7 @@ async function main() {
     });
     console.log(`Student ${s.first_name} ${s.last_name} (${u.institutional_id}) - program: ${s.program_id}, year: ${s.year_level}, section: ${s.section}`);
     console.log(`Targets: ${targets.length}`);
-    targets.forEach(t => console.log(`  - ${t.exam.title}`));
+    targets.forEach((t: any) => console.log(`  - ${t.exam.title}`));
   }
 }
 

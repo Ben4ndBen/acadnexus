@@ -188,6 +188,7 @@ Multiple_Choice
 True_False
 Identification
 Matching_Type
+Essay
 }
 
 // --- 4. Workflows and Performance ---
@@ -251,6 +252,7 @@ question_id        Int
 question           QuestionBank @relation(fields: [question_id], references: [question_id])
 submitted_response String      @db.Text
 is_correct         Boolean?
+points_awarded     Int?
 last_updated_at    DateTime    @db.Timestamp
 
 @@map("STUDENT_ANSWERS")
