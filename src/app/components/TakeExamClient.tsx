@@ -804,6 +804,20 @@ export function TakeExamClient({
                   </div>
                 )}
 
+                {/* 5. Essay */}
+                {currentQuestion.question_type === "Essay" && (
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Your Essay Response:</label>
+                    <textarea
+                      value={answers[currentQuestion.question_id] || ""}
+                      onChange={(e) => handleAnswerChange(currentQuestion.question_id, e.target.value)}
+                      placeholder="Write your answer here..."
+                      rows={6}
+                      className="w-full bg-slate-900 border border-slate-800 focus:bg-slate-900 focus:ring-2 focus:ring-rose-500/20 focus:border-rose-600 text-sm font-semibold text-slate-100 placeholder:text-slate-500 p-4 rounded-xl transition-all resize-y"
+                    />
+                  </div>
+                )}
+
               </div>
             </div>
 
