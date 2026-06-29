@@ -6,7 +6,7 @@ import {
   BarChart3, ShieldCheck, Map, List, CheckCircle, 
   XCircle, Clock, AlertCircle, RefreshCw, Search, Building2
 } from "lucide-react";
-import { reviewExamByDirector } from "@/app/actions/director";
+import { reviewExamByDirector, toggleGlobalHold, toggleIndividualHold } from "@/app/actions/director";
 
 interface DirectorDashboardClientProps {
   directorUserId: number;
@@ -48,6 +48,25 @@ interface DirectorDashboardClientProps {
       role: string;
     };
   }>;
+  allExaminations: Array<{
+    exam_id: number;
+    title: string;
+    current_status: string;
+    faculty: {
+      first_name: string;
+      last_name: string;
+    };
+    course: {
+      course_code: string;
+      course_title: string;
+    };
+    approvalWorkflow: {
+      workflow_id: number;
+      di_review_status: string;
+      reviewed_by_di_id: number | null;
+    } | null;
+  }>;
+  globalHoldActive: boolean;
 }
 
 export function DirectorDashboardClient({ 
@@ -55,13 +74,25 @@ export function DirectorDashboardClient({
   stats, 
   pendingApprovals, 
   departmentsData,
-  auditLogs
+  auditLogs,
+  allExaminations,
+  globalHoldActive
 }: DirectorDashboardClientProps) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<"overview" | "compliance" | "logs">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "compliance" | "logs" | "exams">("overview");
 
   // State for Review Queue
   const [isSubmittingReview, setIsSubmittingReview] = useState<number | null>(null);
+
+  // State for Global Hold Toggle
+  const [isTogglingGlobalHold, setIsTogglingGlobalHold] = useState(false);
+
+  // State for Individual Hold Toggles
+  const [isTogglingIndividualHold, setIsTogglingIndividualHold] = useState<Record<number, boolean>>({});
+
+  // State for Manage Exams Search & Filter
+  const [examSearchQuery, setExamSearchQuery] = useState("");
+  const [examStatusFilter, setExamStatusFilter] = useState("ALL");
 
   // State for Logs Search
   const [searchQuery, setSearchQuery] = useState("");
@@ -78,11 +109,47 @@ export function DirectorDashboardClient({
     }
   };
 
+  const handleToggleGlobalHold = async () => {
+    setIsTogglingGlobalHold(true);
+    const res = await toggleGlobalHold(directorUserId, !globalHoldActive);
+    setIsTogglingGlobalHold(false);
+
+    if (res.error) {
+      alert(res.error);
+    } else {
+      router.refresh();
+    }
+  };
+
+  const handleToggleIndividualHold = async (examId: number, placeHold: boolean) => {
+    setIsTogglingIndividualHold(prev => ({ ...prev, [examId]: true }));
+    const res = await toggleIndividualHold(directorUserId, examId, placeHold);
+    setIsTogglingIndividualHold(prev => ({ ...prev, [examId]: false }));
+
+    if (res.error) {
+      alert(res.error);
+    } else {
+      router.refresh();
+    }
+  };
+
   const filteredLogs = auditLogs.filter(log => 
     log.action_performed.toLowerCase().includes(searchQuery.toLowerCase()) ||
     log.user.institutional_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
     log.user.role.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  const filteredExams = allExaminations.filter(exam => {
+    const matchesSearch = 
+      exam.title.toLowerCase().includes(examSearchQuery.toLowerCase()) ||
+      exam.course.course_code.toLowerCase().includes(examSearchQuery.toLowerCase()) ||
+      exam.course.course_title.toLowerCase().includes(examSearchQuery.toLowerCase()) ||
+      `${exam.faculty.first_name} ${exam.faculty.last_name}`.toLowerCase().includes(examSearchQuery.toLowerCase());
+
+    const matchesStatus = examStatusFilter === "ALL" || exam.current_status === examStatusFilter;
+
+    return matchesSearch && matchesStatus;
+  });
 
   return (
     <div className="space-y-8">
@@ -98,6 +165,17 @@ export function DirectorDashboardClient({
         >
           <BarChart3 className="w-4 h-4" />
           Overview & Approvals
+        </button>
+        <button
+          onClick={() => setActiveTab("exams")}
+          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-bold rounded-xl transition-all duration-300 ${
+            activeTab === "exams"
+              ? "bg-indigo-700 text-white shadow-md shadow-indigo-700/20"
+              : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+          }`}
+        >
+          <ShieldCheck className="w-4 h-4" />
+          Manage All Examinations
         </button>
         <button
           onClick={() => setActiveTab("compliance")}
@@ -155,6 +233,46 @@ export function DirectorDashboardClient({
               </div>
               <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Examinations</span>
               <p className="text-3xl font-extrabold text-slate-800">{stats.totalExams}</p>
+            </div>
+          </div>
+
+          {/* Global Hold / Pass-Through clearance card */}
+          <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <div className="space-y-1">
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <ShieldCheck className="w-5 h-5 text-indigo-700" />
+                Pass-Through Clearance Optimization
+              </h3>
+              <p className="text-xs text-slate-500 max-w-2xl leading-relaxed">
+                When enabled, examinations approved by Department Chairs bypass manual Director review and go live instantly.
+                Disable this to enforce manual Director approval on all examinations.
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className={`text-xs font-extrabold px-2.5 py-1 rounded-full border ${
+                !globalHoldActive
+                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                  : "bg-amber-50 text-amber-700 border-amber-200"
+              }`}>
+                {!globalHoldActive ? "Pass-Through Active (Auto-Live)" : "Global Hold Active (Manual Review)"}
+              </span>
+              <button
+                disabled={isTogglingGlobalHold}
+                onClick={handleToggleGlobalHold}
+                className={`text-xs font-bold px-4 py-2.5 rounded-xl shadow-sm transition-all disabled:opacity-50 flex items-center gap-2 ${
+                  !globalHoldActive
+                    ? "bg-amber-600 hover:bg-amber-700 text-white"
+                    : "bg-emerald-600 hover:bg-emerald-700 text-white"
+                }`}
+              >
+                {isTogglingGlobalHold ? (
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                ) : !globalHoldActive ? (
+                  "Enforce Manual Review"
+                ) : (
+                  "Enable Auto-Live"
+                )}
+              </button>
             </div>
           </div>
 
@@ -217,6 +335,122 @@ export function DirectorDashboardClient({
                 </p>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* MANAGE EXAMINATIONS TAB */}
+      {activeTab === "exams" && (
+        <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-6">
+          <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-slate-100 pb-5 gap-4">
+            <div>
+              <h2 className="text-xl font-bold text-slate-950 flex items-center gap-2">
+                <span className="w-1.5 h-6 bg-indigo-750 rounded-full" />
+                Manage All Examinations
+              </h2>
+              <p className="text-slate-500 text-xs mt-1">
+                Oversee all system examinations and place or lift administrative holds on specific assessments.
+              </p>
+            </div>
+            
+            <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+              <div className="relative flex-1 md:w-64">
+                <input
+                  type="text"
+                  placeholder="Search by title or course..."
+                  value={examSearchQuery}
+                  onChange={(e) => setExamSearchQuery(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 text-sm font-medium text-slate-800 placeholder:text-slate-400 px-10 py-2.5 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all outline-none"
+                />
+                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+              </div>
+              <select
+                value={examStatusFilter}
+                onChange={(e) => setExamStatusFilter(e.target.value)}
+                className="bg-slate-50 border border-slate-200 text-sm font-bold text-slate-700 px-4 py-2.5 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none"
+              >
+                <option value="ALL">All Statuses</option>
+                <option value="Draft">Draft</option>
+                <option value="Pending_Chair">Pending Chair</option>
+                <option value="Pending_DI">Pending DI</option>
+                <option value="Approved">Approved (Live)</option>
+                <option value="Returned">Returned</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto rounded-xl border border-slate-200">
+            <table className="w-full text-left text-sm text-slate-600">
+              <thead className="bg-slate-50 text-xs uppercase font-bold text-slate-500 border-b border-slate-200">
+                <tr>
+                  <th scope="col" className="px-6 py-4">Course & Title</th>
+                  <th scope="col" className="px-6 py-4">Faculty Author</th>
+                  <th scope="col" className="px-6 py-4">Status</th>
+                  <th scope="col" className="px-6 py-4">Administrative Hold</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 bg-white">
+                {filteredExams.map(exam => {
+                  const isManualHold = exam.approvalWorkflow?.di_review_status === "Hold" && exam.approvalWorkflow?.reviewed_by_di_id !== null;
+                  const isLoading = isTogglingIndividualHold[exam.exam_id] || false;
+                  
+                  return (
+                    <tr key={exam.exam_id} className="hover:bg-slate-50/50 transition-colors">
+                      <td className="px-6 py-4">
+                        <div className="flex flex-col">
+                          <span className="font-bold text-slate-800 text-sm">{exam.title}</span>
+                          <span className="text-xs text-slate-400 mt-0.5">{exam.course.course_code} - {exam.course.course_title}</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap font-medium text-slate-700">
+                        {exam.faculty.first_name} {exam.faculty.last_name}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`text-xs font-bold px-2.5 py-1 rounded-full border ${
+                          exam.current_status === "Approved" ? "bg-emerald-50 text-emerald-700 border-emerald-200" :
+                          exam.current_status === "Returned" ? "bg-rose-50 text-rose-700 border-rose-200" :
+                          exam.current_status === "Pending_DI" ? "bg-amber-50 text-amber-700 border-amber-200" :
+                          exam.current_status === "Pending_Chair" ? "bg-blue-50 text-blue-700 border-blue-200" :
+                          "bg-slate-50 text-slate-600 border-slate-200"
+                        }`}>
+                          {exam.current_status === "Approved" ? "Approved (Live)" : exam.current_status}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <button
+                          disabled={isLoading}
+                          onClick={() => handleToggleIndividualHold(exam.exam_id, !isManualHold)}
+                          className={`text-xs font-bold px-3 py-1.5 rounded-lg border transition-all disabled:opacity-50 flex items-center gap-1.5 ${
+                            isManualHold
+                              ? "bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100"
+                              : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+                          }`}
+                        >
+                          {isLoading ? (
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          ) : isManualHold ? (
+                            <>
+                              <Clock className="w-3.5 h-3.5 text-rose-500" />
+                              On Hold
+                            </>
+                          ) : (
+                              "No Hold"
+                          )}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {filteredExams.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="px-6 py-12 text-center text-slate-500">
+                      <AlertCircle className="w-6 h-6 mx-auto mb-2 text-slate-400" />
+                      <p>No examinations found matching the filters.</p>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
       )}

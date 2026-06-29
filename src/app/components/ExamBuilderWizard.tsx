@@ -27,7 +27,7 @@ interface Exam {
   questionBank: Array<{
     question_id: number;
     question_text: string;
-    question_type: "Multiple_Choice" | "True_False" | "Identification" | "Matching_Type";
+    question_type: "Multiple_Choice" | "True_False" | "Identification" | "Matching_Type" | "Essay";
     correct_answer: string;
     points: number;
   }>;
@@ -42,7 +42,7 @@ interface ExamBuilderWizardProps {
 interface QuestionState {
   question_id?: number;
   text: string;
-  question_type: "Multiple_Choice" | "True_False" | "Identification" | "Matching_Type";
+  question_type: "Multiple_Choice" | "True_False" | "Identification" | "Matching_Type" | "Essay";
   options: string[]; // Multiple Choice options
   premises: string[]; // Matching Column A
   matches: Array<{ premise: string; choice: string }>; // Matching correct mapping

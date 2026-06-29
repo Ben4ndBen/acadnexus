@@ -55,6 +55,24 @@ export default async function DirectorDashboard() {
     },
   });
 
+  // Fetch all examinations (to allow manual holds)
+  const allExaminations = await db.examination.findMany({
+    include: {
+      faculty: true,
+      course: true,
+      approvalWorkflow: true,
+    },
+    orderBy: {
+      exam_id: "desc",
+    },
+  });
+
+  // Fetch global administrative hold setting
+  const globalHoldSetting = await db.systemSetting.findUnique({
+    where: { key: "global_administrative_hold" },
+  });
+  const globalHoldActive = globalHoldSetting?.value === "true";
+
   // Fetch departments data with compliance scoring
   const rawDepartments = await db.department.findMany({
     include: {
@@ -165,6 +183,8 @@ export default async function DirectorDashboard() {
           pendingApprovals={pendingApprovals as any}
           departmentsData={departmentsData as any}
           auditLogs={serializedLogs as any}
+          allExaminations={allExaminations as any}
+          globalHoldActive={globalHoldActive}
         />
       </main>
 
