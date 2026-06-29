@@ -61,38 +61,35 @@ export async function startStudentExam(examId: number, studentId: number) {
     const exam = target.exam;
 
     // 3. Check if current time is within schedule
-    const now = new Date();
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
-    const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+    const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
 
-    const scheduledDate = new Date(target.scheduled_date);
-    
-    // Prisma returns @db.Date as YYYY-MM-DDT00:00:00.000Z
-    const localScheduledDate = new Date(
-      scheduledDate.getUTCFullYear(),
-      scheduledDate.getUTCMonth(),
-      scheduledDate.getUTCDate(),
-      0, 0, 0
+    const examStart = new Date(
+      target.scheduled_date.getUTCFullYear(),
+      target.scheduled_date.getUTCMonth(),
+      target.scheduled_date.getUTCDate(),
+      target.start_time.getUTCHours(),
+      target.start_time.getUTCMinutes(),
+      0
     );
-    
-    const isToday = localScheduledDate.getTime() >= todayStart.getTime() && localScheduledDate.getTime() <= todayEnd.getTime();
 
-    if (!isToday) {
-      return { error: "This examination is not scheduled for today." };
+    const examEnd = new Date(
+      target.scheduled_date.getUTCFullYear(),
+      target.scheduled_date.getUTCMonth(),
+      target.scheduled_date.getUTCDate(),
+      target.end_time.getUTCHours(),
+      target.end_time.getUTCMinutes(),
+      0
+    );
+
+    if (now < examStart) {
+      const startTimeString = new Date(target.start_time).toLocaleTimeString([], { 
+        hour: '2-digit', 
+        minute: '2-digit', 
+        timeZone: 'UTC' 
+      });
+      return { error: `Examination has not started yet. It is scheduled to start at ${startTimeString}.` };
     }
-
-    const start = new Date(target.start_time);
-    const end = new Date(target.end_time);
-
-    const currentMin = now.getHours() * 60 + now.getMinutes();
-    // Prisma @db.Time is returned as 1970-01-01T[HH]:[MM]:[SS]Z
-    const startMin = start.getUTCHours() * 60 + start.getUTCMinutes();
-    const endMin = end.getUTCHours() * 60 + end.getUTCMinutes();
-
-    if (currentMin < startMin) {
-      return { error: `Examination has not started yet. It is scheduled to start at ${start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })}.` };
-    }
-    if (currentMin > endMin) {
+    if (now > examEnd) {
       return { error: "Examination window has already closed." };
     }
 
@@ -292,9 +289,13 @@ export async function submitStudentExam(
         const response = ans?.submitted_response || "";
         const correct = q.correct_answer || "";
 
-        let isCorrect = false;
+        let isCorrect: boolean | null = false;
+        let pointsAwarded: number | null = 0;
 
-        if (q.question_type === "Matching_Type") {
+        if (q.question_type === "Essay") {
+          isCorrect = null;
+          pointsAwarded = null;
+        } else if (q.question_type === "Matching_Type") {
           try {
             const parsedCorrect = JSON.parse(correct);
             const parsedResponse = JSON.parse(response);
@@ -332,14 +333,20 @@ export async function submitStudentExam(
           isCorrect = response.trim().toLowerCase() === correct.trim().toLowerCase();
         }
 
-        if (isCorrect) {
+        if (isCorrect === true) {
           totalScore += q.points;
+          pointsAwarded = q.points;
+        } else if (isCorrect === false) {
+          pointsAwarded = 0;
         }
 
         if (ans) {
           await tx.studentAnswer.update({
             where: { answer_id: ans.answer_id },
-            data: { is_correct: isCorrect },
+            data: { 
+              is_correct: isCorrect,
+              points_awarded: pointsAwarded
+            },
           });
         } else {
           // Create blank response if they did not answer
@@ -348,7 +355,8 @@ export async function submitStudentExam(
               student_exam_id: studentExamId,
               question_id: q.question_id,
               submitted_response: "",
-              is_correct: false,
+              is_correct: q.question_type === "Essay" ? null : false,
+              points_awarded: q.question_type === "Essay" ? null : 0,
               last_updated_at: new Date(),
             },
           });

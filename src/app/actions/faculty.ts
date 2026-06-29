@@ -423,3 +423,76 @@ export async function scheduleExamTarget(
   }
 }
 
+export async function gradeEssayAnswer(
+  facultyId: number,
+  answerId: number,
+  pointsAwarded: number,
+  isCorrect: boolean
+) {
+  try {
+    const answer = await db.studentAnswer.findUnique({
+      where: { answer_id: answerId },
+      include: {
+        studentExam: {
+          include: {
+            exam: true
+          }
+        }
+      }
+    });
+
+    if (!answer) {
+      return { error: "Answer not found." };
+    }
+
+    if (answer.studentExam.exam.faculty_id !== facultyId) {
+      return { error: "Unauthorized operation." };
+    }
+
+    await db.$transaction(async (tx) => {
+      await tx.studentAnswer.update({
+        where: { answer_id: answerId },
+        data: {
+          is_correct: isCorrect,
+          points_awarded: pointsAwarded,
+          last_updated_at: new Date()
+        }
+      });
+
+      const allAnswers = await tx.studentAnswer.findMany({
+        where: { student_exam_id: answer.student_exam_id },
+        include: { question: true }
+      });
+
+      const totalScore = allAnswers.reduce((sum, ans) => {
+        let points = ans.points_awarded;
+        if (points === null && ans.is_correct === true) {
+           points = ans.question.points;
+        } else if (points === null) {
+           points = 0;
+        }
+        return sum + (points || 0);
+      }, 0);
+
+      await tx.studentExam.update({
+        where: { student_exam_id: answer.student_exam_id },
+        data: { total_score: totalScore }
+      });
+
+      await tx.auditLog.create({
+        data: {
+          user_id: facultyId,
+          action_performed: `Manually graded essay answer (ID: ${answerId}) with ${pointsAwarded} points.`,
+          ip_address: "127.0.0.1",
+        },
+      });
+    });
+
+    revalidatePath("/dashboard/faculty");
+    return { success: true };
+  } catch (err: any) {
+    console.error("Error grading essay answer:", err);
+    return { error: err.message || "Failed to grade essay answer." };
+  }
+}
+
