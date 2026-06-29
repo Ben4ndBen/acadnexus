@@ -11,38 +11,74 @@ export async function reviewExamByChair(
   userId: number
 ) {
   try {
+    // 1. Get the current workflow state to check for individual manual holds
+    const currentWorkflow = await db.approvalWorkflow.findUnique({
+      where: { workflow_id: workflowId },
+    });
+
+    // Check if the Director has manually placed an individual hold on this exam.
+    // A manual hold is indicated by di_review_status = "Hold" and reviewed_by_di_id is set.
+    const isIndividualHoldActive =
+      currentWorkflow?.di_review_status === "Hold" &&
+      currentWorkflow?.reviewed_by_di_id !== null;
+
+    // 2. Check if a global administrative hold is active in the system settings
+    const globalHoldSetting = await db.systemSetting.findUnique({
+      where: { key: "global_administrative_hold" },
+    });
+    const isGlobalHoldActive = globalHoldSetting?.value === "true";
+
+    const isHoldActive = isGlobalHoldActive || isIndividualHoldActive;
+
     // Determine target statuses
     const chairReviewStatus = action === "Approve" ? "Approved" : "Returned";
-    const examStatus = action === "Approve" ? "Pending_DI" : "Returned";
+    
+    // Pass-through clearance: if approved and no hold is active, it goes live instantly ("Approved").
+    // Otherwise, if approved but a hold is active, it goes to "Pending_DI".
+    const examStatus =
+      action === "Approve"
+        ? isHoldActive
+          ? "Pending_DI"
+          : "Approved"
+        : "Returned";
 
-    // 1. Update the approval workflow
+    const diReviewStatus =
+      action === "Approve"
+        ? isHoldActive
+          ? "Hold"
+          : "Pass_Through_Approved"
+        : "Hold";
+
+    // 3. Update the approval workflow
     await db.approvalWorkflow.update({
       where: { workflow_id: workflowId },
       data: {
         chair_review_status: chairReviewStatus,
         chair_comments: comments || null,
         chair_action_timestamp: new Date(),
-        // If approved, move to DI queue by setting hold, else leave as is
-        di_review_status: action === "Approve" ? "Hold" : undefined,
+        di_review_status: diReviewStatus,
       },
     });
 
-    // 2. Update the examination status
+    // 4. Update the examination status
     const exam = await db.examination.update({
       where: { exam_id: examId },
       data: { current_status: examStatus },
     });
 
-    // 3. Log the audit event
+    // 5. Log the audit event
     await db.auditLog.create({
       data: {
         user_id: userId,
-        action_performed: `Chair ${action} examination ${examId}: ${exam.title}`,
+        action_performed: `Chair ${action} examination ${examId}: ${exam.title}. Pass-through: ${
+          action === "Approve" && !isHoldActive ? "Yes" : "No"
+        } (Global Hold: ${isGlobalHoldActive}, Individual Hold: ${isIndividualHoldActive})`,
         ip_address: "127.0.0.1",
       },
     });
 
     revalidatePath("/dashboard/chair");
+    revalidatePath("/dashboard/director");
     return { success: true };
   } catch (err: any) {
     console.error("Error updating chair review:", err);

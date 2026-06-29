@@ -12,7 +12,7 @@ import { saveStudentAnswers, submitStudentExam, logStudentWarning } from "@/app/
 interface Question {
   question_id: number;
   question_text: string;
-  question_type: "Multiple_Choice" | "True_False" | "Identification" | "Matching_Type";
+  question_type: "Multiple_Choice" | "True_False" | "Identification" | "Matching_Type" | "Essay";
   points: number;
 }
 

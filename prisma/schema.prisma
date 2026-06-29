@@ -184,10 +184,11 @@ studentAnswers   StudentAnswer[]
 }
 
 enum QuestionType {
-Multiple_Choice
-True_False
-Identification
-Matching_Type
+  Multiple_Choice
+  True_False
+  Identification
+  Matching_Type
+  Essay
 }
 
 // --- 4. Workflows and Performance ---
@@ -244,16 +245,17 @@ Cheating_Lockout
 }
 
 model StudentAnswer {
-answer_id          Int         @id @default(autoincrement())
-student_exam_id    Int
-studentExam        StudentExam @relation(fields: [student_exam_id], references: [student_exam_id])
-question_id        Int
-question           QuestionBank @relation(fields: [question_id], references: [question_id])
-submitted_response String      @db.Text
-is_correct         Boolean?
-last_updated_at    DateTime    @db.Timestamp
+  answer_id          Int         @id @default(autoincrement())
+  student_exam_id    Int
+  studentExam        StudentExam @relation(fields: [student_exam_id], references: [student_exam_id])
+  question_id        Int
+  question           QuestionBank @relation(fields: [question_id], references: [question_id])
+  submitted_response String      @db.Text
+  is_correct         Boolean?
+  points_awarded     Int?
+  last_updated_at    DateTime    @db.Timestamp
 
-@@map("STUDENT_ANSWERS")
+  @@map("STUDENT_ANSWERS")
 }
 
 // --- 5. Compliance and Audit ---
@@ -279,4 +281,11 @@ ip_address       String   @db.VarChar(45)
 timestamp        DateTime @default(now()) @db.Timestamp
 
 @@map("AUDIT_LOGS")
+}
+
+model SystemSetting {
+  key   String @id @db.VarChar(100)
+  value String @db.Text
+
+  @@map("SYSTEM_SETTINGS")
 }
