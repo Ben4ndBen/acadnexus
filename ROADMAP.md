@@ -58,8 +58,8 @@
 - [x] **Task 23:** Implement the DI "Pass-Through Clearance" optimization—when a Chair marks an exam as approved, it automatically goes live for targeted students unless a global administrative hold is explicitly applied.
 
 ##### **Card 11: Real-Time Alerts & Communications**
-- [ ] **Task 24:** Implement a unified real-time notification layer (using Supabase Realtime broadcast channels or PostgreSQL listen/notify streams).
-- [ ] **Task 25:** Create system event triggers for specific contextual alerts (upcoming exams for students, new review assignments for chairs, approval/return status updates for faculty).
+- [x] **Task 24:** Implement a unified real-time notification layer (using Supabase Realtime broadcast channels or PostgreSQL listen/notify streams).
+- [x] **Task 25:** Create system event triggers for specific contextual alerts (upcoming exams for students, new review assignments for chairs, approval/return status updates for faculty).
 
 ##### **Card 12: Faculty Portfolios & Audit Logs**
 - [ ] **Task 26:** Automate asynchronous `FACULTY_PORTFOLIOS` aggregation rules to log submittal frequencies and compliance timelines.
@@ -90,4 +90,5 @@
 | 2026-06-12 | Task 13, 14 | Built Department Chair and Director for Instruction (DI) dashboards featuring Faculty Progress Tracker, Review Queues, Syllabus/TOS Verification Tool, Compliance Map, and System Action Logs. | Completed |
 | 2026-06-12 | Task 15, 16 | Implemented interactive Exam Creator Wizard (Step 1 Configuration with TOS Upload) and Question Bank Builder (Step 2 MCQ/TF/ID/Matching, Step 3 Preview & Submit) under `/exams/[id]/builder`. | Completed |
 | 2026-06-12 | Task 17, 18, 19 | Built Secure Test-Taking Interface including Entry Gate, Fullscreen/Focus lockdown (3 attempts warning system), background auto-save checkpoints, and objective auto-grading. | Completed |
-| 2026-06-29 | Task 22, 23 | Implemented Chair approval/return toggles with comments, and Director's Pass-Through Clearance optimization with global and individual administrative holds. | Completed |
+| 2026-06-29 | Task 22, 23 | Implemented Chair approval/return toggles with comments, and Director's Pass-Through Clearance optimization with global and individual administrative holds. | Completed |
+| 2026-07-01 | Task 24, 25 | Implemented floating notification bell component with Supabase Realtime and polling fallback, and deployed Postgres triggers for student, faculty, and chair alerts. | Completed |
