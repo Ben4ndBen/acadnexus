@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import db from "@/lib/db";
 import { LogoutButton } from "@/app/components/LogoutButton";
+import { NotificationBell } from "@/app/components/NotificationBell";
 import { BookOpen } from "lucide-react";
 import { FacultyDashboardClient } from "@/app/components/FacultyDashboardClient";
 
@@ -111,6 +112,7 @@ export default async function FacultyDashboard() {
               </p>
               <p className="text-xs text-slate-500">{institutionalId}</p>
             </div>
+            <NotificationBell userId={dbUser.user_id} />
             <LogoutButton />
           </div>
         </div>

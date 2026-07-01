@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import db from "@/lib/db";
 import Link from "next/link";
 import { LogoutButton } from "@/app/components/LogoutButton";
+import { NotificationBell } from "@/app/components/NotificationBell";
 import { GraduationCap, BookOpen, Calendar, Award, ShieldAlert, Clock, CheckCircle, Hourglass, ArrowRight } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -190,6 +191,7 @@ export default async function StudentDashboard() {
               </p>
               <p className="text-xs text-slate-500">{institutionalId}</p>
             </div>
+            <NotificationBell userId={dbUser.user_id} />
             <LogoutButton />
           </div>
         </div>

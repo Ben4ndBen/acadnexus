@@ -4,6 +4,7 @@ import db from "@/lib/db";
 import { ExamBuilderWizard } from "@/app/components/ExamBuilderWizard";
 import { BookOpen } from "lucide-react";
 import { LogoutButton } from "@/app/components/LogoutButton";
+import { NotificationBell } from "@/app/components/NotificationBell";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -111,6 +112,7 @@ export default async function ExamBuilderPage({ params }: PageProps) {
               </p>
               <p className="text-xs text-slate-500">{institutionalId}</p>
             </div>
+            <NotificationBell userId={dbUser.user_id} />
             <LogoutButton />
           </div>
         </div>

@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import db from "@/lib/db";
 import { LogoutButton } from "@/app/components/LogoutButton";
+import { NotificationBell } from "@/app/components/NotificationBell";
 import { ShieldCheck } from "lucide-react";
 import { DirectorDashboardClient } from "@/app/components/DirectorDashboardClient";
 
@@ -151,6 +152,7 @@ export default async function DirectorDashboard() {
               <p className="text-sm font-semibold text-slate-800">Director Office</p>
               <p className="text-xs text-slate-500">{institutionalId}</p>
             </div>
+            <NotificationBell userId={dbUser.user_id} />
             <LogoutButton />
           </div>
         </div>

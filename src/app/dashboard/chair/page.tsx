@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import db from "@/lib/db";
 import { LogoutButton } from "@/app/components/LogoutButton";
+import { NotificationBell } from "@/app/components/NotificationBell";
 import { ClipboardCheck } from "lucide-react";
 import { ChairDashboardClient } from "@/app/components/ChairDashboardClient";
 
@@ -129,6 +130,7 @@ export default async function ChairDashboard() {
               </p>
               <p className="text-xs text-slate-500">{institutionalId}</p>
             </div>
+            <NotificationBell userId={dbUser.user_id} />
             <LogoutButton />
           </div>
         </div>

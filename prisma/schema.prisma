@@ -29,6 +29,7 @@ chair            Chair?
 director         Director?
 
 auditLogs        AuditLog[]
+notifications    Notification[]
 
 @@map("USERS")
 }
@@ -288,4 +289,16 @@ model SystemSetting {
   value String @db.Text
 
   @@map("SYSTEM_SETTINGS")
+}
+
+model Notification {
+  notification_id Int      @id @default(autoincrement())
+  user_id         Int
+  user            User     @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+  title           String   @db.VarChar(255)
+  message         String   @db.Text
+  is_read         Boolean  @default(false)
+  created_at      DateTime @default(now()) @db.Timestamp
+
+  @@map("NOTIFICATIONS")
 }
