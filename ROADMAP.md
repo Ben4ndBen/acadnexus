@@ -67,14 +67,66 @@
 
 ---
 
-#### EPIC 5: Testing, Evaluation, & Deployment (Phases 4 & 5)
-##### **Card 13: Quality Assurance & System Testing**
-- [ ] **Task 28:** Conduct granular functional testing for the examination targeting engine (verifying total isolation of test visibility across student sections).
-- [ ] **Task 29:** Execute load and integration tests, focusing specifically on concurrent database write patterns caused by the auto-save worker.
+#### EPIC 5: Midterm Safeguards, Restrictions & Test Banking (Phase 3.5)
+##### **Card 13: Core Structural Credentials**
+- [ ] **Task 28:** Create a deterministic username generation engine for faculty using the formula: 2 first letters + 1 middle name letter + 2 or 3 last name letters (e.g., `miAgCa`), requiring a password update immediately after signing up.
+- [ ] **Task 29:** Implement a secure account configuration dashboard that captures institutional emails and profile images for faculty dashboard identity cards.
 
-##### **Card 14: Release Engineering & Documentation**
-- [ ] **Task 30:** Synthesize technical documentation, environment configuration manifests, and system runtime runbooks.
-- [ ] **Task 31:** Configure automated CI/CD deployment pipelines to host the front-end application layer on Vercel and upgrade the Supabase datastore instance to production tiering.
+##### **Card 14: Connectivity Safeguards & Clocks**
+- [ ] **Task 30:** Implement a continuous, item-by-item auto-saving routine that captures student inputs per question to prevent data loss.
+- [ ] **Task 31:** Build a connection-loss state lock that stops the clock, saves remaining time, and allows students to safely take the exam again after a forced exit or device shutdown without resetting their progress.
+- [ ] **Task 32:** Configure individualized duration logic that grants a student their full fixed exam duration upon starting, even if they log in right before the global testing window deadline.
+
+##### **Card 15: Exam Security & Content Add-ons**
+- [ ] **Task 33:** Program focus-exit tracking scripts that notify instructors of attempted exits or tab-switches, executing automatic time or score penalties for live exams.
+- [ ] **Task 34:** Upgrade the questionnaire building system to allow rich-text attachments, enabling faculty to embed images and mathematical equations directly into test items.
+
+##### **Card 16: Workflow Gatekeepers & Metrics**
+- [ ] **Task 35:** Deploy a strict validation rule that requires a pre-completed TOS file to be uploaded before a faculty member can proceed to the examination review stage.
+- [ ] **Task 36:** Build institutional compliance trackers to log administrative metrics, specifically auditing the turnaround time taken to approve an exam and the total frequency of revision returns.
+
+##### **Card 17: Signatures & Holds**
+- [ ] **Task 37:** Implement permanent frontend visual markers reading `“Digitally Signed by —”` that affix onto the examination data footprint once verified by the Chairperson and Director for Instruction.
+- [ ] **Task 38:** Enforce a validation rule on the Director’s portal that mandates the inclusion of written remarks explaining the hold status before an exam can be placed on "Hold".
+
+##### **Card 18: Grading Matrix Rules**
+- [ ] **Task 39:** Program the scoring engine to automatically reveal objective scores to students on screen immediately after final submission.
+- [ ] **Task 40:** Design the master Grading Sheet view to display exact student scores, incorporating a security rule that permanently disables the data entry rows once the institutional grading submission timeline closes.
+
+##### **Card 19: Course-Based Test Banking**
+- [ ] **Task 41:** Restructure the Question Bank repository to store and categorize question content per course, topic, and year level for rapid filtering.
+- [ ] **Task 42:** Establish an archival system that securely stores historical exam content, allowing faculty members to modify and reuse previous test assets for the next school year if they handle the same course.
+
+---
+
+#### EPIC 6: User Onboarding, Scheduling Overrides & Live Feeds (Phase 3.6)
+##### **Card 20: Public Registration Portal**
+- [ ] **Task 43:** Build a secure, branded registration sign-up screen that allows students to register via their unique ID numbers and handles role-based onboarding.
+- [ ] **Task 44:** Re-engineer review panels to allow the Department Chairperson to leave itemized comments and granular feedback per specific question number.
+
+##### **Card 21: Calendar Configuration Overrides**
+- [ ] **Task 45:** Fix calendar interface responsiveness so that clicking "schedule" on an already scheduled exam displays the saved date and time instead of rendering blank.
+- [ ] **Task 46:** Create an override engine that allows faculty to view approved and scheduled exams, with tools to change dates, hours, and testing windows to correct misclicks or conflicts.
+- [ ] **Task 47:** Develop an administrative override trigger that allows instructors to handle individual requests to reset access for students who completely missed the testing window.
+
+##### **Card 22: Live Monitoring Status Tabs**
+- [ ] **Task 48:** Restructure the Faculty Feed with organized navigation tabs separating exams by operational status: Drafts/Pending, Scheduled, Ongoing Live, and Finished.
+- [ ] **Task 49:** Create a real-time examinee monitoring roster within the Ongoing Live tab, allowing instructors to click an exam to see who is currently taking the test and who has already finished taking it.
+
+##### **Card 23: Optimized Student Layout**
+- [ ] **Task 50:** Implement a sticky, non-scrolling left-hand sidebar navigation on the student dashboard layout to maximize user convenience.
+- [ ] **Task 51:** Populate the student sidebar with dedicated, consolidated widget blocks for missed exams, upcoming exams, and evaluation/continuous performance trends to eliminate vertical scrolling.
+
+---
+
+#### EPIC 7: Testing, Evaluation, & Deployment (Phases 4 & 5)
+##### **Card 24: Quality Assurance & System Testing**
+- [ ] **Task 52:** Conduct granular functional testing for the examination targeting engine (verifying total isolation of test visibility across student sections).
+- [ ] **Task 53:** Execute load and integration tests, focusing specifically on concurrent database write patterns caused by the auto-save worker.
+
+##### **Card 25: Release Engineering & Documentation**
+- [ ] **Task 54:** Synthesize technical documentation, environment configuration manifests, and system runtime runbooks.
+- [ ] **Task 55:** Configure automated CI/CD deployment pipelines to host the front-end application layer on Vercel and upgrade the Supabase datastore instance to production tiering.
 
 ---
 
@@ -91,4 +143,4 @@
 | 2026-06-12 | Task 15, 16 | Implemented interactive Exam Creator Wizard (Step 1 Configuration with TOS Upload) and Question Bank Builder (Step 2 MCQ/TF/ID/Matching, Step 3 Preview & Submit) under `/exams/[id]/builder`. | Completed |
 | 2026-06-12 | Task 17, 18, 19 | Built Secure Test-Taking Interface including Entry Gate, Fullscreen/Focus lockdown (3 attempts warning system), background auto-save checkpoints, and objective auto-grading. | Completed |
 | 2026-06-29 | Task 22, 23 | Implemented Chair approval/return toggles with comments, and Director's Pass-Through Clearance optimization with global and individual administrative holds. | Completed |
-| 2026-07-01 | Task 24, 25 | Implemented floating notification bell component with Supabase Realtime and polling fallback, and deployed Postgres triggers for student, faculty, and chair alerts. | Completed |
+| 2026-07-01 | Task 24, 25 | Implemented floating notification bell component with Supabase Realtime and polling fallback, and deployed Postgres triggers for student, faculty, and chair alerts. | Completed |
