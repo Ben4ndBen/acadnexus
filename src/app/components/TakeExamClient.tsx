@@ -7,7 +7,7 @@ import {
   ChevronLeft, ChevronRight, Maximize2, Monitor, Loader2, ArrowRight,
   Menu, X
 } from "lucide-react";
-import { saveStudentAnswers, submitStudentExam, logStudentWarning } from "@/app/actions/student";
+import { saveStudentAnswers, submitStudentExam, logStudentWarning, keepAliveStudentExam } from "@/app/actions/student";
 
 interface Question {
   question_id: number;
@@ -74,6 +74,13 @@ export function TakeExamClient({
   // Flagged/Bookmarked Questions: Record<question_id, boolean>
   const [flagged, setFlagged] = useState<Record<number, boolean>>({});
 
+  const remainingSecondsRef = useRef(remainingSeconds);
+  const autoSaveDebounceRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    remainingSecondsRef.current = remainingSeconds;
+  }, [remainingSeconds]);
+
   const violationsKey = `exam_violations_${initialData.studentExamId}`;
 
   // 1. Initialize local violation count from localStorage on mount
@@ -106,6 +113,21 @@ export function TakeExamClient({
 
     return () => clearInterval(timer);
   }, [mode, answers]);
+
+  // 2.5 Heartbeat Timer Sync Loop (Every 10 Seconds)
+  useEffect(() => {
+    if (mode !== "exam" && mode !== "warning") return;
+
+    const heartbeat = setInterval(async () => {
+      try {
+        await keepAliveStudentExam(initialData.studentExamId, remainingSecondsRef.current);
+      } catch (err) {
+        console.error("Timer heartbeat sync failed:", err);
+      }
+    }, 10000);
+
+    return () => clearInterval(heartbeat);
+  }, [mode]);
 
   // 3. Low-Overhead Background Auto-Save Loop (Every 15 Seconds)
   useEffect(() => {
@@ -244,12 +266,37 @@ export function TakeExamClient({
     }
   };
 
-  // Update answer locally
+  // Update answer locally and trigger auto-saving per item
   const handleAnswerChange = (questionId: number, response: string) => {
-    setAnswers((prev) => ({
-      ...prev,
-      [questionId]: response,
-    }));
+    setAnswers((prev) => {
+      const newAnswers = {
+        ...prev,
+        [questionId]: response,
+      };
+
+      const targetQuestion = initialData.questions.find(
+        (q) => q.question_id === questionId
+      );
+      const isTextType =
+        targetQuestion?.question_type === "Essay" ||
+        targetQuestion?.question_type === "Identification";
+
+      if (autoSaveDebounceRef.current) {
+        clearTimeout(autoSaveDebounceRef.current);
+      }
+
+      if (isTextType) {
+        // Debounce text inputs by 1.5 seconds of inactivity
+        autoSaveDebounceRef.current = setTimeout(() => {
+          triggerBackgroundSave(newAnswers);
+        }, 1500);
+      } else {
+        // Save choice selections immediately
+        triggerBackgroundSave(newAnswers);
+      }
+
+      return newAnswers;
+    });
   };
 
   // Paginate questions (saves current dirty answer instantly on navigation)
