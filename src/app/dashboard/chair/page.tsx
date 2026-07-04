@@ -55,7 +55,8 @@ export default async function ChairDashboard() {
               exam: {
                 include: {
                   course: true,
-                  faculty: true
+                  faculty: true,
+                  questionBank: true
                 }
               },
             },

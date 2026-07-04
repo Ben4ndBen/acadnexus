@@ -41,29 +41,71 @@ async function main() {
 
   // 2. Seed Departments
   console.log("Seeding departments...");
-  const csDept = await prisma.department.create({
-    data: { department_name: "Department of Computer Studies" },
+  const itDept = await prisma.department.create({
+    data: { department_name: "IT Department" },
   });
-  
-  const eduDept = await prisma.department.create({
-    data: { department_name: "Department of Teacher Education" },
+  const ictDept = await prisma.department.create({
+    data: { department_name: "ICT Department" },
+  });
+  const agriDept = await prisma.department.create({
+    data: { department_name: "Agriculture Department" },
+  });
+  const teacherEduDept = await prisma.department.create({
+    data: { department_name: "Teacher Education Department" },
+  });
+  const hospitalityDept = await prisma.department.create({
+    data: { department_name: "Hospitality and Tourism Management Department" },
   });
 
   // 3. Seed Programs
   console.log("Seeding programs...");
-  const bscsProg = await prisma.academicProgram.create({
+  const bsitProg = await prisma.academicProgram.create({
     data: {
-      program_code: "BSCS",
-      program_name: "Bachelor of Science in Computer Science",
-      department_id: csDept.department_id,
+      program_code: "BSIT",
+      program_name: "Bachelor of Science in Information Technology",
+      department_id: itDept.department_id,
     },
   });
-
+  const bsindtechProg = await prisma.academicProgram.create({
+    data: {
+      program_code: "BSINDTECH",
+      program_name: "Bachelor of Science in Industrial Technology",
+      department_id: ictDept.department_id,
+    },
+  });
+  const bsaProg = await prisma.academicProgram.create({
+    data: {
+      program_code: "BSA",
+      program_name: "Bachelor of Science in Agriculture",
+      department_id: agriDept.department_id,
+    },
+  });
+  const beedProg = await prisma.academicProgram.create({
+    data: {
+      program_code: "BEED",
+      program_name: "Bachelor of Elementary Education",
+      department_id: teacherEduDept.department_id,
+    },
+  });
   const bsedProg = await prisma.academicProgram.create({
     data: {
       program_code: "BSED",
       program_name: "Bachelor of Secondary Education",
-      department_id: eduDept.department_id,
+      department_id: teacherEduDept.department_id,
+    },
+  });
+  const bshmProg = await prisma.academicProgram.create({
+    data: {
+      program_code: "BSHM",
+      program_name: "Bachelor of Science in Hospitality Management",
+      department_id: hospitalityDept.department_id,
+    },
+  });
+  const bstmProg = await prisma.academicProgram.create({
+    data: {
+      program_code: "BSTM",
+      program_name: "Bachelor of Science in Tourism Management",
+      department_id: hospitalityDept.department_id,
     },
   });
 
@@ -84,9 +126,9 @@ async function main() {
       student_id: studentUser.user_id,
       first_name: "Janice",
       last_name: "Delfin",
-      program_id: bscsProg.program_id,
+      program_id: bsitProg.program_id,
       year_level: 4,
-      section: "A",
+      section: "General",
     },
   });
 
@@ -104,7 +146,7 @@ async function main() {
       faculty_id: facultyUser.user_id,
       first_name: "Mark",
       last_name: "Abad",
-      department_id: csDept.department_id,
+      department_id: itDept.department_id,
     },
   });
 
@@ -120,7 +162,7 @@ async function main() {
   const chair = await prisma.chair.create({
     data: {
       chair_id: chairUser.user_id,
-      department_id: csDept.department_id,
+      department_id: itDept.department_id,
     },
   });
 
@@ -194,9 +236,9 @@ async function main() {
       examTargets: {
         create: [
           {
-            program_id: bscsProg.program_id,
+            program_id: bsitProg.program_id,
             year_level: 4,
-            section: "A",
+            section: "General",
             scheduled_date: new Date(),
             start_time: new Date(new Date().setHours(0, 0, 0, 0)),
             end_time: new Date(new Date().setHours(23, 59, 59, 999)),
@@ -229,9 +271,9 @@ async function main() {
       examTargets: {
         create: [
           {
-            program_id: bscsProg.program_id,
+            program_id: bsitProg.program_id,
             year_level: 4,
-            section: "A",
+            section: "General",
             scheduled_date: new Date(new Date().setDate(new Date().getDate() + 2)), // 2 days from now
             start_time: new Date(new Date().setHours(9, 0, 0, 0)),
             end_time: new Date(new Date().setHours(12, 0, 0, 0)),
@@ -264,9 +306,9 @@ async function main() {
       examTargets: {
         create: [
           {
-            program_id: bscsProg.program_id,
+            program_id: bsitProg.program_id,
             year_level: 4,
-            section: "A",
+            section: "General",
             scheduled_date: new Date(new Date().setDate(new Date().getDate() - 1)), // yesterday
             start_time: new Date(new Date().setHours(10, 0, 0, 0)),
             end_time: new Date(new Date().setHours(11, 0, 0, 0)),
@@ -375,9 +417,9 @@ async function main() {
 
   console.log("Database seeding completed successfully!");
   console.log("Created test accounts (all passwords are 'password123'):");
-  console.log("  - Student: STUDENT-001 (Janice Delfin - BSCS Year 4 Section A)");
-  console.log("  - Faculty: FACULTY-001 (Mark Abad - Department of Computer Studies)");
-  console.log("  - Chair: CHAIR-001 (Department of Computer Studies Chair)");
+  console.log("  - Student: STUDENT-001 (Janice Delfin - BSIT Year 4 Major General)");
+  console.log("  - Faculty: FACULTY-001 (Mark Abad - IT Department)");
+  console.log("  - Chair: CHAIR-001 (IT Department Chair)");
   console.log("  - Director: DIRECTOR-001 (Office of the Director)");
 }
 

@@ -37,6 +37,13 @@ export default async function FacultyDashboard() {
             include: {
               course: true,
               approvalWorkflow: true,
+              questionBank: {
+                select: {
+                  question_id: true,
+                  question_text: true,
+                  points: true
+                }
+              },
               _count: {
                 select: { questionBank: true }
               }

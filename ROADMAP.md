@@ -101,8 +101,8 @@
 
 #### EPIC 6: User Onboarding, Scheduling Overrides & Live Feeds (Phase 3.6)
 ##### **Card 20: Public Registration Portal**
-- [ ] **Task 43:** Build a secure, branded registration sign-up screen that allows students to register via their unique ID numbers and handles role-based onboarding.
-- [ ] **Task 44:** Re-engineer review panels to allow the Department Chairperson to leave itemized comments and granular feedback per specific question number.
+- [x] **Task 43:** Build a secure, branded registration sign-up screen that allows students to register via their unique ID numbers and handles role-based onboarding.
+- [x] **Task 44:** Re-engineer review panels to allow the Department Chairperson to leave itemized comments and granular feedback per specific question number.
 
 ##### **Card 21: Calendar Configuration Overrides**
 - [ ] **Task 45:** Fix calendar interface responsiveness so that clicking "schedule" on an already scheduled exam displays the saved date and time instead of rendering blank.
@@ -144,3 +144,5 @@
 | 2026-06-12 | Task 17, 18, 19 | Built Secure Test-Taking Interface including Entry Gate, Fullscreen/Focus lockdown (3 attempts warning system), background auto-save checkpoints, and objective auto-grading. | Completed |
 | 2026-06-29 | Task 22, 23 | Implemented Chair approval/return toggles with comments, and Director's Pass-Through Clearance optimization with global and individual administrative holds. | Completed |
 | 2026-07-01 | Task 24, 25 | Implemented floating notification bell component with Supabase Realtime and polling fallback, and deployed Postgres triggers for student, faculty, and chair alerts. | Completed |
+| 2026-07-04 | Task 43, 44 | Integrated secure, real-time client & server validations on the student registration portal and re-engineered the department chair review queue with per-question toggles and granular feedback metrics. | Completed |
+
