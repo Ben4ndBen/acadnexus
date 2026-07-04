@@ -4,6 +4,7 @@ import { useActionState, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { loginAction } from "@/app/actions/auth";
 import { Eye, EyeOff, Lock, User, Loader2, AlertCircle } from "lucide-react";
+import Link from "next/link";
 
 export function LoginForm() {
   const router = useRouter();
@@ -103,12 +104,12 @@ export function LoginForm() {
         )}
       </button>
 
-      <div className="text-center mt-4 border-t border-stone-100 pt-4">
+      <div className="text-center pt-2">
         <p className="text-xs text-stone-500">
-          New institutional user?{" "}
-          <a href="/register" className="font-bold text-[#7A151A] hover:underline">
-            Register Account Here
-          </a>
+          Don't have an account?{" "}
+          <Link href="/register" className="font-bold text-[#7A151A] hover:underline transition-all">
+            Register here
+          </Link>
         </p>
       </div>
     </form>

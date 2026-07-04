@@ -51,7 +51,7 @@ last_name  String   @db.VarChar(100)
 program_id Int
 program    AcademicProgram @relation(fields: [program_id], references: [program_id])
 year_level Int
-section    String   @db.VarChar(10)
+section    String   @db.VarChar(100)
 
 studentExams StudentExam[]
 
@@ -167,7 +167,7 @@ exam           Examination     @relation(fields: [exam_id], references: [exam_id
 program_id     Int
 program        AcademicProgram @relation(fields: [program_id], references: [program_id])
 year_level     Int
-section        String          @db.VarChar(10)
+section        String          @db.VarChar(100)
 scheduled_date DateTime        @db.Date
 start_time     DateTime        @db.Time
 end_time       DateTime        @db.Time

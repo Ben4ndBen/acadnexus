@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { 
   Activity, Users, ClipboardCheck, FileSearch, CheckCircle, 
-  XCircle, Send, AlertCircle, RefreshCw, FileText
+  XCircle, Send, AlertCircle, RefreshCw, FileText, Check, X
 } from "lucide-react";
 import { reviewExamByChair, verifySyllabusAndTOS } from "@/app/actions/chair";
 
@@ -40,7 +40,14 @@ interface ChairDashboardClientProps {
       faculty: {
         first_name: string;
         last_name: string;
-      }
+      };
+      questionBank: Array<{
+        question_id: number;
+        question_text: string;
+        question_type: string;
+        correct_answer: string;
+        points: number;
+      }>;
     };
   }>;
   departmentExams: Array<any>;
@@ -59,27 +66,72 @@ export function ChairDashboardClient({
   // State for Review Queue
   const [isSubmittingReview, setIsSubmittingReview] = useState<number | null>(null);
   const [reviewComments, setReviewComments] = useState<Record<number, string>>({});
+  const [questionComments, setQuestionComments] = useState<Record<number, Record<number, string>>>({});
+  const [questionStatuses, setQuestionStatuses] = useState<Record<number, Record<number, "Approved" | "Revision">>>({});
 
   // State for Verification Tool
   const [isVerifying, setIsVerifying] = useState<number | null>(null);
   const [verifiedExams, setVerifiedExams] = useState<Set<number>>(new Set());
 
   const handleReview = async (workflowId: number, examId: number, action: "Approve" | "Return") => {
-    const comments = reviewComments[workflowId] || "";
-    if (action === "Return" && !comments.trim()) {
-      alert("Please provide feedback when returning an examination.");
+    const generalComment = reviewComments[workflowId] || "";
+    const qComments = questionComments[workflowId] || {};
+    const qStatuses = questionStatuses[workflowId] || {};
+    
+    // For each question in the pending approval, compile its status and comment
+    const approval = pendingApprovals.find(a => a.workflow_id === workflowId);
+    const questionsFeedback: Record<string, { status: "Approved" | "Revision"; comment: string }> = {};
+    
+    if (approval && approval.exam.questionBank) {
+      approval.exam.questionBank.forEach(q => {
+        const status = qStatuses[q.question_id] || "Approved"; // default to Approved if not toggled
+        const comment = qComments[q.question_id] || "";
+        questionsFeedback[q.question_id] = { status, comment };
+      });
+    }
+
+    const hasRevisionRequested = Object.values(questionsFeedback).some(q => q.status === "Revision");
+    const hasQuestionComments = Object.values(questionsFeedback).some(q => q.comment.trim().length > 0);
+
+    // Enforce feedback rules when returning
+    if (action === "Return" && !generalComment.trim() && !hasRevisionRequested && !hasQuestionComments) {
+      alert("Please provide general feedback or request revisions on specific questions before returning the exam.");
       return;
     }
 
+    // Enforce warning when approving but revisions are requested
+    if (action === "Approve" && hasRevisionRequested) {
+      const confirmApprove = window.confirm(
+        "You have marked some questions as requiring revision. Are you sure you want to approve this exam?"
+      );
+      if (!confirmApprove) return;
+    }
+
+    // Compile into serialized JSON
+    const compiledComments = JSON.stringify({
+      general: generalComment,
+      questions: questionsFeedback
+    });
+
     setIsSubmittingReview(workflowId);
-    const res = await reviewExamByChair(workflowId, examId, action, comments, chairUserId);
+    const res = await reviewExamByChair(workflowId, examId, action, compiledComments, chairUserId);
     setIsSubmittingReview(null);
 
     if (res.error) {
       alert(res.error);
     } else {
-      // Clear comment on success
+      // Clear comments on success
       setReviewComments((prev) => {
+        const next = { ...prev };
+        delete next[workflowId];
+        return next;
+      });
+      setQuestionComments((prev) => {
+        const next = { ...prev };
+        delete next[workflowId];
+        return next;
+      });
+      setQuestionStatuses((prev) => {
         const next = { ...prev };
         delete next[workflowId];
         return next;
@@ -304,14 +356,176 @@ export function ChairDashboardClient({
                     </div>
 
                     <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
-                      <label className="text-xs font-bold text-slate-700 mb-2 block">Review Comments (Required for Return)</label>
+                      <label className="text-xs font-bold text-slate-700 mb-2 block">General Review Comments</label>
                       <textarea
                         value={reviewComments[approval.workflow_id] || ""}
                         onChange={(e) => setReviewComments({...reviewComments, [approval.workflow_id]: e.target.value})}
                         className="w-full bg-white border border-slate-200 rounded-lg p-3 text-sm text-slate-800 placeholder:text-slate-400 focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all outline-none"
                         rows={3}
-                        placeholder="Add your feedback or required changes here..."
+                        placeholder="Add your general feedback or required changes here..."
                       />
+                    </div>
+                    {/* Itemized Question Feedback Panel */}
+                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-4">
+                      {(() => {
+                        const qStatuses = questionStatuses[approval.workflow_id] || {};
+                        const totalQuestions = approval.exam.questionBank?.length || 0;
+                        const approvedCount = approval.exam.questionBank?.filter(q => (qStatuses[q.question_id] || "Approved") === "Approved").length || 0;
+                        const revisionCount = totalQuestions - approvedCount;
+                        const percentApproved = totalQuestions > 0 ? Math.round((approvedCount / totalQuestions) * 100) : 100;
+                        
+                        return (
+                          <>
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-3">
+                              <div>
+                                <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">
+                                  Granular Question Review
+                                </h4>
+                                <p className="text-[10px] text-slate-400 font-semibold uppercase mt-0.5">
+                                  Set individual item status and write specific corrections.
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <div className="text-right">
+                                  <span className="text-[10px] font-extrabold text-slate-600 block">
+                                    {approvedCount} / {totalQuestions} Approved
+                                  </span>
+                                  {revisionCount > 0 && (
+                                    <span className="text-[9px] font-bold text-rose-600">
+                                      {revisionCount} require revision
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="w-16 bg-slate-200 h-2 rounded-full overflow-hidden shrink-0">
+                                  <div 
+                                    className={`h-full rounded-full transition-all duration-300 ${
+                                      percentApproved === 100 ? "bg-emerald-500" : percentApproved > 50 ? "bg-amber-500" : "bg-rose-500"
+                                    }`}
+                                    style={{ width: `${percentApproved}%` }}
+                                  />
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="space-y-3 max-h-[350px] overflow-y-auto pr-1">
+                              {approval.exam.questionBank && approval.exam.questionBank.length > 0 ? (
+                                approval.exam.questionBank.map((q, idx) => {
+                                  const currentStatus = qStatuses[q.question_id] || "Approved";
+                                  return (
+                                    <div key={q.question_id} className={`bg-white border rounded-xl p-4.5 space-y-3 transition-all duration-200 shadow-sm ${
+                                      currentStatus === "Approved" 
+                                        ? "border-slate-100 hover:border-slate-200" 
+                                        : "border-rose-200 ring-2 ring-rose-500/5 bg-rose-50/5"
+                                    }`}>
+                                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                                        <div className="flex items-center gap-2">
+                                          <span className="font-extrabold text-slate-800 bg-slate-100 px-2 py-0.5 rounded text-[10px]">
+                                            Item #{idx + 1}
+                                          </span>
+                                          <span className="bg-amber-50 text-amber-800 px-2 py-0.5 rounded border border-amber-100 font-semibold text-[9px] uppercase tracking-wider">
+                                            {q.question_type.replace("_", " ")}
+                                          </span>
+                                          <span className="text-[10px] font-bold text-slate-400">
+                                            {q.points} {q.points === 1 ? "pt" : "pts"}
+                                          </span>
+                                        </div>
+
+                                        {/* Status Toggle Buttons */}
+                                        <div className="flex border border-slate-200 rounded-lg p-0.5 bg-slate-50 shrink-0 text-[10px] font-bold">
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              const currentWfStatuses = questionStatuses[approval.workflow_id] || {};
+                                              setQuestionStatuses({
+                                                ...questionStatuses,
+                                                [approval.workflow_id]: {
+                                                  ...currentWfStatuses,
+                                                  [q.question_id]: "Approved"
+                                                }
+                                              });
+                                            }}
+                                            className={`px-2.5 py-1 rounded-md transition-all cursor-pointer flex items-center gap-1 ${
+                                              currentStatus === "Approved"
+                                                ? "bg-emerald-600 text-white shadow-sm font-black"
+                                                : "text-slate-500 hover:text-slate-700"
+                                            }`}
+                                          >
+                                            <Check className="w-3.5 h-3.5" />
+                                            <span>Approve</span>
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              const currentWfStatuses = questionStatuses[approval.workflow_id] || {};
+                                              setQuestionStatuses({
+                                                ...questionStatuses,
+                                                [approval.workflow_id]: {
+                                                  ...currentWfStatuses,
+                                                  [q.question_id]: "Revision"
+                                                }
+                                              });
+                                            }}
+                                            className={`px-2.5 py-1 rounded-md transition-all cursor-pointer flex items-center gap-1 ${
+                                              currentStatus === "Revision"
+                                                ? "bg-rose-600 text-white shadow-sm font-black"
+                                                : "text-slate-500 hover:text-slate-700"
+                                            }`}
+                                          >
+                                            <X className="w-3.5 h-3.5" />
+                                            <span>Requires Revision</span>
+                                          </button>
+                                        </div>
+                                      </div>
+
+                                      <p className="text-xs text-slate-700 font-medium leading-relaxed bg-slate-50/50 p-2.5 rounded-lg border border-slate-100">
+                                        {q.question_text}
+                                      </p>
+
+                                      {/* Feedback text area (always available, but styled specifically for revisions) */}
+                                      <div className="space-y-1">
+                                        <div className="flex justify-between items-center text-[10px]">
+                                          <span className="font-bold text-slate-500">Feedback Comments:</span>
+                                          {currentStatus === "Revision" && (
+                                            <span className="text-rose-600 font-extrabold uppercase tracking-wider text-[8px]">
+                                              * Required for revisions
+                                            </span>
+                                          )}
+                                        </div>
+                                        <textarea
+                                          value={questionComments[approval.workflow_id]?.[q.question_id] || ""}
+                                          onChange={(e) => {
+                                            const currentWorkflowComments = questionComments[approval.workflow_id] || {};
+                                            setQuestionComments({
+                                              ...questionComments,
+                                              [approval.workflow_id]: {
+                                                ...currentWorkflowComments,
+                                                [q.question_id]: e.target.value
+                                              }
+                                            });
+                                          }}
+                                          placeholder={
+                                            currentStatus === "Revision"
+                                              ? "Describe the correction needed for this item (e.g. rewrite options, change correct key, etc.)..."
+                                              : "Add suggestions or comments (optional)..."
+                                          }
+                                          rows={2}
+                                          className={`w-full bg-slate-50/50 border rounded-lg p-2 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:bg-white transition-all duration-200 ${
+                                            currentStatus === "Revision"
+                                              ? "border-rose-200 focus:border-rose-500 focus:ring-1 focus:ring-rose-500/20"
+                                              : "border-slate-200 focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20"
+                                          }`}
+                                        />
+                                      </div>
+                                    </div>
+                                  );
+                                })
+                              ) : (
+                                <p className="text-xs text-slate-400 italic">No questions found in this examination draft.</p>
+                              )}
+                            </div>
+                          </>
+                        );
+                      })()}
                     </div>
                   </div>
 

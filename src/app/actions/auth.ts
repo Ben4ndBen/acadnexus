@@ -152,34 +152,69 @@ export async function logoutAction() {
 }
 
 export async function registerAction(prevState: any, formData: FormData) {
+  const institutionalId = formData.get("institutionalId") as string;
+  const password = formData.get("password") as string;
+  const confirmPassword = formData.get("confirmPassword") as string;
   const firstName = formData.get("firstName") as string;
   const middleName = formData.get("middleName") as string;
   const lastName = formData.get("lastName") as string;
-  const departmentIdStr = formData.get("departmentId") as string;
-  const institutionalId = formData.get("institutionalId") as string;
-  const password = formData.get("password") as string;
   const role = formData.get("role") as string;
 
+  // Onboarding fields
   const programIdStr = formData.get("programId") as string;
   const yearLevelStr = formData.get("yearLevel") as string;
-  const section = formData.get("section") as string;
+  const major = formData.get("major") as string;
+  const departmentIdStr = formData.get("departmentId") as string;
 
-  if (!firstName || !lastName || !institutionalId || !password || !role) {
+  if (!institutionalId || !password || !confirmPassword || !firstName || !lastName || !role) {
     return { error: "Please fill in all required fields." };
   }
 
+  if (password !== confirmPassword) {
+    return { error: "Passwords do not match." };
+  }
+
+  // Validate password strength
+  const hasUppercase = /[A-Z]/.test(password);
+  const hasLowercase = /[a-z]/.test(password);
+  const hasDigit = /\d/.test(password);
+  const hasSpecial = /[^A-Za-z0-9]/.test(password);
+  if (
+    password.length < 8 ||
+    !hasUppercase ||
+    !hasLowercase ||
+    !hasDigit ||
+    !hasSpecial
+  ) {
+    return {
+      error: "Password must be at least 8 characters long and contain uppercase, lowercase, numbers, and special characters.",
+    };
+  }
+
+  // Validate ID format prefix & suffix
+  const formattedId = institutionalId.trim().toUpperCase();
+  if (role === "Student") {
+    if (!/^STUDENT-\d+$/.test(formattedId)) {
+      return { error: "Student ID must follow the standard format: STUDENT- followed by digits (e.g. STUDENT-002)." };
+    }
+  } else if (role === "Faculty") {
+    if (!/^FACULTY-\d+$/.test(formattedId)) {
+      return { error: "Faculty ID must follow the standard format: FACULTY- followed by digits (e.g. FACULTY-002)." };
+    }
+  }
+
   try {
-    // 1. Check if institutional_id already exists
+    // Check if institutional ID already registered
     const existingUser = await db.user.findUnique({
-      where: { institutional_id: institutionalId },
+      where: { institutional_id: formattedId },
     });
 
     if (existingUser) {
       return { error: "Institutional ID already registered." };
     }
 
-    // 2. Generate unique username for Faculty using formula:
-    // 2 first letters + 1 middle name letter + 2 or 3 last name letters (e.g. miAgCa)
+    // Generate unique username for Faculty using formula:
+    // 2 first letters + 1 middle name letter + 2 or 3 last name letters
     let username = "";
     if (role === "Faculty") {
       const cleanFirst = firstName.trim().replace(/[^a-zA-Z]/g, "");
@@ -187,13 +222,11 @@ export async function registerAction(prevState: any, formData: FormData) {
       const cleanLast = lastName.trim().replace(/[^a-zA-Z]/g, "");
 
       const fPart = cleanFirst.slice(0, 2).toLowerCase();
-      // middle initial (uppercase) - if middle name is missing, use "X"
       const mPart = cleanMiddle ? cleanMiddle.slice(0, 1).toUpperCase() : "X";
       
-      // Try 2 letters of last name:
       const lPart2 = cleanLast.slice(0, 2);
       const lPart2Cased = lPart2.charAt(0).toUpperCase() + lPart2.slice(1).toLowerCase();
-      const candidate1 = `${fPart}${mPart}${lPart2Cased}`; // e.g. miAgCa
+      const candidate1 = `${fPart}${mPart}${lPart2Cased}`;
       
       const userWithCand1 = await db.user.findUnique({
         where: { username: candidate1 },
@@ -202,10 +235,9 @@ export async function registerAction(prevState: any, formData: FormData) {
       if (!userWithCand1) {
         username = candidate1;
       } else {
-        // Try 3 letters of last name:
         const lPart3 = cleanLast.slice(0, 3);
         const lPart3Cased = lPart3.charAt(0).toUpperCase() + lPart3.slice(1).toLowerCase();
-        const candidate2 = `${fPart}${mPart}${lPart3Cased}`; // e.g. miAgCas
+        const candidate2 = `${fPart}${mPart}${lPart3Cased}`;
         
         const userWithCand2 = await db.user.findUnique({
           where: { username: candidate2 },
@@ -214,7 +246,6 @@ export async function registerAction(prevState: any, formData: FormData) {
         if (!userWithCand2) {
           username = candidate2;
         } else {
-          // Fallback: append sequential numbers
           let suffix = 1;
           while (true) {
             const candidate3 = `${candidate1}${suffix}`;
@@ -231,19 +262,19 @@ export async function registerAction(prevState: any, formData: FormData) {
       }
     }
 
-    // 3. Hash the password
+    // Hash the password
     const salt = await bcrypt.genSalt(10);
     const passwordHash = await bcrypt.hash(password, salt);
 
-    // 4. Create User and Faculty/Student record
-    await db.$transaction(async (tx) => {
-      const newUser = await tx.user.create({
+    // Create User and Faculty/Student record in transaction
+    const newUser = await db.$transaction(async (tx) => {
+      const user = await tx.user.create({
         data: {
-          institutional_id: institutionalId,
+          institutional_id: formattedId,
           username: role === "Faculty" ? username : null,
           password_hash: passwordHash,
           role: role as any,
-          require_password_update: true, // Force password update immediately after signing up!
+          require_password_update: role === "Faculty", // Force password update immediately after signing up for Faculty!
         },
       });
 
@@ -253,7 +284,7 @@ export async function registerAction(prevState: any, formData: FormData) {
         }
         await tx.faculty.create({
           data: {
-            faculty_id: newUser.user_id,
+            faculty_id: user.user_id,
             first_name: firstName,
             middle_name: middleName || null,
             last_name: lastName,
@@ -261,25 +292,94 @@ export async function registerAction(prevState: any, formData: FormData) {
           },
         });
       } else if (role === "Student") {
-        if (!programIdStr) {
-          throw new Error("Academic Program is required for Student.");
+        if (!programIdStr || !yearLevelStr || !major) {
+          throw new Error("Please provide program, year level, and major for student onboarding.");
         }
         await tx.student.create({
           data: {
-            student_id: newUser.user_id,
+            student_id: user.user_id,
             first_name: firstName,
             last_name: lastName,
             program_id: Number(programIdStr),
-            year_level: Number(yearLevelStr || 1),
-            section: section || "A",
+            year_level: Number(yearLevelStr),
+            section: major, // Storing 'Major' in the section column
           },
         });
       }
+
+      return user;
     });
 
-    return { success: true, username: role === "Faculty" ? username : undefined };
+    // Sync with Supabase Auth or mock session cookie
+    const isMockAuth = !process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+    const email = `${formattedId.toLowerCase()}@acadnexus.bsc.edu.ph`;
+
+    if (isMockAuth) {
+      const mockUser = {
+        id: `mock-${newUser.user_id}`,
+        user_metadata: {
+          role: newUser.role,
+          institutional_id: formattedId,
+        },
+      };
+
+      await db.user.update({
+        where: { user_id: newUser.user_id },
+        data: { supabase_uid: mockUser.id },
+      });
+
+      const cookieStore = await cookies();
+      cookieStore.set("acadnexus_mock_session", JSON.stringify(mockUser), {
+        path: "/",
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        maxAge: 60 * 60 * 24,
+      });
+    } else {
+      const supabase = await createClient();
+      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            institutional_id: formattedId,
+            role: newUser.role,
+          },
+        },
+      });
+
+      if (signUpError) {
+        // Rollback transaction manually
+        if (role === "Student") {
+          await db.student.delete({ where: { student_id: newUser.user_id } });
+        } else if (role === "Faculty") {
+          await db.faculty.delete({ where: { faculty_id: newUser.user_id } });
+        }
+        await db.user.delete({ where: { user_id: newUser.user_id } });
+        return { error: `Supabase registration failed: ${signUpError.message}` };
+      }
+
+      if (signUpData?.user) {
+        await db.user.update({
+          where: { user_id: newUser.user_id },
+          data: { supabase_uid: signUpData.user.id },
+        });
+
+        // Automatically log in
+        await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+      }
+    }
+
+    return { 
+      success: true, 
+      username: role === "Faculty" ? username : undefined,
+      role: newUser.role 
+    };
   } catch (err: any) {
-    console.error("Registration error:", err);
-    return { error: err.message || "An error occurred during registration." };
+    console.error("Register action error:", err);
+    return { error: err.message || "An unexpected error occurred during registration." };
   }
 }
