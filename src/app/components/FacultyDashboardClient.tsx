@@ -1,19 +1,22 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { 
   BookOpen, Award, FileText, ClipboardList, PenTool, CheckCircle, 
   User, Shield, Settings, Activity, Send, RotateCcw, AlertCircle, RefreshCw, Mail,
-  Plus, Trash2, Calendar
+  Plus, Trash2, Calendar, Lock, Camera, Check, ShieldAlert, Loader2
 } from "lucide-react";
-import { updateFacultyProfile, updateExamStatus, createExamDraft, deleteExam, scheduleExamTarget } from "@/app/actions/faculty";
+import { updateFacultyProfile, updateExamStatus, createExamDraft, deleteExam, scheduleExamTarget, configureFacultyAccount } from "@/app/actions/faculty";
 
 interface FacultyDashboardClientProps {
   faculty: {
     faculty_id: number;
     first_name: string;
+    middle_name?: string | null;
     last_name: string;
+    institutional_email?: string | null;
+    profile_image?: string | null;
     department: {
       department_name: string;
     } | null;
@@ -50,11 +53,60 @@ interface FacultyDashboardClientProps {
   };
   institutionalId: string;
   programs?: Array<{ program_id: number; program_code: string; program_name: string; department_id: number }>;
+  requirePasswordUpdate?: boolean;
+  username?: string;
 }
 
-export function FacultyDashboardClient({ faculty, institutionalId, programs = [] }: FacultyDashboardClientProps) {
+export function FacultyDashboardClient({ 
+  faculty, 
+  institutionalId, 
+  programs = [], 
+  requirePasswordUpdate = false, 
+  username 
+}: FacultyDashboardClientProps) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<"overview" | "tracker" | "profile">("overview");
+  
+  // Account Configuration form state
+  const [configPassword, setConfigPassword] = useState("");
+  const [configConfirmPassword, setConfigConfirmPassword] = useState("");
+  const [configEmail, setConfigEmail] = useState(faculty.institutional_email || "");
+  const [configImage, setConfigImage] = useState<File | null>(null);
+  const [configImagePreview, setConfigImagePreview] = useState<string | null>(faculty.profile_image || null);
+  const [configMessage, setConfigMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [isConfiguring, startConfigureTransition] = useTransition();
+
+  const handleConfigSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (configPassword !== configConfirmPassword) {
+      setConfigMessage({ type: "error", text: "Passwords do not match." });
+      return;
+    }
+    if (configPassword.length < 8) {
+      setConfigMessage({ type: "error", text: "Password must be at least 8 characters long." });
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("newPassword", configPassword);
+    formData.append("institutionalEmail", configEmail);
+    if (configImage) {
+      formData.append("profileImage", configImage);
+    }
+
+    setConfigMessage(null);
+    startConfigureTransition(async () => {
+      const res = await configureFacultyAccount(faculty.faculty_id, formData);
+      if (res.success) {
+        setConfigMessage({ type: "success", text: "Account configured successfully! Unlocking dashboard..." });
+        setTimeout(() => {
+          window.location.reload();
+        }, 1500);
+      } else {
+        setConfigMessage({ type: "error", text: res.error || "Failed to configure account." });
+      }
+    });
+  };
   
   // Profile form state
   const [firstName, setFirstName] = useState(faculty.first_name);
@@ -232,6 +284,134 @@ export function FacultyDashboardClient({ faculty, institutionalId, programs = []
     return exam.current_status === trackerFilter;
   });
 
+  if (requirePasswordUpdate) {
+    return (
+      <div className="max-w-2xl mx-auto bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 shadow-xl space-y-6">
+        <div className="text-center space-y-2 border-b border-slate-100 pb-5">
+          <div className="bg-[#7A151A]/10 text-[#7A151A] p-4 rounded-full w-16 h-16 flex items-center justify-center mx-auto border border-[#7A151A]/20">
+            <Lock className="w-8 h-8" />
+          </div>
+          <h2 className="text-2xl font-black text-slate-800">Secure Account Configuration</h2>
+          <p className="text-slate-500 text-xs max-w-md mx-auto leading-relaxed">
+            Welcome to AcadNexus! Because you recently signed up, Batanes State College security policy requires you to configure your institutional email, upload a profile image, and update your temporary password immediately before accessing the dashboard pipeline.
+          </p>
+        </div>
+
+        <form onSubmit={handleConfigSubmit} className="space-y-6">
+          {configMessage && (
+            <div className={`p-4 rounded-xl border text-xs font-bold flex items-center gap-3 ${
+              configMessage.type === "success" 
+                ? "bg-emerald-50 text-emerald-800 border-emerald-100" 
+                : "bg-rose-50 text-rose-800 border-rose-100"
+            }`}>
+              {configMessage.type === "success" ? <Check className="w-4 h-4 text-emerald-600" /> : <AlertCircle className="w-4 h-4 text-rose-600" />}
+              <p>{configMessage.text}</p>
+            </div>
+          )}
+
+          {/* Profile Image Upload */}
+          <div className="space-y-3">
+            <label className="text-xs font-extrabold text-slate-700 uppercase tracking-wider block">Profile Image</label>
+            <div className="flex flex-col sm:flex-row items-center gap-6 bg-slate-50 p-4 rounded-2xl border border-slate-200/50">
+              <div className="relative w-24 h-24 rounded-2xl overflow-hidden border-2 border-dashed border-slate-350 bg-white flex items-center justify-center group/avatar shrink-0">
+                {configImagePreview ? (
+                  <img src={configImagePreview} alt="Preview" className="w-full h-full object-cover" />
+                ) : (
+                  <User className="w-8 h-8 text-slate-400" />
+                )}
+                <label className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover/avatar:opacity-100 flex items-center justify-center text-white cursor-pointer transition-all duration-300">
+                  <Camera className="w-5 h-5" />
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        setConfigImage(file);
+                        setConfigImagePreview(URL.createObjectURL(file));
+                      }
+                    }}
+                  />
+                </label>
+              </div>
+              <div className="text-center sm:text-left space-y-1">
+                <p className="text-xs font-bold text-slate-700">Upload your profile photo</p>
+                <p className="text-[10px] text-slate-400 leading-relaxed">
+                  Supported formats: JPG, PNG, WEBP. Max size 2MB. This image will be printed onto your digital faculty identity card.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Institutional Email */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-extrabold text-slate-700 uppercase tracking-wider block">Institutional Email Address</label>
+            <div className="relative">
+              <Mail className="absolute left-3.5 top-3 w-5 h-5 text-slate-400" />
+              <input
+                type="email"
+                required
+                value={configEmail}
+                onChange={(e) => setConfigEmail(e.target.value)}
+                placeholder="e.g. mark.abad@acadnexus.bsc.edu.ph"
+                className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-[#7A151A]/20 focus:border-[#7A151A] text-sm font-medium text-slate-900 pl-11 pr-4 py-2.5 rounded-xl transition-all duration-300"
+              />
+            </div>
+          </div>
+
+          {/* New Password */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-extrabold text-slate-700 uppercase tracking-wider block">New Secure Password</label>
+              <div className="relative">
+                <Lock className="absolute left-3.5 top-3 w-5 h-5 text-slate-400" />
+                <input
+                  type="password"
+                  required
+                  value={configPassword}
+                  onChange={(e) => setConfigPassword(e.target.value)}
+                  placeholder="•••••••• (Min 8 chars)"
+                  className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-[#7A151A]/20 focus:border-[#7A151A] text-sm font-medium text-slate-900 pl-11 pr-4 py-2.5 rounded-xl transition-all duration-300"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-extrabold text-slate-700 uppercase tracking-wider block">Confirm Password</label>
+              <div className="relative">
+                <Lock className="absolute left-3.5 top-3 w-5 h-5 text-slate-400" />
+                <input
+                  type="password"
+                  required
+                  value={configConfirmPassword}
+                  onChange={(e) => setConfigConfirmPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-[#7A151A]/20 focus:border-[#7A151A] text-sm font-medium text-slate-900 pl-11 pr-4 py-2.5 rounded-xl transition-all duration-300"
+                />
+              </div>
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            disabled={isConfiguring}
+            className="w-full relative flex items-center justify-center bg-[#7A151A] hover:bg-[#580B0F] text-white font-bold rounded-xl py-3.5 text-sm shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-[#7A151A] focus:ring-offset-2 transition-all duration-300 disabled:opacity-85 disabled:cursor-not-allowed overflow-hidden group"
+          >
+            {isConfiguring ? (
+              <div className="flex items-center gap-2">
+                <Loader2 className="w-5 h-5 animate-spin text-[#FBB017]" />
+                <span>Applying Secure Configurations...</span>
+              </div>
+            ) : (
+              <span>Save & Activate Account</span>
+            )}
+          </button>
+        </form>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8">
       {/* Dashboard Sub-navigation Tabs */}
@@ -276,40 +456,86 @@ export function FacultyDashboardClient({ faculty, institutionalId, programs = []
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Left Panel: Portfolios & Overview Stats */}
           <div className="space-y-8">
-            {/* Quick Profile Summary */}
-            <div className="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-sm space-y-6">
-              <h2 className="text-lg font-bold text-slate-800 border-b border-slate-100 pb-3 flex items-center gap-2">
-                <span className="w-1.5 h-6 bg-emerald-600 rounded-full" />
-                Institutional Info
-              </h2>
-              <div className="space-y-4">
-                <div className="flex items-center gap-3">
-                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                    <User className="w-5 h-5 text-slate-500" />
+            {/* Premium Faculty Identity Card */}
+            <div className="bg-gradient-to-b from-[#7A151A] to-[#580B0F] rounded-3xl overflow-hidden shadow-lg border-2 border-[#E2A123]/60 relative text-white transition-all duration-500 hover:shadow-2xl hover:scale-[1.01] group/idcard select-none">
+              {/* Card Holographic/Vector overlay */}
+              <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff03_1px,transparent_1px),linear-gradient(to_bottom,#ffffff03_1px,transparent_1px)] bg-[size:16px_16px] opacity-40 pointer-events-none" />
+              <div className="absolute top-0 right-0 w-24 h-full bg-[#E2A123]/5 transform skew-x-12 origin-top-right pointer-events-none" />
+              
+              {/* ID Card Header */}
+              <div className="bg-[#580B0F] px-5 py-4 border-b border-[#E2A123]/30 flex items-center gap-3">
+                <div className="bg-white p-1 rounded-full border border-[#E2A123]/50 shrink-0 shadow-sm">
+                  <img src="/bsc-logo.png" alt="BSC Logo" className="w-8 h-8 object-contain" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[10px] text-[#E2A123] font-black uppercase tracking-wider leading-none">Batanes State College</p>
+                  <p className="text-[11px] text-amber-100 font-bold uppercase tracking-widest mt-1 opacity-90 leading-none">Faculty Identity Card</p>
+                </div>
+              </div>
+
+              {/* ID Card Body */}
+              <div className="p-6 flex flex-col items-center text-center space-y-4">
+                {/* Profile Image Frame */}
+                <div className="relative w-28 h-28 rounded-2xl overflow-hidden border-2 border-[#E2A123] bg-[#7A151A]/40 shadow-inner flex items-center justify-center shrink-0">
+                  {faculty.profile_image ? (
+                    <img src={faculty.profile_image} alt={`${faculty.first_name} ${faculty.last_name}`} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full bg-gradient-to-tr from-[#7A151A] to-amber-700 flex items-center justify-center text-white text-3xl font-black">
+                      {faculty.first_name.charAt(0)}{faculty.last_name.charAt(0)}
+                    </div>
+                  )}
+                </div>
+
+                {/* Faculty Name & Role */}
+                <div className="space-y-1">
+                  <h3 className="text-lg font-black tracking-wide truncate max-w-[220px]">
+                    {faculty.first_name} {faculty.middle_name ? `${faculty.middle_name.charAt(0).toUpperCase()}. ` : ""}{faculty.last_name}
+                  </h3>
+                  <p className="text-[10px] bg-[#E2A123]/20 text-[#E2A123] font-extrabold uppercase tracking-widest px-3 py-1 rounded-full inline-block border border-[#E2A123]/30">
+                    Faculty Instructor
+                  </p>
+                </div>
+
+                {/* Faculty Specific Details */}
+                <div className="w-full text-left bg-black/15 rounded-2xl p-4 border border-white/5 space-y-2 text-xs font-semibold text-neutral-100">
+                  <div className="flex justify-between items-center gap-4">
+                    <span className="text-amber-200/70 text-[10px] font-bold uppercase tracking-wider">Dept</span>
+                    <span className="truncate max-w-[150px] font-bold">{faculty.department?.department_name || "BSC Faculty"}</span>
                   </div>
-                  <div>
-                    <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Instructor</p>
-                    <p className="text-sm font-bold text-slate-800">{faculty.first_name} {faculty.last_name}</p>
+                  <div className="flex justify-between items-center gap-4">
+                    <span className="text-amber-200/70 text-[10px] font-bold uppercase tracking-wider">ID Number</span>
+                    <span className="font-mono font-bold">{institutionalId}</span>
+                  </div>
+                  {username && (
+                    <div className="flex justify-between items-center gap-4">
+                      <span className="text-amber-200/70 text-[10px] font-bold uppercase tracking-wider">Username</span>
+                      <span className="font-mono font-bold text-amber-300">{username}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between items-center gap-4 border-t border-white/10 pt-2 mt-2">
+                    <span className="text-amber-200/70 text-[10px] font-bold uppercase tracking-wider">Email</span>
+                    <span className="truncate max-w-[150px] font-mono text-neutral-200">
+                      {faculty.institutional_email || `${institutionalId.toLowerCase()}@acadnexus.bsc.edu.ph`}
+                    </span>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3">
-                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                    <Shield className="w-5 h-5 text-slate-500" />
+                {/* Aesthetic Digital Card Details */}
+                <div className="w-full flex items-center justify-between border-t border-white/10 pt-3">
+                  <div className="flex flex-col items-start gap-0.5">
+                    <span className="text-[8px] text-white/40 font-bold uppercase tracking-widest">Digital ID Security</span>
+                    <span className="text-[9px] text-[#E2A123] font-bold font-mono tracking-wider">SECURE-ACADNEXUS-2026</span>
                   </div>
-                  <div>
-                    <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Department</p>
-                    <p className="text-sm font-bold text-slate-800">{faculty.department?.department_name || "Not Seeded"}</p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                    <Mail className="w-5 h-5 text-slate-500" />
-                  </div>
-                  <div>
-                    <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Institutional Email</p>
-                    <p className="text-sm font-bold text-slate-800">{institutionalId.toLowerCase()}@acadnexus.bsc.edu.ph</p>
+                  {/* Stylized CSS Barcode */}
+                  <div className="flex gap-[2px] items-center h-6 opacity-60">
+                    <div className="w-[2px] h-6 bg-white" />
+                    <div className="w-[1px] h-6 bg-white" />
+                    <div className="w-[3px] h-6 bg-white" />
+                    <div className="w-[1px] h-6 bg-white" />
+                    <div className="w-[2px] h-6 bg-white" />
+                    <div className="w-[1px] h-6 bg-white" />
+                    <div className="w-[4px] h-6 bg-white" />
+                    <div className="w-[1px] h-6 bg-white" />
                   </div>
                 </div>
               </div>

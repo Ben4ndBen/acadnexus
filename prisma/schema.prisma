@@ -21,6 +21,8 @@ password_hash    String      @db.VarChar(255)
 role             Role
 is_active        Boolean     @default(true)
 supabase_uid     String?     @unique
+username         String?     @unique @db.VarChar(50)
+require_password_update Boolean @default(true)
 
 // Inheritance relationships
 student          Student?
@@ -60,7 +62,10 @@ model Faculty {
 faculty_id    Int      @id // FK to User
 user          User     @relation(fields: [faculty_id], references: [user_id], onDelete: Cascade)
 first_name    String   @db.VarChar(100)
+middle_name   String?  @db.VarChar(100)
 last_name     String   @db.VarChar(100)
+institutional_email String? @db.VarChar(255)
+profile_image String?  @db.VarChar(255)
 department_id Int
 department    Department @relation(fields: [department_id], references: [department_id])
 

@@ -69,8 +69,8 @@
 
 #### EPIC 5: Midterm Safeguards, Restrictions & Test Banking (Phase 3.5)
 ##### **Card 13: Core Structural Credentials**
-- [ ] **Task 28:** Create a deterministic username generation engine for faculty using the formula: 2 first letters + 1 middle name letter + 2 or 3 last name letters (e.g., `miAgCa`), requiring a password update immediately after signing up.
-- [ ] **Task 29:** Implement a secure account configuration dashboard that captures institutional emails and profile images for faculty dashboard identity cards.
+- [x] **Task 28:** Create a deterministic username generation engine for faculty using the formula: 2 first letters + 1 middle name letter + 2 or 3 last name letters (e.g., `miAgCa`), requiring a password update immediately after signing up.
+- [x] **Task 29:** Implement a secure account configuration dashboard that captures institutional emails and profile images for faculty dashboard identity cards.
 
 ##### **Card 14: Connectivity Safeguards & Clocks**
 - [x] **Task 30:** Implement a continuous, item-by-item auto-saving routine that captures student inputs per question to prevent data loss.
@@ -144,6 +144,6 @@
 | 2026-06-12 | Task 17, 18, 19 | Built Secure Test-Taking Interface including Entry Gate, Fullscreen/Focus lockdown (3 attempts warning system), background auto-save checkpoints, and objective auto-grading. | Completed |
 | 2026-06-29 | Task 22, 23 | Implemented Chair approval/return toggles with comments, and Director's Pass-Through Clearance optimization with global and individual administrative holds. | Completed |
 | 2026-07-01 | Task 24, 25 | Implemented floating notification bell component with Supabase Realtime and polling fallback, and deployed Postgres triggers for student, faculty, and chair alerts. | Completed |
+| 2026-07-04 | Task 28, 29 | Implemented deterministic faculty username generation engine, registration onboarding, secure first-login configuration dashboard with email/profile image capture and forced password updates, and visual digital identity cards. | Completed |
 | 2026-07-04 | Task 43, 44 | Integrated secure, real-time client & server validations on the student registration portal and re-engineered the department chair review queue with per-question toggles and granular feedback metrics. | Completed |
 | 2026-07-04 | Task 30, 31, 32 | Implemented continuous item-by-item exam auto-saving, debounced free-text saves, database timer state lock heartbeat loop (every 10 seconds), resilient exam resume logic, and individualized duration tracking. | Completed |
-
