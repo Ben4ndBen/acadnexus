@@ -496,3 +496,86 @@ export async function gradeEssayAnswer(
   }
 }
 
+export async function configureFacultyAccount(facultyId: number, formData: FormData) {
+  const newPassword = formData.get("newPassword") as string;
+  const institutionalEmail = formData.get("institutionalEmail") as string;
+  const profileImageFile = formData.get("profileImage") as File | null;
+
+  if (!newPassword || !institutionalEmail) {
+    return { error: "New password and institutional email are required." };
+  }
+
+  try {
+    const { writeFile, mkdir } = await import("fs/promises");
+    const { join } = await import("path");
+    const bcrypt = await import("bcryptjs");
+
+    // 1. Verify that the user exists
+    const user = await db.user.findUnique({
+      where: { user_id: facultyId },
+      include: { faculty: true },
+    });
+
+    if (!user || !user.faculty) {
+      return { error: "Faculty user not found." };
+    }
+
+    // 2. Handle profile image upload if provided
+    let profileImagePath = user.faculty.profile_image;
+
+    if (profileImageFile && profileImageFile.size > 0 && profileImageFile.name !== "undefined") {
+      const bytes = await profileImageFile.arrayBuffer();
+      const buffer = Buffer.from(bytes);
+      
+      const uploadDir = join(process.cwd(), "public", "uploads", "profiles");
+      await mkdir(uploadDir, { recursive: true });
+      
+      const uniqueFilename = `${facultyId}-${Date.now()}-${profileImageFile.name.replace(/[^a-zA-Z0-9.-]/g, "_")}`;
+      const absolutePath = join(uploadDir, uniqueFilename);
+      await writeFile(absolutePath, buffer);
+      
+      profileImagePath = `/uploads/profiles/${uniqueFilename}`;
+    }
+
+    // 3. Hash the new password and update User + Faculty tables
+    const salt = await bcrypt.genSalt(10);
+    const passwordHash = await bcrypt.hash(newPassword, salt);
+
+    await db.$transaction(async (tx) => {
+      // Update password hash and clear requirement flag
+      await tx.user.update({
+        where: { user_id: facultyId },
+        data: {
+          password_hash: passwordHash,
+          require_password_update: false,
+        },
+      });
+
+      // Update faculty specific configuration details
+      await tx.faculty.update({
+        where: { faculty_id: facultyId },
+        data: {
+          institutional_email: institutionalEmail,
+          profile_image: profileImagePath,
+        },
+      });
+    });
+
+    // 4. Log the configuration action to audit logs
+    await db.auditLog.create({
+      data: {
+        user_id: facultyId,
+        action_performed: "Completed secure account configuration and updated password",
+        ip_address: "127.0.0.1",
+      },
+    });
+
+    revalidatePath("/dashboard/faculty");
+    return { success: true };
+  } catch (err: any) {
+    console.error("Account configuration error:", err);
+    return { error: err.message || "Failed to configure account." };
+  }
+}
+
+
