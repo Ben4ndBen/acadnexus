@@ -73,9 +73,9 @@
 - [x] **Task 29:** Implement a secure account configuration dashboard that captures institutional emails and profile images for faculty dashboard identity cards.
 
 ##### **Card 14: Connectivity Safeguards & Clocks**
-- [ ] **Task 30:** Implement a continuous, item-by-item auto-saving routine that captures student inputs per question to prevent data loss.
-- [ ] **Task 31:** Build a connection-loss state lock that stops the clock, saves remaining time, and allows students to safely take the exam again after a forced exit or device shutdown without resetting their progress.
-- [ ] **Task 32:** Configure individualized duration logic that grants a student their full fixed exam duration upon starting, even if they log in right before the global testing window deadline.
+- [x] **Task 30:** Implement a continuous, item-by-item auto-saving routine that captures student inputs per question to prevent data loss.
+- [x] **Task 31:** Build a connection-loss state lock that stops the clock, saves remaining time, and allows students to safely take the exam again after a forced exit or device shutdown without resetting their progress.
+- [x] **Task 32:** Configure individualized duration logic that grants a student their full fixed exam duration upon starting, even if they log in right before the global testing window deadline.
 
 ##### **Card 15: Exam Security & Content Add-ons**
 - [ ] **Task 33:** Program focus-exit tracking scripts that notify instructors of attempted exits or tab-switches, executing automatic time or score penalties for live exams.
@@ -146,3 +146,4 @@
 | 2026-07-01 | Task 24, 25 | Implemented floating notification bell component with Supabase Realtime and polling fallback, and deployed Postgres triggers for student, faculty, and chair alerts. | Completed |
 | 2026-07-04 | Task 28, 29 | Implemented deterministic faculty username generation engine, registration onboarding, secure first-login configuration dashboard with email/profile image capture and forced password updates, and visual digital identity cards. | Completed |
 | 2026-07-04 | Task 43, 44 | Integrated secure, real-time client & server validations on the student registration portal and re-engineered the department chair review queue with per-question toggles and granular feedback metrics. | Completed |
+| 2026-07-04 | Task 30, 31, 32 | Implemented continuous item-by-item exam auto-saving, debounced free-text saves, database timer state lock heartbeat loop (every 10 seconds), resilient exam resume logic, and individualized duration tracking. | Completed |

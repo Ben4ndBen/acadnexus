@@ -89,9 +89,6 @@ export async function startStudentExam(examId: number, studentId: number) {
       });
       return { error: `Examination has not started yet. It is scheduled to start at ${startTimeString}.` };
     }
-    if (now > examEnd) {
-      return { error: "Examination window has already closed." };
-    }
 
     // 4. Fetch or create StudentExam
     let studentExam = await db.studentExam.findFirst({
@@ -117,11 +114,16 @@ export async function startStudentExam(examId: number, studentId: number) {
         };
       }
 
-      // If active, calculate remaining time from when they started
-      const elapsedMs = now.getTime() - studentExam.started_at.getTime();
-      const limitMs = exam.time_limit_minutes * 60 * 1000;
+      // Resume attempt - use saved remaining_seconds or calculate if null
+      if (studentExam.remaining_seconds !== null && studentExam.remaining_seconds !== undefined) {
+        remainingSeconds = studentExam.remaining_seconds;
+      } else {
+        const elapsedMs = now.getTime() - studentExam.started_at.getTime();
+        const limitMs = exam.time_limit_minutes * 60 * 1000;
+        remainingSeconds = Math.max(0, Math.floor((limitMs - elapsedMs) / 1000));
+      }
 
-      if (elapsedMs >= limitMs) {
+      if (remainingSeconds <= 0) {
         // Time exceeded while away, auto-submit
         const submitResult = await submitStudentExam(studentExam.student_exam_id, "Timeout");
         if (submitResult.error) {
@@ -134,15 +136,19 @@ export async function startStudentExam(examId: number, studentId: number) {
           trigger: "Timeout" as SubmissionType,
         };
       }
-
-      remainingSeconds = Math.max(0, Math.floor((limitMs - elapsedMs) / 1000));
     } else {
+      // Task 32: Check global testing window deadline ONLY for starting new attempts
+      if (now > examEnd) {
+        return { error: "Examination window has already closed." };
+      }
+
       // Create new student exam attempt
       studentExam = await db.studentExam.create({
         data: {
           student_id: studentId,
           exam_id: examId,
           started_at: now,
+          remaining_seconds: remainingSeconds,
           submission_trigger: "Manual",
         },
         include: {
@@ -370,6 +376,7 @@ export async function submitStudentExam(
           submitted_at: new Date(),
           total_score: totalScore,
           submission_trigger: trigger,
+          remaining_seconds: 0, // Task 31: Clear remaining seconds upon submission
         },
       });
 
@@ -409,5 +416,36 @@ export async function logStudentWarning(
   } catch (err: any) {
     console.error("Error logging warning:", err);
     return { error: err.message || "Failed to log security warning." };
+  }
+}
+
+export async function keepAliveStudentExam(
+  studentExamId: number,
+  remainingSeconds: number
+) {
+  try {
+    const studentExam = await db.studentExam.findUnique({
+      where: { student_exam_id: studentExamId },
+    });
+
+    if (!studentExam) {
+      return { error: "Student examination record not found." };
+    }
+
+    if (studentExam.submitted_at) {
+      return { error: "Examination has already been submitted." };
+    }
+
+    await db.studentExam.update({
+      where: { student_exam_id: studentExamId },
+      data: {
+        remaining_seconds: Math.max(0, remainingSeconds),
+      },
+    });
+
+    return { success: true };
+  } catch (err: any) {
+    console.error("Error in keepAliveStudentExam server action:", err);
+    return { error: err.message || "Failed to save timer state." };
   }
 }

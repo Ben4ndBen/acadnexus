@@ -238,6 +238,7 @@ started_at         DateTime        @db.Timestamp
 submitted_at       DateTime?       @db.Timestamp
 total_score        Int             @default(0)
 submission_trigger SubmissionType
+remaining_seconds  Int?
 
 studentAnswers     StudentAnswer[]
 
