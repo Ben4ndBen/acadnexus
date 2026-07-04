@@ -134,7 +134,13 @@ export default async function FacultyDashboard() {
         </div>
 
         {/* Render interactive Faculty Dashboard Client */}
-        <FacultyDashboardClient faculty={sanitizedFaculty as any} institutionalId={institutionalId} programs={programs} />
+        <FacultyDashboardClient
+          faculty={sanitizedFaculty as any}
+          institutionalId={institutionalId}
+          programs={programs}
+          requirePasswordUpdate={!!dbUser?.require_password_update}
+          username={dbUser?.username || undefined}
+        />
       </main>
 
       {/* Footer */}
