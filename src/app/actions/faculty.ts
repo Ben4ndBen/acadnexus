@@ -158,6 +158,8 @@ export async function saveExamConfig(formData: FormData) {
     const timeLimitMinutes = Number(formData.get("timeLimitMinutes"));
     const randomizeItems = formData.get("randomizeItems") === "true";
     const tosFile = formData.get("tosFile") as File | null;
+    const timePenaltySeconds = Number(formData.get("timePenaltySeconds") || "60");
+    const scorePenaltyPoints = Number(formData.get("scorePenaltyPoints") || "2");
 
     if (!examId || !facultyId || !title || !courseId || !timeLimitMinutes) {
       return { error: "Missing required configuration fields." };
@@ -196,6 +198,8 @@ export async function saveExamConfig(formData: FormData) {
         time_limit_minutes: timeLimitMinutes,
         randomize_items: randomizeItems,
         tos_file_path: tosFilePath,
+        time_penalty_seconds: timePenaltySeconds,
+        score_penalty_points: scorePenaltyPoints,
       },
     });
 
@@ -474,9 +478,20 @@ export async function gradeEssayAnswer(
         return sum + (points || 0);
       }, 0);
 
+      // Fetch student exam and apply penalty configurations
+      const studentExam = await tx.studentExam.findUnique({
+        where: { student_exam_id: answer.student_exam_id },
+        include: { exam: true }
+      });
+
+      const violationsCount = studentExam?.violations_count ?? 0;
+      const scorePenaltyPoints = studentExam?.exam.score_penalty_points ?? 2;
+      const totalPenalty = violationsCount * scorePenaltyPoints;
+      const penalizedScore = Math.max(0, totalScore - totalPenalty);
+
       await tx.studentExam.update({
         where: { student_exam_id: answer.student_exam_id },
-        data: { total_score: totalScore }
+        data: { total_score: penalizedScore }
       });
 
       await tx.auditLog.create({
@@ -577,5 +592,61 @@ export async function configureFacultyAccount(facultyId: number, formData: FormD
     return { error: err.message || "Failed to configure account." };
   }
 }
+
+export async function uploadQuestionAttachment(facultyId: number, formData: FormData) {
+  try {
+    const { writeFile, mkdir } = await import("fs/promises");
+    const { join } = await import("path");
+
+    const file = formData.get("file") as File | null;
+    if (!file || file.size === 0) {
+      return { error: "No file uploaded." };
+    }
+
+    const bytes = await file.arrayBuffer();
+    const buffer = Buffer.from(bytes);
+    const uploadDir = join(process.cwd(), "public", "uploads", "questions");
+    await mkdir(uploadDir, { recursive: true });
+    const uniqueFilename = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, "_")}`;
+    const absolutePath = join(uploadDir, uniqueFilename);
+    await writeFile(absolutePath, buffer);
+
+    const fileUrl = `/uploads/questions/${uniqueFilename}`;
+    return { success: true, url: fileUrl };
+  } catch (err: any) {
+    console.error("Error in uploadQuestionAttachment:", err);
+    return { error: err.message || "Failed to upload file." };
+  }
+}
+
+export async function getStudentExamLogs(studentId: number, examId: number) {
+  try {
+    const logs = await db.auditLog.findMany({
+      where: {
+        user_id: studentId,
+        OR: [
+          {
+            action_performed: {
+              contains: `Exam (ID: ${examId})`
+            }
+          },
+          {
+            action_performed: {
+              contains: `Exam ID: ${examId}`
+            }
+          }
+        ]
+      },
+      orderBy: {
+        timestamp: "desc"
+      }
+    });
+    return { success: true, logs: logs.map(l => ({ ...l, log_id: l.log_id.toString(), timestamp: l.timestamp.toISOString() })) };
+  } catch (err: any) {
+    console.error("Error fetching logs:", err);
+    return { error: err.message || "Failed to fetch logs." };
+  }
+}
+
 
 

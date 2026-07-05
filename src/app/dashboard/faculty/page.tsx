@@ -96,6 +96,36 @@ export default async function FacultyDashboard() {
 
   const programs = await db.academicProgram.findMany();
 
+  const studentExams = await db.studentExam.findMany({
+    where: {
+      exam: {
+        faculty_id: faculty.faculty_id
+      }
+    },
+    include: {
+      student: {
+        include: {
+          user: true,
+          program: true,
+        }
+      },
+      exam: {
+        include: {
+          course: true
+        }
+      }
+    },
+    orderBy: {
+      started_at: "desc"
+    }
+  });
+
+  const sanitizedStudentExams = studentExams.map(se => ({
+    ...se,
+    started_at: se.started_at.toISOString(),
+    submitted_at: se.submitted_at ? se.submitted_at.toISOString() : null,
+  }));
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
       {/* Navbar */}
@@ -147,6 +177,7 @@ export default async function FacultyDashboard() {
           programs={programs}
           requirePasswordUpdate={!!dbUser?.require_password_update}
           username={dbUser?.username || undefined}
+          studentExams={sanitizedStudentExams as any}
         />
       </main>
 

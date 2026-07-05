@@ -143,6 +143,8 @@ tos_file_path      String           @db.VarChar(255)
 time_limit_minutes Int
 randomize_items    Boolean          @default(true)
 current_status     ExamStatus
+time_penalty_seconds Int            @default(60)
+score_penalty_points Int            @default(2)
 
 examTargets        ExamTarget[]
 questionBank       QuestionBank[]
@@ -239,6 +241,7 @@ submitted_at       DateTime?       @db.Timestamp
 total_score        Int             @default(0)
 submission_trigger SubmissionType
 remaining_seconds  Int?
+violations_count   Int             @default(0)
 
 studentAnswers     StudentAnswer[]
 
