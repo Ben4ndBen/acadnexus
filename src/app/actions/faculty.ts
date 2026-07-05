@@ -399,27 +399,47 @@ export async function scheduleExamTarget(
     const startObj = new Date(`1970-01-01T${startTime}:00.000Z`);
     const endObj = new Date(`1970-01-01T${endTime}:00.000Z`);
 
-    await db.examTarget.create({
-      data: {
-        exam_id: examId,
-        program_id: programId,
-        year_level: yearLevel,
-        section: section,
-        scheduled_date: dateObj,
-        start_time: startObj,
-        end_time: endObj,
-      },
+    // Check if an ExamTarget already exists for this exam
+    const existingTarget = await db.examTarget.findFirst({
+      where: { exam_id: examId }
     });
+
+    if (existingTarget) {
+      await db.examTarget.update({
+        where: { target_id: existingTarget.target_id },
+        data: {
+          program_id: programId,
+          year_level: yearLevel,
+          section: section,
+          scheduled_date: dateObj,
+          start_time: startObj,
+          end_time: endObj,
+        }
+      });
+    } else {
+      await db.examTarget.create({
+        data: {
+          exam_id: examId,
+          program_id: programId,
+          year_level: yearLevel,
+          section: section,
+          scheduled_date: dateObj,
+          start_time: startObj,
+          end_time: endObj,
+        },
+      });
+    }
 
     await db.auditLog.create({
       data: {
         user_id: facultyId,
-        action_performed: `Scheduled exam target for "${exam.title}" (ID: ${examId}) on ${scheduledDate}`,
+        action_performed: `Scheduled/updated exam target for "${exam.title}" (ID: ${examId}) on ${scheduledDate}`,
         ip_address: "127.0.0.1",
       },
     });
 
     revalidatePath("/dashboard/faculty");
+    revalidatePath("/dashboard/student");
     return { success: true };
   } catch (err: any) {
     console.error("Error in scheduleExamTarget:", err);
@@ -645,6 +665,142 @@ export async function getStudentExamLogs(studentId: number, examId: number) {
   } catch (err: any) {
     console.error("Error fetching logs:", err);
     return { error: err.message || "Failed to fetch logs." };
+  }
+}
+
+export async function getMissedStudentsForExam(facultyId: number, examId: number) {
+  try {
+    const exam = await db.examination.findUnique({
+      where: { exam_id: examId },
+      include: { examTargets: true }
+    });
+
+    if (!exam || exam.faculty_id !== facultyId) {
+      return { error: "Examination not found or unauthorized." };
+    }
+
+    const students: any[] = [];
+    const seenStudentIds = new Set<number>();
+
+    for (const target of exam.examTargets) {
+      const cohort = await db.student.findMany({
+        where: {
+          program_id: target.program_id,
+          year_level: target.year_level,
+          section: target.section
+        },
+        include: {
+          user: true,
+          studentExams: {
+            where: { exam_id: examId }
+          }
+        }
+      });
+      
+      for (const s of cohort) {
+        if (!seenStudentIds.has(s.student_id)) {
+          seenStudentIds.add(s.student_id);
+          students.push(s);
+        }
+      }
+    }
+
+    const studentList = students.map(s => {
+      const attempt = s.studentExams[0] || null;
+      return {
+        student_id: s.student_id,
+        first_name: s.first_name,
+        last_name: s.last_name,
+        institutional_email: s.user.institutional_email,
+        institutional_id: s.user.institutional_id,
+        attempt: attempt ? {
+          student_exam_id: attempt.student_exam_id,
+          started_at: attempt.started_at.toISOString(),
+          submitted_at: attempt.submitted_at ? attempt.submitted_at.toISOString() : null,
+          submission_trigger: attempt.submission_trigger,
+          total_score: attempt.total_score
+        } : null
+      };
+    });
+
+    return { success: true, students: studentList };
+  } catch (err: any) {
+    console.error("Error in getMissedStudentsForExam:", err);
+    return { error: err.message || "Failed to fetch missed student cohort." };
+  }
+}
+
+export async function grantStudentOverride(
+  facultyId: number,
+  studentId: number,
+  examId: number,
+  startTimeStr: string,
+  endTimeStr: string
+) {
+  try {
+    const exam = await db.examination.findUnique({
+      where: { exam_id: examId }
+    });
+
+    if (!exam || exam.faculty_id !== facultyId) {
+      return { error: "Examination not found or unauthorized." };
+    }
+
+    const startTime = new Date(startTimeStr);
+    const endTime = new Date(endTimeStr);
+
+    await db.$transaction(async (tx) => {
+      // 1. Delete existing student exam attempt and answers to clean state
+      const studentExam = await tx.studentExam.findFirst({
+        where: { student_id: studentId, exam_id: examId }
+      });
+      if (studentExam) {
+        await tx.studentAnswer.deleteMany({
+          where: { student_exam_id: studentExam.student_exam_id }
+        });
+        await tx.studentExam.delete({
+          where: { student_exam_id: studentExam.student_exam_id }
+        });
+      }
+
+      // 2. Upsert override record
+      await tx.studentOverride.upsert({
+        where: {
+          student_id_exam_id: {
+            student_id: studentId,
+            exam_id: examId
+          }
+        },
+        update: {
+          new_start_time: startTime,
+          new_end_time: endTime,
+          is_active: true
+        },
+        create: {
+          student_id: studentId,
+          exam_id: examId,
+          new_start_time: startTime,
+          new_end_time: endTime,
+          is_active: true
+        }
+      });
+
+      // 3. Log audit event
+      await tx.auditLog.create({
+        data: {
+          user_id: facultyId,
+          action_performed: `Granted administrative exam override for Student ID: ${studentId} on Exam ID: ${examId} (Window: ${startTimeStr} to ${endTimeStr})`,
+          ip_address: "127.0.0.1"
+        }
+      });
+    });
+
+    revalidatePath("/dashboard/faculty");
+    revalidatePath("/dashboard/student");
+    return { success: true };
+  } catch (err: any) {
+    console.error("Error in grantStudentOverride:", err);
+    return { error: err.message || "Failed to grant override access." };
   }
 }
 

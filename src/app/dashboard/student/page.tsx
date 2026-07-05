@@ -78,7 +78,29 @@ export default async function StudentDashboard() {
   console.log("Targets found:", targets.length);
   console.log("====================");
 
-  // 2. Fetch completed student exams
+  // 2. Fetch active student overrides
+  const studentOverrides = await db.studentOverride.findMany({
+    where: {
+      student_id: student.student_id,
+      is_active: true
+    },
+    include: {
+      exam: {
+        include: {
+          course: true,
+          questionBank: {
+            select: {
+              points: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  const overrideExamIds = new Set(studentOverrides.map(o => o.exam_id));
+
+  // 3. Fetch completed student exams
   const completedExams = await db.studentExam.findMany({
     where: {
       student_id: student.student_id,
@@ -132,6 +154,11 @@ export default async function StudentDashboard() {
       return;
     }
 
+    // Prioritize student override if active
+    if (overrideExamIds.has(t.exam_id)) {
+      return;
+    }
+
     // Construct start and end dates in the Asia/Manila timezone-relative context
     const examStart = new Date(
       t.scheduled_date.getUTCFullYear(),
@@ -171,6 +198,40 @@ export default async function StudentDashboard() {
     } else {
       missedExams.push({
         ...t.exam,
+        target: sanitizedTarget
+      });
+    }
+  });
+
+  // Handle active student overrides
+  studentOverrides.forEach(o => {
+    if (completedExamIds.has(o.exam_id)) {
+      return;
+    }
+
+    const examStart = o.new_start_time;
+    const examEnd = o.new_end_time;
+
+    const sanitizedTarget = {
+      target_id: -o.override_id, // negative ID to distinguish from real targets
+      scheduled_date: o.new_start_time.toISOString(),
+      start_time: o.new_start_time.toISOString(),
+      end_time: o.new_end_time.toISOString(),
+    };
+
+    if (now >= examStart && now <= examEnd) {
+      activeExams.push({
+        ...o.exam,
+        target: sanitizedTarget
+      });
+    } else if (now < examStart) {
+      upcomingExams.push({
+        ...o.exam,
+        target: sanitizedTarget
+      });
+    } else {
+      missedExams.push({
+        ...o.exam,
         target: sanitizedTarget
       });
     }

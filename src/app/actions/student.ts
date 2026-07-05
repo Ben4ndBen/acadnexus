@@ -34,16 +34,12 @@ export async function startStudentExam(examId: number, studentId: number) {
       return { error: "Student profile not found." };
     }
 
-    // 2. Fetch targeted approved exam targets to verify the schedule
-    const target = await db.examTarget.findFirst({
+    // 2. Check if there is an active student override first
+    const override = await db.studentOverride.findFirst({
       where: {
+        student_id: studentId,
         exam_id: examId,
-        program_id: student.program_id,
-        year_level: student.year_level,
-        section: student.section,
-        exam: {
-          current_status: "Approved",
-        },
+        is_active: true,
       },
       include: {
         exam: {
@@ -54,38 +50,66 @@ export async function startStudentExam(examId: number, studentId: number) {
       },
     });
 
-    if (!target) {
-      return { error: "Examination is not active or targeted for your section." };
-    }
+    let exam: any;
+    let examStart: Date;
+    let examEnd: Date;
 
-    const exam = target.exam;
-
-    // 3. Check if current time is within schedule
     const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
 
-    const examStart = new Date(
-      target.scheduled_date.getUTCFullYear(),
-      target.scheduled_date.getUTCMonth(),
-      target.scheduled_date.getUTCDate(),
-      target.start_time.getUTCHours(),
-      target.start_time.getUTCMinutes(),
-      0
-    );
+    if (override) {
+      exam = override.exam;
+      examStart = override.new_start_time;
+      examEnd = override.new_end_time;
+    } else {
+      // Fetch targeted approved exam targets to verify the schedule
+      const target = await db.examTarget.findFirst({
+        where: {
+          exam_id: examId,
+          program_id: student.program_id,
+          year_level: student.year_level,
+          section: student.section,
+          exam: {
+            current_status: "Approved",
+          },
+        },
+        include: {
+          exam: {
+            include: {
+              course: true,
+            },
+          },
+        },
+      });
 
-    const examEnd = new Date(
-      target.scheduled_date.getUTCFullYear(),
-      target.scheduled_date.getUTCMonth(),
-      target.scheduled_date.getUTCDate(),
-      target.end_time.getUTCHours(),
-      target.end_time.getUTCMinutes(),
-      0
-    );
+      if (!target) {
+        return { error: "Examination is not active or targeted for your section." };
+      }
+
+      exam = target.exam;
+
+      examStart = new Date(
+        target.scheduled_date.getUTCFullYear(),
+        target.scheduled_date.getUTCMonth(),
+        target.scheduled_date.getUTCDate(),
+        target.start_time.getUTCHours(),
+        target.start_time.getUTCMinutes(),
+        0
+      );
+
+      examEnd = new Date(
+        target.scheduled_date.getUTCFullYear(),
+        target.scheduled_date.getUTCMonth(),
+        target.scheduled_date.getUTCDate(),
+        target.end_time.getUTCHours(),
+        target.end_time.getUTCMinutes(),
+        0
+      );
+    }
 
     if (now < examStart) {
-      const startTimeString = new Date(target.start_time).toLocaleTimeString([], { 
+      const startTimeString = examStart.toLocaleTimeString([], { 
         hour: '2-digit', 
-        minute: '2-digit', 
-        timeZone: 'UTC' 
+        minute: '2-digit'
       });
       return { error: `Examination has not started yet. It is scheduled to start at ${startTimeString}.` };
     }
@@ -388,7 +412,19 @@ export async function submitStudentExam(
         },
       });
 
-      // 3. Log audit event
+      // 3. Deactivate any active student override for this exam
+      await tx.studentOverride.updateMany({
+        where: {
+          student_id: studentExam.student_id,
+          exam_id: exam.exam_id,
+          is_active: true
+        },
+        data: {
+          is_active: false
+        }
+      });
+
+      // 4. Log audit event
       await tx.auditLog.create({
         data: {
           user_id: studentExam.student_id,
