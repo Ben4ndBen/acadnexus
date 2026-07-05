@@ -5,9 +5,10 @@ import { useRouter } from "next/navigation";
 import { 
   BookOpen, Award, FileText, ClipboardList, PenTool, CheckCircle, 
   User, Shield, Settings, Activity, Send, RotateCcw, AlertCircle, RefreshCw, Mail,
-  Plus, Trash2, Calendar, Lock, Camera, Check, ShieldAlert, Loader2, ShieldCheck, Clock
+  Plus, Trash2, Calendar, Lock, Camera, Check, ShieldAlert, Loader2, ShieldCheck, Clock,
+  X, AlertTriangle
 } from "lucide-react";
-import { updateFacultyProfile, updateExamStatus, createExamDraft, deleteExam, scheduleExamTarget, configureFacultyAccount } from "@/app/actions/faculty";
+import { updateFacultyProfile, updateExamStatus, createExamDraft, deleteExam, scheduleExamTarget, configureFacultyAccount, getStudentExamLogs } from "@/app/actions/faculty";
 
 interface FacultyDashboardClientProps {
   faculty: {
@@ -56,6 +57,7 @@ interface FacultyDashboardClientProps {
   programs?: Array<{ program_id: number; program_code: string; program_name: string; department_id: number }>;
   requirePasswordUpdate?: boolean;
   username?: string;
+  studentExams?: any[];
 }
 
 export function FacultyDashboardClient({ 
@@ -63,10 +65,39 @@ export function FacultyDashboardClient({
   institutionalId, 
   programs = [], 
   requirePasswordUpdate = false, 
-  username 
+  username,
+  studentExams = []
 }: FacultyDashboardClientProps) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<"overview" | "tracker" | "profile">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "tracker" | "submissions" | "profile">("overview");
+
+  // Violation Audit Logs State variables
+  const [selectedAttemptLogs, setSelectedAttemptLogs] = useState<any[] | null>(null);
+  const [selectedAttemptStudentName, setSelectedAttemptStudentName] = useState<string>("");
+  const [logsModalOpen, setLogsModalOpen] = useState<boolean>(false);
+  const [loadingLogs, setLoadingLogs] = useState<boolean>(false);
+
+  const handleViewAttemptLogs = async (studentId: number, studentName: string, examId: number) => {
+    setLoadingLogs(true);
+    setSelectedAttemptStudentName(studentName);
+    setSelectedAttemptLogs(null);
+    setLogsModalOpen(true);
+    try {
+      const res = await getStudentExamLogs(studentId, examId);
+      if (res.success && res.logs) {
+        setSelectedAttemptLogs(res.logs);
+      } else {
+        alert(res.error || "Failed to retrieve logs.");
+        setLogsModalOpen(false);
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Error fetching attempt logs.");
+      setLogsModalOpen(false);
+    } finally {
+      setLoadingLogs(false);
+    }
+  };
   
   // Account Configuration form state
   const [configPassword, setConfigPassword] = useState("");
@@ -438,6 +469,17 @@ export function FacultyDashboardClient({
         >
           <ClipboardList className="w-4 h-4" />
           Examination Workflow Tracker
+        </button>
+        <button
+          onClick={() => setActiveTab("submissions")}
+          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-bold rounded-xl transition-all duration-300 ${
+            activeTab === "submissions"
+              ? "bg-emerald-600 text-white shadow-md shadow-emerald-600/20"
+              : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+          }`}
+        >
+          <ShieldAlert className="w-4 h-4" />
+          Live Monitor & Results
         </button>
         <button
           onClick={() => setActiveTab("profile")}
@@ -990,6 +1032,122 @@ export function FacultyDashboardClient({
         </div>
       )}
 
+      {/* SUBMISSIONS TAB */}
+      {activeTab === "submissions" && (
+        <div className="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-sm space-y-6 animate-in fade-in duration-300">
+          <div className="border-b border-slate-100 pb-5">
+            <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+              <span className="w-1.5 h-6 bg-emerald-600 rounded-full" />
+              Student Exam Monitoring & Results
+            </h2>
+            <p className="text-slate-500 text-xs mt-1">
+              Track live student examinations, view security violation attempts, and analyze penalties and net scores.
+            </p>
+          </div>
+
+          {studentExams && studentExams.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs font-semibold text-slate-600 border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200/60 text-slate-400 font-extrabold uppercase tracking-wider">
+                    <th className="p-4">Student</th>
+                    <th className="p-4">Examination</th>
+                    <th className="p-4 text-center">Trigger</th>
+                    <th className="p-4 text-center">Violations</th>
+                    <th className="p-4 text-center">Net Score</th>
+                    <th className="p-4">Started At</th>
+                    <th className="p-4">Submitted At</th>
+                    <th className="p-4 text-center">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {studentExams.map((se) => {
+                    const studentName = `${se.student.first_name} ${se.student.last_name}`;
+                    const penaltyText = se.violations_count > 0 
+                      ? `-${se.violations_count * (se.exam.score_penalty_points ?? 2)} pts penalty` 
+                      : "";
+
+                    let triggerBadgeColor = "bg-slate-100 text-slate-800 border-slate-200";
+                    if (se.submission_trigger === "Manual") triggerBadgeColor = "bg-emerald-50 text-emerald-800 border-emerald-200";
+                    if (se.submission_trigger === "Timeout") triggerBadgeColor = "bg-amber-50 text-amber-800 border-amber-200";
+                    if (se.submission_trigger === "Cheating_Lockout") triggerBadgeColor = "bg-rose-50 text-rose-800 border-rose-200";
+
+                    return (
+                      <tr key={se.student_exam_id} className="hover:bg-slate-50/50 transition-colors">
+                        <td className="p-4 min-w-[150px]">
+                          <div className="font-extrabold text-slate-800">{studentName}</div>
+                          <div className="text-[10px] text-slate-400 font-mono mt-0.5">{se.student.user.institutional_id}</div>
+                          <div className="text-[9px] text-emerald-700 font-bold uppercase mt-0.5">
+                            {se.student.program.program_code} - Yr {se.student.year_level} Sec {se.student.section}
+                          </div>
+                        </td>
+                        <td className="p-4 min-w-[150px]">
+                          <div className="font-bold text-slate-800">{se.exam.title}</div>
+                          <div className="text-[10px] text-slate-400 font-semibold mt-0.5">{se.exam.course.course_code}</div>
+                        </td>
+                        <td className="p-4 text-center">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border ${triggerBadgeColor}`}>
+                            {se.submission_trigger.replace("_", " ")}
+                          </span>
+                        </td>
+                        <td className="p-4 text-center">
+                          <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                            se.violations_count > 0 
+                              ? "bg-rose-50 text-rose-800 border border-rose-100 shadow-sm" 
+                              : "bg-emerald-50 text-emerald-800 border border-emerald-100"
+                          }`}>
+                            {se.violations_count}
+                          </span>
+                        </td>
+                        <td className="p-4 text-center">
+                          <div className="font-black text-slate-800 text-sm">
+                            {se.submitted_at ? `${se.total_score} pts` : <span className="text-[10px] text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded font-extrabold animate-pulse">LIVE IN PROGRESS</span>}
+                          </div>
+                          {se.violations_count > 0 && se.submitted_at && (
+                            <div className="text-[9px] text-rose-600 font-black tracking-wide mt-0.5 uppercase">
+                              {penaltyText}
+                            </div>
+                          )}
+                        </td>
+                        <td className="p-4 text-slate-500 font-medium whitespace-nowrap">
+                          {new Date(se.started_at).toLocaleString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' })}
+                        </td>
+                        <td className="p-4 text-slate-500 font-medium whitespace-nowrap">
+                          {se.submitted_at ? (
+                            new Date(se.submitted_at).toLocaleString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' })
+                          ) : (
+                            <em className="text-slate-400 font-normal">Active...</em>
+                          )}
+                        </td>
+                        <td className="p-4 text-center whitespace-nowrap">
+                          <button
+                            onClick={() => handleViewAttemptLogs(se.student_id, studentName, se.exam_id)}
+                            className="inline-flex items-center gap-1 bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-770 text-[10px] font-extrabold px-3 py-1.5 rounded-xl shadow-sm transition-all cursor-pointer"
+                          >
+                            <ShieldAlert className="w-3.5 h-3.5 text-rose-500" />
+                            View Logs
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="text-center py-20 border-2 border-dashed border-slate-100 rounded-3xl">
+              <div className="bg-slate-50 p-4 rounded-full text-slate-400 mb-4 inline-block">
+                <ShieldAlert className="w-8 h-8" />
+              </div>
+              <h3 className="font-extrabold text-slate-800 text-base">No exam attempts logged</h3>
+              <p className="text-slate-500 text-xs max-w-xs mt-1 mx-auto leading-relaxed">
+                When students begin taking your scheduled examinations, their active sessions, violation flags, and score penalties will be logged here.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* PROFILE TAB */}
       {activeTab === "profile" && (
         <div className="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-sm max-w-2xl mx-auto space-y-6">
@@ -1172,6 +1330,84 @@ export function FacultyDashboardClient({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* DETAILED LOGS MODAL */}
+      {logsModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="bg-white border border-slate-200 rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl space-y-6 relative max-h-[90vh] flex flex-col justify-between">
+            <div>
+              <div className="flex justify-between items-start border-b border-slate-100 pb-4">
+                <div>
+                  <h3 className="text-base font-extrabold text-slate-900">
+                    Security Violation Audit Logs
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-1 font-semibold">
+                    Attempt history for: <span className="text-emerald-700 font-extrabold">{selectedAttemptStudentName}</span>
+                  </p>
+                </div>
+                <button
+                  onClick={() => setLogsModalOpen(false)}
+                  className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-400 hover:text-slate-700 cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="mt-6 space-y-4 overflow-y-auto max-h-[50vh] pr-1">
+                {loadingLogs ? (
+                  <div className="flex flex-col items-center justify-center py-10 gap-3">
+                    <Loader2 className="w-8 h-8 animate-spin text-emerald-600" />
+                    <span className="text-xs font-semibold text-slate-500">Querying project audit logs...</span>
+                  </div>
+                ) : selectedAttemptLogs && selectedAttemptLogs.length > 0 ? (
+                  <div className="relative border-l border-slate-100 pl-4 ml-2 space-y-5">
+                    {selectedAttemptLogs.map((log) => {
+                      const isWarning = log.action_performed.includes("Warning");
+                      const isSubmission = log.action_performed.includes("Submitted");
+                      
+                      let logDotColor = "bg-slate-400";
+                      let logBgColor = "bg-slate-50 border-slate-100 text-slate-705";
+                      if (isWarning) {
+                        logDotColor = "bg-rose-500 animate-pulse";
+                        logBgColor = "bg-rose-50/50 border-rose-100 text-rose-900";
+                      } else if (isSubmission) {
+                        logDotColor = "bg-emerald-500";
+                        logBgColor = "bg-emerald-50/50 border-emerald-100 text-emerald-900";
+                      }
+
+                      return (
+                        <div key={log.log_id} className="relative">
+                          {/* Timeline Dot */}
+                          <span className={`absolute -left-[21px] top-1.5 w-2.5 h-2.5 rounded-full ring-4 ring-white ${logDotColor}`} />
+                          <div className={`border p-3 rounded-xl ${logBgColor} space-y-1`}>
+                            <p className="text-xs font-bold leading-normal">{log.action_performed}</p>
+                            <p className="text-[10px] text-slate-400 font-semibold font-mono">
+                              {new Date(log.timestamp).toLocaleString()}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-center py-10 text-slate-450 italic text-xs">
+                    No matching security violation logs found in database. Student has taken the exam within full compliance.
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="border-t border-slate-100 pt-4 flex justify-end">
+              <button
+                onClick={() => setLogsModalOpen(false)}
+                className="bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold px-4 py-2.5 rounded-xl cursor-pointer"
+              >
+                Close Logs Window
+              </button>
+            </div>
           </div>
         </div>
       )}

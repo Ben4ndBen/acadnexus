@@ -187,6 +187,8 @@ export async function startStudentExam(examId: number, studentId: number) {
       examTitle: exam.title,
       courseTitle: exam.course.course_title,
       courseCode: exam.course.course_code,
+      timePenaltySeconds: exam.time_penalty_seconds ?? 60,
+      scorePenaltyPoints: exam.score_penalty_points ?? 2,
     };
   } catch (err: any) {
     console.error("Error starting exam:", err);
@@ -369,12 +371,18 @@ export async function submitStudentExam(
         }
       }
 
+      // Apply security violation score penalty
+      const violationsCount = studentExam.violations_count ?? 0;
+      const scorePenaltyPoints = exam.score_penalty_points ?? 2;
+      const totalPenalty = violationsCount * scorePenaltyPoints;
+      const penalizedScore = Math.max(0, totalScore - totalPenalty);
+
       // Update the student exam attempt to completed
       await tx.studentExam.update({
         where: { student_exam_id: studentExamId },
         data: {
           submitted_at: new Date(),
-          total_score: totalScore,
+          total_score: penalizedScore,
           submission_trigger: trigger,
           remaining_seconds: 0, // Task 31: Clear remaining seconds upon submission
         },
@@ -384,14 +392,14 @@ export async function submitStudentExam(
       await tx.auditLog.create({
         data: {
           user_id: studentExam.student_id,
-          action_performed: `Submitted Examination (Exam ID: ${exam.exam_id}, Trigger: ${trigger}, Score: ${totalScore})`,
+          action_performed: `Submitted Examination (Exam ID: ${exam.exam_id}, Trigger: ${trigger}, Raw Score: ${totalScore}, Penalty: -${totalPenalty} for ${violationsCount} violations, Net Score: ${penalizedScore})`,
           ip_address: "127.0.0.1",
         },
       });
     });
 
     revalidatePath("/dashboard/student");
-    return { success: true, totalScore };
+    return { success: true, totalScore: Math.max(0, totalScore - ((studentExam.violations_count ?? 0) * (exam.score_penalty_points ?? 2))) };
   } catch (err: any) {
     console.error("Error submitting exam:", err);
     return { error: err.message || "Failed to submit examination." };
@@ -402,9 +410,11 @@ export async function logStudentWarning(
   studentId: number,
   examId: number,
   warningNumber: number,
-  reason: string
+  reason: string,
+  studentExamId?: number
 ) {
   try {
+    // 1. Log audit warning event
     await db.auditLog.create({
       data: {
         user_id: studentId,
@@ -412,7 +422,68 @@ export async function logStudentWarning(
         ip_address: "127.0.0.1",
       },
     });
-    return { success: true };
+
+    // 2. Fetch student exam and apply penalty configurations
+    let studentExam = null;
+    if (studentExamId) {
+      studentExam = await db.studentExam.findUnique({
+        where: { student_exam_id: studentExamId },
+        include: { exam: true },
+      });
+    } else {
+      studentExam = await db.studentExam.findFirst({
+        where: {
+          student_id: studentId,
+          exam_id: examId,
+          submitted_at: null,
+        },
+        include: { exam: true },
+      });
+    }
+
+    let updatedRemainingSeconds = undefined;
+
+    if (studentExam) {
+      const exam = studentExam.exam;
+      const timePenalty = exam.time_penalty_seconds ?? 60;
+      
+      // Calculate new remaining seconds
+      const currentRemaining = studentExam.remaining_seconds ?? (exam.time_limit_minutes * 60);
+      const newRemaining = Math.max(0, currentRemaining - timePenalty);
+      updatedRemainingSeconds = newRemaining;
+
+      // Update session state
+      await db.studentExam.update({
+        where: { student_exam_id: studentExam.student_exam_id },
+        data: {
+          violations_count: {
+            increment: 1,
+          },
+          remaining_seconds: newRemaining,
+        },
+      });
+
+      // 3. Create real-time notification record for the exam author (instructor)
+      const student = await db.student.findUnique({
+        where: { student_id: studentId },
+        include: { user: true },
+      });
+
+      if (student) {
+        const studentName = `${student.first_name} ${student.last_name}`;
+        const studentInstId = student.user.institutional_id;
+
+        await db.notification.create({
+          data: {
+            user_id: exam.faculty_id,
+            title: "Exam Security Violation",
+            message: `Student ${studentName} (ID: ${studentInstId}) triggered a warning (${warningNumber}/2) for exam "${exam.title}". Reason: ${reason}. A time penalty of -${timePenalty} seconds was applied.`,
+          },
+        });
+      }
+    }
+
+    return { success: true, remainingSeconds: updatedRemainingSeconds };
   } catch (err: any) {
     console.error("Error logging warning:", err);
     return { error: err.message || "Failed to log security warning." };

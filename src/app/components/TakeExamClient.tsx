@@ -8,6 +8,7 @@ import {
   Menu, X, ShieldCheck
 } from "lucide-react";
 import { saveStudentAnswers, submitStudentExam, logStudentWarning, keepAliveStudentExam } from "@/app/actions/student";
+import { Latex } from "@/app/components/Latex";
 
 interface Question {
   question_id: number;
@@ -29,6 +30,8 @@ interface TakeExamClientProps {
     examTitle: string;
     courseTitle: string;
     courseCode: string;
+    timePenaltySeconds: number;
+    scorePenaltyPoints: number;
   };
 }
 
@@ -210,7 +213,7 @@ export function TakeExamClient({
   };
 
   // Log and increment violation attempts
-  const triggerViolation = (reason: string) => {
+  const triggerViolation = async (reason: string) => {
     const currentCount = Number(localStorage.getItem(violationsKey) || "0");
     const nextCount = currentCount + 1;
     localStorage.setItem(violationsKey, String(nextCount));
@@ -219,9 +222,17 @@ export function TakeExamClient({
     if (nextCount < 3) {
       setMode("warning");
       setWarningReason(reason);
-      logStudentWarning(studentId, examId, nextCount, reason);
       if (document.fullscreenElement) {
         document.exitFullscreen().catch(() => {});
+      }
+      try {
+        const res = await logStudentWarning(studentId, examId, nextCount, reason, initialData.studentExamId);
+        if (res.success && res.remainingSeconds !== undefined) {
+          setRemainingSeconds(res.remainingSeconds);
+          remainingSecondsRef.current = res.remainingSeconds;
+        }
+      } catch (err) {
+        console.error("Failed to log warning / apply penalty on server:", err);
       }
     } else {
       // 3rd violation triggers lockout
@@ -559,7 +570,12 @@ export function TakeExamClient({
             <p className="text-slate-400 text-sm leading-relaxed mt-3">
               We detected: <strong className="text-slate-200">{warningReason}</strong>
             </p>
-            <p className="text-slate-500 text-xs leading-relaxed mt-2 font-medium">
+            <div className="bg-rose-500/10 border border-rose-500/20 text-rose-300 p-4 rounded-2xl text-xs font-semibold max-w-sm mx-auto my-3 text-left space-y-1">
+              <p className="font-extrabold text-rose-400 flex items-center gap-1.5">⚠️ Automatic Penalty Executed:</p>
+              <p className="ml-1">Time reduction: <strong className="text-white">-{initialData.timePenaltySeconds} seconds</strong></p>
+              <p className="ml-1">Score deduction: <strong className="text-white">-{initialData.scorePenaltyPoints} points</strong> applied to final exam grade</p>
+            </div>
+            <p className="text-slate-500 text-[11px] leading-relaxed mt-2 font-medium">
               Academic honesty guidelines enforce a strict fullscreen window focus. On the next violation, your examination attempt will be closed and auto-submitted.
             </p>
           </div>
@@ -748,12 +764,26 @@ export function TakeExamClient({
               </div>
 
               {/* Text prompt */}
-              <p className="text-slate-100 font-bold text-base sm:text-lg leading-relaxed">
-                {currentQuestion.question_type === "Multiple_Choice" || currentQuestion.question_type === "Matching_Type" 
-                  ? currentParsed?.text 
-                  : currentQuestion.question_text
-                }
-              </p>
+              <div className="text-slate-100 font-bold text-base sm:text-lg leading-relaxed whitespace-pre-wrap">
+                <Latex 
+                  text={
+                    currentQuestion.question_type === "Multiple_Choice" || currentQuestion.question_type === "Matching_Type" || currentQuestion.question_text.trim().startsWith("{")
+                      ? currentParsed?.text || ""
+                      : currentQuestion.question_text
+                  } 
+                />
+              </div>
+
+              {/* Attached Image Asset */}
+              {currentParsed?.image_url && (
+                <div className="my-4 bg-slate-900/20 border border-slate-800/80 rounded-2xl p-2 max-w-xl overflow-hidden">
+                  <img 
+                    src={currentParsed.image_url} 
+                    alt="Question asset" 
+                    className="w-full h-auto max-h-[300px] object-contain rounded-xl"
+                  />
+                </div>
+              )}
 
               {/* Option Rendering by Type */}
               <div className="mt-6">
@@ -778,7 +808,7 @@ export function TakeExamClient({
                           }`}>
                             {isSelected && <span className="w-2.5 h-2.5 rounded-full bg-rose-500" />}
                           </div>
-                          <span className="text-sm font-semibold">{option}</span>
+                          <span className="text-sm font-semibold"><Latex text={option} /></span>
                         </button>
                       );
                     })}
@@ -835,7 +865,7 @@ export function TakeExamClient({
                         const selectedVal = getMatchingChoice(currentQuestion.question_id, premise);
                         return (
                           <div key={premise} className="flex flex-col sm:flex-row sm:items-center justify-between border border-slate-800/60 bg-slate-900/20 p-4 rounded-xl gap-3">
-                            <span className="text-sm text-slate-300 font-bold">{premise}</span>
+                            <span className="text-sm text-slate-300 font-bold"><Latex text={premise} /></span>
                             <select
                               value={selectedVal}
                               onChange={(e) => handleMatchingChoiceChange(currentQuestion.question_id, premise, e.target.value)}

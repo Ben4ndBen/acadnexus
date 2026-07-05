@@ -183,6 +183,8 @@ export default async function ExamPage({ params }: PageProps) {
         examTitle: result.examTitle!,
         courseTitle: result.courseTitle!,
         courseCode: result.courseCode!,
+        timePenaltySeconds: (result as any).timePenaltySeconds!,
+        scorePenaltyPoints: (result as any).scorePenaltyPoints!,
       }}
     />
   );
