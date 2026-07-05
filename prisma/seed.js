@@ -115,7 +115,7 @@ async function main() {
   // --- Student ---
   const studentUser = await prisma.user.create({
     data: {
-      institutional_id: "STUDENT-001",
+      institutional_id: "2023-0001-AB",
       password_hash: passwordHash,
       role: "Student",
     },
@@ -417,7 +417,7 @@ async function main() {
 
   console.log("Database seeding completed successfully!");
   console.log("Created test accounts (all passwords are 'password123'):");
-  console.log("  - Student: STUDENT-001 (Janice Delfin - BSIT Year 4 Major General)");
+  console.log("  - Student: 2023-0001-AB (Janice Delfin - BSIT Year 4 Major General)");
   console.log("  - Faculty: FACULTY-001 (Mark Abad - IT Department)");
   console.log("  - Chair: CHAIR-001 (IT Department Chair)");
   console.log("  - Director: DIRECTOR-001 (Office of the Director)");

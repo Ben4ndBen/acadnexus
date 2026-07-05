@@ -48,7 +48,7 @@ export function LoginForm() {
             name="institutionalId"
             type="text"
             required
-            placeholder="e.g. STUDENT-001 or FACULTY-001"
+            placeholder="e.g. 2023-0001-AB or FACULTY-001"
             className="w-full bg-stone-50/60 hover:bg-stone-50 focus:bg-white border border-stone-200/80 focus:border-[#7A151A] rounded-xl pl-11 pr-4 py-3.5 text-sm text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-[#7A151A]/20 transition-all duration-200"
             disabled={isPending}
           />
