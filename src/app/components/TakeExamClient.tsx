@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   Clock, ShieldAlert, CheckCircle2, AlertTriangle, Bookmark,
   ChevronLeft, ChevronRight, Maximize2, Monitor, Loader2, ArrowRight,
-  Menu, X
+  Menu, X, ShieldCheck
 } from "lucide-react";
 import { saveStudentAnswers, submitStudentExam, logStudentWarning, keepAliveStudentExam } from "@/app/actions/student";
 
@@ -482,6 +482,10 @@ export function TakeExamClient({
               <p className="text-xs text-slate-400 font-medium">
                 Course: {initialData.courseTitle} ({initialData.courseCode})
               </p>
+              <div className="mt-2.5 flex items-center gap-1.5 text-[10px] font-bold text-emerald-400 bg-emerald-950/40 border border-emerald-900/60 px-2.5 py-1 rounded-lg w-fit shadow-md">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                Digitally Signed by Chairperson & Director for Instruction
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4 border-y border-slate-800 py-4 text-xs font-medium text-slate-400">

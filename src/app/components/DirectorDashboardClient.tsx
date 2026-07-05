@@ -64,6 +64,7 @@ interface DirectorDashboardClientProps {
       workflow_id: number;
       di_review_status: string;
       reviewed_by_di_id: number | null;
+      di_comments: string | null;
     } | null;
   }>;
   globalHoldActive: boolean;
@@ -90,6 +91,13 @@ export function DirectorDashboardClient({
   // State for Individual Hold Toggles
   const [isTogglingIndividualHold, setIsTogglingIndividualHold] = useState<Record<number, boolean>>({});
 
+  // State for Hold Remarks Modal
+  const [holdModalOpen, setHoldModalOpen] = useState(false);
+  const [selectedWorkflowId, setSelectedWorkflowId] = useState<number | null>(null);
+  const [selectedExamId, setSelectedExamId] = useState<number | null>(null);
+  const [holdTriggerType, setHoldTriggerType] = useState<"review" | "toggle" | null>(null);
+  const [holdRemarks, setHoldRemarks] = useState("");
+
   // State for Manage Exams Search & Filter
   const [examSearchQuery, setExamSearchQuery] = useState("");
   const [examStatusFilter, setExamStatusFilter] = useState("ALL");
@@ -98,6 +106,15 @@ export function DirectorDashboardClient({
   const [searchQuery, setSearchQuery] = useState("");
 
   const handleReview = async (workflowId: number, examId: number, action: "Approve" | "Return" | "Hold") => {
+    if (action === "Hold") {
+      setSelectedWorkflowId(workflowId);
+      setSelectedExamId(examId);
+      setHoldTriggerType("review");
+      setHoldRemarks("");
+      setHoldModalOpen(true);
+      return;
+    }
+
     setIsSubmittingReview(workflowId);
     const res = await reviewExamByDirector(workflowId, examId, action, directorUserId);
     setIsSubmittingReview(null);
@@ -122,6 +139,15 @@ export function DirectorDashboardClient({
   };
 
   const handleToggleIndividualHold = async (examId: number, placeHold: boolean) => {
+    if (placeHold) {
+      setSelectedWorkflowId(null);
+      setSelectedExamId(examId);
+      setHoldTriggerType("toggle");
+      setHoldRemarks("");
+      setHoldModalOpen(true);
+      return;
+    }
+
     setIsTogglingIndividualHold(prev => ({ ...prev, [examId]: true }));
     const res = await toggleIndividualHold(directorUserId, examId, placeHold);
     setIsTogglingIndividualHold(prev => ({ ...prev, [examId]: false }));
@@ -130,6 +156,36 @@ export function DirectorDashboardClient({
       alert(res.error);
     } else {
       router.refresh();
+    }
+  };
+
+  const handleConfirmHoldSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!holdRemarks.trim()) {
+      alert("Hold remarks are required.");
+      return;
+    }
+
+    setHoldModalOpen(false);
+
+    if (holdTriggerType === "review" && selectedWorkflowId && selectedExamId) {
+      setIsSubmittingReview(selectedWorkflowId);
+      const res = await reviewExamByDirector(selectedWorkflowId, selectedExamId, "Hold", directorUserId, holdRemarks);
+      setIsSubmittingReview(null);
+      if (res.error) {
+        alert(res.error);
+      } else {
+        router.refresh();
+      }
+    } else if (holdTriggerType === "toggle" && selectedExamId) {
+      setIsTogglingIndividualHold(prev => ({ ...prev, [selectedExamId]: true }));
+      const res = await toggleIndividualHold(directorUserId, selectedExamId, true, holdRemarks);
+      setIsTogglingIndividualHold(prev => ({ ...prev, [selectedExamId]: false }));
+      if (res.error) {
+        alert(res.error);
+      } else {
+        router.refresh();
+      }
     }
   };
 
@@ -400,6 +456,17 @@ export function DirectorDashboardClient({
                         <div className="flex flex-col">
                           <span className="font-bold text-slate-800 text-sm">{exam.title}</span>
                           <span className="text-xs text-slate-400 mt-0.5">{exam.course.course_code} - {exam.course.course_title}</span>
+                          {exam.current_status === "Approved" && (
+                            <div className="mt-1.5 flex items-center gap-1 text-[10px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded w-fit shadow-sm">
+                              <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                              Digitally Signed by Chairperson & Director for Instruction
+                            </div>
+                          )}
+                          {isManualHold && exam.approvalWorkflow?.di_comments && (
+                            <div className="text-[10px] italic font-semibold text-rose-600 bg-rose-50 border border-rose-100 px-1.5 py-0.5 rounded w-fit mt-1.5 shadow-sm">
+                              Hold Reason: "{exam.approvalWorkflow.di_comments}"
+                            </div>
+                          )}
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap font-medium text-slate-700">
@@ -582,6 +649,55 @@ export function DirectorDashboardClient({
                 )}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* HOLD REMARKS MODAL */}
+      {holdModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl border border-slate-200">
+            <div className="flex justify-between items-start mb-6">
+              <div>
+                <h3 className="text-xl font-bold text-slate-900">Enforce Administrative Hold</h3>
+                <p className="text-xs text-slate-500 mt-1">Remarks explaining the hold status are strictly required.</p>
+              </div>
+              <button onClick={() => setHoldModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+                <span className="text-xl leading-none">&times;</span>
+              </button>
+            </div>
+
+            <form onSubmit={handleConfirmHoldSubmit} className="space-y-4">
+              <div>
+                <label className="text-xs font-bold text-slate-600 block mb-1">Written Remarks / Explanation</label>
+                <textarea
+                  required
+                  value={holdRemarks}
+                  onChange={e => setHoldRemarks(e.target.value)}
+                  placeholder="Explain why this examination is being placed on hold..."
+                  className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-sm font-medium text-slate-800 placeholder:text-slate-400 p-3 rounded-xl transition-all outline-none"
+                  rows={4}
+                />
+              </div>
+
+              <div className="pt-4 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setHoldModalOpen(false)}
+                  className="px-5 py-2.5 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={!holdRemarks.trim()}
+                  className="px-5 py-2.5 text-xs font-extrabold text-white bg-amber-600 hover:bg-amber-700 rounded-xl flex items-center gap-2 disabled:opacity-50"
+                >
+                  <Clock className="w-4 h-4" />
+                  Confirm Hold
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

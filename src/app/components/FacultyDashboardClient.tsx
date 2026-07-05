@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { 
   BookOpen, Award, FileText, ClipboardList, PenTool, CheckCircle, 
   User, Shield, Settings, Activity, Send, RotateCcw, AlertCircle, RefreshCw, Mail,
-  Plus, Trash2, Calendar, Lock, Camera, Check, ShieldAlert, Loader2
+  Plus, Trash2, Calendar, Lock, Camera, Check, ShieldAlert, Loader2, ShieldCheck, Clock
 } from "lucide-react";
 import { updateFacultyProfile, updateExamStatus, createExamDraft, deleteExam, scheduleExamTarget, configureFacultyAccount } from "@/app/actions/faculty";
 
@@ -33,6 +33,7 @@ interface FacultyDashboardClientProps {
         chair_comments: string | null;
         chair_review_status: string;
         di_review_status: string;
+        di_comments: string | null;
       } | null;
       questionBank?: Array<{
         question_id: number;
@@ -611,6 +612,12 @@ export function FacultyDashboardClient({
                           {exam._count?.questionBank ?? 0} Questions
                         </span>
                       </div>
+                      {exam.current_status === "Approved" && (
+                        <div className="mt-1.5 flex items-center gap-1 text-[10px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded w-fit shadow-sm">
+                          <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                          Digitally Signed
+                        </div>
+                      )}
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       {renderStatusBadge(exam.current_status)}
@@ -709,6 +716,12 @@ export function FacultyDashboardClient({
                             {exam._count?.questionBank ?? 0} Questions
                           </span>
                         </p>
+                        {exam.current_status === "Approved" && (
+                          <div className="mt-2 flex items-center gap-1.5 text-[11px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-100 px-2.5 py-1 rounded-lg w-fit shadow-sm">
+                            <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                            Digitally Signed by Chairperson & Director for Instruction
+                          </div>
+                        )}
                       </div>
 
                       {/* Interactive Actions for testing and state transitions */}
@@ -952,6 +965,19 @@ export function FacultyDashboardClient({
                         </div>
                       );
                     })()}
+
+                    {/* Hold Comments Showcase */}
+                    {exam.approvalWorkflow?.di_comments && (
+                      <div className="bg-amber-50/50 border border-amber-100 rounded-xl p-4 flex gap-3 items-start mt-3">
+                        <Clock className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-xs font-bold text-amber-800">Administrative Hold Remarks by Director:</p>
+                          <p className="text-xs text-amber-700 mt-1 italic leading-relaxed">
+                            "{exam.approvalWorkflow.di_comments}"
+                          </p>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })}
