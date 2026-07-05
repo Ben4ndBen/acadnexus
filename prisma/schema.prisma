@@ -214,6 +214,7 @@ reviewed_by_di_id      Int?
 director               Director?     @relation(fields: [reviewed_by_di_id], references: [director_id])
 di_review_status       DIStatus
 di_action_timestamp    DateTime?     @db.Timestamp
+di_comments            String?       @db.Text
 
 @@map("APPROVAL_WORKFLOWS")
 }

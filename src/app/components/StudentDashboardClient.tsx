@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { 
   BookOpen, Calendar, Award, ShieldAlert, Clock, CheckCircle, 
-  Hourglass, ArrowRight 
+  Hourglass, ArrowRight, ShieldCheck
 } from "lucide-react";
 
 interface Course {
@@ -256,6 +256,10 @@ export function StudentDashboardClient({
                         <p className="text-xs text-slate-400 flex items-center gap-1.5">
                           <Clock className="w-3.5 h-3.5" /> Time Limit: {exam.time_limit_minutes} minutes
                         </p>
+                        <div className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-100 px-2.5 py-1 rounded-lg w-fit mt-1.5 shadow-sm">
+                          <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                          Digitally Signed by Chairperson & Director for Instruction
+                        </div>
                       </div>
                       <Link
                         href={`/dashboard/student/exam/${exam.exam_id}`}
@@ -295,6 +299,10 @@ export function StudentDashboardClient({
                       <p className="text-xs text-slate-500 font-medium">
                         {exam.course.course_title} ({exam.course.course_code})
                       </p>
+                      <div className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-100 px-2.5 py-1 rounded-lg w-fit shadow-sm">
+                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                        Digitally Signed by Chairperson & Director for Instruction
+                      </div>
                       <div className="bg-slate-50 p-3 rounded-xl text-xs space-y-1.5 border border-slate-100">
                         <p className="text-slate-700 font-semibold flex items-center gap-2">
                           <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
@@ -340,6 +348,10 @@ export function StudentDashboardClient({
                           <p className="text-xs text-slate-400">
                             Submitted: {new Date(se.submitted_at || se.started_at).toLocaleDateString()} at {new Date(se.submitted_at || se.started_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                           </p>
+                          <div className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-100 px-2.5 py-1 rounded-lg w-fit mt-1.5 shadow-sm">
+                            <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                            Digitally Signed by Chairperson & Director for Instruction
+                          </div>
                         </div>
                         <div className="self-start sm:self-auto">
                           <span className="inline-flex items-center text-sm font-black bg-emerald-50 text-emerald-700 px-3.5 py-1.5 rounded-full border border-emerald-100">
@@ -384,6 +396,10 @@ export function StudentDashboardClient({
                       <p className="text-xs text-slate-500">
                         {exam.course.course_title} ({exam.course.course_code})
                       </p>
+                      <div className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-100 px-2.5 py-1 rounded-lg w-fit shadow-sm">
+                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                        Digitally Signed by Chairperson & Director for Instruction
+                      </div>
                       <div className="text-xs text-slate-500 flex items-center gap-2">
                         <Calendar className="w-4 h-4 text-slate-400" />
                         <span>Scheduled: {new Date(exam.target.scheduled_date).toLocaleDateString([], { timeZone: 'UTC' })}</span>

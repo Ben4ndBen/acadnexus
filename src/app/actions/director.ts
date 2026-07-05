@@ -7,12 +7,19 @@ export async function reviewExamByDirector(
   workflowId: number,
   examId: number,
   action: "Approve" | "Return" | "Hold",
-  userId: number
+  userId: number,
+  comments?: string
 ) {
   try {
     // Determine target statuses
     const diReviewStatus = action === "Approve" ? "Approved" : "Hold";
     const examStatus = action === "Approve" ? "Approved" : action === "Return" ? "Returned" : "Pending_DI";
+
+    if (action === "Hold") {
+      if (!comments || !comments.trim()) {
+        return { error: "Remarks explaining the hold status are required." };
+      }
+    }
 
     // 1. Update the approval workflow
     await db.approvalWorkflow.update({
@@ -21,6 +28,7 @@ export async function reviewExamByDirector(
         di_review_status: diReviewStatus,
         reviewed_by_di_id: userId,
         di_action_timestamp: new Date(),
+        di_comments: action === "Hold" ? comments : null,
       },
     });
 
@@ -34,7 +42,7 @@ export async function reviewExamByDirector(
     await db.auditLog.create({
       data: {
         user_id: userId,
-        action_performed: `Director ${action} examination ${examId}: ${exam.title}`,
+        action_performed: `Director ${action} examination ${examId}: ${exam.title}${action === "Hold" ? ` (Remarks: ${comments})` : ""}`,
         ip_address: "127.0.0.1",
       },
     });
@@ -84,7 +92,7 @@ export async function toggleGlobalHold(userId: number, enabled: boolean) {
   }
 }
 
-export async function toggleIndividualHold(userId: number, examId: number, placeHold: boolean) {
+export async function toggleIndividualHold(userId: number, examId: number, placeHold: boolean, comments?: string) {
   try {
     const user = await db.user.findUnique({
       where: { user_id: userId },
@@ -101,6 +109,12 @@ export async function toggleIndividualHold(userId: number, examId: number, place
 
     if (!exam) {
       return { error: "Examination not found." };
+    }
+
+    if (placeHold) {
+      if (!comments || !comments.trim()) {
+        return { error: "Remarks explaining the hold status are required." };
+      }
     }
 
     // Find or create the Chair of the department this exam belongs to
@@ -132,6 +146,7 @@ export async function toggleIndividualHold(userId: number, examId: number, place
           di_review_status: "Hold",
           reviewed_by_di_id: userId,
           di_action_timestamp: new Date(),
+          di_comments: comments,
         },
         create: {
           exam_id: examId,
@@ -140,6 +155,7 @@ export async function toggleIndividualHold(userId: number, examId: number, place
           di_review_status: "Hold",
           reviewed_by_di_id: userId,
           di_action_timestamp: new Date(),
+          di_comments: comments,
         },
       });
 
@@ -154,7 +170,7 @@ export async function toggleIndividualHold(userId: number, examId: number, place
       await db.auditLog.create({
         data: {
           user_id: userId,
-          action_performed: `Director placed administrative hold on examination ${examId}: ${exam.title}`,
+          action_performed: `Director placed administrative hold on examination ${examId}: ${exam.title} (Remarks: ${comments})`,
           ip_address: "127.0.0.1",
         },
       });
@@ -170,6 +186,7 @@ export async function toggleIndividualHold(userId: number, examId: number, place
           di_review_status: isChairApproved ? "Approved" : "Hold",
           reviewed_by_di_id: isChairApproved ? userId : null,
           di_action_timestamp: isChairApproved ? new Date() : null,
+          di_comments: isChairApproved ? null : undefined, // clear comments if approved, keep if still on hold
         },
       });
 
