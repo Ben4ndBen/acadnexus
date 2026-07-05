@@ -37,6 +37,7 @@ export default async function FacultyDashboard() {
             include: {
               course: true,
               approvalWorkflow: true,
+              examTargets: true,
               questionBank: {
                 select: {
                   question_id: true,
@@ -89,8 +90,19 @@ export default async function FacultyDashboard() {
     compliance_percentage: portfolio.compliance_percentage.toString(),
   }));
 
+  const sanitizedExaminations = faculty.examinations.map((exam) => ({
+    ...exam,
+    examTargets: exam.examTargets.map((target) => ({
+      ...target,
+      scheduled_date: target.scheduled_date.toISOString(),
+      start_time: target.start_time.toISOString(),
+      end_time: target.end_time.toISOString(),
+    })),
+  }));
+
   const sanitizedFaculty = {
     ...faculty,
+    examinations: sanitizedExaminations,
     facultyPortfolios: sanitizedPortfolios,
   };
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { 
   BookOpen, Award, FileText, ClipboardList, PenTool, CheckCircle, 
@@ -44,6 +44,15 @@ interface FacultyDashboardClientProps {
       _count?: {
         questionBank: number;
       };
+      examTargets?: Array<{
+        target_id: number;
+        program_id: number;
+        year_level: number;
+        section: string;
+        scheduled_date: string;
+        start_time: string;
+        end_time: string;
+      }>;
     }>;
     facultyPortfolios: Array<{
       portfolio_id: number;
@@ -69,7 +78,7 @@ export function FacultyDashboardClient({
   studentExams = []
 }: FacultyDashboardClientProps) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<"overview" | "tracker" | "submissions" | "profile">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "tracker" | "submissions" | "profile" | "override">("overview");
 
   // Violation Audit Logs State variables
   const [selectedAttemptLogs, setSelectedAttemptLogs] = useState<any[] | null>(null);
@@ -159,6 +168,69 @@ export function FacultyDashboardClient({
   // Schedule Exam Modal State
   const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
   const [selectedExamForSchedule, setSelectedExamForSchedule] = useState<{exam_id: number, title: string} | null>(null);
+
+  // States for Student Access Resets
+  const [selectedOverrideExamId, setSelectedOverrideExamId] = useState<number | null>(null);
+  const [missedStudents, setMissedStudents] = useState<any[]>([]);
+  const [isLoadingMissedStudents, setIsLoadingMissedStudents] = useState(false);
+  
+  const [overrideModalOpen, setOverrideModalOpen] = useState(false);
+  const [selectedOverrideStudent, setSelectedOverrideStudent] = useState<{ student_id: number; first_name: string; last_name: string } | null>(null);
+  const [overrideForm, setOverrideForm] = useState({
+    start_date: new Date().toISOString().split("T")[0],
+    start_time: "09:00",
+    end_date: new Date(Date.now() + 86400000).toISOString().split("T")[0], // tomorrow
+    end_time: "09:00"
+  });
+  const [isSavingOverride, setIsSavingOverride] = useState(false);
+
+  const fetchMissedStudents = async (examId: number) => {
+    setIsLoadingMissedStudents(true);
+    const { getMissedStudentsForExam } = await import("@/app/actions/faculty");
+    const res = await getMissedStudentsForExam(faculty.faculty_id, examId);
+    setIsLoadingMissedStudents(false);
+    if (res.error) {
+      alert(res.error);
+    } else {
+      setMissedStudents(res.students || []);
+    }
+  };
+
+  useEffect(() => {
+    if (selectedOverrideExamId) {
+      fetchMissedStudents(selectedOverrideExamId);
+    } else {
+      setMissedStudents([]);
+    }
+  }, [selectedOverrideExamId]);
+
+  const handleOverrideSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedOverrideStudent || !selectedOverrideExamId) return;
+
+    const startTimeStr = `${overrideForm.start_date}T${overrideForm.start_time}:00`;
+    const endTimeStr = `${overrideForm.end_date}T${overrideForm.end_time}:00`;
+
+    setIsSavingOverride(true);
+    const { grantStudentOverride } = await import("@/app/actions/faculty");
+    const res = await grantStudentOverride(
+      faculty.faculty_id,
+      selectedOverrideStudent.student_id,
+      selectedOverrideExamId,
+      startTimeStr,
+      endTimeStr
+    );
+    setIsSavingOverride(false);
+
+    if (res.error) {
+      alert(res.error);
+    } else {
+      alert("Override granted successfully! Student exam attempts have been reset.");
+      setOverrideModalOpen(false);
+      fetchMissedStudents(selectedOverrideExamId);
+      router.refresh();
+    }
+  };
   const [scheduleForm, setScheduleForm] = useState({
     program_id: "",
     year_level: "1",
@@ -172,14 +244,39 @@ export function FacultyDashboardClient({
   const handleOpenScheduleModal = (examId: number, title: string) => {
     setSelectedExamForSchedule({ exam_id: examId, title });
     setScheduleModalOpen(true);
-    setScheduleForm({
-      program_id: programs.length > 0 ? String(programs[0].program_id) : "",
-      year_level: "1",
-      section: "A",
-      scheduled_date: new Date().toISOString().split("T")[0],
-      start_time: "09:00",
-      end_time: "10:00"
-    });
+
+    const existingTarget = faculty.examinations.find(e => e.exam_id === examId)?.examTargets?.[0];
+
+    if (existingTarget) {
+      const formatTime = (timeStr: string) => {
+        try {
+          if (timeStr.includes("T")) {
+            return timeStr.split("T")[1].slice(0, 5);
+          }
+          return timeStr.slice(0, 5);
+        } catch {
+          return "09:00";
+        }
+      };
+
+      setScheduleForm({
+        program_id: String(existingTarget.program_id),
+        year_level: String(existingTarget.year_level),
+        section: existingTarget.section,
+        scheduled_date: existingTarget.scheduled_date.split("T")[0],
+        start_time: formatTime(existingTarget.start_time),
+        end_time: formatTime(existingTarget.end_time)
+      });
+    } else {
+      setScheduleForm({
+        program_id: programs.length > 0 ? String(programs[0].program_id) : "",
+        year_level: "1",
+        section: "A",
+        scheduled_date: new Date().toISOString().split("T")[0],
+        start_time: "09:00",
+        end_time: "10:00"
+      });
+    }
   };
 
   const handleScheduleSubmit = async (e: React.FormEvent) => {
@@ -480,6 +577,17 @@ export function FacultyDashboardClient({
         >
           <ShieldAlert className="w-4 h-4" />
           Live Monitor & Results
+        </button>
+        <button
+          onClick={() => setActiveTab("override")}
+          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-bold rounded-xl transition-all duration-300 ${
+            activeTab === "override"
+              ? "bg-emerald-600 text-white shadow-md shadow-emerald-600/20"
+              : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+          }`}
+        >
+          <Settings className="w-4 h-4" />
+          Override Controls
         </button>
         <button
           onClick={() => setActiveTab("profile")}
@@ -1143,6 +1251,301 @@ export function FacultyDashboardClient({
               <p className="text-slate-500 text-xs max-w-xs mt-1 mx-auto leading-relaxed">
                 When students begin taking your scheduled examinations, their active sessions, violation flags, and score penalties will be logged here.
               </p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* OVERRIDE CONTROLS TAB */}
+      {activeTab === "override" && (
+        <div className="space-y-8 animate-in fade-in duration-300">
+          {/* Section 1: Schedules Override Engine */}
+          <div className="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-sm space-y-6">
+            <div>
+              <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                <span className="w-1.5 h-6 bg-emerald-600 rounded-full" />
+                Schedules Override Engine
+              </h2>
+              <p className="text-slate-500 text-xs mt-1">
+                View approved examinations and override testing schedules, windows, dates, or sections to fix scheduling conflicts.
+              </p>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-slate-100 text-left text-xs text-slate-600">
+                <thead className="bg-slate-50 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                  <tr>
+                    <th className="px-6 py-3">Examination Title</th>
+                    <th className="px-6 py-3">Course</th>
+                    <th className="px-6 py-3">Target Details</th>
+                    <th className="px-6 py-3">Testing Window</th>
+                    <th className="px-6 py-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 bg-white">
+                  {faculty.examinations
+                    .filter(exam => exam.current_status === "Approved")
+                    .map(exam => {
+                      const target = exam.examTargets?.[0];
+                      const programName = programs.find(p => p.program_id === target?.program_id)?.program_code || "N/A";
+                      
+                      return (
+                        <tr key={exam.exam_id} className="hover:bg-slate-50/50 transition-colors">
+                          <td className="px-6 py-4 font-bold text-slate-900">{exam.title}</td>
+                          <td className="px-6 py-4">{exam.course.course_code} - {exam.course.course_title}</td>
+                          <td className="px-6 py-4">
+                            {target ? (
+                              <span className="font-semibold text-slate-800">
+                                {programName} {target.year_level}-{target.section}
+                              </span>
+                            ) : (
+                              <span className="text-slate-400 italic">Not Scheduled</span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4">
+                            {target ? (
+                              <div className="space-y-0.5">
+                                <p className="font-semibold text-slate-800">
+                                  {new Date(target.scheduled_date).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}
+                                </p>
+                                <p className="text-[10px] text-slate-400">
+                                  {new Date(target.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })} - {new Date(target.end_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })}
+                                </p>
+                              </div>
+                            ) : (
+                              <span className="text-slate-400 italic">Not Scheduled</span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            <button
+                              onClick={() => handleOpenScheduleModal(exam.exam_id, exam.title)}
+                              className="px-3.5 py-1.5 text-[11px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-100 rounded-lg shadow-sm transition-all"
+                            >
+                              {target ? "Override Schedule" : "Schedule Exam"}
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  {faculty.examinations.filter(exam => exam.current_status === "Approved").length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="text-center py-8 text-slate-400 italic">
+                        No approved examinations available to override.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Section 2: Student Access Resets */}
+          <div className="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-sm space-y-6">
+            <div>
+              <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                <span className="w-1.5 h-6 bg-amber-600 rounded-full" />
+                Administrative Access Resets
+              </h2>
+              <p className="text-slate-500 text-xs mt-1">
+                Grant individual student overrides to extend or reset access for students who completely missed the testing window or experienced locking issues.
+              </p>
+            </div>
+
+            <div className="max-w-md space-y-2">
+              <label className="text-xs font-bold text-slate-700 block">Select Examination to Manage</label>
+              <select
+                value={selectedOverrideExamId || ""}
+                onChange={e => setSelectedOverrideExamId(e.target.value ? Number(e.target.value) : null)}
+                className="w-full bg-slate-50 border border-slate-200 text-sm font-medium text-slate-800 px-4 py-2.5 rounded-xl transition-all"
+              >
+                <option value="">-- Choose Approved Exam --</option>
+                {faculty.examinations
+                  .filter(exam => exam.current_status === "Approved")
+                  .map(exam => (
+                    <option key={exam.exam_id} value={exam.exam_id}>
+                      {exam.title} ({exam.course.course_code})
+                    </option>
+                  ))}
+              </select>
+            </div>
+
+            {selectedOverrideExamId && (
+              <div className="space-y-4 pt-2 animate-in fade-in duration-300">
+                <h3 className="text-sm font-bold text-slate-900">Target Cohort & Student Attempts</h3>
+
+                {isLoadingMissedStudents ? (
+                  <div className="flex items-center gap-2 text-xs text-slate-500 py-6">
+                    <Loader2 className="w-4 h-4 animate-spin text-emerald-600" />
+                    <span>Loading student records...</span>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-slate-100 text-left text-xs text-slate-600 font-semibold">
+                      <thead className="bg-slate-50 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                        <tr>
+                          <th className="px-6 py-3">Student Name</th>
+                          <th className="px-6 py-3">ID / Email</th>
+                          <th className="px-6 py-3">Exam Status</th>
+                          <th className="px-6 py-3 text-right">Access Controls</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 bg-white">
+                        {missedStudents.map(student => {
+                          const attempt = student.attempt;
+                          
+                          let statusNode = (
+                            <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase bg-rose-50 text-rose-700 border border-rose-100">
+                              Missed Exam
+                            </span>
+                          );
+
+                          if (attempt) {
+                            if (attempt.submitted_at) {
+                              statusNode = (
+                                <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase bg-emerald-50 text-emerald-700 border border-emerald-100">
+                                  Completed ({attempt.total_score} pts)
+                                </span>
+                              );
+                            } else {
+                              statusNode = (
+                                <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase bg-amber-50 text-amber-700 border border-amber-100">
+                                  Ongoing / Active
+                                </span>
+                              );
+                            }
+                          }
+
+                          return (
+                            <tr key={student.student_id} className="hover:bg-slate-50/50 transition-colors">
+                              <td className="px-6 py-4 font-bold text-slate-800">
+                                {student.first_name} {student.last_name}
+                              </td>
+                              <td className="px-6 py-4">
+                                <div className="space-y-0.5 text-slate-500">
+                                  <p className="font-semibold text-slate-700">{student.institutional_id}</p>
+                                  <p className="text-[10px]">{student.institutional_email}</p>
+                                </div>
+                              </td>
+                              <td className="px-6 py-4">{statusNode}</td>
+                              <td className="px-6 py-4 text-right">
+                                <button
+                                  onClick={() => {
+                                    setSelectedOverrideStudent({
+                                      student_id: student.student_id,
+                                      first_name: student.first_name,
+                                      last_name: student.last_name
+                                    });
+                                    setOverrideModalOpen(true);
+                                  }}
+                                  className="px-3.5 py-1.5 text-[11px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-100 rounded-lg shadow-sm transition-all"
+                                >
+                                  Grant Reset Access
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                        {missedStudents.length === 0 && (
+                          <tr>
+                            <td colSpan={4} className="text-center py-8 text-slate-400 italic">
+                              No students found in the target cohort.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* STUDENT OVERRIDE MODAL */}
+          {overrideModalOpen && selectedOverrideStudent && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+              <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl border border-slate-200">
+                <div className="flex justify-between items-start mb-6">
+                  <div>
+                    <h3 className="text-xl font-bold text-slate-900">Grant Individual Access Override</h3>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Reset access for student <span className="font-bold text-emerald-600">{selectedOverrideStudent.first_name} {selectedOverrideStudent.last_name}</span>.
+                    </p>
+                  </div>
+                  <button onClick={() => setOverrideModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+                    <span className="text-xl leading-none">&times;</span>
+                  </button>
+                </div>
+
+                <form onSubmit={handleOverrideSubmit} className="space-y-4">
+                  <div className="bg-rose-50 border border-rose-100 rounded-xl p-3.5 text-xs text-rose-800 font-medium">
+                    ⚠️ Granting an override will delete the student's previous attempt and answers (if any exist) to allow a completely clean restart.
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-slate-600 block">Override Start Date</label>
+                      <input
+                        type="date"
+                        required
+                        value={overrideForm.start_date}
+                        onChange={e => setOverrideForm(prev => ({ ...prev, start_date: e.target.value }))}
+                        className="w-full bg-slate-50 border border-slate-200 text-sm font-medium text-slate-800 px-4 py-2.5 rounded-xl transition-all"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-slate-600 block">Override Start Time</label>
+                      <input
+                        type="time"
+                        required
+                        value={overrideForm.start_time}
+                        onChange={e => setOverrideForm(prev => ({ ...prev, start_time: e.target.value }))}
+                        className="w-full bg-slate-50 border border-slate-200 text-sm font-medium text-slate-800 px-4 py-2.5 rounded-xl transition-all"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-slate-600 block">Override End Date</label>
+                      <input
+                        type="date"
+                        required
+                        value={overrideForm.end_date}
+                        onChange={e => setOverrideForm(prev => ({ ...prev, end_date: e.target.value }))}
+                        className="w-full bg-slate-50 border border-slate-200 text-sm font-medium text-slate-800 px-4 py-2.5 rounded-xl transition-all"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-slate-600 block">Override End Time</label>
+                      <input
+                        type="time"
+                        required
+                        value={overrideForm.end_time}
+                        onChange={e => setOverrideForm(prev => ({ ...prev, end_time: e.target.value }))}
+                        className="w-full bg-slate-50 border border-slate-200 text-sm font-medium text-slate-800 px-4 py-2.5 rounded-xl transition-all"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="pt-4 flex justify-end gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setOverrideModalOpen(false)}
+                      className="px-5 py-2.5 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isSavingOverride}
+                      className="px-5 py-2.5 text-xs font-extrabold text-white bg-amber-600 hover:bg-amber-700 rounded-xl flex items-center gap-2 disabled:opacity-50"
+                    >
+                      {isSavingOverride && <Loader2 className="w-4 h-4 animate-spin" />}
+                      Grant Access
+                    </button>
+                  </div>
+                </form>
+              </div>
             </div>
           )}
         </div>
