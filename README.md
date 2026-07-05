@@ -126,7 +126,7 @@ pnpm dev
 
 | Role | Institutional ID | Expected Destination | Description |
 | :--- | :--- | :--- | :--- |
-| **Student** | `STUDENT-001` | `/dashboard/student` | Janice Delfin — BSCS Year 4 Section A |
+| **Student** | `2023-0001-AB` | `/dashboard/student` | Janice Delfin — BSCS Year 4 Section A |
 | **Faculty** | `FACULTY-001` | `/dashboard/faculty` | Mark Abad — Department of Computer Studies |
 | **Chair** | `CHAIR-001` | `/dashboard/chair` | Department of Computer Studies Chair |
 | **Director** | `DIRECTOR-001` | `/dashboard/director` | Office of the Director |

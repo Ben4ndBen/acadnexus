@@ -251,7 +251,7 @@ export function RegisterForm({
             name="institutionalId"
             type="text"
             required
-            placeholder={role === "Faculty" ? "e.g. FACULTY-002" : "e.g. STUDENT-002"}
+            placeholder={role === "Faculty" ? "e.g. FACULTY-002" : "e.g. 2023-0001-AB"}
             className="w-full bg-stone-50/60 focus:bg-white border border-stone-200/80 focus:border-[#7A151A] rounded-xl pl-11 pr-4 py-3 text-sm text-stone-900 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-[#7A151A]/20 transition-all duration-200"
             disabled={isPending}
           />

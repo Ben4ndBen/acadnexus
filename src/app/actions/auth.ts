@@ -194,8 +194,8 @@ export async function registerAction(prevState: any, formData: FormData) {
   // Validate ID format prefix & suffix
   const formattedId = institutionalId.trim().toUpperCase();
   if (role === "Student") {
-    if (!/^STUDENT-\d+$/.test(formattedId)) {
-      return { error: "Student ID must follow the standard format: STUDENT- followed by digits (e.g. STUDENT-002)." };
+    if (!/^\d{4}-\d{4}-AB$/.test(formattedId)) {
+      return { error: "Student ID must follow the standard format: YYYY-NNNN-AB (e.g. 2023-0001-AB)." };
     }
   } else if (role === "Faculty") {
     if (!/^FACULTY-\d+$/.test(formattedId)) {

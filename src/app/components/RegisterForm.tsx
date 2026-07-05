@@ -63,7 +63,7 @@ export function RegisterForm({ programs, departments }: RegisterFormProps) {
   // Real-time validations
   const isIdEmpty = institutionalId.trim() === "";
   const isIdValid = role === "Student" 
-    ? /^STUDENT-\d+$/.test(institutionalId.trim().toUpperCase())
+    ? /^\d{4}-\d{4}-AB$/.test(institutionalId.trim().toUpperCase())
     : /^FACULTY-\d+$/.test(institutionalId.trim().toUpperCase());
 
   // Password strength checks
@@ -194,7 +194,7 @@ export function RegisterForm({ programs, departments }: RegisterFormProps) {
       {/* Institutional ID Field */}
       <div>
         <label htmlFor="institutionalId" className="block text-xs font-bold text-stone-600 uppercase tracking-wider mb-2">
-          Institutional ID ({role === "Student" ? "STUDENT- followed by digits" : "FACULTY- followed by digits"})
+          Institutional ID ({role === "Student" ? "YYYY-NNNN-AB format (e.g. 2023-0001-AB)" : "FACULTY- followed by digits"})
         </label>
         <div className="relative">
           <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-stone-400">
@@ -207,7 +207,7 @@ export function RegisterForm({ programs, departments }: RegisterFormProps) {
             required
             value={institutionalId}
             onChange={(e) => setInstitutionalId(e.target.value)}
-            placeholder={role === "Student" ? "STUDENT-002" : "FACULTY-002"}
+            placeholder={role === "Student" ? "2023-0001-AB" : "FACULTY-002"}
             className={`w-full bg-stone-50/60 hover:bg-stone-50 focus:bg-white border rounded-xl pl-11 pr-10 py-3 text-sm text-stone-800 focus:outline-none focus:ring-2 focus:ring-[#7A151A]/20 transition-all duration-200 ${
               isIdEmpty 
                 ? "border-stone-200/80" 
@@ -227,7 +227,7 @@ export function RegisterForm({ programs, departments }: RegisterFormProps) {
         </div>
         {!isIdEmpty && !isIdValid && (
           <p className="text-[11px] text-rose-600 mt-1 font-semibold animate-in fade-in duration-300">
-            Must match pattern: {role === "Student" ? "STUDENT-" : "FACULTY-"} followed by digits (e.g. {role === "Student" ? "STUDENT-002" : "FACULTY-002"}).
+            Must match pattern: {role === "Student" ? "YYYY-NNNN-AB (e.g. 2023-0001-AB)" : "FACULTY- followed by digits (e.g. FACULTY-002)"}.
           </p>
         )}
       </div>
