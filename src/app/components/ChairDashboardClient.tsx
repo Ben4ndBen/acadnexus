@@ -7,6 +7,7 @@ import {
   XCircle, Send, AlertCircle, RefreshCw, FileText, Check, X
 } from "lucide-react";
 import { reviewExamByChair, verifySyllabusAndTOS } from "@/app/actions/chair";
+import { Latex } from "@/app/components/Latex";
 
 interface ChairDashboardClientProps {
   chairUserId: number;
@@ -477,9 +478,68 @@ export function ChairDashboardClient({
                                         </div>
                                       </div>
 
-                                      <p className="text-xs text-slate-700 font-medium leading-relaxed bg-slate-50/50 p-2.5 rounded-lg border border-slate-100">
-                                        {q.question_text}
-                                      </p>
+                                      {(() => {
+                                        let parsed: { text: string; image_url?: string; options?: string[]; premises?: string[] } | null = null;
+                                        if (q.question_text.trim().startsWith("{")) {
+                                          try {
+                                            parsed = JSON.parse(q.question_text);
+                                          } catch (e) {
+                                            // fallback
+                                          }
+                                        }
+
+                                        const textToRender = parsed ? parsed.text : q.question_text;
+
+                                        return (
+                                          <div className="bg-slate-50/50 p-3.5 rounded-xl border border-slate-100 space-y-3">
+                                            <div className="text-xs text-slate-700 font-semibold leading-relaxed whitespace-pre-wrap">
+                                              <Latex text={textToRender} />
+                                            </div>
+
+                                            {parsed?.image_url && (
+                                              <div className="max-w-md border border-slate-200/60 rounded-xl overflow-hidden p-1 bg-white">
+                                                <img 
+                                                  src={parsed.image_url} 
+                                                  alt="Question attachment" 
+                                                  className="w-full h-auto max-h-[180px] object-contain rounded-lg"
+                                                />
+                                              </div>
+                                            )}
+
+                                            {/* Render choices/options for math & completeness */}
+                                            {parsed?.options && parsed.options.length > 0 && (
+                                              <div className="text-[11px] text-slate-500 font-semibold space-y-1 pl-2">
+                                                <p className="font-extrabold text-[10px] text-slate-400 uppercase tracking-wider">Choices:</p>
+                                                {parsed.options.map((opt, oIdx) => (
+                                                  <div key={oIdx} className="flex gap-1.5 items-center">
+                                                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                                                    <span><Latex text={opt} /></span>
+                                                    {opt === q.correct_answer && <span className="text-[9px] bg-emerald-50 text-emerald-700 border border-emerald-100 px-1 py-0.2 rounded font-extrabold uppercase ml-2">Correct</span>}
+                                                  </div>
+                                                ))}
+                                              </div>
+                                            )}
+
+                                            {parsed?.premises && parsed.premises.length > 0 && (
+                                              <div className="text-[11px] text-slate-500 font-semibold space-y-1 pl-2">
+                                                <p className="font-extrabold text-[10px] text-slate-400 uppercase tracking-wider">Premises:</p>
+                                                {parsed.premises.map((prem, pIdx) => (
+                                                  <div key={pIdx} className="flex gap-1.5 items-center">
+                                                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                                                    <span><Latex text={prem} /></span>
+                                                  </div>
+                                                ))}
+                                              </div>
+                                            )}
+
+                                            {!parsed?.options && q.correct_answer && (
+                                              <div className="text-[11px] text-slate-500 font-semibold pl-2">
+                                                <span className="font-bold text-slate-400">Correct Answer:</span> <strong className="text-slate-700">{q.correct_answer}</strong>
+                                              </div>
+                                            )}
+                                          </div>
+                                        );
+                                      })()}
 
                                       {/* Feedback text area (always available, but styled specifically for revisions) */}
                                       <div className="space-y-1">

@@ -7,7 +7,8 @@ import {
   Upload, Trash2, Plus, Check, Eye, Trash, ArrowUp, ArrowDown, FileText, 
   Shuffle, AlertCircle, RefreshCw, FileUp, Sparkles, CheckCircle
 } from "lucide-react";
-import { saveExamConfig, saveExamQuestions, updateExamStatus } from "@/app/actions/faculty";
+import { saveExamConfig, saveExamQuestions, updateExamStatus, uploadQuestionAttachment } from "@/app/actions/faculty";
+import { Latex } from "@/app/components/Latex";
 
 interface Course {
   course_id: number;
@@ -22,6 +23,8 @@ interface Exam {
   tos_file_path: string;
   time_limit_minutes: number;
   randomize_items: boolean;
+  time_penalty_seconds?: number;
+  score_penalty_points?: number;
   current_status: "Draft" | "Pending_Chair" | "Pending_DI" | "Approved" | "Returned";
   course: Course;
   questionBank: Array<{
@@ -48,6 +51,7 @@ interface QuestionState {
   matches: Array<{ premise: string; choice: string }>; // Matching correct mapping
   correctAnswer: string; // For MCQ / TF / Identification
   points: number;
+  image_url?: string;
 }
 
 // Deserialization helper
@@ -58,8 +62,20 @@ function deserializeQuestions(dbQuestions: any[]): QuestionState[] {
     let premises: string[] = [];
     let matches: Array<{ premise: string; choice: string }> = [];
     let correctAnswer = q.correct_answer;
+    let image_url = "";
 
-    if (q.question_type === "Multiple_Choice") {
+    // Check if the question text is a serialized JSON object
+    if (q.question_text.trim().startsWith("{")) {
+      try {
+        const parsed = JSON.parse(q.question_text);
+        text = parsed.text || q.question_text;
+        options = parsed.options || [];
+        premises = parsed.premises || [];
+        image_url = parsed.image_url || "";
+      } catch {
+        text = q.question_text;
+      }
+    } else if (q.question_type === "Multiple_Choice") {
       try {
         const parsed = JSON.parse(q.question_text);
         text = parsed.text || q.question_text;
@@ -79,7 +95,9 @@ function deserializeQuestions(dbQuestions: any[]): QuestionState[] {
         premises = [];
         options = [];
       }
+    }
 
+    if (q.question_type === "Matching_Type") {
       try {
         const parsedAnswer = JSON.parse(q.correct_answer);
         matches = parsedAnswer.matches || [];
@@ -97,6 +115,7 @@ function deserializeQuestions(dbQuestions: any[]): QuestionState[] {
       matches,
       correctAnswer,
       points: q.points,
+      image_url,
     };
   });
 }
@@ -107,25 +126,35 @@ function serializeQuestions(questions: QuestionState[]) {
     let question_text = q.text;
     let correct_answer = q.correctAnswer;
 
+    // Build standard JSON wrapper to hold metadata like images
+    const serializedData: Record<string, any> = {
+      text: q.text,
+    };
+    if (q.image_url) {
+      serializedData.image_url = q.image_url;
+    }
+
     if (q.question_type === "Multiple_Choice") {
-      question_text = JSON.stringify({
-        text: q.text,
-        options: q.options,
-      });
+      serializedData.options = q.options;
+      question_text = JSON.stringify(serializedData);
       correct_answer = q.correctAnswer;
     } else if (q.question_type === "Matching_Type") {
-      // Extract premises and options from matches
       const premises = q.matches.map(m => m.premise).filter(Boolean);
       const options = Array.from(new Set(q.matches.map(m => m.choice).filter(Boolean)));
       
-      question_text = JSON.stringify({
-        text: q.text,
-        premises,
-        options,
-      });
+      serializedData.premises = premises;
+      serializedData.options = options;
+      question_text = JSON.stringify(serializedData);
       correct_answer = JSON.stringify({
         matches: q.matches.filter(m => m.premise || m.choice)
       });
+    } else {
+      // For identification, T/F, essay, serialize to JSON if there's an image
+      if (q.image_url) {
+        question_text = JSON.stringify(serializedData);
+      } else {
+        question_text = q.text;
+      }
     }
 
     return {
@@ -152,6 +181,8 @@ export function ExamBuilderWizard({ exam, courses, facultyId }: ExamBuilderWizar
   const [randomizeItems, setRandomizeItems] = useState<boolean>(exam.randomize_items);
   const [tosFile, setTosFile] = useState<File | null>(null);
   const [existingTosPath, setExistingTosPath] = useState<string>(exam.tos_file_path);
+  const [timePenalty, setTimePenalty] = useState<number>(exam.time_penalty_seconds ?? 60);
+  const [scorePenalty, setScorePenalty] = useState<number>(exam.score_penalty_points ?? 2);
 
   // Question Bank State
   const [questions, setQuestions] = useState<QuestionState[]>(deserializeQuestions(exam.questionBank));
@@ -165,6 +196,41 @@ export function ExamBuilderWizard({ exam, courses, facultyId }: ExamBuilderWizar
 
   // Step 1 Validation
   const isConfigValid = title.trim() !== "" && courseId > 0 && timeLimit > 0;
+
+  // Question Image Upload handlers
+  const [uploadingImage, setUploadingImage] = useState<boolean>(false);
+
+  const handleUploadQuestionImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || activeQuestionIdx === -1) return;
+
+    setUploadingImage(true);
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const res = await uploadQuestionAttachment(facultyId, formData);
+      if (res.success && res.url) {
+        const updated = [...questions];
+        updated[activeQuestionIdx].image_url = res.url;
+        setQuestions(updated);
+      } else {
+        alert(res.error || "Failed to upload image.");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Error uploading file.");
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  const handleRemoveQuestionImage = () => {
+    if (activeQuestionIdx === -1) return;
+    const updated = [...questions];
+    delete updated[activeQuestionIdx].image_url;
+    setQuestions(updated);
+  };
 
   // Handles adding a new question
   const handleAddQuestion = (type: "Multiple_Choice" | "True_False" | "Identification" | "Matching_Type") => {
@@ -320,6 +386,8 @@ export function ExamBuilderWizard({ exam, courses, facultyId }: ExamBuilderWizar
     configData.append("courseId", String(courseId));
     configData.append("timeLimitMinutes", String(timeLimit));
     configData.append("randomizeItems", String(randomizeItems));
+    configData.append("timePenaltySeconds", String(timePenalty));
+    configData.append("scorePenaltyPoints", String(scorePenalty));
     if (tosFile) {
       configData.append("tosFile", tosFile);
     }
@@ -361,6 +429,8 @@ export function ExamBuilderWizard({ exam, courses, facultyId }: ExamBuilderWizar
     configData.append("courseId", String(courseId));
     configData.append("timeLimitMinutes", String(timeLimit));
     configData.append("randomizeItems", String(randomizeItems));
+    configData.append("timePenaltySeconds", String(timePenalty));
+    configData.append("scorePenaltyPoints", String(scorePenalty));
     if (tosFile) {
       configData.append("tosFile", tosFile);
     }
@@ -611,6 +681,51 @@ export function ExamBuilderWizard({ exam, courses, facultyId }: ExamBuilderWizar
                   <span className="bg-white w-4.5 h-4.5 rounded-full shadow-sm" />
                 </button>
               </div>
+
+              {/* Security Violations Penalties Configuration */}
+              <div className="border-t border-slate-100 pt-4 space-y-4">
+                <h3 className="text-sm font-black text-slate-800 flex items-center gap-1.5">
+                  <AlertCircle className="w-4 h-4 text-rose-600" />
+                  Security Violation Penalties
+                </h3>
+                <p className="text-xs text-slate-400 mt-1">
+                  Configure automatic time or score reductions executed when a student exits fullscreen, switches browser tabs, or loses window focus.
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* Time Penalty */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-extrabold text-slate-600 block">Time Penalty per Violation</label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min="0"
+                        max="300"
+                        value={timePenalty}
+                        onChange={(e) => setTimePenalty(Number(e.target.value))}
+                        className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 text-sm font-bold text-slate-800 px-4 py-2.5 rounded-xl transition-all duration-300"
+                      />
+                      <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-slate-400 font-semibold">seconds</span>
+                    </div>
+                  </div>
+
+                  {/* Score Penalty */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-extrabold text-slate-600 block">Score Penalty per Violation</label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min="0"
+                        max="50"
+                        value={scorePenalty}
+                        onChange={(e) => setScorePenalty(Number(e.target.value))}
+                        className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 text-sm font-bold text-slate-800 px-4 py-2.5 rounded-xl transition-all duration-300"
+                      />
+                      <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-slate-400 font-semibold">points</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -848,6 +963,63 @@ export function ExamBuilderWizard({ exam, courses, facultyId }: ExamBuilderWizar
                     onChange={(e) => updateQuestionText(e.target.value)}
                     className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 text-sm font-medium text-slate-800 placeholder:text-slate-400 p-4 rounded-xl transition-all duration-300 outline-none"
                   />
+                </div>
+
+                {/* Image Attachment & Math/Equation Helpers */}
+                <div className="space-y-3 bg-slate-50 p-4 rounded-2xl border border-slate-155">
+                  <div className="flex flex-wrap items-center justify-between gap-4">
+                    <div>
+                      <p className="text-xs font-black text-slate-800">Rich-Text & Math Attachments</p>
+                      <p className="text-[10px] text-slate-400 leading-relaxed">
+                        To add mathematical equations, enclose LaTeX symbols in <code>$formula$</code> (inline) or <code>$$formula$$</code> (block).
+                      </p>
+                    </div>
+                    <div>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        id="question-image-file"
+                        className="hidden"
+                        onChange={handleUploadQuestionImage}
+                      />
+                      <button
+                        type="button"
+                        disabled={uploadingImage}
+                        onClick={() => document.getElementById("question-image-file")?.click()}
+                        className="bg-white hover:bg-slate-50 border border-slate-200 text-slate-750 text-xs font-bold px-3 py-2 rounded-xl shadow-sm transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                      >
+                        {uploadingImage ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                        Attach Image
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Render preview of image if attached */}
+                  {questions[activeQuestionIdx].image_url && (
+                    <div className="relative w-full max-w-md rounded-2xl border border-slate-200 overflow-hidden bg-white p-2">
+                      <img
+                        src={questions[activeQuestionIdx].image_url}
+                        alt="Attached question asset"
+                        className="w-full h-auto max-h-[220px] object-contain rounded-xl"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleRemoveQuestionImage}
+                        className="absolute top-4 right-4 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-600 p-2 rounded-xl shadow-sm transition-all cursor-pointer"
+                        title="Remove Image"
+                      >
+                        <Trash className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Math & Rich-Text Prompt Preview */}
+                <div className="bg-emerald-50/20 border border-emerald-100/50 p-4.5 rounded-2xl space-y-2">
+                  <span className="text-[10px] font-black uppercase text-emerald-800 tracking-wider">Live Prompt & Math Preview:</span>
+                  <div className="text-sm font-semibold text-slate-800 leading-relaxed whitespace-pre-wrap">
+                    <Latex text={questions[activeQuestionIdx].text || "Type your prompt text to preview rendering..."} />
+                  </div>
                 </div>
 
                 {/* MULTIPLE CHOICE EDITOR */}
