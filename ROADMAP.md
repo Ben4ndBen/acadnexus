@@ -119,14 +119,33 @@
 
 ---
 
-#### EPIC 7: Testing, Evaluation, & Deployment (Phases 4 & 5)
-##### **Card 24: Quality Assurance & System Testing**
-- [ ] **Task 52:** Conduct granular functional testing for the examination targeting engine (verifying total isolation of test visibility across student sections).
-- [ ] **Task 53:** Execute load and integration tests, focusing specifically on concurrent database write patterns caused by the auto-save worker.
+#### EPIC 7: Academic Structural Hierarchy & Automated Matrix Enrolments (Phase 3.7)
+##### **Card 24: Role Expansion & Multi-Tier Identity Portals**
+- [ ] **Task 52:** Integrate Department Chairperson and Director for Instruction (DI) roles into the sign-up system, forcing the Department options list selection on Chairperson registrations similar to the Faculty layout.
+- [ ] **Task 53:** Implement mandatory profile picture inputs and info cards for the DI and Department Chairperson registrations, mirroring the profile infrastructure established for Faculty.
 
-##### **Card 25: Release Engineering & Documentation**
-- [ ] **Task 54:** Synthesize technical documentation, environment configuration manifests, and system runtime runbooks.
-- [ ] **Task 55:** Configure automated CI/CD deployment pipelines to host the front-end application layer on Vercel and upgrade the Supabase datastore instance to production tiering.
+##### **Card 25: Conditional Departmental Dropdowns**
+- [ ] **Task 54:** Implement conditional major dropdown blocks on the Faculty registration portal triggered by specific department options: IT Department displays Architectural, Automotive, and Electronics Technologies; Hospitality and Tourism displays HM and TM.
+- [ ] **Task 55:** Program dynamic pop-up option panels for the Teacher Education Department (TED) registration that render Elementary Education and Secondary Education, further nested with Science, English, and Mathematics options if Secondary is chosen.
+
+##### **Card 26: Automated Faculty & Chairperson Courses Matrix**
+- [ ] **Task 56:** Build background synchronization data tables that automatically connect faculty profiles to specific standardized courses based on their chosen department.
+- [ ] **Task 57:** Configure automated course view assignment tables for Chairpersons, rendering department-specific subject codes and global General Education (GE) paths managed across divisions or by TED/part-time instructors.
+
+##### **Card 27: Automated Student Academic Routing**
+- [ ] **Task 58:** Program backend course mapping matrices to automatically bind matching academic course loads to regular student records according to their designated department, year level, and major profiles.
+- [ ] **Task 59:** Build an explicit "Irregular Student" registration toggle that bypasses automated courses mapping tables and exposes multi-select courses selection checkboxes instead.
+
+---
+
+#### EPIC 8: Testing, Evaluation, & Deployment (Phases 4 & 5)
+##### **Card 28: Quality Assurance & System Testing**
+- [ ] **Task 60:** Conduct granular functional testing for the examination targeting engine (verifying total isolation of test visibility across student sections).
+- [ ] **Task 61:** Execute load and integration tests, focusing specifically on concurrent database write patterns caused by the auto-save worker.
+
+##### **Card 29: Release Engineering & Documentation**
+- [ ] **Task 62:** Synthesize technical documentation, environment configuration manifests, and system runtime runbooks.
+- [ ] **Task 63:** Configure automated CI/CD deployment pipelines to host the front-end application layer on Vercel and upgrade the Supabase datastore instance to production tiering.
 
 ---
 
