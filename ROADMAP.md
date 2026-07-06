@@ -126,7 +126,7 @@
 
 ##### **Card 25: Conditional Departmental Dropdowns**
 - [ ] **Task 54:** Implement conditional major dropdown blocks on the Faculty registration portal triggered by specific department options: IT Department displays Architectural, Automotive, and Electronics Technologies; Hospitality and Tourism displays HM and TM.
-- [ ] **Task 55:** Program dynamic pop-up option panels for the Teacher Education Department (TED) registration that render Elementary Education and Secondary Education, further nested with Science, English, and Mathematics options if Secondary is chosen.
+- [ ] **Task 55:** Program dynamic pop-up option panels for the Teacher Education Department (TED) registration that render Elementary Education and Secondary Education, further nested with Science, English, and Mathematics options as majors if Secondary is chosen.
 
 ##### **Card 26: Automated Faculty & Chairperson Courses Matrix**
 - [ ] **Task 56:** Build background synchronization data tables that automatically connect faculty profiles to specific standardized courses based on their chosen department.
