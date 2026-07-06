@@ -6,20 +6,23 @@ import bcrypt from "bcryptjs";
 import { cookies } from "next/headers";
 
 export async function loginAction(prevState: any, formData: FormData) {
-  const institutionalId = formData.get("institutionalId") as string;
+  const rawId = formData.get("institutionalId") as string;
   const password = formData.get("password") as string;
 
-  if (!institutionalId || !password) {
+  if (!rawId || !password) {
     return { error: "Please enter both institutional ID and password." };
   }
 
+  const trimmedId = rawId.trim();
+
   try {
     // 1. Fetch user from local USERS table (support institutional ID or username)
+    // Institutional ID lookup is case-insensitive, while username is checked as-is.
     const user = await db.user.findFirst({
       where: {
         OR: [
-          { institutional_id: institutionalId },
-          { username: institutionalId },
+          { institutional_id: trimmedId.toUpperCase() },
+          { username: trimmedId },
         ],
       },
     });
@@ -46,7 +49,7 @@ export async function loginAction(prevState: any, formData: FormData) {
         id: `mock-${user.user_id}`,
         user_metadata: {
           role: user.role,
-          institutional_id: institutionalId,
+          institutional_id: user.institutional_id, // Use canonical uppercase ID
         },
       };
 
@@ -68,8 +71,8 @@ export async function loginAction(prevState: any, formData: FormData) {
       return { success: true, role: user.role };
     }
 
-    // Use a synthetic email derived from the institutional ID
-    const email = `${institutionalId.toLowerCase()}@acadnexus.bsc.edu.ph`;
+    // Use a synthetic email derived from the canonical institutional ID
+    const email = `${user.institutional_id.toLowerCase()}@acadnexus.bsc.edu.ph`;
     const supabase = await createClient();
 
     let { data, error } = await supabase.auth.signInWithPassword({
@@ -85,7 +88,7 @@ export async function loginAction(prevState: any, formData: FormData) {
         password,
         options: {
           data: {
-            institutional_id: institutionalId,
+            institutional_id: user.institutional_id, // Use canonical uppercase ID
             role: user.role,
           },
         },
@@ -119,11 +122,11 @@ export async function loginAction(prevState: any, formData: FormData) {
         });
       }
 
-      // Synchronize role and metadata in Supabase token
+      // Synchronize role and metadata in Supabase token using canonical uppercase ID
       await supabase.auth.updateUser({
         data: {
           role: user.role,
-          institutional_id: institutionalId,
+          institutional_id: user.institutional_id,
         },
       });
     }
@@ -154,7 +157,7 @@ export async function logoutAction() {
 export async function registerAction(prevState: any, formData: FormData) {
   const institutionalId = formData.get("institutionalId") as string;
   const password = formData.get("password") as string;
-  const confirmPassword = formData.get("confirmPassword") as string;
+  const confirmPassword = (formData.get("confirmPassword") as string) || password;
   const firstName = formData.get("firstName") as string;
   const middleName = formData.get("middleName") as string;
   const lastName = formData.get("lastName") as string;
@@ -163,7 +166,8 @@ export async function registerAction(prevState: any, formData: FormData) {
   // Onboarding fields
   const programIdStr = formData.get("programId") as string;
   const yearLevelStr = formData.get("yearLevel") as string;
-  const major = formData.get("major") as string;
+  // Support both 'major' (alternative forms) and 'section' (main register portal form)
+  const major = (formData.get("major") || formData.get("section")) as string;
   const departmentIdStr = formData.get("departmentId") as string;
 
   if (!institutionalId || !password || !confirmPassword || !firstName || !lastName || !role) {
