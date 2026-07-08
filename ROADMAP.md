@@ -138,14 +138,26 @@
 
 ---
 
-#### EPIC 8: Testing, Evaluation, & Deployment (Phases 4 & 5)
-##### **Card 28: Quality Assurance & System Testing**
-- [ ] **Task 60:** Conduct granular functional testing for the examination targeting engine (verifying total isolation of test visibility across student sections).
-- [ ] **Task 61:** Execute load and integration tests, focusing specifically on concurrent database write patterns caused by the auto-save worker.
+#### EPIC 8: Advanced Enterprise Governance & Dual-Role Workplace Extensions (Phase 3.8)
+##### **Card 28: Multi-Variant Shuffling & Session Isolation**
+- [ ] **Task 60:** Program a secure backend randomization pipeline that dynamically shuffles question item ordering and individual choice arrays independently per unique student testing token, eliminating adjacent monitor copying.
+- [ ] **Task 61:** Implement structural academic year and semester boundary isolation within database queries to ensure legacy user performance metrics remain fully read-only when active calendar variables transition.
 
-##### **Card 29: Release Engineering & Documentation**
-- [ ] **Task 62:** Synthesize technical documentation, environment configuration manifests, and system runtime runbooks.
-- [ ] **Task 63:** Configure automated CI/CD deployment pipelines to host the front-end application layer on Vercel and upgrade the Supabase datastore instance to production tiering.
+##### **Card 29: Hybrid Structural Roles Switcher & Multi-Hat Safety Ledgers**
+- [ ] **Task 62:** Program a dynamic **Multi-Role Header Dropdown Toggle Switch** component that evaluates user configuration matrices (`is_faculty`, `is_chair`, `is_di`) to allow instant interface workspace transitions for multi-hat administrators.
+- [ ] **Task 63:** Configure system views to ensure that if a user holding overlapping functional ranks is reviewing an exam they personally produced under their Faculty profile, the layout flags it prominently as an internal self-audit while maintaining their legal clearance authority.
+- [ ] **Task 64:** Design an administrative Security Incident Tracker window on the Chair and DI portals to display immediate real-time records of anti-cheating focus violations and network state drops flagged during active testing sessions.
+
+---
+
+#### EPIC 9: Testing, Evaluation, & Deployment (Phases 4 & 5)
+##### **Card 30: Quality Assurance & System Testing**
+- [ ] **Task 65:** Conduct granular functional testing for the examination targeting engine (verifying total isolation of test visibility across student sections).
+- [ ] **Task 66:** Execute load and integration tests, focusing specifically on concurrent database write patterns caused by the auto-save worker.
+
+##### **Card 31: Release Engineering & Documentation**
+- [ ] **Task 67:** Synthesize technical documentation, environment configuration manifests, and system runtime runbooks.
+- [ ] **Task 68:** Configure automated CI/CD deployment pipelines to host the front-end application layer on Vercel and upgrade the Supabase datastore instance to production tiering.
 
 ---
 
