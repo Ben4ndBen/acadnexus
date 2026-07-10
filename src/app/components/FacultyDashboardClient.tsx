@@ -6,9 +6,15 @@ import {
   BookOpen, Award, FileText, ClipboardList, PenTool, CheckCircle, 
   User, Shield, Settings, Activity, Send, RotateCcw, AlertCircle, RefreshCw, Mail,
   Plus, Trash2, Calendar, Lock, Camera, Check, ShieldAlert, Loader2, ShieldCheck, Clock,
-  X, AlertTriangle
+  X, AlertTriangle, Archive, Search, Edit
 } from "lucide-react";
-import { updateFacultyProfile, updateExamStatus, createExamDraft, deleteExam, scheduleExamTarget, configureFacultyAccount, getStudentExamLogs } from "@/app/actions/faculty";
+import { 
+  updateFacultyProfile, updateExamStatus, createExamDraft, deleteExam, 
+  scheduleExamTarget, configureFacultyAccount, getStudentExamLogs,
+  getQuestionBankQuestions, saveQuestionBankQuestion, deleteQuestionBankQuestion,
+  archiveExamination, reuseArchivedExamination, getArchivedExaminations,
+  getCurrentAcademicYear
+} from "@/app/actions/faculty";
 
 interface FacultyDashboardClientProps {
   faculty: {
@@ -26,6 +32,8 @@ interface FacultyDashboardClientProps {
       title: string;
       time_limit_minutes: number;
       current_status: "Draft" | "Pending_Chair" | "Pending_DI" | "Approved" | "Returned";
+      is_archived?: boolean;
+      academic_year?: string | null;
       course: {
         course_code: string;
         course_title: string;
@@ -64,6 +72,7 @@ interface FacultyDashboardClientProps {
   };
   institutionalId: string;
   programs?: Array<{ program_id: number; program_code: string; program_name: string; department_id: number }>;
+  courses?: Array<{ course_id: number; course_code: string; course_title: string }>;
   requirePasswordUpdate?: boolean;
   username?: string;
   studentExams?: any[];
@@ -73,12 +82,180 @@ export function FacultyDashboardClient({
   faculty, 
   institutionalId, 
   programs = [], 
+  courses = [],
   requirePasswordUpdate = false, 
   username,
   studentExams = []
 }: FacultyDashboardClientProps) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<"overview" | "tracker" | "submissions" | "profile" | "override">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "tracker" | "submissions" | "profile" | "override" | "question_bank" | "archive">("overview");
+
+  // --- Question Bank Tab State ---
+  const [qbFilters, setQbFilters] = useState({
+    course_id: "",
+    topic: "",
+    year_level: ""
+  });
+  const [qbQuestions, setQbQuestions] = useState<any[]>([]);
+  const [loadingQb, setLoadingQb] = useState(false);
+
+  // Question CRUD Modal State
+  const [qModalOpen, setQModalOpen] = useState(false);
+  const [editingQ, setEditingQ] = useState<any | null>(null);
+  const [qForm, setQForm] = useState({
+    course_id: "",
+    topic: "",
+    year_level: "",
+    question_type: "Multiple_Choice",
+    question_text: "",
+    correct_answer: "",
+    points: 1
+  });
+  const [isSavingQ, setIsSavingQ] = useState(false);
+
+  // --- Archived Exams Tab State ---
+  const [archiveFilters, setArchiveFilters] = useState({
+    course_id: ""
+  });
+  const [archivedExams, setArchivedExams] = useState<any[]>([]);
+  const [loadingArchives, setLoadingArchives] = useState(false);
+  const [isReusingExamId, setIsReusingExamId] = useState<number | null>(null);
+
+  // Active exam archiving states
+  const [archiveModalOpen, setArchiveModalOpen] = useState(false);
+  const [examToArchive, setExamToArchive] = useState<any | null>(null);
+  const [academicYearInput, setAcademicYearInput] = useState("");
+  const [isArchiving, setIsArchiving] = useState(false);
+
+  const fetchQbQuestions = async () => {
+    setLoadingQb(true);
+    try {
+      const res = await getQuestionBankQuestions({
+        course_id: qbFilters.course_id ? Number(qbFilters.course_id) : undefined,
+        topic: qbFilters.topic || undefined,
+        year_level: qbFilters.year_level ? Number(qbFilters.year_level) : undefined
+      });
+      if (res.success && res.questions) {
+        setQbQuestions(res.questions);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingQb(false);
+    }
+  };
+
+  const fetchArchivedExams = async () => {
+    setLoadingArchives(true);
+    try {
+      const res = await getArchivedExaminations(archiveFilters.course_id ? Number(archiveFilters.course_id) : undefined);
+      if (res.success && res.exams) {
+        setArchivedExams(res.exams);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingArchives(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === "question_bank") {
+      fetchQbQuestions();
+    }
+  }, [activeTab, qbFilters]);
+
+  useEffect(() => {
+    if (activeTab === "archive") {
+      fetchArchivedExams();
+    }
+  }, [activeTab, archiveFilters]);
+
+  const handleSaveQuestionBankItem = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!qForm.course_id) {
+      alert("Please select a Course.");
+      return;
+    }
+    setIsSavingQ(true);
+    try {
+      const res = await saveQuestionBankQuestion(faculty.faculty_id, {
+        question_id: editingQ?.question_id,
+        course_id: Number(qForm.course_id),
+        question_text: qForm.question_text,
+        question_type: qForm.question_type as any,
+        correct_answer: qForm.correct_answer,
+        points: Number(qForm.points) || 1,
+        topic: qForm.topic || undefined,
+        year_level: qForm.year_level ? Number(qForm.year_level) : undefined
+      });
+      if (res.success) {
+        setQModalOpen(false);
+        fetchQbQuestions();
+        alert("Question bank item saved successfully!");
+      } else {
+        alert(res.error || "Failed to save question bank item.");
+      }
+    } catch (err: any) {
+      alert(err.message || "An error occurred.");
+    } finally {
+      setIsSavingQ(false);
+    }
+  };
+
+  const handleDeleteQuestionBankItem = async (questionId: number) => {
+    if (!confirm("Are you sure you want to delete this question from the Question Bank repository?")) return;
+    try {
+      const res = await deleteQuestionBankQuestion(questionId, faculty.faculty_id);
+      if (res.success) {
+        fetchQbQuestions();
+        alert("Question deleted successfully!");
+      } else {
+        alert(res.error || "Failed to delete question bank item.");
+      }
+    } catch (err: any) {
+      alert(err.message || "An error occurred.");
+    }
+  };
+
+  const handleReuseExam = async (examId: number) => {
+    setIsReusingExamId(examId);
+    try {
+      const res = await reuseArchivedExamination(examId, faculty.faculty_id);
+      if (res.success && res.exam_id) {
+        alert("Exam duplicated successfully as a Draft. Redirecting to Exam Builder...");
+        router.push(`/dashboard/faculty/exams/${res.exam_id}/builder`);
+      } else {
+        alert(res.error || "Failed to reuse exam.");
+      }
+    } catch (err: any) {
+      alert(err.message || "An error occurred.");
+    } finally {
+      setIsReusingExamId(null);
+    }
+  };
+
+  const handleArchiveExamSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!examToArchive || !academicYearInput) return;
+    setIsArchiving(true);
+    try {
+      const res = await archiveExamination(examToArchive.exam_id, academicYearInput, faculty.faculty_id);
+      if (res.success) {
+        alert("Examination archived successfully!");
+        setArchiveModalOpen(false);
+        setExamToArchive(null);
+        setAcademicYearInput("");
+        router.refresh();
+      } else {
+        alert(res.error || "Failed to archive exam.");
+      }
+    } catch (err: any) {
+      alert(err.message || "An error occurred.");
+    } finally {
+      setIsArchiving(false);
+    }
+  };
 
   // Violation Audit Logs State variables
   const [selectedAttemptLogs, setSelectedAttemptLogs] = useState<any[] | null>(null);
@@ -409,6 +586,7 @@ export function FacultyDashboardClient({
 
   // Filtered Exams
   const filteredExams = faculty.examinations.filter((exam) => {
+    if (exam.is_archived) return false;
     if (trackerFilter === "ALL") return true;
     return exam.current_status === trackerFilter;
   });
@@ -577,6 +755,28 @@ export function FacultyDashboardClient({
         >
           <ShieldAlert className="w-4 h-4" />
           Live Monitor & Results
+        </button>
+        <button
+          onClick={() => setActiveTab("question_bank")}
+          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-bold rounded-xl transition-all duration-300 ${
+            activeTab === "question_bank"
+              ? "bg-emerald-600 text-white shadow-md shadow-emerald-600/20"
+              : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+          }`}
+        >
+          <BookOpen className="w-4 h-4" />
+          Question Bank Repository
+        </button>
+        <button
+          onClick={() => setActiveTab("archive")}
+          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-bold rounded-xl transition-all duration-300 ${
+            activeTab === "archive"
+              ? "bg-emerald-600 text-white shadow-md shadow-emerald-600/20"
+              : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+          }`}
+        >
+          <Award className="w-4 h-4" />
+          Exam Archives
         </button>
         <button
           onClick={() => setActiveTab("override")}
@@ -928,13 +1128,27 @@ export function FacultyDashboardClient({
                           </button>
                         )}
                         {exam.current_status === "Approved" && (
-                          <button
-                            onClick={() => handleOpenScheduleModal(exam.exam_id, exam.title)}
-                            className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-2 rounded-xl shadow-sm transition-all duration-300"
-                          >
-                            <Calendar className="w-3.5 h-3.5" />
-                            Schedule Exam
-                          </button>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handleOpenScheduleModal(exam.exam_id, exam.title)}
+                              className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-2 rounded-xl shadow-sm transition-all duration-300"
+                            >
+                              <Calendar className="w-3.5 h-3.5" />
+                              Schedule Exam
+                            </button>
+                            <button
+                              onClick={async () => {
+                                setExamToArchive(exam);
+                                const ay = await getCurrentAcademicYear();
+                                setAcademicYearInput(ay);
+                                setArchiveModalOpen(true);
+                              }}
+                              className="inline-flex items-center gap-2 bg-slate-700 hover:bg-slate-800 text-white text-xs font-bold px-3 py-2 rounded-xl shadow-sm transition-all duration-300"
+                            >
+                              <Archive className="w-3.5 h-3.5" />
+                              Archive Exam
+                            </button>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -1734,6 +1948,492 @@ export function FacultyDashboardClient({
               </div>
             </form>
           </div>
+        </div>
+      )}
+
+      {/* QUESTION BANK REPOSITORY TAB */}
+      {activeTab === "question_bank" && (
+        <div className="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-sm space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-5">
+            <div>
+              <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                <span className="w-1.5 h-6 bg-emerald-600 rounded-full" />
+                Question Bank Repository
+              </h2>
+              <p className="text-slate-500 text-xs mt-1">Manage and categorize objective & subjective test items.</p>
+            </div>
+            
+            <button
+              onClick={() => {
+                setEditingQ(null);
+                setQForm({
+                  course_id: courses[0]?.course_id ? String(courses[0].course_id) : "",
+                  topic: "",
+                  year_level: "",
+                  question_type: "Multiple_Choice",
+                  question_text: "",
+                  correct_answer: "",
+                  points: 1
+                });
+                setQModalOpen(true);
+              }}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-sm transition-all flex items-center gap-1.5"
+            >
+              <Plus className="w-4 h-4" />
+              Add Question
+            </button>
+          </div>
+
+          {/* Filters */}
+          <div className="bg-slate-50 border border-slate-150 p-5 rounded-2xl grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-black uppercase text-slate-500 tracking-wider">Course</label>
+              <select
+                value={qbFilters.course_id}
+                onChange={(e) => setQbFilters({ ...qbFilters, course_id: e.target.value })}
+                className="w-full bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 px-3 py-2.5 focus:outline-emerald-500 shadow-sm"
+              >
+                <option value="">All Courses</option>
+                {courses.map((c) => (
+                  <option key={c.course_id} value={c.course_id}>
+                    {c.course_code} - {c.course_title}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-black uppercase text-slate-500 tracking-wider">Search Topic</label>
+              <div className="relative">
+                <Search className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="e.g. Arrays, Normalization"
+                  value={qbFilters.topic}
+                  onChange={(e) => setQbFilters({ ...qbFilters, topic: e.target.value })}
+                  className="w-full bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 pl-9 pr-4 py-2.5 focus:outline-emerald-500 shadow-sm"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-black uppercase text-slate-500 tracking-wider">Year Level</label>
+              <select
+                value={qbFilters.year_level}
+                onChange={(e) => setQbFilters({ ...qbFilters, year_level: e.target.value })}
+                className="w-full bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 px-3 py-2.5 focus:outline-emerald-500 shadow-sm"
+              >
+                <option value="">All Year Levels</option>
+                <option value="1">1st Year</option>
+                <option value="2">2nd Year</option>
+                <option value="3">3rd Year</option>
+                <option value="4">4th Year</option>
+              </select>
+            </div>
+          </div>
+
+          {/* List Content */}
+          {loadingQb ? (
+            <div className="flex flex-col items-center justify-center py-20 gap-3">
+              <Loader2 className="w-8 h-8 animate-spin text-emerald-600" />
+              <span className="text-xs font-semibold text-slate-500">Querying question bank...</span>
+            </div>
+          ) : qbQuestions.length > 0 ? (
+            <div className="grid grid-cols-1 gap-4">
+              {qbQuestions.map((q) => {
+                let typeColor = "bg-slate-100 text-slate-700 border-slate-200";
+                if (q.question_type === "Multiple_Choice") typeColor = "bg-blue-50 text-blue-700 border-blue-100";
+                if (q.question_type === "True_False") typeColor = "bg-purple-50 text-purple-700 border-purple-100";
+                if (q.question_type === "Identification") typeColor = "bg-amber-50 text-amber-700 border-amber-100";
+                if (q.question_type === "Matching_Type") typeColor = "bg-indigo-50 text-indigo-700 border-indigo-100";
+
+                let promptPreview = q.question_text;
+                if (q.question_text.trim().startsWith("{")) {
+                  try {
+                    promptPreview = JSON.parse(q.question_text).text || q.question_text;
+                  } catch {}
+                }
+
+                return (
+                  <div key={q.question_id} className="border border-slate-200 rounded-2xl p-5 hover:shadow-md transition-all duration-300 bg-white flex flex-col sm:flex-row justify-between items-start gap-4">
+                    <div className="space-y-2 min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full border ${typeColor}`}>
+                          {q.question_type.replace("_", " ")}
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-extrabold">{q.points} pt{q.points !== 1 && "s"}</span>
+                        
+                        {q.course && (
+                          <span className="text-[9px] bg-slate-100 text-slate-600 border border-slate-200 px-2.5 py-0.5 rounded-full font-bold">
+                            {q.course.course_code}
+                          </span>
+                        )}
+
+                        {q.topic && (
+                          <span className="text-[9px] bg-indigo-50 text-indigo-600 border border-indigo-100 px-2.5 py-0.5 rounded-full font-bold">
+                            Topic: {q.topic}
+                          </span>
+                        )}
+
+                        {q.year_level && (
+                          <span className="text-[9px] bg-amber-50 text-amber-600 border border-amber-100 px-2.5 py-0.5 rounded-full font-bold">
+                            {q.year_level} Year
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs font-bold text-slate-800 leading-relaxed max-w-3xl whitespace-pre-wrap">
+                        {promptPreview}
+                      </p>
+                      {q.correct_answer && (
+                        <p className="text-[11px] text-slate-400 leading-normal">
+                          <span className="font-extrabold text-slate-500">Correct Answer:</span> {q.correct_answer.startsWith("{") ? "Matches definition" : q.correct_answer}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        onClick={() => {
+                          setEditingQ(q);
+                          setQForm({
+                            course_id: String(q.course_id || ""),
+                            topic: q.topic || "",
+                            year_level: q.year_level ? String(q.year_level) : "",
+                            question_type: q.question_type,
+                            question_text: promptPreview,
+                            correct_answer: q.correct_answer,
+                            points: q.points
+                          });
+                          setQModalOpen(true);
+                        }}
+                        className="p-2 rounded-xl border border-slate-200 text-slate-500 hover:text-slate-800 hover:bg-slate-50 transition-colors shadow-sm bg-white"
+                        title="Edit Question"
+                      >
+                        <Edit className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteQuestionBankItem(q.question_id)}
+                        className="p-2 rounded-xl border border-slate-200 text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors shadow-sm bg-white"
+                        title="Delete Question"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="text-center py-20 border-2 border-dashed border-slate-150 rounded-3xl">
+              <AlertCircle className="w-8 h-8 text-slate-350 mx-auto mb-2" />
+              <p className="text-xs font-bold text-slate-500">No questions found</p>
+              <p className="text-[10px] text-slate-400 mt-1">Add items or adjust filters to explore matches.</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* EXAM ARCHIVES TAB */}
+      {activeTab === "archive" && (
+        <div className="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-sm space-y-6">
+          <div className="border-b border-slate-100 pb-5">
+            <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+              <span className="w-1.5 h-6 bg-emerald-600 rounded-full" />
+              Exam Archives
+            </h2>
+            <p className="text-slate-500 text-xs mt-1">Reuse previous examinations and test assets for the new academic year.</p>
+          </div>
+
+          {/* Filters */}
+          <div className="bg-slate-50 border border-slate-150 p-5 rounded-2xl flex flex-col sm:flex-row gap-4 items-end">
+            <div className="space-y-1.5 flex-1 max-w-md">
+              <label className="text-[10px] font-black uppercase text-slate-500 tracking-wider">Filter by Course</label>
+              <select
+                value={archiveFilters.course_id}
+                onChange={(e) => setArchiveFilters({ course_id: e.target.value })}
+                className="w-full bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 px-3 py-2.5 focus:outline-emerald-500 shadow-sm"
+              >
+                <option value="">All Courses</option>
+                {courses.map((c) => (
+                  <option key={c.course_id} value={c.course_id}>
+                    {c.course_code} - {c.course_title}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Archives Content */}
+          {loadingArchives ? (
+            <div className="flex flex-col items-center justify-center py-20 gap-3">
+              <Loader2 className="w-8 h-8 animate-spin text-emerald-600" />
+              <span className="text-xs font-semibold text-slate-500">Querying historical archives...</span>
+            </div>
+          ) : archivedExams.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {archivedExams.map((exam) => (
+                <div key={exam.exam_id} className="border border-slate-200 rounded-2xl p-5 hover:shadow-md transition-all duration-300 bg-white flex flex-col justify-between gap-4">
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-start gap-4">
+                      <span className="text-[10px] bg-slate-900 text-white font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                        AY {exam.academic_year || "Unknown"}
+                      </span>
+                      <span className="text-xs text-slate-400 font-bold">
+                        {exam._count?.questionBank ?? 0} Items
+                      </span>
+                    </div>
+                    <h3 className="font-extrabold text-slate-850 text-sm leading-snug">{exam.title}</h3>
+                    <p className="text-xs text-emerald-700 font-semibold leading-normal">
+                      {exam.course.course_code} - {exam.course.course_title}
+                    </p>
+                    <p className="text-[10px] text-slate-400 font-medium">
+                      Author: Instructor {exam.faculty.first_name} {exam.faculty.last_name}
+                    </p>
+                  </div>
+                  <button
+                    disabled={isReusingExamId !== null}
+                    onClick={() => handleReuseExam(exam.exam_id)}
+                    className="w-full inline-flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold py-2.5 rounded-xl shadow-sm transition-all duration-300 disabled:opacity-50"
+                  >
+                    {isReusingExamId === exam.exam_id ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        <span>Duplicating Exam...</span>
+                      </>
+                    ) : (
+                      <>
+                        <RotateCcw className="w-4 h-4" />
+                        <span>Reuse & Create Draft</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-20 border-2 border-dashed border-slate-150 rounded-3xl">
+              <Archive className="w-8 h-8 text-slate-350 mx-auto mb-2" />
+              <p className="text-xs font-bold text-slate-500">No archived examinations found</p>
+              <p className="text-[10px] text-slate-400 mt-1">Exams are marked as archived by faculty members upon completion.</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* QUESTION CRUD MODAL */}
+      {qModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
+          <form onSubmit={handleSaveQuestionBankItem} className="bg-white border border-slate-200 rounded-3xl max-w-xl w-full p-6 sm:p-8 shadow-2xl space-y-5 relative max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-start border-b border-slate-100 pb-4">
+              <div>
+                <h3 className="text-base font-extrabold text-slate-900">
+                  {editingQ ? "Edit Question Repository Item" : "Create Question Repository Item"}
+                </h3>
+                <p className="text-xs text-slate-400 font-medium mt-0.5">Define structured metadata for categorized cataloging</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setQModalOpen(false)}
+                className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-400 hover:text-slate-700 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-extrabold text-slate-700 block">Target Course</label>
+                <select
+                  required
+                  value={qForm.course_id}
+                  onChange={(e) => setQForm({ ...qForm, course_id: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-200 focus:bg-white text-sm font-semibold text-slate-900 px-4 py-2.5 rounded-xl transition-all"
+                >
+                  <option value="" disabled>Select Course...</option>
+                  {courses.map((c) => (
+                    <option key={c.course_id} value={c.course_id}>
+                      {c.course_code} - {c.course_title}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-extrabold text-slate-700 block">Topic</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Arrays, Lists"
+                    value={qForm.topic}
+                    onChange={(e) => setQForm({ ...qForm, topic: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 focus:bg-white text-sm font-semibold text-slate-900 px-4 py-2.5 rounded-xl transition-all"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-extrabold text-slate-700 block">Year Level</label>
+                  <select
+                    value={qForm.year_level}
+                    onChange={(e) => setQForm({ ...qForm, year_level: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 focus:bg-white text-sm font-semibold text-slate-900 px-4 py-2.5 rounded-xl transition-all"
+                  >
+                    <option value="">N/A</option>
+                    <option value="1">1st Year</option>
+                    <option value="2">2nd Year</option>
+                    <option value="3">3rd Year</option>
+                    <option value="4">4th Year</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-extrabold text-slate-700 block">Question Type</label>
+                  <select
+                    value={qForm.question_type}
+                    onChange={(e) => setQForm({ ...qForm, question_type: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 focus:bg-white text-sm font-semibold text-slate-900 px-4 py-2.5 rounded-xl transition-all"
+                  >
+                    <option value="Multiple_Choice">Multiple Choice</option>
+                    <option value="True_False">True / False</option>
+                    <option value="Identification">Identification</option>
+                    <option value="Matching_Type">Matching Type</option>
+                    <option value="Essay">Essay</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-extrabold text-slate-700 block">Points</label>
+                  <input
+                    type="number"
+                    min="1"
+                    required
+                    value={qForm.points}
+                    onChange={(e) => setQForm({ ...qForm, points: Number(e.target.value) })}
+                    className="w-full bg-slate-50 border border-slate-200 focus:bg-white text-sm font-semibold text-slate-900 px-4 py-2.5 rounded-xl transition-all"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-extrabold text-slate-700 block">Question Prompt Text</label>
+                <textarea
+                  rows={3}
+                  required
+                  placeholder="Enter the question details..."
+                  value={qForm.question_text}
+                  onChange={(e) => setQForm({ ...qForm, question_text: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-200 focus:bg-white text-sm font-semibold text-slate-900 px-4 py-2.5 rounded-xl transition-all"
+                />
+              </div>
+
+              {qForm.question_type !== "Essay" && (
+                <div className="space-y-1.5">
+                  <label className="text-xs font-extrabold text-slate-700 block">Correct Answer</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder={
+                      qForm.question_type === "True_False" 
+                        ? "True or False" 
+                        : "Type expected target response..."
+                    }
+                    value={qForm.correct_answer}
+                    onChange={(e) => setQForm({ ...qForm, correct_answer: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 focus:bg-white text-sm font-semibold text-slate-900 px-4 py-2.5 rounded-xl transition-all"
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="border-t border-slate-100 pt-4 flex justify-end gap-3 shrink-0">
+              <button
+                type="button"
+                onClick={() => setQModalOpen(false)}
+                className="px-5 py-2.5 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isSavingQ}
+                className="px-5 py-2.5 text-xs font-extrabold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl flex items-center gap-1.5 disabled:opacity-50"
+              >
+                {isSavingQ && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                Save Question
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* EXAM ARCHIVE CONFIRMATION MODAL */}
+      {archiveModalOpen && examToArchive && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
+          <form onSubmit={handleArchiveExamSubmit} className="bg-white border border-slate-200 rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl space-y-5 relative">
+            <div className="flex justify-between items-start border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="text-base font-extrabold text-slate-900">Archive Examination</h3>
+                <p className="text-xs text-slate-400 mt-0.5">Move exam to historical records</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setArchiveModalOpen(false);
+                  setExamToArchive(null);
+                }}
+                className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-400 hover:text-slate-700 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="bg-slate-50 border border-slate-150 p-4 rounded-xl space-y-1">
+                <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Exam Title</p>
+                <p className="text-sm font-extrabold text-slate-800">{examToArchive.title}</p>
+                <p className="text-xs text-emerald-700 font-bold mt-1">
+                  {examToArchive.course.course_code} - {examToArchive.course.course_title}
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-extrabold text-slate-750 block">Academic Year Target</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. 2025-2026"
+                  value={academicYearInput}
+                  onChange={(e) => setAcademicYearInput(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 focus:bg-white text-sm font-semibold text-slate-900 px-4 py-2.5 rounded-xl transition-all"
+                />
+                <p className="text-[10px] text-slate-400 leading-normal">
+                  Specify the academic year this test was administered. Archiving hides the exam from active feed tracker boards, keeping it safe for duplication.
+                </p>
+              </div>
+            </div>
+
+            <div className="border-t border-slate-100 pt-4 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setArchiveModalOpen(false);
+                  setExamToArchive(null);
+                }}
+                className="px-5 py-2.5 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isArchiving}
+                className="px-5 py-2.5 text-xs font-extrabold text-white bg-slate-900 hover:bg-slate-800 rounded-xl flex items-center gap-1.5 disabled:opacity-50"
+              >
+                {isArchiving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                Archive Exam
+              </button>
+            </div>
+          </form>
         </div>
       )}
 

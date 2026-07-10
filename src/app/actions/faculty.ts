@@ -268,6 +268,9 @@ export async function saveExamQuestions(examId: number, questions: any[], facult
           question_type: q.question_type,
           correct_answer: q.correct_answer,
           points: Number(q.points) || 1,
+          course_id: exam.course_id,
+          topic: q.topic || null,
+          year_level: q.year_level ? Number(q.year_level) : null,
         };
 
         if (q.question_id && existingIds.includes(q.question_id)) {
@@ -801,6 +804,301 @@ export async function grantStudentOverride(
   } catch (err: any) {
     console.error("Error in grantStudentOverride:", err);
     return { error: err.message || "Failed to grant override access." };
+  }
+}
+
+export async function getCurrentAcademicYear(): Promise<string> {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth(); // 0-indexed, 5 is June
+  if (month >= 5) {
+    return `${year}-${year + 1}`;
+  } else {
+    return `${year - 1}-${year}`;
+  }
+}
+
+export async function getQuestionBankQuestions(filters: { course_id?: number; topic?: string; year_level?: number }) {
+  try {
+    const where: any = {};
+    if (filters.course_id) {
+      where.course_id = Number(filters.course_id);
+    }
+    if (filters.topic) {
+      where.topic = { contains: filters.topic, mode: "insensitive" };
+    }
+    if (filters.year_level) {
+      where.year_level = Number(filters.year_level);
+    }
+
+    const questions = await db.questionBank.findMany({
+      where,
+      include: {
+        course: true,
+        exam: true,
+      },
+      orderBy: { question_id: "desc" },
+    });
+
+    return { success: true, questions };
+  } catch (err: any) {
+    console.error("Error in getQuestionBankQuestions:", err);
+    return { error: err.message || "Failed to fetch question bank." };
+  }
+}
+
+export async function saveQuestionBankQuestion(
+  facultyId: number,
+  questionData: {
+    question_id?: number;
+    course_id: number;
+    question_text: string;
+    question_type: "Multiple_Choice" | "True_False" | "Identification" | "Matching_Type" | "Essay";
+    correct_answer: string;
+    points: number;
+    topic?: string;
+    year_level?: number;
+  }
+) {
+  try {
+    const data = {
+      course_id: Number(questionData.course_id),
+      question_text: questionData.question_text,
+      question_type: questionData.question_type,
+      correct_answer: questionData.correct_answer,
+      points: Number(questionData.points) || 1,
+      topic: questionData.topic || null,
+      year_level: questionData.year_level ? Number(questionData.year_level) : null,
+    };
+
+    if (questionData.question_id) {
+      await db.questionBank.update({
+        where: { question_id: questionData.question_id },
+        data,
+      });
+      await db.auditLog.create({
+        data: {
+          user_id: facultyId,
+          action_performed: `Updated question ID ${questionData.question_id} in Question Bank`,
+          ip_address: "127.0.0.1",
+        },
+      });
+    } else {
+      await db.questionBank.create({
+        data,
+      });
+      await db.auditLog.create({
+        data: {
+          user_id: facultyId,
+          action_performed: `Created new question in Question Bank for course ID ${questionData.course_id}`,
+          ip_address: "127.0.0.1",
+        },
+      });
+    }
+
+    revalidatePath("/dashboard/faculty");
+    return { success: true };
+  } catch (err: any) {
+    console.error("Error in saveQuestionBankQuestion:", err);
+    return { error: err.message || "Failed to save question bank item." };
+  }
+}
+
+export async function deleteQuestionBankQuestion(questionId: number, facultyId: number) {
+  try {
+    await db.questionBank.delete({
+      where: { question_id: questionId },
+    });
+
+    await db.auditLog.create({
+      data: {
+        user_id: facultyId,
+        action_performed: `Deleted question ID ${questionId} from Question Bank`,
+        ip_address: "127.0.0.1",
+      },
+    });
+
+    revalidatePath("/dashboard/faculty");
+    return { success: true };
+  } catch (err: any) {
+    console.error("Error in deleteQuestionBankQuestion:", err);
+    return { error: err.message || "Failed to delete question bank item." };
+  }
+}
+
+export async function importQuestionsToExam(examId: number, questionIds: number[], facultyId: number) {
+  try {
+    const exam = await db.examination.findUnique({
+      where: { exam_id: examId },
+    });
+
+    if (!exam) {
+      return { error: "Examination not found." };
+    }
+    if (exam.faculty_id !== facultyId) {
+      return { error: "Unauthorized." };
+    }
+
+    // Fetch the questions to copy
+    const sourceQuestions = await db.questionBank.findMany({
+      where: { question_id: { in: questionIds } },
+    });
+
+    // Copy/clone them
+    await db.$transaction(async (tx) => {
+      for (const sq of sourceQuestions) {
+        await tx.questionBank.create({
+          data: {
+            exam_id: examId,
+            question_text: sq.question_text,
+            question_type: sq.question_type,
+            correct_answer: sq.correct_answer,
+            points: sq.points,
+            course_id: exam.course_id,
+            topic: sq.topic,
+            year_level: sq.year_level,
+          },
+        });
+      }
+
+      await tx.auditLog.create({
+        data: {
+          user_id: facultyId,
+          action_performed: `Imported ${sourceQuestions.length} questions into exam ID: ${examId}`,
+          ip_address: "127.0.0.1",
+        },
+      });
+    });
+
+    revalidatePath(`/dashboard/faculty/exams/${examId}/builder`);
+    revalidatePath("/dashboard/faculty");
+    return { success: true };
+  } catch (err: any) {
+    console.error("Error in importQuestionsToExam:", err);
+    return { error: err.message || "Failed to import questions." };
+  }
+}
+
+export async function archiveExamination(examId: number, academicYear: string, facultyId: number) {
+  try {
+    const exam = await db.examination.findUnique({
+      where: { exam_id: examId },
+    });
+
+    if (!exam) {
+      return { error: "Examination not found." };
+    }
+    if (exam.faculty_id !== facultyId) {
+      return { error: "Unauthorized." };
+    }
+
+    await db.examination.update({
+      where: { exam_id: examId },
+      data: {
+        is_archived: true,
+        academic_year: academicYear,
+      },
+    });
+
+    await db.auditLog.create({
+      data: {
+        user_id: facultyId,
+        action_performed: `Archived exam ID ${examId} for Academic Year ${academicYear}`,
+        ip_address: "127.0.0.1",
+      },
+    });
+
+    revalidatePath("/dashboard/faculty");
+    return { success: true };
+  } catch (err: any) {
+    console.error("Error in archiveExamination:", err);
+    return { error: err.message || "Failed to archive examination." };
+  }
+}
+
+export async function reuseArchivedExamination(examId: number, facultyId: number) {
+  try {
+    const sourceExam = await db.examination.findUnique({
+      where: { exam_id: examId },
+      include: { questionBank: true },
+    });
+
+    if (!sourceExam) {
+      return { error: "Source examination not found." };
+    }
+
+    // Create new examination draft copy
+    const newExam = await db.examination.create({
+      data: {
+        title: `${sourceExam.title} (Reused)`,
+        course_id: sourceExam.course_id,
+        faculty_id: facultyId,
+        tos_file_path: sourceExam.tos_file_path,
+        time_limit_minutes: sourceExam.time_limit_minutes,
+        randomize_items: sourceExam.randomize_items,
+        time_penalty_seconds: sourceExam.time_penalty_seconds,
+        score_penalty_points: sourceExam.score_penalty_points,
+        current_status: "Draft",
+        academic_year: await getCurrentAcademicYear(),
+        is_archived: false,
+      },
+    });
+
+    // Clone the questions
+    if (sourceExam.questionBank.length > 0) {
+      await db.questionBank.createMany({
+        data: sourceExam.questionBank.map((q) => ({
+          exam_id: newExam.exam_id,
+          question_text: q.question_text,
+          question_type: q.question_type,
+          correct_answer: q.correct_answer,
+          points: q.points,
+          course_id: sourceExam.course_id,
+          topic: q.topic,
+          year_level: q.year_level,
+        })),
+      });
+    }
+
+    await db.auditLog.create({
+      data: {
+        user_id: facultyId,
+        action_performed: `Reused archived exam ID ${examId} to create new draft exam ID ${newExam.exam_id}`,
+        ip_address: "127.0.0.1",
+      },
+    });
+
+    revalidatePath("/dashboard/faculty");
+    return { success: true, exam_id: newExam.exam_id };
+  } catch (err: any) {
+    console.error("Error in reuseArchivedExamination:", err);
+    return { error: err.message || "Failed to reuse archived examination." };
+  }
+}
+
+export async function getArchivedExaminations(courseId?: number) {
+  try {
+    const where: any = {
+      is_archived: true
+    };
+    if (courseId) {
+      where.course_id = Number(courseId);
+    }
+    const exams = await db.examination.findMany({
+      where,
+      include: {
+        course: true,
+        faculty: true,
+        _count: {
+          select: { questionBank: true }
+        }
+      },
+      orderBy: { exam_id: "desc" }
+    });
+    return { success: true, exams };
+  } catch (err: any) {
+    console.error("Error in getArchivedExaminations:", err);
+    return { error: err.message || "Failed to fetch archived exams." };
   }
 }
 
