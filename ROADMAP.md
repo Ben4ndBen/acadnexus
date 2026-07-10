@@ -94,8 +94,8 @@
 - [ ] **Task 40:** Design the master Grading Sheet view to display exact student scores, incorporating a security rule that permanently disables the data entry rows once the institutional grading submission timeline closes.
 
 ##### **Card 19: Course-Based Test Banking**
-- [ ] **Task 41:** Restructure the Question Bank repository to store and categorize question content per course, topic, and year level for rapid filtering.
-- [ ] **Task 42:** Establish an archival system that securely stores historical exam content, allowing faculty members to modify and reuse previous test assets for the next school year if they handle the same course.
+- [x] **Task 41:** Restructure the Question Bank repository to store and categorize question content per course, topic, and year level for rapid filtering.
+- [x] **Task 42:** Establish an archival system that securely stores historical exam content, allowing faculty members to modify and reuse previous test assets for the next school year if they handle the same course.
 
 ---
 
@@ -147,3 +147,4 @@
 | 2026-07-04 | Task 28, 29 | Implemented deterministic faculty username generation engine, registration onboarding, secure first-login configuration dashboard with email/profile image capture and forced password updates, and visual digital identity cards. | Completed |
 | 2026-07-04 | Task 43, 44 | Integrated secure, real-time client & server validations on the student registration portal and re-engineered the department chair review queue with per-question toggles and granular feedback metrics. | Completed |
 | 2026-07-04 | Task 30, 31, 32 | Implemented continuous item-by-item exam auto-saving, debounced free-text saves, database timer state lock heartbeat loop (every 10 seconds), resilient exam resume logic, and individualized duration tracking. | Completed |
+| 2026-07-10 | Task 41, 42 | Restructured Central Question Bank repository with Course/Topic/Year Level filtering and full CRUD; implemented Exam Archival and Reuse/Modify system with duplication. | Completed |

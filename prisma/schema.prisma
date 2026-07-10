@@ -127,6 +127,7 @@ course_code        String        @unique @db.VarChar(20)
 course_title       String        @db.VarChar(150)
 syllabus_file_path String?       @db.VarChar(255)
 examinations       Examination[]
+questionBank       QuestionBank[]
 
 @@map("COURSES")
 }
@@ -146,6 +147,8 @@ randomize_items    Boolean          @default(true)
 current_status     ExamStatus
 time_penalty_seconds Int            @default(60)
 score_penalty_points Int            @default(2)
+academic_year      String?          @db.VarChar(20)
+is_archived        Boolean          @default(false)
 
 examTargets        ExamTarget[]
 questionBank       QuestionBank[]
@@ -181,12 +184,16 @@ end_time       DateTime        @db.Time
 
 model QuestionBank {
 question_id      Int          @id @default(autoincrement())
-exam_id          Int
-exam             Examination  @relation(fields: [exam_id], references: [exam_id])
+exam_id          Int?
+exam             Examination? @relation(fields: [exam_id], references: [exam_id], onDelete: Cascade)
 question_text    String       @db.Text
 question_type    QuestionType
 correct_answer   String       @db.Text
 points           Int
+course_id        Int?
+course           Course?      @relation(fields: [course_id], references: [course_id], onDelete: SetNull)
+topic            String?      @db.VarChar(150)
+year_level       Int?
 
 studentAnswers   StudentAnswer[]
 

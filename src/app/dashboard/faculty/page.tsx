@@ -183,14 +183,23 @@ export default async function FacultyDashboard() {
         </div>
 
         {/* Render interactive Faculty Dashboard Client */}
-        <FacultyDashboardClient
-          faculty={sanitizedFaculty as any}
-          institutionalId={institutionalId}
-          programs={programs}
-          requirePasswordUpdate={!!dbUser?.require_password_update}
-          username={dbUser?.username || undefined}
-          studentExams={sanitizedStudentExams as any}
-        />
+        {(() => {
+          return db.course.findMany({
+            orderBy: { course_code: "asc" }
+          }).then(async (courses) => {
+            return (
+              <FacultyDashboardClient
+                faculty={sanitizedFaculty as any}
+                institutionalId={institutionalId}
+                programs={programs}
+                courses={courses}
+                requirePasswordUpdate={!!dbUser?.require_password_update}
+                username={dbUser?.username || undefined}
+                studentExams={sanitizedStudentExams as any}
+              />
+            );
+          });
+        })()}
       </main>
 
       {/* Footer */}
