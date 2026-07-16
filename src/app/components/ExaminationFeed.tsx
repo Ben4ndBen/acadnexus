@@ -244,7 +244,7 @@ export default function ExaminationFeed({ exams, student }: ExaminationFeedProps
                       <p className="exam-instructions">{exam.instructions}</p>
                     )}
                     {exam.status === "open" && (
-                      <a href={`/dashboard/student/exams/${exam.id}`} className="exam-cta-btn">
+                      <a href={`/dashboard/student/exam/${exam.exam_id ?? exam.id}`} className="exam-cta-btn">
                         Start examination
                       </a>
                     )}

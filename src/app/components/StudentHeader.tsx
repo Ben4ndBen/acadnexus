@@ -47,7 +47,7 @@ export default function StudentHeader({ student }: StudentHeaderProps) {
         {/* Nav links */}
         <nav className="header-nav" aria-label="Student navigation">
           <a href="/dashboard/student" className="nav-link active">Overview</a>
-          <a href="/dashboard/student/exams" className="nav-link">Examinations</a>
+          <a href="/dashboard/student/exam" className="nav-link">Examinations</a>
           <a href="/dashboard/student/subjects" className="nav-link">Subjects</a>
           <a href="/dashboard/student/portfolio" className="nav-link">Portfolio</a>
         </nav>
