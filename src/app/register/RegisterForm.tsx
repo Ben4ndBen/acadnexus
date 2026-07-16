@@ -27,6 +27,26 @@ export function RegisterForm({
   const [role, setRole] = useState<"Faculty" | "Student">("Faculty");
   const [state, formAction, isPending] = useActionState(registerAction, null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [selectedProgramId, setSelectedProgramId] = useState<string>("");
+
+  // Map program names (lowercase keywords) → available majors
+  const PROGRAM_MAJORS: Record<string, string[]> = {
+    "secondary education": ["English", "Science", "Mathematics"],
+    "industrial technology": ["Automotive", "Architecture", "Electronics"],
+  };
+
+  /** Returns the major options for the currently selected program, or [] */
+  const getMajorsForProgram = (programId: string): string[] => {
+    const prog = programs.find((p) => String(p.program_id) === programId);
+    if (!prog) return [];
+    const nameLower = prog.program_name.toLowerCase();
+    for (const [keyword, majors] of Object.entries(PROGRAM_MAJORS)) {
+      if (nameLower.includes(keyword)) return majors;
+    }
+    return [];
+  };
+
+  const availableMajors = getMajorsForProgram(selectedProgramId);
 
   useEffect(() => {
     if (state?.success) {
@@ -189,7 +209,8 @@ export function RegisterForm({
               required
               className="w-full bg-stone-50/60 focus:bg-white border border-stone-200/80 focus:border-[#7A151A] rounded-xl px-4 py-3 text-sm text-stone-900 focus:outline-none focus:ring-2 focus:ring-[#7A151A]/20 transition-all duration-200"
               disabled={isPending}
-              defaultValue=""
+              value={selectedProgramId}
+              onChange={(e) => setSelectedProgramId(e.target.value)}
             >
               <option value="" disabled>Select Program</option>
               {programs.map((prog) => (
@@ -220,19 +241,32 @@ export function RegisterForm({
           </div>
 
           <div>
-            <label htmlFor="section" className="block text-xs font-bold text-stone-600 uppercase tracking-wider mb-1.5">
-              Section
+            <label htmlFor="major" className="block text-xs font-bold text-stone-600 uppercase tracking-wider mb-1.5">
+              Major
             </label>
-            <input
-              id="section"
+            <select
+              id="major"
               name="section"
-              type="text"
               required
-              placeholder="e.g. A"
-              className="w-full bg-stone-50/60 focus:bg-white border border-stone-200/80 focus:border-[#7A151A] rounded-xl px-4 py-3 text-sm text-stone-900 focus:outline-none focus:ring-2 focus:ring-[#7A151A]/20 transition-all duration-200"
-              disabled={isPending}
-              defaultValue="A"
-            />
+              className="w-full bg-stone-50/60 focus:bg-white border border-stone-200/80 focus:border-[#7A151A] rounded-xl px-4 py-3 text-sm text-stone-900 focus:outline-none focus:ring-2 focus:ring-[#7A151A]/20 transition-all duration-200 disabled:text-stone-400"
+              disabled={isPending || availableMajors.length === 0}
+              defaultValue=""
+            >
+              {availableMajors.length === 0 ? (
+                <option value="" disabled>
+                  {selectedProgramId ? "No majors for this program" : "Select a program first"}
+                </option>
+              ) : (
+                <>
+                  <option value="" disabled>Select Major</option>
+                  {availableMajors.map((major) => (
+                    <option key={major} value={major}>
+                      {major}
+                    </option>
+                  ))}
+                </>
+              )}
+            </select>
           </div>
         </div>
       )}
