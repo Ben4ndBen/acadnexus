@@ -4,6 +4,7 @@ import { useState } from "react";
 
 export interface Exam {
   id: string;
+  exam_id?: string | number;
   title: string;
   course_code: string;
   course_name: string;
