@@ -106,7 +106,7 @@ export async function verifySyllabusAndTOS(
     await db.auditLog.create({
       data: {
         user_id: userId,
-        action_performed: `Chair verified Syllabus and TOS alignment for course ${exam.course.course_code} (Exam: ${exam.title})`,
+        action_performed: `Chair verified TOS alignment for course ${exam.course.course_code} (Exam: ${exam.title})`,
         ip_address: "127.0.0.1",
       },
     });
@@ -114,7 +114,7 @@ export async function verifySyllabusAndTOS(
     revalidatePath("/dashboard/chair");
     return { success: true };
   } catch (err: any) {
-    console.error("Error verifying Syllabus/TOS:", err);
+    console.error("Error verifying TOS:", err);
     return { error: err.message || "Failed to verify alignment." };
   }
 }

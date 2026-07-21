@@ -3,10 +3,11 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { 
-  Activity, Users, ClipboardCheck, FileSearch, CheckCircle, 
-  XCircle, Send, AlertCircle, RefreshCw, FileText, Check, X
+  Activity, Users, ClipboardCheck, CheckCircle, 
+  XCircle, Send, AlertCircle, RefreshCw, FileText, Check, X,
+  Columns, ExternalLink, Download
 } from "lucide-react";
-import { reviewExamByChair, verifySyllabusAndTOS } from "@/app/actions/chair";
+import { reviewExamByChair } from "@/app/actions/chair";
 import { Latex } from "@/app/components/Latex";
 
 interface ChairDashboardClientProps {
@@ -36,7 +37,6 @@ interface ChairDashboardClientProps {
         course_id: number;
         course_code: string;
         course_title: string;
-        syllabus_file_path: string | null;
       };
       faculty: {
         first_name: string;
@@ -62,7 +62,7 @@ export function ChairDashboardClient({
   departmentExams 
 }: ChairDashboardClientProps) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<"overview" | "faculty" | "queue" | "verification">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "faculty" | "queue">("overview");
 
   // State for Review Queue
   const [isSubmittingReview, setIsSubmittingReview] = useState<number | null>(null);
@@ -70,9 +70,16 @@ export function ChairDashboardClient({
   const [questionComments, setQuestionComments] = useState<Record<number, Record<number, string>>>({});
   const [questionStatuses, setQuestionStatuses] = useState<Record<number, Record<number, "Approved" | "Revision">>>({});
 
-  // State for Verification Tool
-  const [isVerifying, setIsVerifying] = useState<number | null>(null);
-  const [verifiedExams, setVerifiedExams] = useState<Set<number>>(new Set());
+  // State for TOS Alignment Checklist
+  const [tosChecklist, setTosChecklist] = useState<Record<number, {
+    topicWeighting: boolean;
+    cognitiveLevels: boolean;
+    itemPoints: boolean;
+  }>>({});
+
+  // State for Split Screen Review Modal
+  const [activeSplitApproval, setActiveSplitApproval] = useState<any | null>(null);
+  const [splitViewMode, setSplitViewMode] = useState<"split" | "tos_only" | "questions_only">("split");
 
   const handleReview = async (workflowId: number, examId: number, action: "Approve" | "Return") => {
     const generalComment = reviewComments[workflowId] || "";
@@ -98,6 +105,15 @@ export function ChairDashboardClient({
     if (action === "Return" && !generalComment.trim() && !hasRevisionRequested && !hasQuestionComments) {
       alert("Please provide general feedback or request revisions on specific questions before returning the exam.");
       return;
+    }
+
+    // Enforce TOS Alignment Checklist before approving
+    if (action === "Approve") {
+      const checklist = tosChecklist[workflowId] || { topicWeighting: false, cognitiveLevels: false, itemPoints: false };
+      if (!checklist.topicWeighting || !checklist.cognitiveLevels || !checklist.itemPoints) {
+        alert("Before approving this examination, you must complete all items in the TOS Alignment Checklist.");
+        return;
+      }
     }
 
     // Enforce warning when approving but revisions are requested
@@ -137,25 +153,94 @@ export function ChairDashboardClient({
         delete next[workflowId];
         return next;
       });
+      setTosChecklist((prev) => {
+        const next = { ...prev };
+        delete next[workflowId];
+        return next;
+      });
+      if (activeSplitApproval?.workflow_id === workflowId) {
+        setActiveSplitApproval(null);
+      }
       router.refresh();
     }
   };
 
-  const handleVerify = async (courseId: number, examId: number) => {
-    setIsVerifying(examId);
-    const res = await verifySyllabusAndTOS(courseId, examId, chairUserId);
-    setIsVerifying(null);
+  const renderTosChecklist = (workflowId: number) => {
+    const current = tosChecklist[workflowId] || { topicWeighting: false, cognitiveLevels: false, itemPoints: false };
+    const isComplete = current.topicWeighting && current.cognitiveLevels && current.itemPoints;
 
-    if (res.error) {
-      alert(res.error);
-    } else {
-      setVerifiedExams((prev) => {
-        const next = new Set(prev);
-        next.add(examId);
-        return next;
-      });
-      router.refresh();
-    }
+    return (
+      <div className={`border rounded-xl p-4 space-y-3 transition-all ${
+        isComplete 
+          ? "bg-emerald-50/50 border-emerald-200" 
+          : "bg-amber-50/50 border-amber-200"
+      }`}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <FileText className={`w-4 h-4 ${isComplete ? "text-emerald-700" : "text-amber-700"}`} />
+            <h4 className={`text-xs font-black uppercase tracking-wider ${isComplete ? "text-emerald-900" : "text-amber-900"}`}>
+              TOS Alignment Checklist <span className="text-rose-600">*</span>
+            </h4>
+          </div>
+          {isComplete ? (
+            <span className="text-[10px] bg-emerald-600 text-white font-extrabold px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-sm">
+              <Check className="w-3 h-3" /> All Verified
+            </span>
+          ) : (
+            <span className="text-[10px] bg-amber-200/80 text-amber-900 font-bold px-2 py-0.5 rounded-full">
+              Required for approval
+            </span>
+          )}
+        </div>
+
+        <div className="space-y-2 pt-1">
+          <label className="flex items-start gap-2.5 text-xs text-slate-700 font-semibold cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={current.topicWeighting}
+              onChange={(e) => {
+                setTosChecklist({
+                  ...tosChecklist,
+                  [workflowId]: { ...current, topicWeighting: e.target.checked }
+                });
+              }}
+              className="mt-0.5 rounded border-slate-300 text-amber-600 focus:ring-amber-600 shrink-0 w-4 h-4 cursor-pointer"
+            />
+            <span>Topic weighting matches test question distribution</span>
+          </label>
+
+          <label className="flex items-start gap-2.5 text-xs text-slate-700 font-semibold cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={current.cognitiveLevels}
+              onChange={(e) => {
+                setTosChecklist({
+                  ...tosChecklist,
+                  [workflowId]: { ...current, cognitiveLevels: e.target.checked }
+                });
+              }}
+              className="mt-0.5 rounded border-slate-300 text-amber-600 focus:ring-amber-600 shrink-0 w-4 h-4 cursor-pointer"
+            />
+            <span>Cognitive levels (Remembering, Applying, etc.) match item breakdown</span>
+          </label>
+
+          <label className="flex items-start gap-2.5 text-xs text-slate-700 font-semibold cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={current.itemPoints}
+              onChange={(e) => {
+                setTosChecklist({
+                  ...tosChecklist,
+                  [workflowId]: { ...current, itemPoints: e.target.checked }
+                });
+              }}
+              className="mt-0.5 rounded border-slate-300 text-amber-600 focus:ring-amber-600 shrink-0 w-4 h-4 cursor-pointer"
+            />
+            <span>Total test items & point allocation match TOS specification</span>
+          </label>
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -195,17 +280,6 @@ export function ChairDashboardClient({
           <ClipboardCheck className="w-4 h-4" />
           Pending Review Queue
         </button>
-        <button
-          onClick={() => setActiveTab("verification")}
-          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-bold rounded-xl transition-all duration-300 ${
-            activeTab === "verification"
-              ? "bg-amber-600 text-white shadow-md shadow-amber-600/20"
-              : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-          }`}
-        >
-          <FileSearch className="w-4 h-4" />
-          Syllabus/TOS Verification
-        </button>
       </div>
 
       {/* OVERVIEW TAB */}
@@ -243,7 +317,7 @@ export function ChairDashboardClient({
               <Activity className="w-8 h-8 text-slate-400 mb-4" />
               <h3 className="font-extrabold text-slate-800 text-base">Select a tab to view details</h3>
               <p className="text-slate-500 text-xs max-w-sm mt-2">
-                Use the navigation tabs above to track faculty progress, review pending examinations, or verify syllabus and TOS alignment.
+                Use the navigation tabs above to track faculty progress or review pending examinations.
               </p>
             </div>
           </div>
@@ -342,274 +416,307 @@ export function ChairDashboardClient({
           </div>
 
           <div className="space-y-6">
-            {pendingApprovals.map(approval => (
-              <div key={approval.workflow_id} className="border border-slate-200 rounded-2xl p-6 bg-gradient-to-br from-white to-amber-50/10">
-                <div className="flex flex-col lg:flex-row justify-between items-start gap-6">
-                  
-                  <div className="flex-1 space-y-4 w-full">
-                    <div>
-                      <h3 className="text-lg font-bold text-slate-900">{approval.exam.title}</h3>
-                      <div className="flex items-center gap-2 text-xs text-slate-500 font-medium mt-1">
-                        <span>Course: <strong className="text-slate-700">{approval.exam.course.course_code} - {approval.exam.course.course_title}</strong></span>
-                        <span>•</span>
-                        <span>Instructor: <strong className="text-slate-700">{approval.exam.faculty.first_name} {approval.exam.faculty.last_name}</strong></span>
+            {pendingApprovals.map(approval => {
+              const hasTosFile = Boolean(approval.exam.tos_file_path && approval.exam.tos_file_path.trim() !== "");
+
+              return (
+                <div key={approval.workflow_id} className="border border-slate-200 rounded-2xl p-6 bg-gradient-to-br from-white to-amber-50/10">
+                  <div className="flex flex-col lg:flex-row justify-between items-start gap-6">
+                    
+                    <div className="flex-1 space-y-4 w-full">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                        <div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h3 className="text-lg font-bold text-slate-900">{approval.exam.title}</h3>
+                            {hasTosFile ? (
+                              <span className="inline-flex items-center gap-1 text-[11px] bg-emerald-50 text-emerald-700 border border-emerald-200 font-extrabold px-2.5 py-0.5 rounded-md">
+                                <FileText className="w-3 h-3" /> TOS File Attached
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-[11px] bg-rose-50 text-rose-700 border border-rose-200 font-extrabold px-2.5 py-0.5 rounded-md">
+                                <AlertCircle className="w-3 h-3 text-rose-500" /> No TOS File Uploaded
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 text-xs text-slate-500 font-medium mt-1">
+                            <span>Course: <strong className="text-slate-700">{approval.exam.course.course_code} - {approval.exam.course.course_title}</strong></span>
+                            <span>•</span>
+                            <span>Instructor: <strong className="text-slate-700">{approval.exam.faculty.first_name} {approval.exam.faculty.last_name}</strong></span>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveSplitApproval(approval);
+                            setSplitViewMode("split");
+                          }}
+                          className="inline-flex items-center gap-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-sm transition-all self-start sm:self-auto cursor-pointer"
+                        >
+                          <Columns className="w-4 h-4" />
+                          <span>Review TOS & Exam (Split Screen)</span>
+                        </button>
+                      </div>
+
+                      {/* TOS Alignment Checklist */}
+                      {renderTosChecklist(approval.workflow_id)}
+
+                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+                        <label className="text-xs font-bold text-slate-700 mb-2 block">General Review Comments</label>
+                        <textarea
+                          value={reviewComments[approval.workflow_id] || ""}
+                          onChange={(e) => setReviewComments({...reviewComments, [approval.workflow_id]: e.target.value})}
+                          className="w-full bg-white border border-slate-200 rounded-lg p-3 text-sm text-slate-800 placeholder:text-slate-400 focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all outline-none"
+                          rows={3}
+                          placeholder="Add your general feedback or required changes here..."
+                        />
+                      </div>
+                      
+                      {/* Itemized Question Feedback Panel */}
+                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-4">
+                        {(() => {
+                          const qStatuses = questionStatuses[approval.workflow_id] || {};
+                          const totalQuestions = approval.exam.questionBank?.length || 0;
+                          const approvedCount = approval.exam.questionBank?.filter(q => (qStatuses[q.question_id] || "Approved") === "Approved").length || 0;
+                          const revisionCount = totalQuestions - approvedCount;
+                          const percentApproved = totalQuestions > 0 ? Math.round((approvedCount / totalQuestions) * 100) : 100;
+                          
+                          return (
+                            <>
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-3">
+                                <div>
+                                  <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">
+                                    Granular Question Review
+                                  </h4>
+                                  <p className="text-[10px] text-slate-400 font-semibold uppercase mt-0.5">
+                                    Set individual item status and write specific corrections.
+                                  </p>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <div className="text-right">
+                                    <span className="text-[10px] font-extrabold text-slate-600 block">
+                                      {approvedCount} / {totalQuestions} Approved
+                                    </span>
+                                    {revisionCount > 0 && (
+                                      <span className="text-[9px] font-bold text-rose-600">
+                                        {revisionCount} require revision
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="w-16 bg-slate-200 h-2 rounded-full overflow-hidden shrink-0">
+                                    <div 
+                                      className={`h-full rounded-full transition-all duration-300 ${
+                                        percentApproved === 100 ? "bg-emerald-500" : percentApproved > 50 ? "bg-amber-500" : "bg-rose-500"
+                                      }`}
+                                      style={{ width: `${percentApproved}%` }}
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="space-y-3 max-h-[350px] overflow-y-auto pr-1">
+                                {approval.exam.questionBank && approval.exam.questionBank.length > 0 ? (
+                                  approval.exam.questionBank.map((q, idx) => {
+                                    const currentStatus = qStatuses[q.question_id] || "Approved";
+                                    return (
+                                      <div key={q.question_id} className={`bg-white border rounded-xl p-4.5 space-y-3 transition-all duration-200 shadow-sm ${
+                                        currentStatus === "Approved" 
+                                          ? "border-slate-100 hover:border-slate-200" 
+                                          : "border-rose-200 ring-2 ring-rose-500/5 bg-rose-50/5"
+                                      }`}>
+                                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                                          <div className="flex items-center gap-2">
+                                            <span className="font-extrabold text-slate-800 bg-slate-100 px-2 py-0.5 rounded text-[10px]">
+                                              Item #{idx + 1}
+                                            </span>
+                                            <span className="bg-amber-50 text-amber-800 px-2 py-0.5 rounded border border-amber-100 font-semibold text-[9px] uppercase tracking-wider">
+                                              {q.question_type.replace("_", " ")}
+                                            </span>
+                                            <span className="text-[10px] font-bold text-slate-400">
+                                              {q.points} {q.points === 1 ? "pt" : "pts"}
+                                            </span>
+                                          </div>
+
+                                          {/* Status Toggle Buttons */}
+                                          <div className="flex border border-slate-200 rounded-lg p-0.5 bg-slate-50 shrink-0 text-[10px] font-bold">
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                const currentWfStatuses = questionStatuses[approval.workflow_id] || {};
+                                                setQuestionStatuses({
+                                                  ...questionStatuses,
+                                                  [approval.workflow_id]: {
+                                                    ...currentWfStatuses,
+                                                    [q.question_id]: "Approved"
+                                                  }
+                                                });
+                                              }}
+                                              className={`px-2.5 py-1 rounded-md transition-all cursor-pointer flex items-center gap-1 ${
+                                                currentStatus === "Approved"
+                                                  ? "bg-emerald-600 text-white shadow-sm font-black"
+                                                  : "text-slate-500 hover:text-slate-700"
+                                              }`}
+                                            >
+                                              <Check className="w-3.5 h-3.5" />
+                                              <span>Approve</span>
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                const currentWfStatuses = questionStatuses[approval.workflow_id] || {};
+                                                setQuestionStatuses({
+                                                  ...questionStatuses,
+                                                  [approval.workflow_id]: {
+                                                    ...currentWfStatuses,
+                                                    [q.question_id]: "Revision"
+                                                  }
+                                                });
+                                              }}
+                                              className={`px-2.5 py-1 rounded-md transition-all cursor-pointer flex items-center gap-1 ${
+                                                currentStatus === "Revision"
+                                                  ? "bg-rose-600 text-white shadow-sm font-black"
+                                                  : "text-slate-500 hover:text-slate-700"
+                                              }`}
+                                            >
+                                              <X className="w-3.5 h-3.5" />
+                                              <span>Requires Revision</span>
+                                            </button>
+                                          </div>
+                                        </div>
+
+                                        {(() => {
+                                          let parsed: { text: string; image_url?: string; options?: string[]; premises?: string[] } | null = null;
+                                          if (q.question_text.trim().startsWith("{")) {
+                                            try {
+                                              parsed = JSON.parse(q.question_text);
+                                            } catch (e) {
+                                              // fallback
+                                            }
+                                          }
+
+                                          const textToRender = parsed ? parsed.text : q.question_text;
+
+                                          return (
+                                            <div className="bg-slate-50/50 p-3.5 rounded-xl border border-slate-100 space-y-3">
+                                              <div className="text-xs text-slate-700 font-semibold leading-relaxed whitespace-pre-wrap">
+                                                <Latex text={textToRender} />
+                                              </div>
+
+                                              {parsed?.image_url && (
+                                                <div className="max-w-md border border-slate-200/60 rounded-xl overflow-hidden p-1 bg-white">
+                                                  <img 
+                                                    src={parsed.image_url} 
+                                                    alt="Question attachment" 
+                                                    className="w-full h-auto max-h-[180px] object-contain rounded-lg"
+                                                  />
+                                                </div>
+                                              )}
+
+                                              {/* Render choices/options for math & completeness */}
+                                              {parsed?.options && parsed.options.length > 0 && (
+                                                <div className="text-[11px] text-slate-500 font-semibold space-y-1 pl-2">
+                                                  <p className="font-extrabold text-[10px] text-slate-400 uppercase tracking-wider">Choices:</p>
+                                                  {parsed.options.map((opt, oIdx) => (
+                                                    <div key={oIdx} className="flex gap-1.5 items-center">
+                                                      <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                                                      <span><Latex text={opt} /></span>
+                                                      {opt === q.correct_answer && <span className="text-[9px] bg-emerald-50 text-emerald-700 border border-emerald-100 px-1 py-0.2 rounded font-extrabold uppercase ml-2">Correct</span>}
+                                                    </div>
+                                                  ))}
+                                                </div>
+                                              )}
+
+                                              {parsed?.premises && parsed.premises.length > 0 && (
+                                                <div className="text-[11px] text-slate-500 font-semibold space-y-1 pl-2">
+                                                  <p className="font-extrabold text-[10px] text-slate-400 uppercase tracking-wider">Premises:</p>
+                                                  {parsed.premises.map((prem, pIdx) => (
+                                                    <div key={pIdx} className="flex gap-1.5 items-center">
+                                                      <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                                                      <span><Latex text={prem} /></span>
+                                                    </div>
+                                                  ))}
+                                                </div>
+                                              )}
+
+                                              {!parsed?.options && q.correct_answer && (
+                                                <div className="text-[11px] text-slate-500 font-semibold pl-2">
+                                                  <span className="font-bold text-slate-400">Correct Answer:</span> <strong className="text-slate-700">{q.correct_answer}</strong>
+                                                </div>
+                                              )}
+                                            </div>
+                                          );
+                                        })()}
+
+                                        {/* Feedback text area */}
+                                        <div className="space-y-1">
+                                          <div className="flex justify-between items-center text-[10px]">
+                                            <span className="font-bold text-slate-500">Feedback Comments:</span>
+                                            {currentStatus === "Revision" && (
+                                              <span className="text-rose-600 font-extrabold uppercase tracking-wider text-[8px]">
+                                                * Required for revisions
+                                              </span>
+                                            )}
+                                          </div>
+                                          <textarea
+                                            value={questionComments[approval.workflow_id]?.[q.question_id] || ""}
+                                            onChange={(e) => {
+                                              const currentWorkflowComments = questionComments[approval.workflow_id] || {};
+                                              setQuestionComments({
+                                                ...questionComments,
+                                                [approval.workflow_id]: {
+                                                  ...currentWorkflowComments,
+                                                  [q.question_id]: e.target.value
+                                                }
+                                              });
+                                            }}
+                                            placeholder={
+                                              currentStatus === "Revision"
+                                                ? "Describe the correction needed for this item (e.g. rewrite options, change correct key, etc.)..."
+                                                : "Add suggestions or comments (optional)..."
+                                            }
+                                            rows={2}
+                                            className={`w-full bg-slate-50/50 border rounded-lg p-2 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:bg-white transition-all duration-200 ${
+                                              currentStatus === "Revision"
+                                                ? "border-rose-200 focus:border-rose-500 focus:ring-1 focus:ring-rose-500/20"
+                                                : "border-slate-200 focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20"
+                                            }`}
+                                          />
+                                        </div>
+                                      </div>
+                                    );
+                                  })
+                                ) : (
+                                  <p className="text-xs text-slate-400 italic">No questions found in this examination draft.</p>
+                                )}
+                              </div>
+                            </>
+                          );
+                        })()}
                       </div>
                     </div>
 
-                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
-                      <label className="text-xs font-bold text-slate-700 mb-2 block">General Review Comments</label>
-                      <textarea
-                        value={reviewComments[approval.workflow_id] || ""}
-                        onChange={(e) => setReviewComments({...reviewComments, [approval.workflow_id]: e.target.value})}
-                        className="w-full bg-white border border-slate-200 rounded-lg p-3 text-sm text-slate-800 placeholder:text-slate-400 focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all outline-none"
-                        rows={3}
-                        placeholder="Add your general feedback or required changes here..."
-                      />
+                    <div className="flex flex-row lg:flex-col gap-3 w-full lg:w-48 pt-2">
+                      <button
+                        disabled={isSubmittingReview === approval.workflow_id}
+                        onClick={() => handleReview(approval.workflow_id, approval.exam_id, "Approve")}
+                        className="flex-1 inline-flex justify-center items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-3 rounded-xl transition-all shadow-sm disabled:opacity-50 cursor-pointer"
+                      >
+                        {isSubmittingReview === approval.workflow_id ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                        Approve Exam
+                      </button>
+                      <button
+                        disabled={isSubmittingReview === approval.workflow_id}
+                        onClick={() => handleReview(approval.workflow_id, approval.exam_id, "Return")}
+                        className="flex-1 inline-flex justify-center items-center gap-2 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold px-4 py-3 rounded-xl transition-all shadow-sm disabled:opacity-50 border border-rose-200 cursor-pointer"
+                      >
+                        {isSubmittingReview === approval.workflow_id ? <RefreshCw className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />}
+                        Return Exam
+                      </button>
                     </div>
-                    {/* Itemized Question Feedback Panel */}
-                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-4">
-                      {(() => {
-                        const qStatuses = questionStatuses[approval.workflow_id] || {};
-                        const totalQuestions = approval.exam.questionBank?.length || 0;
-                        const approvedCount = approval.exam.questionBank?.filter(q => (qStatuses[q.question_id] || "Approved") === "Approved").length || 0;
-                        const revisionCount = totalQuestions - approvedCount;
-                        const percentApproved = totalQuestions > 0 ? Math.round((approvedCount / totalQuestions) * 100) : 100;
-                        
-                        return (
-                          <>
-                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-3">
-                              <div>
-                                <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">
-                                  Granular Question Review
-                                </h4>
-                                <p className="text-[10px] text-slate-400 font-semibold uppercase mt-0.5">
-                                  Set individual item status and write specific corrections.
-                                </p>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <div className="text-right">
-                                  <span className="text-[10px] font-extrabold text-slate-600 block">
-                                    {approvedCount} / {totalQuestions} Approved
-                                  </span>
-                                  {revisionCount > 0 && (
-                                    <span className="text-[9px] font-bold text-rose-600">
-                                      {revisionCount} require revision
-                                    </span>
-                                  )}
-                                </div>
-                                <div className="w-16 bg-slate-200 h-2 rounded-full overflow-hidden shrink-0">
-                                  <div 
-                                    className={`h-full rounded-full transition-all duration-300 ${
-                                      percentApproved === 100 ? "bg-emerald-500" : percentApproved > 50 ? "bg-amber-500" : "bg-rose-500"
-                                    }`}
-                                    style={{ width: `${percentApproved}%` }}
-                                  />
-                                </div>
-                              </div>
-                            </div>
-
-                            <div className="space-y-3 max-h-[350px] overflow-y-auto pr-1">
-                              {approval.exam.questionBank && approval.exam.questionBank.length > 0 ? (
-                                approval.exam.questionBank.map((q, idx) => {
-                                  const currentStatus = qStatuses[q.question_id] || "Approved";
-                                  return (
-                                    <div key={q.question_id} className={`bg-white border rounded-xl p-4.5 space-y-3 transition-all duration-200 shadow-sm ${
-                                      currentStatus === "Approved" 
-                                        ? "border-slate-100 hover:border-slate-200" 
-                                        : "border-rose-200 ring-2 ring-rose-500/5 bg-rose-50/5"
-                                    }`}>
-                                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-                                        <div className="flex items-center gap-2">
-                                          <span className="font-extrabold text-slate-800 bg-slate-100 px-2 py-0.5 rounded text-[10px]">
-                                            Item #{idx + 1}
-                                          </span>
-                                          <span className="bg-amber-50 text-amber-800 px-2 py-0.5 rounded border border-amber-100 font-semibold text-[9px] uppercase tracking-wider">
-                                            {q.question_type.replace("_", " ")}
-                                          </span>
-                                          <span className="text-[10px] font-bold text-slate-400">
-                                            {q.points} {q.points === 1 ? "pt" : "pts"}
-                                          </span>
-                                        </div>
-
-                                        {/* Status Toggle Buttons */}
-                                        <div className="flex border border-slate-200 rounded-lg p-0.5 bg-slate-50 shrink-0 text-[10px] font-bold">
-                                          <button
-                                            type="button"
-                                            onClick={() => {
-                                              const currentWfStatuses = questionStatuses[approval.workflow_id] || {};
-                                              setQuestionStatuses({
-                                                ...questionStatuses,
-                                                [approval.workflow_id]: {
-                                                  ...currentWfStatuses,
-                                                  [q.question_id]: "Approved"
-                                                }
-                                              });
-                                            }}
-                                            className={`px-2.5 py-1 rounded-md transition-all cursor-pointer flex items-center gap-1 ${
-                                              currentStatus === "Approved"
-                                                ? "bg-emerald-600 text-white shadow-sm font-black"
-                                                : "text-slate-500 hover:text-slate-700"
-                                            }`}
-                                          >
-                                            <Check className="w-3.5 h-3.5" />
-                                            <span>Approve</span>
-                                          </button>
-                                          <button
-                                            type="button"
-                                            onClick={() => {
-                                              const currentWfStatuses = questionStatuses[approval.workflow_id] || {};
-                                              setQuestionStatuses({
-                                                ...questionStatuses,
-                                                [approval.workflow_id]: {
-                                                  ...currentWfStatuses,
-                                                  [q.question_id]: "Revision"
-                                                }
-                                              });
-                                            }}
-                                            className={`px-2.5 py-1 rounded-md transition-all cursor-pointer flex items-center gap-1 ${
-                                              currentStatus === "Revision"
-                                                ? "bg-rose-600 text-white shadow-sm font-black"
-                                                : "text-slate-500 hover:text-slate-700"
-                                            }`}
-                                          >
-                                            <X className="w-3.5 h-3.5" />
-                                            <span>Requires Revision</span>
-                                          </button>
-                                        </div>
-                                      </div>
-
-                                      {(() => {
-                                        let parsed: { text: string; image_url?: string; options?: string[]; premises?: string[] } | null = null;
-                                        if (q.question_text.trim().startsWith("{")) {
-                                          try {
-                                            parsed = JSON.parse(q.question_text);
-                                          } catch (e) {
-                                            // fallback
-                                          }
-                                        }
-
-                                        const textToRender = parsed ? parsed.text : q.question_text;
-
-                                        return (
-                                          <div className="bg-slate-50/50 p-3.5 rounded-xl border border-slate-100 space-y-3">
-                                            <div className="text-xs text-slate-700 font-semibold leading-relaxed whitespace-pre-wrap">
-                                              <Latex text={textToRender} />
-                                            </div>
-
-                                            {parsed?.image_url && (
-                                              <div className="max-w-md border border-slate-200/60 rounded-xl overflow-hidden p-1 bg-white">
-                                                <img 
-                                                  src={parsed.image_url} 
-                                                  alt="Question attachment" 
-                                                  className="w-full h-auto max-h-[180px] object-contain rounded-lg"
-                                                />
-                                              </div>
-                                            )}
-
-                                            {/* Render choices/options for math & completeness */}
-                                            {parsed?.options && parsed.options.length > 0 && (
-                                              <div className="text-[11px] text-slate-500 font-semibold space-y-1 pl-2">
-                                                <p className="font-extrabold text-[10px] text-slate-400 uppercase tracking-wider">Choices:</p>
-                                                {parsed.options.map((opt, oIdx) => (
-                                                  <div key={oIdx} className="flex gap-1.5 items-center">
-                                                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
-                                                    <span><Latex text={opt} /></span>
-                                                    {opt === q.correct_answer && <span className="text-[9px] bg-emerald-50 text-emerald-700 border border-emerald-100 px-1 py-0.2 rounded font-extrabold uppercase ml-2">Correct</span>}
-                                                  </div>
-                                                ))}
-                                              </div>
-                                            )}
-
-                                            {parsed?.premises && parsed.premises.length > 0 && (
-                                              <div className="text-[11px] text-slate-500 font-semibold space-y-1 pl-2">
-                                                <p className="font-extrabold text-[10px] text-slate-400 uppercase tracking-wider">Premises:</p>
-                                                {parsed.premises.map((prem, pIdx) => (
-                                                  <div key={pIdx} className="flex gap-1.5 items-center">
-                                                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
-                                                    <span><Latex text={prem} /></span>
-                                                  </div>
-                                                ))}
-                                              </div>
-                                            )}
-
-                                            {!parsed?.options && q.correct_answer && (
-                                              <div className="text-[11px] text-slate-500 font-semibold pl-2">
-                                                <span className="font-bold text-slate-400">Correct Answer:</span> <strong className="text-slate-700">{q.correct_answer}</strong>
-                                              </div>
-                                            )}
-                                          </div>
-                                        );
-                                      })()}
-
-                                      {/* Feedback text area (always available, but styled specifically for revisions) */}
-                                      <div className="space-y-1">
-                                        <div className="flex justify-between items-center text-[10px]">
-                                          <span className="font-bold text-slate-500">Feedback Comments:</span>
-                                          {currentStatus === "Revision" && (
-                                            <span className="text-rose-600 font-extrabold uppercase tracking-wider text-[8px]">
-                                              * Required for revisions
-                                            </span>
-                                          )}
-                                        </div>
-                                        <textarea
-                                          value={questionComments[approval.workflow_id]?.[q.question_id] || ""}
-                                          onChange={(e) => {
-                                            const currentWorkflowComments = questionComments[approval.workflow_id] || {};
-                                            setQuestionComments({
-                                              ...questionComments,
-                                              [approval.workflow_id]: {
-                                                ...currentWorkflowComments,
-                                                [q.question_id]: e.target.value
-                                              }
-                                            });
-                                          }}
-                                          placeholder={
-                                            currentStatus === "Revision"
-                                              ? "Describe the correction needed for this item (e.g. rewrite options, change correct key, etc.)..."
-                                              : "Add suggestions or comments (optional)..."
-                                          }
-                                          rows={2}
-                                          className={`w-full bg-slate-50/50 border rounded-lg p-2 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:bg-white transition-all duration-200 ${
-                                            currentStatus === "Revision"
-                                              ? "border-rose-200 focus:border-rose-500 focus:ring-1 focus:ring-rose-500/20"
-                                              : "border-slate-200 focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20"
-                                          }`}
-                                        />
-                                      </div>
-                                    </div>
-                                  );
-                                })
-                              ) : (
-                                <p className="text-xs text-slate-400 italic">No questions found in this examination draft.</p>
-                              )}
-                            </div>
-                          </>
-                        );
-                      })()}
-                    </div>
-                  </div>
-
-                  <div className="flex flex-row lg:flex-col gap-3 w-full lg:w-48 pt-2">
-                    <button
-                      disabled={isSubmittingReview === approval.workflow_id}
-                      onClick={() => handleReview(approval.workflow_id, approval.exam_id, "Approve")}
-                      className="flex-1 inline-flex justify-center items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold px-4 py-3 rounded-xl transition-all shadow-sm disabled:opacity-50"
-                    >
-                      {isSubmittingReview === approval.workflow_id ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
-                      Approve
-                    </button>
-                    <button
-                      disabled={isSubmittingReview === approval.workflow_id}
-                      onClick={() => handleReview(approval.workflow_id, approval.exam_id, "Return")}
-                      className="flex-1 inline-flex justify-center items-center gap-2 bg-rose-50 hover:bg-rose-100 text-rose-700 text-sm font-bold px-4 py-3 rounded-xl transition-all shadow-sm disabled:opacity-50 border border-rose-200"
-                    >
-                      {isSubmittingReview === approval.workflow_id ? <RefreshCw className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />}
-                      Return Exam
-                    </button>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
 
             {pendingApprovals.length === 0 && (
               <div className="flex flex-col items-center justify-center py-20 text-center border-2 border-dashed border-slate-100 rounded-3xl bg-slate-50/50">
@@ -624,94 +731,366 @@ export function ChairDashboardClient({
         </div>
       )}
 
-      {/* SYLLABUS / TOS VERIFICATION TAB */}
-      {activeTab === "verification" && (
-        <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-6">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-5">
-            <div>
-              <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-                <span className="w-1.5 h-6 bg-amber-600 rounded-full" />
-                Syllabus & TOS Verification Tool
-              </h2>
-              <p className="text-slate-500 text-xs mt-1">Verify that Examination Tables of Specifications (TOS) align with the Course Syllabi.</p>
+      {/* SPLIT SCREEN REVIEW MODAL */}
+      {activeSplitApproval && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex flex-col p-3 sm:p-6 overflow-hidden">
+          {/* Modal Header */}
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shrink-0 shadow-lg">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center font-black">
+                <Columns className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-base sm:text-lg font-bold text-white tracking-tight">
+                    {activeSplitApproval.exam.title}
+                  </h2>
+                  <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded-full font-bold uppercase">
+                    Split Review Mode
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Course: <strong className="text-slate-200">{activeSplitApproval.exam.course.course_code} - {activeSplitApproval.exam.course.course_title}</strong> • Faculty: <strong className="text-slate-200">{activeSplitApproval.exam.faculty.first_name} {activeSplitApproval.exam.faculty.last_name}</strong>
+                </p>
+              </div>
+            </div>
+
+            {/* View Mode Switcher & Close Button */}
+            <div className="flex items-center justify-between md:justify-end gap-3">
+              <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs font-bold text-slate-400">
+                <button
+                  type="button"
+                  onClick={() => setSplitViewMode("split")}
+                  className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer ${
+                    splitViewMode === "split"
+                      ? "bg-amber-600 text-white shadow-md font-extrabold"
+                      : "hover:text-slate-200"
+                  }`}
+                >
+                  <Columns className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Split 50/50</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSplitViewMode("tos_only")}
+                  className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer ${
+                    splitViewMode === "tos_only"
+                      ? "bg-amber-600 text-white shadow-md font-extrabold"
+                      : "hover:text-slate-200"
+                  }`}
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">TOS Document</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSplitViewMode("questions_only")}
+                  className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer ${
+                    splitViewMode === "questions_only"
+                      ? "bg-amber-600 text-white shadow-md font-extrabold"
+                      : "hover:text-slate-200"
+                  }`}
+                >
+                  <ClipboardCheck className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Test Questions</span>
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setActiveSplitApproval(null)}
+                className="w-9 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center transition-all border border-slate-700 shrink-0 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {pendingApprovals.map(approval => {
-              const isExamVerifying = isVerifying === approval.exam_id;
-              const isVerified = verifiedExams.has(approval.exam_id);
-
-              return (
-                <div key={approval.exam_id} className="border border-slate-200 rounded-2xl overflow-hidden shadow-sm flex flex-col">
-                  <div className="bg-slate-50 border-b border-slate-200 p-4">
-                    <h3 className="font-bold text-slate-900 text-sm truncate">{approval.exam.title}</h3>
-                    <p className="text-xs text-slate-500 mt-1">{approval.exam.course.course_code} - {approval.exam.faculty.first_name} {approval.exam.faculty.last_name}</p>
-                  </div>
-                  
-                  <div className="p-4 space-y-4 flex-1">
-                    <div className="grid grid-cols-2 gap-4 text-sm">
-                      <div className="border border-slate-200 rounded-xl p-3 bg-white">
-                        <div className="flex items-center gap-2 text-slate-700 font-bold mb-2">
-                          <FileText className="w-4 h-4 text-blue-600" />
-                          Course Syllabus
-                        </div>
-                        {approval.exam.course.syllabus_file_path ? (
-                          <span className="text-xs text-emerald-600 bg-emerald-50 px-2 py-1 rounded-md font-medium">Uploaded</span>
-                        ) : (
-                          <span className="text-xs text-rose-600 bg-rose-50 px-2 py-1 rounded-md font-medium">Missing</span>
-                        )}
-                      </div>
-                      <div className="border border-slate-200 rounded-xl p-3 bg-white">
-                        <div className="flex items-center gap-2 text-slate-700 font-bold mb-2">
-                          <FileSearch className="w-4 h-4 text-purple-600" />
-                          Exam TOS
-                        </div>
-                        {approval.exam.tos_file_path ? (
-                          <span className="text-xs text-emerald-600 bg-emerald-50 px-2 py-1 rounded-md font-medium">Uploaded</span>
-                        ) : (
-                          <span className="text-xs text-rose-600 bg-rose-50 px-2 py-1 rounded-md font-medium">Missing</span>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
-                      <p className="text-xs font-bold text-slate-700 mb-2">Alignment Checklist</p>
-                      <ul className="space-y-2">
-                        <li className="flex items-center gap-2 text-xs text-slate-600">
-                          <input type="checkbox" className="rounded border-slate-300 text-amber-600 focus:ring-amber-600" />
-                          Cognitive domains match syllabus objectives
-                        </li>
-                        <li className="flex items-center gap-2 text-xs text-slate-600">
-                          <input type="checkbox" className="rounded border-slate-300 text-amber-600 focus:ring-amber-600" />
-                          Time allocation matches topic weight
-                        </li>
-                      </ul>
-                    </div>
+          {/* Modal Main Split Content */}
+          <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-4 overflow-hidden mt-4">
+            
+            {/* LEFT PANEL: TOS FILE VIEWER */}
+            {(splitViewMode === "split" || splitViewMode === "tos_only") && (
+              <div className={`bg-slate-900 border border-slate-800 rounded-2xl flex flex-col overflow-hidden shadow-xl ${
+                splitViewMode === "tos_only" ? "lg:col-span-2" : ""
+              }`}>
+                {/* TOS Panel Header */}
+                <div className="bg-slate-950/70 border-b border-slate-800 p-3.5 flex items-center justify-between gap-3 shrink-0">
+                  <div className="flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-amber-400" />
+                    <h3 className="text-sm font-bold text-white">Table of Specifications (TOS)</h3>
                   </div>
 
-                  <div className="p-4 border-t border-slate-100 bg-white">
-                    <button
-                      disabled={isExamVerifying || isVerified}
-                      onClick={() => handleVerify(approval.exam.course.course_id, approval.exam_id)}
-                      className={`w-full inline-flex justify-center items-center gap-2 text-sm font-bold px-4 py-2.5 rounded-xl transition-all shadow-sm ${
-                        isVerified 
-                          ? "bg-emerald-100 text-emerald-700 cursor-not-allowed" 
-                          : "bg-slate-900 hover:bg-slate-800 text-white"
-                      }`}
-                    >
-                      {isExamVerifying ? <RefreshCw className="w-4 h-4 animate-spin" /> : isVerified ? <CheckCircle className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
-                      {isVerified ? "Alignment Verified" : "Mark as Verified"}
-                    </button>
+                  {activeSplitApproval.exam.tos_file_path && activeSplitApproval.exam.tos_file_path.trim() !== "" ? (
+                    <div className="flex items-center gap-2">
+                      <a
+                        href={activeSplitApproval.exam.tos_file_path}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-xs font-bold bg-slate-800 hover:bg-slate-700 text-amber-300 px-3 py-1.5 rounded-lg border border-slate-700 transition-all"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                        Open New Tab
+                      </a>
+                      <a
+                        href={activeSplitApproval.exam.tos_file_path}
+                        download
+                        className="inline-flex items-center gap-1 text-xs font-bold bg-amber-600 hover:bg-amber-500 text-white px-3 py-1.5 rounded-lg transition-all shadow-sm"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        Download
+                      </a>
+                    </div>
+                  ) : (
+                    <span className="text-xs font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30 px-2.5 py-1 rounded-lg">
+                      No TOS File Uploaded
+                    </span>
+                  )}
+                </div>
+
+                {/* TOS Panel Body */}
+                <div className="flex-1 bg-slate-950 p-3 overflow-hidden flex flex-col relative">
+                  {activeSplitApproval.exam.tos_file_path && activeSplitApproval.exam.tos_file_path.trim() !== "" ? (
+                    <div className="w-full h-full flex flex-col">
+                      <iframe
+                        src={activeSplitApproval.exam.tos_file_path}
+                        className="w-full h-full rounded-xl border border-slate-800 bg-white"
+                        title="TOS Document Preview"
+                      />
+                      <p className="text-[10px] text-slate-400 mt-2 text-center shrink-0">
+                        Viewing document preview. If file format is not supported in browser frame (e.g. DOCX/XLSX), click "Open New Tab" or "Download".
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center h-full py-16 text-center p-6 bg-slate-900/50 rounded-xl border border-dashed border-slate-800">
+                      <AlertCircle className="w-12 h-12 text-rose-500 mb-3" />
+                      <h4 className="font-extrabold text-white text-base">No TOS File Uploaded</h4>
+                      <p className="text-slate-400 text-xs max-w-md mt-1.5 leading-relaxed">
+                        The faculty member did not upload a Table of Specifications (TOS) file for this examination draft.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* RIGHT PANEL: TEST QUESTIONS & REVIEW CONTROLS */}
+            {(splitViewMode === "split" || splitViewMode === "questions_only") && (
+              <div className={`bg-white border border-slate-200 rounded-2xl flex flex-col overflow-hidden shadow-xl ${
+                splitViewMode === "questions_only" ? "lg:col-span-2" : ""
+              }`}>
+                {/* Questions Panel Header */}
+                <div className="bg-slate-50 border-b border-slate-200 p-3.5 flex items-center justify-between gap-3 shrink-0">
+                  <div className="flex items-center gap-2">
+                    <ClipboardCheck className="w-4 h-4 text-amber-600" />
+                    <h3 className="text-sm font-bold text-slate-900">Examination Test Questions</h3>
+                  </div>
+                  <span className="text-xs font-bold text-slate-600 bg-slate-200 px-2.5 py-1 rounded-lg">
+                    {activeSplitApproval.exam.questionBank?.length || 0} Items
+                  </span>
+                </div>
+
+                {/* Questions Panel Body */}
+                <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                  {/* TOS Alignment Checklist */}
+                  {renderTosChecklist(activeSplitApproval.workflow_id)}
+
+                  {/* General Review Comments */}
+                  <div className="bg-amber-50/50 border border-amber-200/60 rounded-xl p-3.5 space-y-2">
+                    <label className="text-xs font-extrabold text-amber-900 block uppercase tracking-wider">
+                      General Review Feedback
+                    </label>
+                    <textarea
+                      value={reviewComments[activeSplitApproval.workflow_id] || ""}
+                      onChange={(e) => setReviewComments({...reviewComments, [activeSplitApproval.workflow_id]: e.target.value})}
+                      className="w-full bg-white border border-amber-200 rounded-lg p-2.5 text-xs text-slate-800 placeholder:text-slate-400 focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all outline-none"
+                      rows={2}
+                      placeholder="Add overall comments or instructions for the instructor..."
+                    />
+                  </div>
+
+                  {/* Granular Questions List */}
+                  <div className="space-y-3">
+                    <h4 className="text-xs font-black text-slate-700 uppercase tracking-wider">
+                      Question Item Review
+                    </h4>
+                    {activeSplitApproval.exam.questionBank && activeSplitApproval.exam.questionBank.length > 0 ? (
+                      activeSplitApproval.exam.questionBank.map((q: any, idx: number) => {
+                        const qStatuses = questionStatuses[activeSplitApproval.workflow_id] || {};
+                        const currentStatus = qStatuses[q.question_id] || "Approved";
+
+                        let parsed: { text: string; image_url?: string; options?: string[]; premises?: string[] } | null = null;
+                        if (q.question_text?.trim().startsWith("{")) {
+                          try {
+                            parsed = JSON.parse(q.question_text);
+                          } catch (e) {}
+                        }
+                        const textToRender = parsed ? parsed.text : q.question_text;
+
+                        return (
+                          <div
+                            key={q.question_id}
+                            className={`border rounded-xl p-3.5 space-y-3 transition-all ${
+                              currentStatus === "Approved"
+                                ? "border-slate-200 bg-slate-50/50"
+                                : "border-rose-200 bg-rose-50/30"
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-2">
+                                <span className="font-extrabold text-slate-800 bg-slate-200 px-2 py-0.5 rounded text-[10px]">
+                                  Item #{idx + 1}
+                                </span>
+                                <span className="bg-amber-100 text-amber-800 px-2 py-0.5 rounded font-semibold text-[9px] uppercase tracking-wider border border-amber-200">
+                                  {q.question_type?.replace("_", " ")}
+                                </span>
+                                <span className="text-[10px] font-bold text-slate-500">
+                                  {q.points} {q.points === 1 ? "pt" : "pts"}
+                                </span>
+                              </div>
+
+                              {/* Toggle item status */}
+                              <div className="flex border border-slate-200 rounded-lg p-0.5 bg-white text-[10px] font-bold">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const currentWfStatuses = questionStatuses[activeSplitApproval.workflow_id] || {};
+                                    setQuestionStatuses({
+                                      ...questionStatuses,
+                                      [activeSplitApproval.workflow_id]: {
+                                        ...currentWfStatuses,
+                                        [q.question_id]: "Approved"
+                                      }
+                                    });
+                                  }}
+                                  className={`px-2 py-1 rounded transition-all cursor-pointer flex items-center gap-1 ${
+                                    currentStatus === "Approved"
+                                      ? "bg-emerald-600 text-white font-black shadow-sm"
+                                      : "text-slate-500 hover:text-slate-800"
+                                  }`}
+                                >
+                                  <Check className="w-3 h-3" /> Approve
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const currentWfStatuses = questionStatuses[activeSplitApproval.workflow_id] || {};
+                                    setQuestionStatuses({
+                                      ...questionStatuses,
+                                      [activeSplitApproval.workflow_id]: {
+                                        ...currentWfStatuses,
+                                        [q.question_id]: "Revision"
+                                      }
+                                    });
+                                  }}
+                                  className={`px-2 py-1 rounded transition-all cursor-pointer flex items-center gap-1 ${
+                                    currentStatus === "Revision"
+                                      ? "bg-rose-600 text-white shadow-sm font-black"
+                                      : "text-slate-500 hover:text-slate-800"
+                                  }`}
+                                >
+                                  <X className="w-3 h-3" /> Revision
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Question text content */}
+                            <div className="bg-white p-3 rounded-lg border border-slate-200 space-y-2 text-xs text-slate-800">
+                              <div className="font-medium whitespace-pre-wrap leading-relaxed">
+                                <Latex text={textToRender} />
+                              </div>
+
+                              {parsed?.image_url && (
+                                <div className="max-w-xs border border-slate-200 rounded-lg overflow-hidden p-1 bg-white">
+                                  <img
+                                    src={parsed.image_url}
+                                    alt="Question attachment"
+                                    className="w-full h-auto max-h-[140px] object-contain rounded"
+                                  />
+                                </div>
+                              )}
+
+                              {parsed?.options && parsed.options.length > 0 && (
+                                <div className="text-[11px] space-y-1 pl-1 text-slate-600 font-medium pt-1 border-t border-slate-100">
+                                  <p className="font-extrabold text-[9px] text-slate-400 uppercase">Options:</p>
+                                  {parsed.options.map((opt: string, oIdx: number) => (
+                                    <div key={oIdx} className="flex gap-1.5 items-center">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-slate-300 shrink-0" />
+                                      <span><Latex text={opt} /></span>
+                                      {opt === q.correct_answer && (
+                                        <span className="text-[9px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-1 py-0.2 rounded font-extrabold uppercase ml-2">
+                                          Correct
+                                        </span>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+
+                              {!parsed?.options && q.correct_answer && (
+                                <div className="text-[11px] text-slate-500 pt-1 border-t border-slate-100">
+                                  <span className="font-bold text-slate-400">Answer:</span> <strong className="text-slate-700">{q.correct_answer}</strong>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Question comment area */}
+                            <textarea
+                              value={questionComments[activeSplitApproval.workflow_id]?.[q.question_id] || ""}
+                              onChange={(e) => {
+                                const currentWorkflowComments = questionComments[activeSplitApproval.workflow_id] || {};
+                                setQuestionComments({
+                                  ...questionComments,
+                                  [activeSplitApproval.workflow_id]: {
+                                    ...currentWorkflowComments,
+                                    [q.question_id]: e.target.value
+                                  }
+                                });
+                              }}
+                              placeholder={
+                                currentStatus === "Revision"
+                                  ? "Specify correction needed for this item (e.g. rewrite options, change correct key, etc.)..."
+                                  : "Item feedback (optional)..."
+                              }
+                              rows={1}
+                              className={`w-full bg-white border rounded-lg p-2 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none transition-all ${
+                                currentStatus === "Revision"
+                                  ? "border-rose-300 focus:border-rose-500"
+                                  : "border-slate-200 focus:border-amber-500"
+                              }`}
+                            />
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <p className="text-xs text-slate-400 italic">No questions found for this exam.</p>
+                    )}
                   </div>
                 </div>
-              );
-            })}
 
-            {pendingApprovals.length === 0 && (
-              <div className="col-span-1 md:col-span-2 text-center py-16 border-2 border-dashed border-slate-100 rounded-3xl bg-slate-50/50">
-                <FileSearch className="w-8 h-8 text-slate-400 mx-auto mb-4" />
-                <p className="text-slate-500 text-sm">No pending examinations available for TOS verification.</p>
+                {/* Questions Panel Footer / Action Bar */}
+                <div className="border-t border-slate-200 p-4 bg-slate-50 flex items-center justify-end gap-3 shrink-0">
+                  <button
+                    disabled={isSubmittingReview === activeSplitApproval.workflow_id}
+                    onClick={() => {
+                      handleReview(activeSplitApproval.workflow_id, activeSplitApproval.exam_id, "Return");
+                    }}
+                    className="inline-flex justify-center items-center gap-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold px-4 py-2.5 rounded-xl border border-rose-200 transition-all disabled:opacity-50 cursor-pointer"
+                  >
+                    {isSubmittingReview === activeSplitApproval.workflow_id ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <XCircle className="w-3.5 h-3.5" />}
+                    Return Exam
+                  </button>
+                  <button
+                    disabled={isSubmittingReview === activeSplitApproval.workflow_id}
+                    onClick={() => {
+                      handleReview(activeSplitApproval.workflow_id, activeSplitApproval.exam_id, "Approve");
+                    }}
+                    className="inline-flex justify-center items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-5 py-2.5 rounded-xl transition-all shadow-sm disabled:opacity-50 cursor-pointer"
+                  >
+                    {isSubmittingReview === activeSplitApproval.workflow_id ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5" />}
+                    Approve Exam
+                  </button>
+                </div>
               </div>
             )}
           </div>
