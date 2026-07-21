@@ -497,6 +497,15 @@ export function ExamBuilderWizard({ exam, courses, facultyId }: ExamBuilderWizar
 
   // Save and Submit for Review
   const handleSubmitForReview = async () => {
+    // Check if TOS file exists (either uploaded in current form or saved in database)
+    if (!tosFile && (!existingTosPath || existingTosPath.trim() === "")) {
+      setSaveStatus({
+        type: "error",
+        message: "You cannot submit this examination for review without uploading a Table of Specifications (TOS) first.",
+      });
+      return;
+    }
+
     setIsSubmitting(true);
     setSaveStatus({ type: "saving", message: "Finalizing and saving exam before submission..." });
 
@@ -519,6 +528,10 @@ export function ExamBuilderWizard({ exam, courses, facultyId }: ExamBuilderWizar
       setSaveStatus({ type: "error", message: `Config Error: ${configRes.error}` });
       setIsSubmitting(false);
       return;
+    }
+
+    if (configRes.exam?.tos_file_path) {
+      setExistingTosPath(configRes.exam.tos_file_path);
     }
 
     // Save questions
