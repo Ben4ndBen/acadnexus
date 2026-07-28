@@ -13,12 +13,13 @@ export default async function RegisterPage() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (user) {
-    const role = user.user_metadata?.role;
-    if (role === "Student") redirect("/dashboard/student");
-    if (role === "Faculty") redirect("/dashboard/faculty");
-    if (role === "Chair") redirect("/dashboard/chair");
-    if (role === "Director") redirect("/dashboard/director");
+  if (!user) {
+    redirect("/");
+  }
+
+  const role = user.user_metadata?.role;
+  if (role !== "Director" && role !== "Chair") {
+    redirect("/");
   }
 
   // Fetch academic programs and departments for Onboarding Forms

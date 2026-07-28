@@ -155,6 +155,7 @@ export default async function ChairDashboard() {
         {/* Render the interactive client component */}
         <ChairDashboardClient
           chairUserId={dbUser.user_id}
+          departmentId={department.department_id}
           departmentName={department.department_name}
           facultyMembers={formattedFaculty as any}
           pendingApprovals={formattedApprovals as any}

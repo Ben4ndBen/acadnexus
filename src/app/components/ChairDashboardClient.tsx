@@ -5,13 +5,15 @@ import { useRouter } from "next/navigation";
 import { 
   Activity, Users, ClipboardCheck, CheckCircle, 
   XCircle, Send, AlertCircle, RefreshCw, FileText, Check, X,
-  Columns, ExternalLink, Download
+  Columns, ExternalLink, Download, UserPlus, Loader2, Eye, EyeOff
 } from "lucide-react";
 import { reviewExamByChair } from "@/app/actions/chair";
+import { registerInstructorByAdminAction } from "@/app/actions/auth";
 import { Latex } from "@/app/components/Latex";
 
 interface ChairDashboardClientProps {
   chairUserId: number;
+  departmentId?: number;
   departmentName: string;
   facultyMembers: Array<{
     faculty_id: number;
@@ -56,6 +58,7 @@ interface ChairDashboardClientProps {
 
 export function ChairDashboardClient({ 
   chairUserId, 
+  departmentId,
   departmentName, 
   facultyMembers, 
   pendingApprovals,
@@ -80,6 +83,53 @@ export function ChairDashboardClient({
   // State for Split Screen Review Modal
   const [activeSplitApproval, setActiveSplitApproval] = useState<any | null>(null);
   const [splitViewMode, setSplitViewMode] = useState<"split" | "tos_only" | "questions_only">("split");
+
+  // State for Register Instructor Modal
+  const [registerModalOpen, setRegisterModalOpen] = useState(false);
+  const [instId, setInstId] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [middleName, setMiddleName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPass, setShowPass] = useState(false);
+  const [regError, setRegError] = useState<string | null>(null);
+  const [regSuccess, setRegSuccess] = useState<{ username: string; institutionalId: string; name: string } | null>(null);
+  const [isSubmittingReg, setIsSubmittingReg] = useState(false);
+
+  const handleRegisterInstructorSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!departmentId) {
+      setRegError("Department ID missing.");
+      return;
+    }
+    setRegError(null);
+    setRegSuccess(null);
+    setIsSubmittingReg(true);
+
+    const formData = new FormData();
+    formData.append("institutionalId", instId);
+    formData.append("firstName", firstName);
+    formData.append("middleName", middleName);
+    formData.append("lastName", lastName);
+    formData.append("departmentId", String(departmentId));
+    formData.append("password", password);
+    formData.append("confirmPassword", confirmPassword);
+
+    const res = await registerInstructorByAdminAction(null, formData);
+    setIsSubmittingReg(false);
+
+    if (res.error) {
+      setRegError(res.error);
+    } else if (res.success) {
+      setRegSuccess({
+        username: res.username!,
+        institutionalId: res.institutionalId!,
+        name: res.name!,
+      });
+      router.refresh();
+    }
+  };
 
   const handleReview = async (workflowId: number, examId: number, action: "Approve" | "Return") => {
     const generalComment = reviewComments[workflowId] || "";
@@ -279,6 +329,24 @@ export function ChairDashboardClient({
         >
           <ClipboardCheck className="w-4 h-4" />
           Pending Review Queue
+        </button>
+
+        <button
+          onClick={() => {
+            setRegError(null);
+            setRegSuccess(null);
+            setInstId("");
+            setFirstName("");
+            setMiddleName("");
+            setLastName("");
+            setPassword("");
+            setConfirmPassword("");
+            setRegisterModalOpen(true);
+          }}
+          className="flex items-center gap-2 px-4 py-2.5 text-sm font-bold rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-md transition-all duration-300 ml-auto"
+        >
+          <UserPlus className="w-4 h-4" />
+          Add Instructor
         </button>
       </div>
 
@@ -1092,6 +1160,216 @@ export function ChairDashboardClient({
                   </button>
                 </div>
               </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* REGISTER INSTRUCTOR MODAL */}
+      {registerModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-lg w-full shadow-2xl border border-slate-200 my-8">
+            <div className="flex justify-between items-start mb-6">
+              <div className="flex items-center gap-3">
+                <div className="bg-emerald-100 text-emerald-700 p-2.5 rounded-2xl">
+                  <UserPlus className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-extrabold text-slate-900">Add Instructor to {departmentName}</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">Department Chair faculty registration portal</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setRegisterModalOpen(false)} 
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-full hover:bg-slate-100 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {regSuccess ? (
+              <div className="space-y-6">
+                <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center space-y-3">
+                  <div className="w-12 h-12 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center mx-auto">
+                    <CheckCircle className="w-7 h-7" />
+                  </div>
+                  <h4 className="text-lg font-bold text-emerald-900">Instructor Registered!</h4>
+                  <p className="text-xs text-emerald-700">
+                    The instructor profile for <strong className="font-semibold">{regSuccess.name}</strong> has been added to {departmentName}.
+                  </p>
+                  
+                  <div className="bg-white border border-emerald-200/80 rounded-xl p-4 text-left space-y-2 text-xs font-mono text-slate-800">
+                    <div><span className="text-slate-400">Institutional ID:</span> <strong className="text-slate-900">{regSuccess.institutionalId}</strong></div>
+                    <div><span className="text-slate-400">Generated Username:</span> <strong className="text-emerald-700 text-sm">{regSuccess.username}</strong></div>
+                    <div className="text-[11px] text-slate-500 font-sans pt-1 border-t border-slate-100">
+                      Password update will be required on initial sign-in.
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRegSuccess(null);
+                      setInstId("");
+                      setFirstName("");
+                      setMiddleName("");
+                      setLastName("");
+                      setPassword("");
+                      setConfirmPassword("");
+                    }}
+                    className="px-5 py-2.5 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors"
+                  >
+                    Add Another Instructor
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRegisterModalOpen(false)}
+                    className="px-5 py-2.5 text-xs font-extrabold text-white bg-amber-600 hover:bg-amber-700 rounded-xl shadow-md transition-colors"
+                  >
+                    Done
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <form onSubmit={handleRegisterInstructorSubmit} className="space-y-4">
+                {regError && (
+                  <div className="bg-rose-50 border border-rose-200 text-rose-700 p-3.5 rounded-xl text-xs flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span>{regError}</span>
+                  </div>
+                )}
+
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">
+                    Institutional ID <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={instId}
+                    onChange={(e) => setInstId(e.target.value)}
+                    placeholder="e.g. FACULTY-003"
+                    className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-xs font-medium text-slate-800 p-3 rounded-xl outline-none"
+                  />
+                  <p className="text-[10px] text-slate-400 mt-1">Format: FACULTY- followed by digits</p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">
+                      First Name <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={firstName}
+                      onChange={(e) => setFirstName(e.target.value)}
+                      placeholder="e.g. Juan"
+                      className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-xs font-medium text-slate-800 p-3 rounded-xl outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">Middle Name</label>
+                    <input
+                      type="text"
+                      value={middleName}
+                      onChange={(e) => setMiddleName(e.target.value)}
+                      placeholder="e.g. Dela"
+                      className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-xs font-medium text-slate-800 p-3 rounded-xl outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">
+                      Last Name <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={lastName}
+                      onChange={(e) => setLastName(e.target.value)}
+                      placeholder="e.g. Cruz"
+                      className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-xs font-medium text-slate-800 p-3 rounded-xl outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">Department</label>
+                  <input
+                    type="text"
+                    disabled
+                    value={departmentName}
+                    className="w-full bg-slate-100 border border-slate-200 text-xs font-bold text-slate-600 p-3 rounded-xl cursor-not-allowed outline-none"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">
+                      Initial Password <span className="text-rose-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showPass ? "text" : "password"}
+                        required
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="Min 8 chars (Aa1!)"
+                        className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-xs font-medium text-slate-800 p-3 pr-9 rounded-xl outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPass(!showPass)}
+                        className="absolute right-3 top-3 text-slate-400 hover:text-slate-600"
+                      >
+                        {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">
+                      Confirm Password <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type={showPass ? "text" : "password"}
+                      required
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="Confirm password"
+                      className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-xs font-medium text-slate-800 p-3 rounded-xl outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-4 flex justify-end gap-3 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setRegisterModalOpen(false)}
+                    className="px-5 py-2.5 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmittingReg}
+                    className="px-5 py-2.5 text-xs font-extrabold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl flex items-center gap-2 disabled:opacity-50 shadow-md transition-all"
+                  >
+                    {isSubmittingReg ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Registering...</span>
+                      </>
+                    ) : (
+                      <>
+                        <UserPlus className="w-4 h-4" />
+                        <span>Add Instructor</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
             )}
           </div>
         </div>
