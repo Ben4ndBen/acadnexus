@@ -184,6 +184,7 @@ export default async function DirectorDashboard() {
           }}
           pendingApprovals={pendingApprovals as any}
           departmentsData={departmentsData as any}
+          departmentsList={rawDepartments.map(d => ({ department_id: d.department_id, department_name: d.department_name }))}
           auditLogs={serializedLogs as any}
           allExaminations={allExaminations as any}
           globalHoldActive={globalHoldActive}

@@ -103,15 +103,6 @@ export function LoginForm() {
           <span>Sign In to AcadNexus</span>
         )}
       </button>
-
-      <div className="text-center pt-2">
-        <p className="text-xs text-stone-500">
-          Don't have an account?{" "}
-          <Link href="/register" className="font-bold text-[#7A151A] hover:underline transition-all">
-            Register here
-          </Link>
-        </p>
-      </div>
     </form>
   );
 }
