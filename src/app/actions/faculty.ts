@@ -1116,5 +1116,186 @@ export async function getArchivedExaminations(courseId?: number) {
   }
 }
 
+export async function getFacultyEnrolledStudentsAndGrades(facultyId: number) {
+  try {
+    const exams = await db.examination.findMany({
+      where: { faculty_id: facultyId },
+      include: {
+        course: true,
+        examTargets: {
+          include: { program: true }
+        },
+        questionBank: {
+          select: { points: true }
+        },
+        studentExams: {
+          include: {
+            student: {
+              include: {
+                user: true,
+                program: true,
+              }
+            }
+          }
+        }
+      },
+      orderBy: { exam_id: "desc" }
+    });
+
+    const now = new Date();
+
+    // Map course_id -> list of exams for that course
+    const courseMap = new Map<number, {
+      course: { course_id: number; course_code: string; course_title: string };
+      exams: typeof exams;
+    }>();
+
+    for (const exam of exams) {
+      if (!courseMap.has(exam.course_id)) {
+        courseMap.set(exam.course_id, {
+          course: exam.course,
+          exams: []
+        });
+      }
+      courseMap.get(exam.course_id)!.exams.push(exam);
+    }
+
+    const aggregatedList: any[] = [];
+
+    for (const [courseId, { course, exams: courseExams }] of courseMap.entries()) {
+      const targetCohorts: Array<{ program_id: number; year_level: number; section: string }> = [];
+      const cohortKeySet = new Set<string>();
+
+      for (const ex of courseExams) {
+        for (const target of ex.examTargets) {
+          const key = `${target.program_id}-${target.year_level}-${target.section}`;
+          if (!cohortKeySet.has(key)) {
+            cohortKeySet.add(key);
+            targetCohorts.push({
+              program_id: target.program_id,
+              year_level: target.year_level,
+              section: target.section
+            });
+          }
+        }
+      }
+
+      const studentsMap = new Map<number, any>();
+
+      if (targetCohorts.length > 0) {
+        const cohortStudents = await db.student.findMany({
+          where: {
+            OR: targetCohorts.map(tc => ({
+              program_id: tc.program_id,
+              year_level: tc.year_level,
+              section: tc.section
+            }))
+          },
+          include: {
+            user: true,
+            program: true
+          }
+        });
+
+        for (const s of cohortStudents) {
+          studentsMap.set(s.student_id, s);
+        }
+      }
+
+      for (const ex of courseExams) {
+        for (const se of ex.studentExams) {
+          if (!studentsMap.has(se.student.student_id)) {
+            studentsMap.set(se.student.student_id, se.student);
+          }
+        }
+      }
+
+      for (const student of studentsMap.values()) {
+        const studentExamRecords: any[] = [];
+        let totalTookCount = 0;
+        let totalMissedCount = 0;
+        let sumPercentages = 0;
+        let percentageCount = 0;
+
+        for (const ex of courseExams) {
+          const maxScore = ex.questionBank.reduce((acc, q) => acc + q.points, 0);
+          const studentAttempt = ex.studentExams.find(se => se.student_id === student.student_id);
+
+          const target = ex.examTargets.find(
+            t => t.program_id === student.program_id && t.year_level === student.year_level && t.section === student.section
+          );
+
+          const scheduledDate = target ? target.scheduled_date : null;
+          const endTime = target ? target.end_time : null;
+
+          let status: "Took Exam" | "Missed Exam" | "Upcoming" = "Upcoming";
+          let score: number | null = null;
+          let pct: number | null = null;
+          let submittedAt: string | null = null;
+
+          if (studentAttempt) {
+            status = "Took Exam";
+            score = studentAttempt.total_score;
+            pct = maxScore > 0 ? Math.round((studentAttempt.total_score / maxScore) * 100) : 100;
+            submittedAt = studentAttempt.submitted_at ? studentAttempt.submitted_at.toISOString() : studentAttempt.started_at.toISOString();
+            totalTookCount++;
+            sumPercentages += pct;
+            percentageCount++;
+          } else {
+            const isPassed = endTime ? new Date(endTime) < now : (scheduledDate ? new Date(scheduledDate) < now : false);
+            if (isPassed) {
+              status = "Missed Exam";
+              score = 0;
+              pct = 0;
+              totalMissedCount++;
+              sumPercentages += 0;
+              percentageCount++;
+            } else {
+              status = "Upcoming";
+            }
+          }
+
+          studentExamRecords.push({
+            exam_id: ex.exam_id,
+            exam_title: ex.title,
+            max_score: maxScore,
+            scheduled_date: scheduledDate ? scheduledDate.toISOString() : null,
+            status,
+            student_score: score,
+            percentage: pct,
+            submitted_at: submittedAt
+          });
+        }
+
+        const avgGrade = percentageCount > 0 ? Math.round(sumPercentages / percentageCount) : null;
+
+        aggregatedList.push({
+          course_id: course.course_id,
+          course_code: course.course_code,
+          course_title: course.course_title,
+          student_id: student.student_id,
+          first_name: student.first_name,
+          last_name: student.last_name,
+          institutional_id: student.user.institutional_id,
+          institutional_email: student.user.institutional_email || `${student.user.institutional_id.toLowerCase()}@acadnexus.bsc.edu.ph`,
+          program_code: student.program.program_code,
+          year_level: student.year_level,
+          section: student.section,
+          exams: studentExamRecords,
+          average_grade_percentage: avgGrade,
+          total_took: totalTookCount,
+          total_missed: totalMissedCount
+        });
+      }
+    }
+
+    return { success: true, enrolledStudents: aggregatedList };
+  } catch (err: any) {
+    console.error("Error in getFacultyEnrolledStudentsAndGrades:", err);
+    return { error: err.message || "Failed to fetch enrolled students and grades." };
+  }
+}
+
+
 
 

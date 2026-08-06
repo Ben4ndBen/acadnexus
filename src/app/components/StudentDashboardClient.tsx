@@ -4,8 +4,9 @@ import { useState } from "react";
 import Link from "next/link";
 import { 
   BookOpen, Calendar, Award, ShieldAlert, Clock, CheckCircle, 
-  Hourglass, ArrowRight, ShieldCheck
+  Hourglass, ArrowRight, ShieldCheck, Download
 } from "lucide-react";
+import * as XLSX from "xlsx";
 
 interface Course {
   course_id: number;
@@ -331,10 +332,39 @@ export function StudentDashboardClient({
 
           {activeTab === "completed" && (
             <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-6 h-full min-h-[300px]">
-              <h2 className="text-lg font-bold text-slate-800 border-b border-slate-100 pb-3 flex items-center gap-2">
-                <Award className="w-5 h-5 text-emerald-600" />
-                Completed Examinations
-              </h2>
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                  <Award className="w-5 h-5 text-emerald-600" />
+                  Completed Examinations
+                </h2>
+                {completedExams.length > 0 && (
+                  <button
+                    onClick={() => {
+                      const rows = completedExams.map((se) => {
+                        const examMaxPoints = se.exam.questionBank.reduce((sum, q) => sum + q.points, 0);
+                        const percentage = examMaxPoints > 0 ? Math.round((se.total_score / examMaxPoints) * 100) : 0;
+                        return {
+                          "Exam Title": se.exam.title,
+                          "Score (pts)": se.total_score,
+                          "Max Score (pts)": examMaxPoints,
+                          "Percentage Grade": `${percentage}%`,
+                          "Date Submitted": new Date(se.submitted_at || se.started_at).toLocaleString(),
+                          "Digital Verification": "Signed by Chair & DI"
+                        };
+                      });
+                      const workbook = XLSX.utils.book_new();
+                      const worksheet = XLSX.utils.json_to_sheet(rows);
+                      worksheet["!cols"] = [{ wch: 30 }, { wch: 14 }, { wch: 16 }, { wch: 18 }, { wch: 22 }, { wch: 25 }];
+                      XLSX.utils.book_append_sheet(workbook, worksheet, "My Exam Scores");
+                      XLSX.writeFile(workbook, `${student.last_name}_${student.first_name}_Exam_Scores.xlsx`);
+                    }}
+                    className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs px-3.5 py-2 rounded-xl shadow-sm transition-all cursor-pointer"
+                  >
+                    <Download className="w-4 h-4" />
+                    Download Scores Excel
+                  </button>
+                )}
+              </div>
 
               {completedExams.length > 0 ? (
                 <div className="space-y-4">

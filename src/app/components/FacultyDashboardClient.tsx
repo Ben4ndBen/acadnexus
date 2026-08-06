@@ -6,15 +6,20 @@ import {
   BookOpen, Award, FileText, ClipboardList, PenTool, CheckCircle, 
   User, Shield, Settings, Activity, Send, RotateCcw, AlertCircle, RefreshCw, Mail,
   Plus, Trash2, Calendar, Lock, Camera, Check, ShieldAlert, Loader2, ShieldCheck, Clock,
-  X, AlertTriangle, Archive, Search, Edit
+  X, AlertTriangle, Archive, Search, Edit, GraduationCap, Users, Download
 } from "lucide-react";
 import { 
   updateFacultyProfile, updateExamStatus, createExamDraft, deleteExam, 
   scheduleExamTarget, configureFacultyAccount, getStudentExamLogs,
   getQuestionBankQuestions, saveQuestionBankQuestion, deleteQuestionBankQuestion,
   archiveExamination, reuseArchivedExamination, getArchivedExaminations,
-  getCurrentAcademicYear
+  getCurrentAcademicYear, getFacultyEnrolledStudentsAndGrades
 } from "@/app/actions/faculty";
+import { 
+  exportStudentGradesRosterToExcel, 
+  exportExamSubmissionsToExcel, 
+  exportMissedStudentsToExcel 
+} from "@/lib/exportExcel";
 
 interface FacultyDashboardClientProps {
   faculty: {
@@ -127,6 +132,35 @@ export function FacultyDashboardClient({
   const [examToArchive, setExamToArchive] = useState<any | null>(null);
   const [academicYearInput, setAcademicYearInput] = useState("");
   const [isArchiving, setIsArchiving] = useState(false);
+
+  // --- Enrolled Students & Grades Roster Modal State ---
+  const [rosterModalOpen, setRosterModalOpen] = useState(false);
+  const [rosterStudents, setRosterStudents] = useState<any[]>([]);
+  const [loadingRoster, setLoadingRoster] = useState(false);
+  const [rosterFilters, setRosterFilters] = useState({
+    course_id: "",
+    status: "ALL",
+    search: ""
+  });
+
+  const fetchEnrolledStudentsAndGrades = async () => {
+    setLoadingRoster(true);
+    try {
+      const res = await getFacultyEnrolledStudentsAndGrades(faculty.faculty_id);
+      if (res.success && res.enrolledStudents) {
+        setRosterStudents(res.enrolledStudents);
+      }
+    } catch (err) {
+      console.error("Failed to fetch roster:", err);
+    } finally {
+      setLoadingRoster(false);
+    }
+  };
+
+  const handleOpenRosterModal = () => {
+    setRosterModalOpen(true);
+    fetchEnrolledStudentsAndGrades();
+  };
 
   const fetchQbQuestions = async () => {
     setLoadingQb(true);
@@ -1375,14 +1409,25 @@ export function FacultyDashboardClient({
       {/* SUBMISSIONS TAB */}
       {activeTab === "submissions" && (
         <div className="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-sm space-y-6 animate-in fade-in duration-300">
-          <div className="border-b border-slate-100 pb-5">
-            <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-              <span className="w-1.5 h-6 bg-emerald-600 rounded-full" />
-              Student Exam Monitoring & Results
-            </h2>
-            <p className="text-slate-500 text-xs mt-1">
-              Track live student examinations, view security violation attempts, and analyze penalties and net scores.
-            </p>
+          <div className="border-b border-slate-100 pb-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                <span className="w-1.5 h-6 bg-emerald-600 rounded-full" />
+                Student Exam Monitoring & Results
+              </h2>
+              <p className="text-slate-500 text-xs mt-1">
+                Track live student examinations, view security violation attempts, and analyze penalties and net scores.
+              </p>
+            </div>
+            {studentExams && studentExams.length > 0 && (
+              <button
+                onClick={() => exportExamSubmissionsToExcel("Exam_Monitoring", faculty.department?.department_name || "Faculty", studentExams)}
+                className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl shadow-md transition-all hover:scale-[1.02] shrink-0 cursor-pointer"
+              >
+                <Download className="w-4 h-4" />
+                Export Submissions Excel
+              </button>
+            )}
           </div>
 
           {studentExams && studentExams.length > 0 ? (
@@ -1603,7 +1648,21 @@ export function FacultyDashboardClient({
 
             {selectedOverrideExamId && (
               <div className="space-y-4 pt-2 animate-in fade-in duration-300">
-                <h3 className="text-sm font-bold text-slate-900">Target Cohort & Student Attempts</h3>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-bold text-slate-900">Target Cohort & Student Attempts</h3>
+                  {missedStudents && missedStudents.length > 0 && (
+                    <button
+                      onClick={() => {
+                        const targetExam = faculty.examinations.find(e => e.exam_id === selectedOverrideExamId);
+                        exportMissedStudentsToExcel(targetExam ? targetExam.title : "Exam", missedStudents);
+                      }}
+                      className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[11px] px-3 py-1.5 rounded-lg shadow-sm transition-all cursor-pointer"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      Export Cohort Excel
+                    </button>
+                  )}
+                </div>
 
                 {isLoadingMissedStudents ? (
                   <div className="flex items-center gap-2 text-xs text-slate-500 py-6">
@@ -1785,82 +1844,111 @@ export function FacultyDashboardClient({
 
       {/* PROFILE TAB */}
       {activeTab === "profile" && (
-        <div className="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-sm max-w-2xl mx-auto space-y-6">
-          <div>
-            <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-              <span className="w-1.5 h-6 bg-emerald-600 rounded-full" />
-              Information Management
-            </h2>
-            <p className="text-slate-500 text-xs mt-1">Manage and update your institutional and personal details.</p>
-          </div>
-
-          <form onSubmit={handleProfileSubmit} className="space-y-6">
-            {profileMessage && (
-              <div className={`p-4 rounded-xl border text-xs font-bold ${
-                profileMessage.type === "success" 
-                  ? "bg-emerald-50 text-emerald-800 border-emerald-100" 
-                  : "bg-rose-50 text-rose-800 border-rose-100"
-              }`}>
-                {profileMessage.text}
+        <div className="max-w-4xl mx-auto space-y-6">
+          {/* Enrolled Students & Grades Quick Access Banner Card */}
+          <div className="bg-gradient-to-br from-slate-900 via-emerald-950 to-slate-900 border border-emerald-800/40 rounded-3xl p-6 sm:p-8 text-white shadow-xl space-y-4 relative overflow-hidden">
+            <div className="absolute -right-8 -bottom-8 w-40 h-40 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative z-10">
+              <div className="space-y-2">
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-black uppercase tracking-wider border border-emerald-500/30">
+                  <Users className="w-3.5 h-3.5" />
+                  Subject Enrollment & Exam Status
+                </div>
+                <h3 className="text-xl font-extrabold text-white tracking-tight">
+                  Enrolled Students & Grade Reports
+                </h3>
+                <p className="text-xs text-slate-300 max-w-xl leading-relaxed">
+                  View students enrolled in your assigned subjects, inspect their exam scores & calculated grades, and track whether they took or missed scheduled examinations.
+                </p>
               </div>
-            )}
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-600 block">First Name</label>
-                <input
-                  type="text"
-                  required
-                  value={firstName}
-                  onChange={(e) => setFirstName(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 text-sm font-medium text-slate-800 placeholder:text-slate-400 px-4 py-2.5 rounded-xl transition-all duration-300"
-                />
-              </div>
-              
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-600 block">Last Name</label>
-                <input
-                  type="text"
-                  required
-                  value={lastName}
-                  onChange={(e) => setLastName(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 text-sm font-medium text-slate-800 placeholder:text-slate-400 px-4 py-2.5 rounded-xl transition-all duration-300"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-600 block">Institutional ID (Read-only)</label>
-                <input
-                  type="text"
-                  disabled
-                  value={institutionalId}
-                  className="w-full bg-slate-100 border border-slate-200 text-slate-500 text-sm font-bold px-4 py-2.5 rounded-xl cursor-not-allowed"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-600 block">Department (Read-only)</label>
-                <input
-                  type="text"
-                  disabled
-                  value={faculty.department?.department_name || "Batanes State College"}
-                  className="w-full bg-slate-100 border border-slate-200 text-slate-500 text-sm font-bold px-4 py-2.5 rounded-xl cursor-not-allowed"
-                />
-              </div>
-            </div>
-
-            <div className="flex justify-end pt-4 border-t border-slate-100">
               <button
-                type="submit"
-                disabled={isSavingProfile}
-                className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-extrabold px-5 py-2.5 rounded-xl shadow-sm transition-all hover:scale-105 duration-300"
+                type="button"
+                onClick={handleOpenRosterModal}
+                className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-black px-6 py-3.5 rounded-2xl shadow-lg hover:shadow-emerald-500/25 transition-all duration-300 flex items-center gap-2 shrink-0 cursor-pointer active:scale-95 border border-emerald-400"
               >
-                {isSavingProfile ? "Saving Changes..." : "Save Profile Details"}
+                <GraduationCap className="w-4.5 h-4.5" />
+                View Enrolled Students & Grades
               </button>
             </div>
-          </form>
+          </div>
+
+          <div className="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-sm space-y-6">
+            <div>
+              <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                <span className="w-1.5 h-6 bg-emerald-600 rounded-full" />
+                Information Management
+              </h2>
+              <p className="text-slate-500 text-xs mt-1">Manage and update your institutional and personal details.</p>
+            </div>
+
+            <form onSubmit={handleProfileSubmit} className="space-y-6">
+              {profileMessage && (
+                <div className={`p-4 rounded-xl border text-xs font-bold ${
+                  profileMessage.type === "success" 
+                    ? "bg-emerald-50 text-emerald-800 border-emerald-100" 
+                    : "bg-rose-50 text-rose-800 border-rose-100"
+                }`}>
+                  {profileMessage.text}
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-600 block">First Name</label>
+                  <input
+                    type="text"
+                    required
+                    value={firstName}
+                    onChange={(e) => setFirstName(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 text-sm font-medium text-slate-800 placeholder:text-slate-400 px-4 py-2.5 rounded-xl transition-all duration-300"
+                  />
+                </div>
+                
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-600 block">Last Name</label>
+                  <input
+                    type="text"
+                    required
+                    value={lastName}
+                    onChange={(e) => setLastName(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 text-sm font-medium text-slate-800 placeholder:text-slate-400 px-4 py-2.5 rounded-xl transition-all duration-300"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-600 block">Institutional ID (Read-only)</label>
+                  <input
+                    type="text"
+                    disabled
+                    value={institutionalId}
+                    className="w-full bg-slate-100 border border-slate-200 text-slate-500 text-sm font-bold px-4 py-2.5 rounded-xl cursor-not-allowed"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-600 block">Department (Read-only)</label>
+                  <input
+                    type="text"
+                    disabled
+                    value={faculty.department?.department_name || "Batanes State College"}
+                    className="w-full bg-slate-100 border border-slate-200 text-slate-500 text-sm font-bold px-4 py-2.5 rounded-xl cursor-not-allowed"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end pt-4 border-t border-slate-100">
+                <button
+                  type="submit"
+                  disabled={isSavingProfile}
+                  className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-extrabold px-5 py-2.5 rounded-xl shadow-sm transition-all hover:scale-105 duration-300"
+                >
+                  {isSavingProfile ? "Saving Changes..." : "Save Profile Details"}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 
@@ -2527,6 +2615,271 @@ export function FacultyDashboardClient({
                 className="bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold px-4 py-2.5 rounded-xl cursor-pointer"
               >
                 Close Logs Window
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ENROLLED STUDENTS & GRADES ROSTER MODAL */}
+      {rosterModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md animate-in fade-in duration-300">
+          <div className="bg-white border border-slate-200 rounded-3xl max-w-5xl w-full p-6 sm:p-8 shadow-2xl space-y-6 relative max-h-[90vh] flex flex-col">
+            {/* Modal Header */}
+            <div className="flex justify-between items-start border-b border-slate-100 pb-4 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="bg-emerald-100 text-emerald-800 p-3 rounded-2xl border border-emerald-200/60">
+                  <GraduationCap className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-lg sm:text-xl font-black text-slate-900">
+                    Enrolled Students & Exam Performance Roster
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Students enrolled in your subjects, their exam completion status, and calculated grade percentages.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    const filtered = rosterStudents.filter((item) => {
+                      if (rosterFilters.course_id && String(item.course_id) !== rosterFilters.course_id) return false;
+                      if (rosterFilters.status === "TOOK" && item.total_took === 0) return false;
+                      if (rosterFilters.status === "MISSED" && item.total_missed === 0) return false;
+                      if (rosterFilters.search) {
+                        const q = rosterFilters.search.toLowerCase();
+                        const name = `${item.first_name} ${item.last_name}`.toLowerCase();
+                        const id = item.institutional_id.toLowerCase();
+                        const course = `${item.course_code} ${item.course_title}`.toLowerCase();
+                        const prog = item.program_code.toLowerCase();
+                        if (!name.includes(q) && !id.includes(q) && !course.includes(q) && !prog.includes(q)) return false;
+                      }
+                      return true;
+                    });
+                    exportStudentGradesRosterToExcel(filtered, "Faculty_Enrolled_Students_Grades");
+                  }}
+                  disabled={loadingRoster || rosterStudents.length === 0}
+                  className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl shadow-md transition-all hover:scale-[1.02] cursor-pointer"
+                  title="Download student roster and grades as Excel document (.xlsx)"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Download Excel</span>
+                </button>
+                <button
+                  onClick={() => setRosterModalOpen(false)}
+                  className="p-2 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-400 hover:text-slate-700 cursor-pointer transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Filter Controls & Summary Stats */}
+            <div className="space-y-4 shrink-0">
+              <div className="bg-slate-50 border border-slate-200/80 p-4 rounded-2xl grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
+                {/* Search */}
+                <div className="relative">
+                  <Search className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Search student, ID, program..."
+                    value={rosterFilters.search}
+                    onChange={(e) => setRosterFilters({ ...rosterFilters, search: e.target.value })}
+                    className="w-full bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 pl-9 pr-4 py-2.5 focus:outline-emerald-500 shadow-sm"
+                  />
+                </div>
+
+                {/* Course Filter */}
+                <div>
+                  <select
+                    value={rosterFilters.course_id}
+                    onChange={(e) => setRosterFilters({ ...rosterFilters, course_id: e.target.value })}
+                    className="w-full bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 px-3 py-2.5 focus:outline-emerald-500 shadow-sm"
+                  >
+                    <option value="">All Taught Subjects</option>
+                    {courses.map((c) => (
+                      <option key={c.course_id} value={c.course_id}>
+                        {c.course_code} - {c.course_title}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Status Filter */}
+                <div>
+                  <select
+                    value={rosterFilters.status}
+                    onChange={(e) => setRosterFilters({ ...rosterFilters, status: e.target.value })}
+                    className="w-full bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 px-3 py-2.5 focus:outline-emerald-500 shadow-sm"
+                  >
+                    <option value="ALL">All Attendance Statuses</option>
+                    <option value="TOOK">Took Scheduled Exams</option>
+                    <option value="MISSED">Missed Scheduled Exams</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Roster Summary KPI Badges */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="bg-emerald-50/70 border border-emerald-100 p-3 rounded-2xl text-center">
+                  <p className="text-[10px] font-black uppercase text-emerald-800 tracking-wider">Total Enrolled</p>
+                  <p className="text-xl font-black text-emerald-950 mt-0.5">{rosterStudents.length}</p>
+                </div>
+                <div className="bg-blue-50/70 border border-blue-100 p-3 rounded-2xl text-center">
+                  <p className="text-[10px] font-black uppercase text-blue-800 tracking-wider">Exams Taken</p>
+                  <p className="text-xl font-black text-blue-950 mt-0.5">
+                    {rosterStudents.reduce((sum, s) => sum + s.total_took, 0)}
+                  </p>
+                </div>
+                <div className="bg-rose-50/70 border border-rose-100 p-3 rounded-2xl text-center">
+                  <p className="text-[10px] font-black uppercase text-rose-800 tracking-wider">Exams Missed</p>
+                  <p className="text-xl font-black text-rose-950 mt-0.5">
+                    {rosterStudents.reduce((sum, s) => sum + s.total_missed, 0)}
+                  </p>
+                </div>
+                <div className="bg-amber-50/70 border border-amber-100 p-3 rounded-2xl text-center">
+                  <p className="text-[10px] font-black uppercase text-amber-800 tracking-wider">Class Avg Grade</p>
+                  <p className="text-xl font-black text-amber-950 mt-0.5">
+                    {(() => {
+                      const valid = rosterStudents.map(s => s.average_grade_percentage).filter(g => g !== null && g !== undefined);
+                      return valid.length > 0 ? `${Math.round(valid.reduce((a, b) => a + b, 0) / valid.length)}%` : "N/A";
+                    })()}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Roster Table Content */}
+            <div className="flex-1 overflow-y-auto min-h-[300px] border border-slate-200 rounded-2xl">
+              {loadingRoster ? (
+                <div className="flex flex-col items-center justify-center py-20 gap-3">
+                  <Loader2 className="w-8 h-8 animate-spin text-emerald-600" />
+                  <span className="text-xs font-semibold text-slate-500">Loading student roster and exam scores...</span>
+                </div>
+              ) : (() => {
+                const filtered = rosterStudents.filter((item) => {
+                  if (rosterFilters.course_id && String(item.course_id) !== rosterFilters.course_id) return false;
+                  if (rosterFilters.status === "TOOK" && item.total_took === 0) return false;
+                  if (rosterFilters.status === "MISSED" && item.total_missed === 0) return false;
+                  if (rosterFilters.search) {
+                    const q = rosterFilters.search.toLowerCase();
+                    const name = `${item.first_name} ${item.last_name}`.toLowerCase();
+                    const id = item.institutional_id.toLowerCase();
+                    const course = `${item.course_code} ${item.course_title}`.toLowerCase();
+                    const prog = item.program_code.toLowerCase();
+                    if (!name.includes(q) && !id.includes(q) && !course.includes(q) && !prog.includes(q)) return false;
+                  }
+                  return true;
+                });
+
+                if (filtered.length === 0) {
+                  return (
+                    <div className="text-center py-20 text-slate-400 text-xs">
+                      No enrolled students found matching the selected filters.
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="divide-y divide-slate-100">
+                    {filtered.map((student, idx) => (
+                      <div key={`${student.course_id}-${student.student_id}-${idx}`} className="p-4 hover:bg-slate-50/80 transition-colors space-y-3">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-slate-900 text-white font-black text-sm flex items-center justify-center shrink-0 shadow-sm">
+                              {student.first_name.charAt(0)}{student.last_name.charAt(0)}
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <h4 className="text-sm font-black text-slate-900">
+                                  {student.first_name} {student.last_name}
+                                </h4>
+                                <span className="text-[10px] bg-slate-100 text-slate-700 font-bold px-2 py-0.5 rounded-md border border-slate-200">
+                                  {student.institutional_id}
+                                </span>
+                                <span className="text-[10px] bg-emerald-50 text-emerald-700 font-bold px-2 py-0.5 rounded-md border border-emerald-100">
+                                  {student.program_code} {student.year_level}-{student.section}
+                                </span>
+                              </div>
+                              <p className="text-xs text-emerald-700 font-bold mt-0.5">
+                                Subject: {student.course_code} - {student.course_title}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-3 shrink-0">
+                            {student.average_grade_percentage !== null ? (
+                              <div className="text-right">
+                                <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider block">Average Grade</span>
+                                <span className={`text-base font-black ${
+                                  student.average_grade_percentage >= 75 ? "text-emerald-600" : "text-rose-600"
+                                }`}>
+                                  {student.average_grade_percentage}%
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-xs text-slate-400 font-medium">No Exams Recorded</span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Exam Participation Breakdown */}
+                        {student.exams && student.exams.length > 0 && (
+                          <div className="bg-slate-50/90 border border-slate-200/60 rounded-xl p-3 space-y-2">
+                            <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider block">Exam History & Performance</span>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              {student.exams.map((ex: any) => {
+                                let badgeColor = "bg-amber-50 text-amber-800 border-amber-200";
+                                if (ex.status === "Took Exam") badgeColor = "bg-emerald-50 text-emerald-800 border-emerald-200";
+                                if (ex.status === "Missed Exam") badgeColor = "bg-rose-50 text-rose-800 border-rose-200";
+
+                                return (
+                                  <div key={ex.exam_id} className="bg-white border border-slate-200/80 p-2.5 rounded-lg flex items-center justify-between text-xs gap-2">
+                                    <div className="min-w-0 flex-1">
+                                      <p className="font-bold text-slate-800 truncate">{ex.exam_title}</p>
+                                      <p className="text-[10px] text-slate-400 font-medium">
+                                        {ex.submitted_at ? `Submitted: ${new Date(ex.submitted_at).toLocaleDateString()}` : (ex.scheduled_date ? `Scheduled: ${new Date(ex.scheduled_date).toLocaleDateString()}` : "No schedule set")}
+                                      </p>
+                                    </div>
+                                    <div className="text-right shrink-0">
+                                      <span className={`inline-block text-[10px] font-black px-2 py-0.5 rounded-full border ${badgeColor}`}>
+                                        {ex.status}
+                                      </span>
+                                      {ex.status === "Took Exam" && (
+                                        <p className="text-[11px] font-black text-emerald-700 mt-0.5">
+                                          {ex.student_score} / {ex.max_score} ({ex.percentage}%)
+                                        </p>
+                                      )}
+                                      {ex.status === "Missed Exam" && (
+                                        <p className="text-[11px] font-black text-rose-600 mt-0.5">
+                                          0 / {ex.max_score} (0%)
+                                        </p>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="border-t border-slate-100 pt-4 flex justify-between items-center shrink-0">
+              <span className="text-xs text-slate-400 font-semibold">
+                Showing roster records for Faculty member
+              </span>
+              <button
+                onClick={() => setRosterModalOpen(false)}
+                className="bg-slate-900 hover:bg-slate-800 text-white text-xs font-extrabold px-5 py-2.5 rounded-xl transition-all cursor-pointer"
+              >
+                Close Roster
               </button>
             </div>
           </div>
