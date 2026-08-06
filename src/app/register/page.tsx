@@ -13,22 +13,22 @@ export default async function RegisterPage() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user) {
+  if (user) {
+    const role = user.user_metadata?.role;
+    if (role === "Student") redirect("/dashboard/student");
+    if (role === "Faculty") redirect("/dashboard/faculty");
+    if (role === "Chair") redirect("/dashboard/chair");
+    if (role === "Director") redirect("/dashboard/director");
     redirect("/");
   }
 
-  const role = user.user_metadata?.role;
-  if (role !== "Director" && role !== "Chair") {
-    redirect("/");
-  }
-
-  // Fetch academic programs and departments for Onboarding Forms
+  // Fetch academic programs and courses for Student Registration
   const programs = await db.academicProgram.findMany({
     orderBy: { program_name: "asc" },
   });
 
-  const departments = await db.department.findMany({
-    orderBy: { department_name: "asc" },
+  const courses = await db.course.findMany({
+    orderBy: { course_code: "asc" },
   });
 
   // Academic Year Indicator Logic
@@ -71,7 +71,7 @@ export default async function RegisterPage() {
                 Batanes State College
               </h2>
               <h1 className="text-lg md:text-xl font-black text-white tracking-tight relative inline-block">
-                AcadNexus Portal Onboarding
+                Student Account Registration
               </h1>
               <p className="italic text-[10px] text-amber-200/70 font-medium hidden md:block">
                 "Builds minds, Serves communities, Creates opportunities"
@@ -98,15 +98,15 @@ export default async function RegisterPage() {
           
           <div className="text-center space-y-1.5 cursor-default">
             <h3 className="text-xl font-black text-neutral-900 tracking-tight">
-              Create Your Institutional Account
+              Create Your Student Account
             </h3>
             <p className="text-sm text-neutral-500 max-w-md mx-auto">
-              Please enter your full credentials to be assigned a secure login username and enroll in your academic pipeline.
+              Please enter your credentials, academic program, and indicate your enrolled subjects.
             </p>
           </div>
 
           <div className="bg-white p-6 sm:p-8 rounded-2xl border border-neutral-200/60 shadow-sm hover:shadow-md transition-all duration-300">
-            <RegisterForm departments={departments} programs={programs} />
+            <RegisterForm programs={programs} courses={courses} />
           </div>
 
           {/* Footer Footnote */}
