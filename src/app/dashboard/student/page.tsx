@@ -147,17 +147,42 @@ export default async function StudentDashboard() {
   const upcomingExams: any[] = [];
   const missedExams: any[] = [];
 
+<<<<<<< Updated upstream
   const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
+=======
+  const now = new Date();
+  const currentMin = now.getHours() * 60 + now.getMinutes();
+>>>>>>> Stashed changes
 
   targets.forEach(t => {
     if (completedExamIds.has(t.exam_id)) {
       return;
     }
 
+<<<<<<< Updated upstream
     // Prioritize student override if active
     if (overrideExamIds.has(t.exam_id)) {
       return;
     }
+=======
+    const scheduledDate = new Date(t.scheduled_date);
+    
+    // Timezone-safe date check (Prisma Date is retrieved in UTC midnight)
+    const schedYear = scheduledDate.getUTCFullYear();
+    const schedMonth = scheduledDate.getUTCMonth();
+    const schedDateVal = scheduledDate.getUTCDate();
+
+    const nowYear = now.getFullYear();
+    const nowMonth = now.getMonth();
+    const nowDateVal = now.getDate();
+
+    const isToday = schedYear === nowYear && schedMonth === nowMonth && schedDateVal === nowDateVal;
+    
+    const isFuture = 
+      schedYear > nowYear ||
+      (schedYear === nowYear && schedMonth > nowMonth) ||
+      (schedYear === nowYear && schedMonth === nowMonth && schedDateVal > nowDateVal);
+>>>>>>> Stashed changes
 
     // Construct start and end dates in the Asia/Manila timezone-relative context
     const examStart = new Date(
@@ -169,6 +194,7 @@ export default async function StudentDashboard() {
       0
     );
 
+<<<<<<< Updated upstream
     const examEnd = new Date(
       t.scheduled_date.getUTCFullYear(),
       t.scheduled_date.getUTCMonth(),
@@ -177,6 +203,11 @@ export default async function StudentDashboard() {
       t.end_time.getUTCMinutes(),
       0
     );
+=======
+      // Timezone-safe time check (Prisma Time is retrieved in UTC)
+      const startMin = start.getUTCHours() * 60 + start.getUTCMinutes();
+      const endMin = end.getUTCHours() * 60 + end.getUTCMinutes();
+>>>>>>> Stashed changes
 
     const sanitizedTarget = {
       target_id: t.target_id,
@@ -322,6 +353,7 @@ export default async function StudentDashboard() {
           </div>
         </div>
 
+<<<<<<< Updated upstream
         {/* Render interactive Student Dashboard Client with tabbed navigation */}
         <StudentDashboardClient
           student={student}
@@ -334,6 +366,166 @@ export default async function StudentDashboard() {
           institutionalId={institutionalId}
           userId={dbUser.user_id}
         />
+=======
+        {/* Dashboard Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Profile Card */}
+          <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-6 self-start">
+            <h2 className="text-lg font-bold text-slate-800 border-b border-slate-100 pb-3 flex items-center gap-2">
+              <span className="w-1.5 h-6 bg-blue-600 rounded-full" />
+              Academic Profile
+            </h2>
+            <div className="space-y-4">
+              <div>
+                <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Full Name</p>
+                <p className="text-sm font-bold text-slate-800 mt-0.5">
+                  {student ? `${student.first_name} ${student.last_name}` : "Not Seeded"}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Program / Department</p>
+                <p className="text-sm font-bold text-slate-800 mt-0.5">
+                  {student?.program ? `${student.program.program_name} (${student.program.program_code})` : "Not Seeded"}
+                </p>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  {student?.program?.department?.department_name || "Batanes State College"}
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Year Level</p>
+                  <p className="text-sm font-bold text-slate-800 mt-0.5">
+                    {student ? `Year ${student.year_level}` : "Not Seeded"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Section</p>
+                  <p className="text-sm font-bold text-slate-800 mt-0.5">
+                    {student ? student.section : "Not Seeded"}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Academic Actions / Exams */}
+          <div className="lg:col-span-2 space-y-8">
+            {/* Active Examinations */}
+            <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-6">
+              <h2 className="text-lg font-bold text-slate-800 border-b border-slate-100 pb-3 flex items-center gap-2">
+                <span className="w-1.5 h-6 bg-rose-500 rounded-full animate-pulse" />
+                Active Examinations
+              </h2>
+
+              {activeExams.length > 0 ? (
+                <div className="space-y-4">
+                  {activeExams.map((exam) => (
+                    <div key={exam.exam_id} className="flex flex-col sm:flex-row sm:items-center justify-between border border-slate-100 p-5 rounded-2xl bg-gradient-to-r from-rose-50/20 to-transparent hover:border-rose-100 transition-all gap-4">
+                      <div className="space-y-1">
+                        <span className="text-[10px] font-bold bg-rose-100 text-rose-700 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                          Live Now
+                        </span>
+                        <h4 className="font-bold text-slate-800 text-base mt-1">{exam.title}</h4>
+                        <p className="text-xs text-slate-400 flex items-center gap-1.5">
+                          <BookOpen className="w-3.5 h-3.5" /> {exam.course.course_title} ({exam.course.course_code})
+                        </p>
+                        <p className="text-xs text-slate-400 flex items-center gap-1.5">
+                          <Clock className="w-3.5 h-3.5" /> Time Limit: {exam.time_limit_minutes} minutes
+                        </p>
+                      </div>
+                      <Link href={`/dashboard/student/exam/${exam.exam_id}`} className="bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs px-5 py-3 rounded-xl flex items-center gap-2 transition-all shadow-sm hover:shadow-md self-start sm:self-auto text-center">
+                        Start Exam <ArrowRight className="w-4 h-4" />
+                      </Link>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-10 px-4 text-center border border-dashed border-slate-100 rounded-2xl">
+                  <div className="bg-slate-50 p-3 rounded-full text-slate-400 mb-3">
+                    <Hourglass className="w-6 h-6" />
+                  </div>
+                  <h3 className="font-bold text-slate-700 text-sm">No live examinations</h3>
+                  <p className="text-slate-400 text-xs max-w-xs mt-1">
+                    There are no exams currently active for your section.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Upcoming & Completed Tab / Layout */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Upcoming Examinations */}
+              <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-6">
+                <h2 className="text-md font-bold text-slate-800 border-b border-slate-100 pb-3 flex items-center gap-2">
+                  <Calendar className="w-4 h-4 text-blue-600" />
+                  Upcoming Exams
+                </h2>
+
+                {upcomingExams.length > 0 ? (
+                  <div className="space-y-4">
+                    {upcomingExams.map((exam) => (
+                      <div key={exam.exam_id} className="border border-slate-100 p-4 rounded-xl space-y-2">
+                        <h4 className="font-bold text-slate-800 text-sm">{exam.title}</h4>
+                        <p className="text-xs text-slate-500">
+                          {exam.course.course_title}
+                        </p>
+                        <div className="bg-slate-50 p-2.5 rounded-lg text-xs space-y-1">
+                          <p className="text-slate-600 font-semibold">
+                            Date: {new Date(exam.target.scheduled_date).toLocaleDateString('en-US', { timeZone: 'UTC' })}
+                          </p>
+                          <p className="text-slate-500">
+                            Time: {new Date(exam.target.start_time).toLocaleTimeString('en-US', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit' })} - {new Date(exam.target.end_time).toLocaleTimeString('en-US', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit' })}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-slate-400 text-xs">
+                    No upcoming exams scheduled.
+                  </div>
+                )}
+              </div>
+
+              {/* Completed Examinations */}
+              <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-6">
+                <h2 className="text-md font-bold text-slate-800 border-b border-slate-100 pb-3 flex items-center gap-2">
+                  <Award className="w-4 h-4 text-emerald-600" />
+                  Completed Exams
+                </h2>
+
+                {completedExams.length > 0 ? (
+                  <div className="space-y-4">
+                    {completedExams.map((se) => {
+                      const examMaxPoints = se.exam.questionBank.reduce((sum, q) => sum + q.points, 0);
+                      const percentage = examMaxPoints > 0 ? Math.round((se.total_score / examMaxPoints) * 100) : 0;
+                      return (
+                        <div key={se.student_exam_id} className="border border-slate-100 p-4 rounded-xl flex justify-between items-center">
+                          <div className="space-y-1">
+                            <h4 className="font-bold text-slate-800 text-sm">{se.exam.title}</h4>
+                            <p className="text-xs text-slate-400">
+                              Submitted: {new Date(se.submitted_at || se.started_at).toLocaleDateString()}
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-xs font-black bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-full border border-emerald-100">
+                              {se.total_score}/{examMaxPoints} ({percentage}%)
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-slate-400 text-xs">
+                    No completed exams recorded.
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+>>>>>>> Stashed changes
       </main>
 
       {/* Footer */}

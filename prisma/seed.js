@@ -238,10 +238,17 @@ async function main() {
           {
             program_id: bsitProg.program_id,
             year_level: 4,
+<<<<<<< Updated upstream
             section: "General",
             scheduled_date: new Date(),
             start_time: new Date(new Date().setHours(0, 0, 0, 0)),
             end_time: new Date(new Date().setHours(23, 59, 59, 999)),
+=======
+            section: "A",
+            scheduled_date: new Date(Date.UTC(new Date().getFullYear(), new Date().getMonth(), new Date().getDate())),
+            start_time: new Date("1970-01-01T00:00:00.000Z"),
+            end_time: new Date("1970-01-01T23:59:59.999Z"),
+>>>>>>> Stashed changes
           },
         ],
       },
@@ -273,10 +280,17 @@ async function main() {
           {
             program_id: bsitProg.program_id,
             year_level: 4,
+<<<<<<< Updated upstream
             section: "General",
             scheduled_date: new Date(new Date().setDate(new Date().getDate() + 2)), // 2 days from now
             start_time: new Date(new Date().setHours(9, 0, 0, 0)),
             end_time: new Date(new Date().setHours(12, 0, 0, 0)),
+=======
+            section: "A",
+            scheduled_date: new Date(Date.UTC(new Date().getFullYear(), new Date().getMonth(), new Date().getDate() + 2)), // 2 days from now
+            start_time: new Date("1970-01-01T09:00:00.000Z"),
+            end_time: new Date("1970-01-01T12:00:00.000Z"),
+>>>>>>> Stashed changes
           },
         ],
       },
@@ -308,10 +322,17 @@ async function main() {
           {
             program_id: bsitProg.program_id,
             year_level: 4,
+<<<<<<< Updated upstream
             section: "General",
             scheduled_date: new Date(new Date().setDate(new Date().getDate() - 1)), // yesterday
             start_time: new Date(new Date().setHours(10, 0, 0, 0)),
             end_time: new Date(new Date().setHours(11, 0, 0, 0)),
+=======
+            section: "A",
+            scheduled_date: new Date(Date.UTC(new Date().getFullYear(), new Date().getMonth(), new Date().getDate() - 1)), // yesterday
+            start_time: new Date("1970-01-01T10:00:00.000Z"),
+            end_time: new Date("1970-01-01T11:00:00.000Z"),
+>>>>>>> Stashed changes
           },
         ],
       },

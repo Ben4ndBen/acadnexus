@@ -37,6 +37,7 @@ export async function updateFacultyProfile(facultyId: number, firstName: string,
 
 export async function updateExamStatus(examId: number, status: ExamStatus, userId: number) {
   try {
+<<<<<<< Updated upstream
     const exam = await db.examination.findUnique({
       where: { exam_id: examId },
     });
@@ -66,46 +67,78 @@ export async function updateExamStatus(examId: number, status: ExamStatus, userI
       // Find a Chair to assign (e.g. for the faculty's department)
       const faculty = await db.faculty.findUnique({
         where: { faculty_id: userId },
+=======
+    return await db.$transaction(async (tx) => {
+      const exam = await tx.examination.findUnique({
+        where: { exam_id: examId },
+>>>>>>> Stashed changes
       });
 
-      if (faculty) {
-        const chair = await db.chair.findUnique({
+      if (!exam) {
+        return { error: "Examination not found." };
+      }
+
+      if (exam.faculty_id !== userId) {
+        return { error: "Unauthorized operation." };
+      }
+
+      // Add or update ApprovalWorkflow record if needed
+      if (status === "Pending_Chair") {
+        // Find a Chair to assign (e.g. for the faculty's department)
+        const faculty = await tx.faculty.findUnique({
+          where: { faculty_id: userId },
+        });
+
+        if (!faculty) {
+          return { error: "Faculty profile not found. Please contact an admin." };
+        }
+
+        const chair = await tx.chair.findUnique({
           where: { department_id: faculty.department_id },
         });
 
-        if (chair) {
-          await db.approvalWorkflow.upsert({
-            where: { exam_id: examId },
-            update: {
-              reviewed_by_chair_id: chair.chair_id,
-              chair_review_status: "Pending",
-              chair_comments: null,
-              chair_action_timestamp: null,
-              di_review_status: "Hold",
-              di_action_timestamp: null,
-            },
-            create: {
-              exam_id: examId,
-              reviewed_by_chair_id: chair.chair_id,
-              chair_review_status: "Pending",
-              di_review_status: "Hold",
-            },
-          });
+        if (!chair) {
+          return { error: "No department chair found for your department. Cannot submit exam for review." };
         }
+
+        await tx.approvalWorkflow.upsert({
+          where: { exam_id: examId },
+          update: {
+            reviewed_by_chair_id: chair.chair_id,
+            chair_review_status: "Pending",
+            chair_comments: null,
+            chair_action_timestamp: null,
+            di_review_status: "Hold",
+            di_action_timestamp: null,
+            reviewed_by_di_id: null,
+          },
+          create: {
+            exam_id: examId,
+            reviewed_by_chair_id: chair.chair_id,
+            chair_review_status: "Pending",
+            di_review_status: "Hold",
+          },
+        });
       }
-    }
 
-    // Log the audit event
-    await db.auditLog.create({
-      data: {
-        user_id: userId,
-        action_performed: `Updated exam (${exam.title}) status to ${status}`,
-        ip_address: "127.0.0.1",
-      },
+      // Update the examination status
+      await tx.examination.update({
+        where: { exam_id: examId },
+        data: { current_status: status },
+      });
+
+      // Log the audit event
+      await tx.auditLog.create({
+        data: {
+          user_id: userId,
+          action_performed: `Updated exam (${exam.title}) status to ${status}`,
+          ip_address: "127.0.0.1",
+        },
+      });
+
+      revalidatePath("/dashboard/faculty");
+      return { success: true };
     });
-
-    revalidatePath("/dashboard/faculty");
-    return { success: true };
   } catch (err: any) {
     console.error("Error updating exam status:", err);
     return { error: err.message || "Failed to update exam status." };
