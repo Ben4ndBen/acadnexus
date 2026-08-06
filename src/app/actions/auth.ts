@@ -175,6 +175,10 @@ export async function registerAction(prevState: any, formData: FormData) {
     return { error: "Please fill in all required fields." };
   }
 
+  if (role !== "Student") {
+    return { error: "Self-registration is restricted to students only. Faculty accounts are provisioned by Department Chairs and Directors." };
+  }
+
   if (password !== confirmPassword) {
     return { error: "Passwords do not match." };
   }
@@ -196,16 +200,10 @@ export async function registerAction(prevState: any, formData: FormData) {
     };
   }
 
-  // Validate ID format prefix & suffix
+  // Validate Student ID format (YYYY-NNNN-AB)
   const formattedId = institutionalId.trim().toUpperCase();
-  if (role === "Student") {
-    if (!/^\d{4}-\d{4}-AB$/.test(formattedId)) {
-      return { error: "Student ID must follow the standard format: YYYY-NNNN-AB (e.g. 2023-0001-AB)." };
-    }
-  } else if (role === "Faculty") {
-    if (!/^FACULTY-\d+$/.test(formattedId)) {
-      return { error: "Faculty ID must follow the standard format: FACULTY- followed by digits (e.g. FACULTY-002)." };
-    }
+  if (!/^\d{4}-\d{4}-AB$/.test(formattedId)) {
+    return { error: "Student ID must follow the standard format: YYYY-NNNN-AB (e.g. 2023-0001-AB)." };
   }
 
   try {
@@ -218,99 +216,36 @@ export async function registerAction(prevState: any, formData: FormData) {
       return { error: "Institutional ID already registered." };
     }
 
-    // Generate unique username for Faculty using formula:
-    // 2 first letters + 1 middle name letter + 2 or 3 last name letters
-    let username = "";
-    if (role === "Faculty") {
-      const cleanFirst = firstName.trim().replace(/[^a-zA-Z]/g, "");
-      const cleanMiddle = (middleName || "").trim().replace(/[^a-zA-Z]/g, "");
-      const cleanLast = lastName.trim().replace(/[^a-zA-Z]/g, "");
-
-      const fPart = cleanFirst.slice(0, 2).toLowerCase();
-      const mPart = cleanMiddle ? cleanMiddle.slice(0, 1).toUpperCase() : "X";
-      
-      const lPart2 = cleanLast.slice(0, 2);
-      const lPart2Cased = lPart2.charAt(0).toUpperCase() + lPart2.slice(1).toLowerCase();
-      const candidate1 = `${fPart}${mPart}${lPart2Cased}`;
-      
-      const userWithCand1 = await db.user.findUnique({
-        where: { username: candidate1 },
-      });
-      
-      if (!userWithCand1) {
-        username = candidate1;
-      } else {
-        const lPart3 = cleanLast.slice(0, 3);
-        const lPart3Cased = lPart3.charAt(0).toUpperCase() + lPart3.slice(1).toLowerCase();
-        const candidate2 = `${fPart}${mPart}${lPart3Cased}`;
-        
-        const userWithCand2 = await db.user.findUnique({
-          where: { username: candidate2 },
-        });
-        
-        if (!userWithCand2) {
-          username = candidate2;
-        } else {
-          let suffix = 1;
-          while (true) {
-            const candidate3 = `${candidate1}${suffix}`;
-            const userWithCand3 = await db.user.findUnique({
-              where: { username: candidate3 },
-            });
-            if (!userWithCand3) {
-              username = candidate3;
-              break;
-            }
-            suffix++;
-          }
-        }
-      }
-    }
-
     // Hash the password
     const salt = await bcrypt.genSalt(10);
     const passwordHash = await bcrypt.hash(password, salt);
 
-    // Create User and Faculty/Student record in transaction
+    // Create User and Student record in transaction
     const newUser = await db.$transaction(async (tx) => {
       const user = await tx.user.create({
         data: {
           institutional_id: formattedId,
-          username: role === "Faculty" ? username : null,
+          username: null,
           password_hash: passwordHash,
-          role: role as any,
-          require_password_update: role === "Faculty", // Force password update immediately after signing up for Faculty!
+          role: "Student",
+          require_password_update: false,
         },
       });
 
-      if (role === "Faculty") {
-        if (!departmentIdStr) {
-          throw new Error("Department selection is required for Faculty.");
-        }
-        await tx.faculty.create({
-          data: {
-            faculty_id: user.user_id,
-            first_name: firstName,
-            middle_name: middleName || null,
-            last_name: lastName,
-            department_id: Number(departmentIdStr),
-          },
-        });
-      } else if (role === "Student") {
-        if (!programIdStr || !yearLevelStr || !major) {
-          throw new Error("Please provide program, year level, and major for student onboarding.");
-        }
-        await tx.student.create({
-          data: {
-            student_id: user.user_id,
-            first_name: firstName,
-            last_name: lastName,
-            program_id: Number(programIdStr),
-            year_level: Number(yearLevelStr),
-            section: major, // Storing 'Major' in the section column
-          },
-        });
+      if (!programIdStr || !yearLevelStr || !major) {
+        throw new Error("Please provide program, year level, and major for student onboarding.");
       }
+
+      await tx.student.create({
+        data: {
+          student_id: user.user_id,
+          first_name: firstName,
+          last_name: lastName,
+          program_id: Number(programIdStr),
+          year_level: Number(yearLevelStr),
+          section: major, // Storing 'Major' in the section column
+        },
+      });
 
       return user;
     });
@@ -355,11 +290,7 @@ export async function registerAction(prevState: any, formData: FormData) {
 
       if (signUpError) {
         // Rollback transaction manually
-        if (role === "Student") {
-          await db.student.delete({ where: { student_id: newUser.user_id } });
-        } else if (role === "Faculty") {
-          await db.faculty.delete({ where: { faculty_id: newUser.user_id } });
-        }
+        await db.student.delete({ where: { student_id: newUser.user_id } });
         await db.user.delete({ where: { user_id: newUser.user_id } });
         return { error: `Supabase registration failed: ${signUpError.message}` };
       }
@@ -380,7 +311,6 @@ export async function registerAction(prevState: any, formData: FormData) {
 
     return { 
       success: true, 
-      username: role === "Faculty" ? username : undefined,
       role: newUser.role 
     };
   } catch (err: any) {
