@@ -37,41 +37,9 @@ export async function updateFacultyProfile(facultyId: number, firstName: string,
 
 export async function updateExamStatus(examId: number, status: ExamStatus, userId: number) {
   try {
-<<<<<<< Updated upstream
-    const exam = await db.examination.findUnique({
-      where: { exam_id: examId },
-    });
-
-    if (!exam) {
-      return { error: "Examination not found." };
-    }
-
-    if (exam.faculty_id !== userId) {
-      return { error: "Unauthorized operation." };
-    }
-
-    // Require Table of Specifications (TOS) before submitting for Chair review
-    if (status === "Pending_Chair") {
-      if (!exam.tos_file_path || exam.tos_file_path.trim() === "") {
-        return { error: "You cannot submit this examination for review without uploading a Table of Specifications (TOS) first." };
-      }
-    }
-
-    await db.examination.update({
-      where: { exam_id: examId },
-      data: { current_status: status },
-    });
-
-    // Add or update ApprovalWorkflow record if needed
-    if (status === "Pending_Chair") {
-      // Find a Chair to assign (e.g. for the faculty's department)
-      const faculty = await db.faculty.findUnique({
-        where: { faculty_id: userId },
-=======
     return await db.$transaction(async (tx) => {
       const exam = await tx.examination.findUnique({
         where: { exam_id: examId },
->>>>>>> Stashed changes
       });
 
       if (!exam) {
@@ -82,6 +50,12 @@ export async function updateExamStatus(examId: number, status: ExamStatus, userI
         return { error: "Unauthorized operation." };
       }
 
+      // Require Table of Specifications (TOS) before submitting for Chair review
+      if (status === "Pending_Chair") {
+        if (!exam.tos_file_path || exam.tos_file_path.trim() === "") {
+          return { error: "You cannot submit this examination for review without uploading a Table of Specifications (TOS) first." };
+        }
+      }
       // Add or update ApprovalWorkflow record if needed
       if (status === "Pending_Chair") {
         // Find a Chair to assign (e.g. for the faculty's department)

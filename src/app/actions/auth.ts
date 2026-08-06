@@ -249,7 +249,7 @@ export async function registerAction(prevState: any, formData: FormData) {
         },
       });
 
-      if (courseIds.length > 0) {
+      if (courseIds && courseIds.length > 0) {
         await tx.auditLog.create({
           data: {
             user_id: user.user_id,

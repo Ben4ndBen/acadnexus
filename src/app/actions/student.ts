@@ -106,44 +106,16 @@ export async function startStudentExam(examId: number, studentId: number) {
       );
     }
 
-<<<<<<< Updated upstream
     if (now < examStart) {
       const startTimeString = examStart.toLocaleTimeString([], { 
         hour: '2-digit', 
         minute: '2-digit'
       });
       return { error: `Examination has not started yet. It is scheduled to start at ${startTimeString}.` };
-=======
-    const exam = target.exam;
-
-    // 3. Check if current time is within schedule
-    const now = new Date();
-    const scheduledDate = new Date(target.scheduled_date);
-
-    // Timezone-safe date check (Prisma Date is retrieved in UTC midnight)
-    const isToday =
-      scheduledDate.getUTCFullYear() === now.getFullYear() &&
-      scheduledDate.getUTCMonth() === now.getMonth() &&
-      scheduledDate.getUTCDate() === now.getDate();
-
-    if (!isToday) {
-      return { error: "This examination is not scheduled for today." };
     }
 
-    const start = new Date(target.start_time);
-    const end = new Date(target.end_time);
-
-    const currentMin = now.getHours() * 60 + now.getMinutes();
-    const startMin = start.getUTCHours() * 60 + start.getUTCMinutes();
-    const endMin = end.getUTCHours() * 60 + end.getUTCMinutes();
-
-    if (currentMin < startMin) {
-      const formattedStart = start.toLocaleTimeString('en-US', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit' });
-      return { error: `Examination has not started yet. It is scheduled to start at ${formattedStart}.` };
-    }
-    if (currentMin > endMin) {
+    if (now > examEnd) {
       return { error: "Examination window has already closed." };
->>>>>>> Stashed changes
     }
 
     // 4. Fetch or create StudentExam

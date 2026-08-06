@@ -91,7 +91,6 @@ export function RegisterForm({
       c.course_code.toLowerCase().includes(subjectSearchQuery.toLowerCase()) ||
       c.course_title.toLowerCase().includes(subjectSearchQuery.toLowerCase())
   );
-
   // Real-time Institutional ID check
   const isIdEmpty = institutionalId.trim() === "";
   const isIdValid = /^\d{4}-\d{4}-AB$/.test(institutionalId.trim().toUpperCase());
