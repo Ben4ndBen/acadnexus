@@ -250,6 +250,13 @@ export async function registerAction(prevState: any, formData: FormData) {
       });
 
       if (courseIds && courseIds.length > 0) {
+        await tx.studentCourse.createMany({
+          data: courseIds.map((cId) => ({
+            student_id: user.user_id,
+            course_id: cId,
+          })),
+        });
+
         await tx.auditLog.create({
           data: {
             user_id: user.user_id,

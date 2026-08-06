@@ -38,6 +38,11 @@ export default async function StudentDashboard() {
               department: true,
             },
           },
+          studentCourses: {
+            include: {
+              course: true,
+            },
+          },
         },
       },
     },
@@ -120,13 +125,28 @@ export default async function StudentDashboard() {
   });
 
   // Calculate metrics
-  // Enrolled courses count: unique courses from all targeted exams
-  const uniqueCourses = new Map();
-  targets.forEach(t => {
+  // Enrolled courses count: combines student's indicated subjects from signup and any targeted exam subjects
+  const uniqueCoursesMap = new Map<number, { course_id: number; course_code: string; course_title: string }>();
+
+  // 1. Add student's explicitly indicated subjects from registration
+  if (student.studentCourses && student.studentCourses.length > 0) {
+    student.studentCourses.forEach((sc) => {
+      if (sc.course) {
+        uniqueCoursesMap.set(sc.course.course_id, sc.course);
+      }
+    });
+  }
+
+  // 2. Add subjects from targeted exams
+  targets.forEach((t) => {
     const course = t.exam.course;
-    uniqueCourses.set(course.course_id, course);
+    if (course) {
+      uniqueCoursesMap.set(course.course_id, course);
+    }
   });
-  const enrolledSubjectsCount = uniqueCourses.size;
+
+  const enrolledSubjectsCount = uniqueCoursesMap.size;
+  const enrolledCoursesList = Array.from(uniqueCoursesMap.values());
 
   // Average examination performance
   let totalPointsAccumulated = 0;
@@ -330,6 +350,7 @@ export default async function StudentDashboard() {
           completedExams={serializedCompletedExams}
           missedExams={missedExams}
           enrolledSubjectsCount={enrolledSubjectsCount}
+          enrolledCourses={enrolledCoursesList}
           averagePerformance={averagePerformance}
           institutionalId={institutionalId}
           userId={dbUser.user_id}

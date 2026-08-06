@@ -55,6 +55,7 @@ section    String   @db.VarChar(100)
 
 studentExams     StudentExam[]
 studentOverrides StudentOverride[]
+studentCourses   StudentCourse[]
 
 @@map("STUDENTS")
 }
@@ -128,8 +129,20 @@ course_title       String        @db.VarChar(150)
 syllabus_file_path String?       @db.VarChar(255)
 examinations       Examination[]
 questionBank       QuestionBank[]
+studentCourses     StudentCourse[]
 
 @@map("COURSES")
+}
+
+model StudentCourse {
+  student_id  Int
+  student     Student  @relation(fields: [student_id], references: [student_id], onDelete: Cascade)
+  course_id   Int
+  course      Course   @relation(fields: [course_id], references: [course_id], onDelete: Cascade)
+  enrolled_at DateTime @default(now()) @db.Timestamp
+
+  @@id([student_id, course_id])
+  @@map("STUDENT_COURSES")
 }
 
 // --- 3. Examination Engine ---
