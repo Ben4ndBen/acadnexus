@@ -106,7 +106,7 @@ export function LoginForm() {
 
       <div className="text-center pt-3 border-t border-stone-100 mt-2">
         <p className="text-xs text-stone-500">
-          New or enrolling student?{" "}
+          New student?{" "}
           <Link href="/register" className="font-bold text-[#7A151A] hover:underline transition-all">
             Create Student Account
           </Link>
