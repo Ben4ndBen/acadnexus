@@ -70,12 +70,12 @@ export default async function RegisterPage() {
               <h2 className="font-black tracking-wider text-xs md:text-sm text-[#E2A123] uppercase leading-tight">
                 Batanes State College
               </h2>
-              <h1 className="text-lg md:text-xl font-black text-white tracking-tight relative inline-block">
-                Student Account Registration
-              </h1>
-              <p className="italic text-[10px] text-amber-200/70 font-medium hidden md:block">
+              <p className="italic text-[10px] text-amber-200/70 font-medium">
                 "Builds minds, Serves communities, Creates opportunities"
               </p>
+              <h1 className="text-lg md:text-xl font-black text-white tracking-tight relative inline-block pt-0.5">
+                Student Account Registration
+              </h1>
             </div>
           </div>
 

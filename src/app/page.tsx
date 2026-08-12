@@ -65,13 +65,13 @@ export default async function LoginPage() {
               <h2 className="font-black tracking-wider text-base md:text-xl text-[#E2A123] uppercase leading-tight transition-colors duration-300 group-hover/logo:text-amber-300">
                 Batanes State College
               </h2>
-              <h1 className="text-xl md:text-2xl font-black text-white tracking-tight relative inline-block">
+              <p className="italic text-xs text-amber-200/70 font-medium transition-all duration-500 group-hover/logo:translate-x-1 group-hover/logo:text-amber-100">
+                "Builds minds, Serves communities, Creates opportunities"
+              </p>
+              <h1 className="text-xl md:text-2xl font-black text-white tracking-tight relative inline-block pt-1">
                 AcadNexus Portal
                 <span className="absolute bottom-0 left-0 w-0 h-[2px] bg-gradient-to-r from-[#E2A123] to-transparent transition-all duration-500 group-hover/logo:w-full" />
               </h1>
-              <p className="italic text-xs text-amber-200/70 font-medium hidden md:block transition-all duration-500 group-hover/logo:translate-x-1 group-hover/logo:text-amber-100">
-                "Builds minds, Serves communities, Creates opportunities"
-              </p>
             </div>
           </div>
 
