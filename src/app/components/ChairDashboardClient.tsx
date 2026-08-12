@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { 
   Activity, Users, ClipboardCheck, CheckCircle, 
   XCircle, Send, AlertCircle, RefreshCw, FileText, Check, X,
-  Columns, ExternalLink, Download, UserPlus, Loader2, Eye, EyeOff
+  Columns, ExternalLink, Download, UserPlus, Loader2, Eye, EyeOff,
+  Tag, Layers, BookOpen
 } from "lucide-react";
 import { reviewExamByChair } from "@/app/actions/chair";
 import { registerInstructorByAdminAction } from "@/app/actions/auth";
@@ -977,6 +978,64 @@ export function ChairDashboardClient({
                     />
                   </div>
 
+                  {/* Chapter & Topic Breakdown Card for Chair Review */}
+                  {(() => {
+                    const qb = activeSplitApproval.exam.questionBank || [];
+                    if (qb.length === 0) return null;
+
+                    const map: Record<string, { itemNumbers: number[]; totalPoints: number }> = {};
+                    const totalExamPoints = qb.reduce((sum: number, q: any) => sum + (q.points || 1), 0);
+
+                    qb.forEach((q: any, idx: number) => {
+                      const topicName = (q.topic && q.topic.trim() !== "") ? q.topic.trim() : "Unassigned Topic";
+                      if (!map[topicName]) {
+                        map[topicName] = { itemNumbers: [], totalPoints: 0 };
+                      }
+                      map[topicName].itemNumbers.push(idx + 1);
+                      map[topicName].totalPoints += (q.points || 1);
+                    });
+
+                    const chapters = Object.entries(map).map(([topic, data]) => {
+                      const count = data.itemNumbers.length;
+                      const start = data.itemNumbers[0];
+                      const end = data.itemNumbers[data.itemNumbers.length - 1];
+                      const rangeStr = count === 1 ? `Item ${start}` : `Items ${start}–${end}`;
+                      const weightPercentage = totalExamPoints > 0 ? Math.round((data.totalPoints / totalExamPoints) * 100) : 0;
+                      return { topic, count, rangeStr, totalPoints: data.totalPoints, weightPercentage };
+                    });
+
+                    return (
+                      <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 space-y-3">
+                        <div className="flex items-center justify-between border-b border-slate-200/60 pb-2.5">
+                          <div className="flex items-center gap-2">
+                            <Layers className="w-4 h-4 text-indigo-600" />
+                            <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">
+                              Chapter & Topic Coverage (TOS Matrix)
+                            </h4>
+                          </div>
+                          <span className="text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-100 px-2 py-0.5 rounded-full">
+                            {chapters.length} Chapter{chapters.length !== 1 && "s"}
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {chapters.map((c, cIdx) => (
+                            <div key={cIdx} className="bg-white border border-slate-200/70 p-2.5 rounded-xl space-y-1">
+                              <div className="flex items-center justify-between gap-1 text-[10px]">
+                                <span className="font-extrabold text-indigo-900 line-clamp-1">{c.topic}</span>
+                                <span className="font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">{c.weightPercentage}%</span>
+                              </div>
+                              <div className="flex items-center justify-between text-[10px] text-slate-500 font-medium">
+                                <span className="font-bold text-slate-700">{c.rangeStr}</span>
+                                <span>{c.count} items ({c.totalPoints} pts)</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
                   {/* Granular Questions List */}
                   <div className="space-y-3">
                     <h4 className="text-xs font-black text-slate-700 uppercase tracking-wider">
@@ -1005,12 +1064,16 @@ export function ChairDashboardClient({
                             }`}
                           >
                             <div className="flex items-center justify-between gap-2">
-                              <div className="flex items-center gap-2">
+                              <div className="flex flex-wrap items-center gap-2">
                                 <span className="font-extrabold text-slate-800 bg-slate-200 px-2 py-0.5 rounded text-[10px]">
                                   Item #{idx + 1}
                                 </span>
                                 <span className="bg-amber-100 text-amber-800 px-2 py-0.5 rounded font-semibold text-[9px] uppercase tracking-wider border border-amber-200">
                                   {q.question_type?.replace("_", " ")}
+                                </span>
+                                <span className="text-[9px] font-extrabold text-indigo-700 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-full flex items-center gap-1">
+                                  <Tag className="w-2.5 h-2.5 text-indigo-500" />
+                                  {q.topic?.trim() || "Unassigned Topic"}
                                 </span>
                                 <span className="text-[10px] font-bold text-slate-500">
                                   {q.points} {q.points === 1 ? "pt" : "pts"}

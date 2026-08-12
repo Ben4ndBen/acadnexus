@@ -6,7 +6,7 @@ import {
   BookOpen, Award, FileText, ClipboardList, PenTool, CheckCircle, 
   User, Shield, Settings, Activity, Send, RotateCcw, AlertCircle, RefreshCw, Mail,
   Plus, Trash2, Calendar, Lock, Camera, Check, ShieldAlert, Loader2, ShieldCheck, Clock,
-  X, AlertTriangle, Archive, Search, Edit, GraduationCap, Users, Download
+  X, AlertTriangle, Archive, Search, Edit, GraduationCap, Users, Download, Layers
 } from "lucide-react";
 import { 
   updateFacultyProfile, updateExamStatus, createExamDraft, deleteExam, 
@@ -561,14 +561,6 @@ export function FacultyDashboardClient({
   };
 
   const handleStatusTransition = async (examId: number, nextStatus: "Draft" | "Pending_Chair" | "Pending_DI" | "Approved" | "Returned") => {
-    if (nextStatus === "Pending_Chair") {
-      const targetExam = faculty.examinations.find((e) => e.exam_id === examId);
-      if (!targetExam?.tos_file_path || targetExam.tos_file_path.trim() === "") {
-        alert("You cannot submit this examination for review without uploading a Table of Specifications (TOS) first. Please open the Exam Builder to upload the TOS file.");
-        return;
-      }
-    }
-
     setTransitioningExamId(examId);
     const res = await updateExamStatus(examId, nextStatus, faculty.faculty_id);
     setTransitioningExamId(null);
@@ -1101,15 +1093,9 @@ export function FacultyDashboardClient({
                         <div className="flex flex-wrap items-center gap-3">
                           <h3 className="text-base font-bold text-slate-900">{exam.title}</h3>
                           {renderStatusBadge(exam.current_status)}
-                          {exam.tos_file_path ? (
-                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200/80 px-2 py-0.5 rounded-full shadow-sm" title="TOS Document Attached">
-                              <FileText className="w-3 h-3 text-emerald-600" /> TOS Uploaded
-                            </span>
-                          ) : (exam.current_status === "Draft" || exam.current_status === "Returned") ? (
-                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-800 bg-amber-50 border border-amber-200/80 px-2 py-0.5 rounded-full shadow-sm" title="TOS Document Missing - Required before submitting for review">
-                              <AlertCircle className="w-3 h-3 text-amber-600" /> TOS Missing
-                            </span>
-                          ) : null}
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200/80 px-2 py-0.5 rounded-full shadow-sm" title="TOS Matrix Enabled">
+                            <Layers className="w-3 h-3 text-emerald-600" /> TOS Matrix Active
+                          </span>
                         </div>
                         <p className="text-xs text-emerald-700 font-semibold mt-1">
                           {exam.course.course_code} - {exam.course.course_title}
