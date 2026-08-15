@@ -862,7 +862,7 @@ export async function saveQuestionBankQuestion(
     question_id?: number;
     course_id: number;
     question_text: string;
-    question_type: "Multiple_Choice" | "True_False" | "Identification" | "Matching_Type" | "Essay";
+    question_type: "Multiple_Choice" | "True_False" | "Identification" | "Matching_Type" | "Essay" | "Fill_In_The_Blanks";
     correct_answer: string;
     points: number;
     topic?: string;

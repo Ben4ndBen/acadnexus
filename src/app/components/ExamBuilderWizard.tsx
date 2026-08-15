@@ -31,7 +31,7 @@ interface Exam {
   questionBank: Array<{
     question_id: number;
     question_text: string;
-    question_type: "Multiple_Choice" | "True_False" | "Identification" | "Matching_Type" | "Essay";
+    question_type: "Multiple_Choice" | "True_False" | "Identification" | "Matching_Type" | "Essay" | "Fill_In_The_Blanks";
     correct_answer: string;
     points: number;
   }>;
@@ -46,11 +46,13 @@ interface ExamBuilderWizardProps {
 interface QuestionState {
   question_id?: number;
   text: string;
-  question_type: "Multiple_Choice" | "True_False" | "Identification" | "Matching_Type" | "Essay";
+  question_type: "Multiple_Choice" | "True_False" | "Identification" | "Matching_Type" | "Essay" | "Fill_In_The_Blanks";
   options: string[]; // Multiple Choice options
   premises: string[]; // Matching Column A
   matches: Array<{ premise: string; choice: string }>; // Matching correct mapping
-  correctAnswer: string; // For MCQ / TF / Identification
+  blanks: Array<{ id: number; answer: string; points: number }>; // Fill in the Blanks list
+  min_words?: number; // Minimum word count limitation for Essay
+  correctAnswer: string; // For MCQ / TF / Identification / Essay
   points: number;
   image_url?: string;
   topic?: string;
@@ -64,6 +66,8 @@ function deserializeQuestions(dbQuestions: any[]): QuestionState[] {
     let options: string[] = [];
     let premises: string[] = [];
     let matches: Array<{ premise: string; choice: string }> = [];
+    let blanks: Array<{ id: number; answer: string; points: number }> = [];
+    let min_words: number | undefined = undefined;
     let correctAnswer = q.correct_answer;
     let image_url = "";
 
@@ -74,6 +78,8 @@ function deserializeQuestions(dbQuestions: any[]): QuestionState[] {
         text = parsed.text || q.question_text;
         options = parsed.options || [];
         premises = parsed.premises || [];
+        blanks = parsed.blanks || [];
+        min_words = parsed.min_words;
         image_url = parsed.image_url || "";
       } catch {
         text = q.question_text;
@@ -107,6 +113,13 @@ function deserializeQuestions(dbQuestions: any[]): QuestionState[] {
       } catch {
         matches = [];
       }
+    } else if (q.question_type === "Fill_In_The_Blanks") {
+      try {
+        const parsedAnswer = JSON.parse(q.correct_answer);
+        if (parsedAnswer.blanks) {
+          blanks = parsedAnswer.blanks;
+        }
+      } catch {}
     }
 
     return {
@@ -116,6 +129,8 @@ function deserializeQuestions(dbQuestions: any[]): QuestionState[] {
       options,
       premises,
       matches,
+      blanks,
+      min_words,
       correctAnswer,
       points: q.points,
       image_url,
@@ -139,6 +154,8 @@ function serializeQuestions(questions: QuestionState[]) {
       serializedData.image_url = q.image_url;
     }
 
+    let calculatedPoints = Number(q.points) || 1;
+
     if (q.question_type === "Multiple_Choice") {
       serializedData.options = q.options;
       question_text = JSON.stringify(serializedData);
@@ -153,8 +170,28 @@ function serializeQuestions(questions: QuestionState[]) {
       correct_answer = JSON.stringify({
         matches: q.matches.filter(m => m.premise || m.choice)
       });
+    } else if (q.question_type === "Fill_In_The_Blanks") {
+      serializedData.blanks = q.blanks;
+      question_text = JSON.stringify(serializedData);
+      correct_answer = JSON.stringify({
+        blanks: q.blanks
+      });
+      if (q.blanks && q.blanks.length > 0) {
+        const sumPoints = q.blanks.reduce((sum, b) => sum + (Number(b.points) || 1), 0);
+        if (sumPoints > 0) calculatedPoints = sumPoints;
+      }
+    } else if (q.question_type === "Essay") {
+      if (q.min_words && q.min_words > 0) {
+        serializedData.min_words = q.min_words;
+      }
+      if (q.image_url || (q.min_words && q.min_words > 0)) {
+        question_text = JSON.stringify(serializedData);
+      } else {
+        question_text = q.text;
+      }
+      correct_answer = q.correctAnswer || "";
     } else {
-      // For identification, T/F, essay, serialize to JSON if there's an image
+      // For identification, T/F serialize to JSON if there's an image
       if (q.image_url) {
         question_text = JSON.stringify(serializedData);
       } else {
@@ -167,7 +204,7 @@ function serializeQuestions(questions: QuestionState[]) {
       question_text,
       question_type: q.question_type,
       correct_answer,
-      points: Number(q.points) || 1,
+      points: calculatedPoints,
       topic: q.topic || null,
       year_level: q.year_level ? Number(q.year_level) : null,
     };
@@ -347,13 +384,15 @@ export function ExamBuilderWizard({ exam, courses, facultyId }: ExamBuilderWizar
   };
 
   // Handles adding a new question
-  const handleAddQuestion = (type: "Multiple_Choice" | "True_False" | "Identification" | "Matching_Type") => {
+  const handleAddQuestion = (type: "Multiple_Choice" | "True_False" | "Identification" | "Matching_Type" | "Essay" | "Fill_In_The_Blanks") => {
     let newQ: QuestionState = {
       text: "",
       question_type: type,
       options: [],
       premises: [],
       matches: [],
+      blanks: [],
+      min_words: type === "Essay" ? 50 : undefined,
       correctAnswer: "",
       points: 1,
     };
@@ -370,6 +409,17 @@ export function ExamBuilderWizard({ exam, courses, facultyId }: ExamBuilderWizar
         { premise: "Premise 1", choice: "Match 1" },
         { premise: "Premise 2", choice: "Match 2" },
       ];
+    } else if (type === "Essay") {
+      newQ.text = "Discuss in detail your analysis of the topic below.";
+      newQ.min_words = 50;
+      newQ.points = 10;
+    } else if (type === "Fill_In_The_Blanks") {
+      newQ.text = "The capital of Batanes is [blank] and it is located in the [blank] region of the Philippines.";
+      newQ.blanks = [
+        { id: 1, answer: "Basco", points: 2 },
+        { id: 2, answer: "northern", points: 2 },
+      ];
+      newQ.points = 4;
     }
 
     const updated = [...questions, newQ];
@@ -437,6 +487,62 @@ export function ExamBuilderWizard({ exam, courses, facultyId }: ExamBuilderWizar
     if (activeQuestionIdx === -1) return;
     const updated = [...questions];
     updated[activeQuestionIdx].year_level = yearLevel;
+    setQuestions(updated);
+  };
+
+  // Updates essay min words limitation
+  const updateEssayMinWords = (words: number) => {
+    if (activeQuestionIdx === -1) return;
+    const updated = [...questions];
+    updated[activeQuestionIdx].min_words = Math.max(0, words);
+    setQuestions(updated);
+  };
+
+  // Updates Fill in the Blanks row
+  const updateBlankItem = (blankIdx: number, field: "answer" | "points", val: any) => {
+    if (activeQuestionIdx === -1) return;
+    const updated = [...questions];
+    const q = updated[activeQuestionIdx];
+    if (!q.blanks) q.blanks = [];
+    if (q.blanks[blankIdx]) {
+      if (field === "points") {
+        q.blanks[blankIdx].points = Math.max(1, Number(val) || 1);
+      } else {
+        q.blanks[blankIdx].answer = String(val);
+      }
+      // Re-calculate total question points
+      const totalBlanksPoints = q.blanks.reduce((sum, b) => sum + (Number(b.points) || 1), 0);
+      if (totalBlanksPoints > 0) q.points = totalBlanksPoints;
+    }
+    setQuestions(updated);
+  };
+
+  // Delete a blank item
+  const deleteBlankItem = (blankIdx: number) => {
+    if (activeQuestionIdx === -1) return;
+    const updated = [...questions];
+    const q = updated[activeQuestionIdx];
+    q.blanks = (q.blanks || []).filter((_, idx) => idx !== blankIdx);
+    // Re-index blank IDs
+    q.blanks = q.blanks.map((b, idx) => ({ ...b, id: idx + 1 }));
+    const totalBlanksPoints = q.blanks.reduce((sum, b) => sum + (Number(b.points) || 1), 0);
+    if (totalBlanksPoints > 0) q.points = totalBlanksPoints;
+    setQuestions(updated);
+  };
+
+  // Add a blank item & append [blank] tag to text prompt
+  const addBlankItem = () => {
+    if (activeQuestionIdx === -1) return;
+    const updated = [...questions];
+    const q = updated[activeQuestionIdx];
+    if (!q.blanks) q.blanks = [];
+    const newId = q.blanks.length + 1;
+    q.blanks.push({ id: newId, answer: "", points: 1 });
+    if (!q.text.includes("[blank]")) {
+      q.text = q.text ? `${q.text} [blank]` : "[blank]";
+    }
+    const totalBlanksPoints = q.blanks.reduce((sum, b) => sum + (Number(b.points) || 1), 0);
+    if (totalBlanksPoints > 0) q.points = totalBlanksPoints;
     setQuestions(updated);
   };
 
@@ -1065,6 +1171,8 @@ export function ExamBuilderWizard({ exam, courses, facultyId }: ExamBuilderWizar
                     if (q.question_type === "True_False") typeColor = "bg-purple-50 text-purple-700 border-purple-100";
                     if (q.question_type === "Identification") typeColor = "bg-amber-50 text-amber-700 border-amber-100";
                     if (q.question_type === "Matching_Type") typeColor = "bg-indigo-50 text-indigo-700 border-indigo-100";
+                    if (q.question_type === "Essay") typeColor = "bg-emerald-50 text-emerald-700 border-emerald-100";
+                    if (q.question_type === "Fill_In_The_Blanks") typeColor = "bg-teal-50 text-teal-700 border-teal-100";
 
                     return (
                       <div 
@@ -1166,6 +1274,20 @@ export function ExamBuilderWizard({ exam, courses, facultyId }: ExamBuilderWizar
                   >
                     <Plus className="w-3.5 h-3.5" />
                     + Matching
+                  </button>
+                  <button
+                    onClick={() => handleAddQuestion("Essay")}
+                    className="flex items-center gap-1.5 justify-center bg-emerald-50/80 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 text-[10px] font-extrabold p-2 rounded-xl transition-all shadow-sm"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    + Essay
+                  </button>
+                  <button
+                    onClick={() => handleAddQuestion("Fill_In_The_Blanks")}
+                    className="col-span-2 flex items-center gap-1.5 justify-center bg-teal-50/80 hover:bg-teal-100 border border-teal-200 text-teal-700 text-[10px] font-extrabold p-2 rounded-xl transition-all shadow-sm"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    + Fill in the Blanks
                   </button>
                   <button
                     onClick={() => setIsImportModalOpen(true)}
@@ -1494,6 +1616,128 @@ export function ExamBuilderWizard({ exam, courses, facultyId }: ExamBuilderWizar
                           </button>
                         </div>
                       ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* ESSAY EDITOR */}
+                {questions[activeQuestionIdx].question_type === "Essay" && (
+                  <div className="space-y-4">
+                    <div className="bg-emerald-50/70 border border-emerald-200/80 rounded-2xl p-4 space-y-3">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div>
+                          <label className="text-xs font-black text-emerald-900 block">Minimum Word Count Limitation</label>
+                          <p className="text-[11px] text-emerald-700">Enforce a least word count requirement that students must satisfy in their essay response.</p>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <input
+                            type="number"
+                            min="0"
+                            max="1000"
+                            value={questions[activeQuestionIdx].min_words ?? 50}
+                            onChange={(e) => updateEssayMinWords(Number(e.target.value))}
+                            className="w-24 bg-white border border-emerald-300 rounded-xl text-center text-xs font-extrabold text-emerald-950 p-2 focus:outline-emerald-600 shadow-sm"
+                          />
+                          <span className="text-xs font-bold text-emerald-800">words min</span>
+                        </div>
+                      </div>
+                      <div className="text-[10px] text-slate-500 italic">
+                        * Set to 0 if there is no minimum word count constraint. Essays are manually graded by faculty.
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* FILL IN THE BLANKS EDITOR */}
+                {questions[activeQuestionIdx].question_type === "Fill_In_The_Blanks" && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <label className="text-xs font-extrabold text-slate-600 block">Blanks & Points Configuration</label>
+                        <p className="text-[10px] text-slate-400">Insert <code>[blank]</code> tags into your prompt text above, then set the correct answer and points per blank below.</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={addBlankItem}
+                        className="inline-flex items-center gap-1 text-[10px] font-black uppercase text-teal-700 hover:text-teal-900 bg-teal-50 hover:bg-teal-100 px-3 py-1.5 rounded-xl border border-teal-200 shadow-sm transition-all cursor-pointer"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        + Insert Blank
+                      </button>
+                    </div>
+
+                    <div className="space-y-3">
+                      {(questions[activeQuestionIdx].blanks || []).map((blank, blankIdx) => (
+                        <div key={blankIdx} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 bg-teal-50/40 border border-teal-200/80 p-3 rounded-2xl">
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span className="text-xs font-black bg-teal-600 text-white px-2 py-0.5 rounded-lg">
+                              Blank #{blankIdx + 1}
+                            </span>
+                          </div>
+
+                          <div className="flex-1 min-w-0">
+                            <input
+                              type="text"
+                              placeholder={`Expected answer for Blank #${blankIdx + 1}...`}
+                              value={blank.answer}
+                              onChange={(e) => updateBlankItem(blankIdx, "answer", e.target.value)}
+                              className="w-full bg-white border border-slate-200 text-xs font-bold text-slate-800 px-3 py-2 rounded-xl focus:outline-teal-500 shadow-sm"
+                            />
+                          </div>
+
+                          <div className="flex items-center gap-2 shrink-0">
+                            <label className="text-[10px] font-bold text-slate-500">Points:</label>
+                            <input
+                              type="number"
+                              min="1"
+                              max="50"
+                              value={blank.points || 1}
+                              onChange={(e) => updateBlankItem(blankIdx, "points", e.target.value)}
+                              className="w-16 bg-white border border-slate-200 text-center text-xs font-bold text-slate-800 py-1.5 rounded-xl focus:outline-teal-500 shadow-sm"
+                            />
+                            <span className="text-[10px] text-slate-400 font-semibold">pt{blank.points !== 1 && "s"}</span>
+
+                            <button
+                              type="button"
+                              disabled={(questions[activeQuestionIdx].blanks || []).length <= 1}
+                              onClick={() => deleteBlankItem(blankIdx)}
+                              className="p-1 text-slate-400 hover:text-rose-600 disabled:opacity-30 disabled:pointer-events-none transition-colors"
+                              title="Delete Blank"
+                            >
+                              <Trash className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Inline preview of prompt with blanks */}
+                    <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-2">
+                      <span className="text-[10px] font-black uppercase text-teal-800 tracking-wider">Fill-in-the-Blanks Interactive Prompt Preview:</span>
+                      <div className="text-xs font-bold text-slate-800 leading-relaxed">
+                        {(() => {
+                          const text = questions[activeQuestionIdx].text || "";
+                          const blanks = questions[activeQuestionIdx].blanks || [];
+                          if (!text.includes("[blank]")) {
+                            return (
+                              <span className="text-amber-600 font-normal italic">
+                                ⚠️ Notice: Include <code>[blank]</code> tag in your prompt text above to position fill-in slots inline.
+                              </span>
+                            );
+                          }
+                          const parts = text.split("[blank]");
+                          return parts.map((part, pIdx) => (
+                            <span key={pIdx}>
+                              {part}
+                              {pIdx < parts.length - 1 && (
+                                <span className="inline-flex items-center gap-1 mx-1 px-2.5 py-0.5 bg-teal-100 border border-teal-300 text-teal-900 font-extrabold text-[11px] rounded-lg shadow-2xs">
+                                  {`_____ (Blank ${pIdx + 1}: ${blanks[pIdx]?.answer || "answer"} [${blanks[pIdx]?.points || 1}pt])`}
+                                </span>
+                              )}
+                            </span>
+                          ));
+                        })()}
+                      </div>
                     </div>
                   </div>
                 )}
@@ -1869,6 +2113,36 @@ export function ExamBuilderWizard({ exam, courses, facultyId }: ExamBuilderWizar
                             </div>
                           </div>
                         )}
+
+                        {/* Rendering Essay */}
+                        {q.question_type === "Essay" && (
+                          <div className="pl-4 space-y-2 font-sans">
+                            <div className="w-full h-24 border border-dashed border-slate-300 rounded-xl bg-slate-50/50 p-3 text-xs text-slate-400 italic">
+                              [ Student essay response area ]
+                            </div>
+                            {q.min_words && q.min_words > 0 ? (
+                              <div className="text-[10px] text-emerald-800 font-extrabold bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg inline-flex items-center gap-1">
+                                📝 Minimum Limitation: {q.min_words} words required
+                              </div>
+                            ) : null}
+                          </div>
+                        )}
+
+                        {/* Rendering Fill in the Blanks */}
+                        {q.question_type === "Fill_In_The_Blanks" && (
+                          <div className="pl-4 space-y-3 font-sans">
+                            <div className="text-xs font-semibold text-slate-900 bg-teal-50/40 border border-teal-100 p-3.5 rounded-xl space-y-2">
+                              <p className="text-[10px] font-black uppercase text-teal-800 tracking-wider">Inline Blanks & Answer Key:</p>
+                              <div className="flex flex-wrap gap-2">
+                                {(q.blanks || []).map((blank, bIdx) => (
+                                  <span key={bIdx} className="text-xs bg-white border border-teal-300 text-teal-950 font-bold px-3 py-1 rounded-lg shadow-2xs">
+                                    Blank #{bIdx + 1}: <strong className="underline text-teal-700">{blank.answer || "(blank)"}</strong> ({blank.points || 1} pt{blank.points !== 1 && "s"})
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     );
                   })
@@ -1991,6 +2265,36 @@ export function ExamBuilderWizard({ exam, courses, facultyId }: ExamBuilderWizar
                                           <span>{String.fromCharCode(65 + mIdx)}. {match.choice}</span>
                                           <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 px-1 py-0.5 rounded border border-emerald-100 shrink-0">Matches {String.fromCharCode(97 + mIdx)}</span>
                                         </p>
+                                      ))}
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Rendering Essay */}
+                              {q.question_type === "Essay" && (
+                                <div className="pl-4 space-y-2 font-sans">
+                                  <div className="w-full h-24 border border-dashed border-slate-300 rounded-xl bg-slate-50/50 p-3 text-xs text-slate-400 italic">
+                                    [ Student essay response area ]
+                                  </div>
+                                  {q.min_words && q.min_words > 0 ? (
+                                    <div className="text-[10px] text-emerald-800 font-extrabold bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg inline-flex items-center gap-1">
+                                      📝 Minimum Limitation: {q.min_words} words required
+                                    </div>
+                                  ) : null}
+                                </div>
+                              )}
+
+                              {/* Rendering Fill in the Blanks */}
+                              {q.question_type === "Fill_In_The_Blanks" && (
+                                <div className="pl-4 space-y-3 font-sans">
+                                  <div className="text-xs font-semibold text-slate-900 bg-teal-50/40 border border-teal-100 p-3.5 rounded-xl space-y-2">
+                                    <p className="text-[10px] font-black uppercase text-teal-800 tracking-wider">Inline Blanks & Answer Key:</p>
+                                    <div className="flex flex-wrap gap-2">
+                                      {(q.blanks || []).map((blank, bIdx) => (
+                                        <span key={bIdx} className="text-xs bg-white border border-teal-300 text-teal-950 font-bold px-3 py-1 rounded-lg shadow-2xs">
+                                          Blank #{bIdx + 1}: <strong className="underline text-teal-700">{blank.answer || "(blank)"}</strong> ({blank.points || 1} pt{blank.points !== 1 && "s"})
+                                        </span>
                                       ))}
                                     </div>
                                   </div>

@@ -13,7 +13,7 @@ import { Latex } from "@/app/components/Latex";
 interface Question {
   question_id: number;
   question_text: string;
-  question_type: "Multiple_Choice" | "True_False" | "Identification" | "Matching_Type" | "Essay";
+  question_type: "Multiple_Choice" | "True_False" | "Identification" | "Matching_Type" | "Essay" | "Fill_In_The_Blanks";
   points: number;
 }
 
@@ -391,14 +391,14 @@ export function TakeExamClient({
   const currentQuestion = initialData.questions[currentQuestionIdx];
 
   const parseQuestionText = (q: Question) => {
-    if (q.question_type === "Multiple_Choice" || q.question_type === "Matching_Type") {
+    if (q.question_type === "Multiple_Choice" || q.question_type === "Matching_Type" || q.question_type === "Fill_In_The_Blanks" || q.question_type === "Essay" || q.question_text.trim().startsWith("{")) {
       try {
         return JSON.parse(q.question_text);
       } catch {
-        return { text: q.question_text, options: [], premises: [] };
+        return { text: q.question_text, options: [], premises: [], blanks: [] };
       }
     }
-    return { text: q.question_text, options: [], premises: [] };
+    return { text: q.question_text, options: [], premises: [], blanks: [] };
   };
 
   const currentParsed = currentQuestion ? parseQuestionText(currentQuestion) : null;
@@ -435,6 +435,35 @@ export function TakeExamClient({
     handleAnswerChange(questionId, updatedResponse);
   };
 
+  // Fill in the Blanks specific helpers
+  const getBlankResponse = (questionId: number, blankId: number | string): string => {
+    const resp = answers[questionId];
+    if (!resp) return "";
+    try {
+      if (resp.trim().startsWith("{")) {
+        const parsed = JSON.parse(resp);
+        return parsed.blanks?.[String(blankId)] || "";
+      }
+      return resp;
+    } catch {
+      return resp;
+    }
+  };
+
+  const handleBlankResponseChange = (questionId: number, blankId: number | string, val: string) => {
+    const resp = answers[questionId];
+    let blanksMap: Record<string, string> = {};
+    if (resp && resp.trim().startsWith("{")) {
+      try {
+        const parsed = JSON.parse(resp);
+        blanksMap = parsed.blanks || {};
+      } catch {}
+    }
+    blanksMap[String(blankId)] = val;
+    const updatedResponse = JSON.stringify({ blanks: blanksMap });
+    handleAnswerChange(questionId, updatedResponse);
+  };
+
   // Format seconds to MM:SS
   const formatTime = (secs: number) => {
     const mins = Math.floor(secs / 60);
@@ -455,6 +484,18 @@ export function TakeExamClient({
         return (parsed.matches?.length || 0) > 0;
       } catch {
         return false;
+      }
+    }
+    if (q.question_type === "Fill_In_The_Blanks") {
+      try {
+        if (ans.trim().startsWith("{")) {
+          const parsed = JSON.parse(ans);
+          const bValues = Object.values(parsed.blanks || {}) as string[];
+          return bValues.some(v => v.trim() !== "");
+        }
+        return ans.trim() !== "";
+      } catch {
+        return ans.trim() !== "";
       }
     }
     return ans.trim() !== "";
@@ -886,18 +927,109 @@ export function TakeExamClient({
                 )}
 
                 {/* 5. Essay */}
-                {currentQuestion.question_type === "Essay" && (
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Your Essay Response:</label>
-                    <textarea
-                      value={answers[currentQuestion.question_id] || ""}
-                      onChange={(e) => handleAnswerChange(currentQuestion.question_id, e.target.value)}
-                      placeholder="Write your answer here..."
-                      rows={6}
-                      className="w-full bg-slate-900 border border-slate-800 focus:bg-slate-900 focus:ring-2 focus:ring-rose-500/20 focus:border-rose-600 text-sm font-semibold text-slate-100 placeholder:text-slate-500 p-4 rounded-xl transition-all resize-y"
-                    />
-                  </div>
-                )}
+                {currentQuestion.question_type === "Essay" && (() => {
+                  const essayText = answers[currentQuestion.question_id] || "";
+                  const wordCount = essayText.trim() ? essayText.trim().split(/\s+/).filter(Boolean).length : 0;
+                  const minWords = currentParsed?.min_words ?? 0;
+                  const meetsMinWords = minWords === 0 || wordCount >= minWords;
+
+                  return (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Your Essay Response:</label>
+                        {minWords > 0 && (
+                          <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border transition-all ${
+                            meetsMinWords 
+                              ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30" 
+                              : "bg-amber-500/10 text-amber-400 border-amber-500/30 animate-pulse"
+                          }`}>
+                            {meetsMinWords ? "✓ Minimum limit met" : `⚠️ Minimum limit: ${wordCount} / ${minWords} words`}
+                          </span>
+                        )}
+                      </div>
+
+                      <textarea
+                        value={essayText}
+                        onChange={(e) => handleAnswerChange(currentQuestion.question_id, e.target.value)}
+                        placeholder="Write your detailed answer response here..."
+                        rows={7}
+                        className="w-full bg-slate-900 border border-slate-800 focus:bg-slate-900 focus:ring-2 focus:ring-rose-500/20 focus:border-rose-600 text-sm font-semibold text-slate-100 placeholder:text-slate-500 p-4 rounded-xl transition-all resize-y outline-none"
+                      />
+
+                      <div className="flex items-center justify-between text-xs text-slate-400 font-medium">
+                        <span>Word Count: <strong className="text-slate-200">{wordCount}</strong> words</span>
+                        {minWords > 0 && !meetsMinWords && (
+                          <span className="text-amber-400 text-[11px] font-bold">
+                            Please write at least {minWords - wordCount} more word{minWords - wordCount !== 1 ? "s" : ""} to satisfy requirements.
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* 6. Fill in the Blanks */}
+                {currentQuestion.question_type === "Fill_In_The_Blanks" && (() => {
+                  const text = currentParsed?.text || currentQuestion.question_text || "";
+                  const blanks = currentParsed?.blanks || [];
+
+                  if (text.includes("[blank]")) {
+                    const parts = text.split("[blank]");
+                    return (
+                      <div className="space-y-4">
+                        <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Fill in the missing blank slots below:</p>
+                        <div className="bg-slate-900/60 border border-slate-800/80 p-5 rounded-2xl text-slate-100 text-sm font-bold leading-loose">
+                          {parts.map((part: string, pIdx: number) => {
+                            const blankId = pIdx + 1;
+                            const val = getBlankResponse(currentQuestion.question_id, blankId);
+                            const blankMeta = blanks[pIdx];
+
+                            return (
+                              <span key={pIdx}>
+                                <Latex text={part} />
+                                {pIdx < parts.length - 1 && (
+                                  <input
+                                    type="text"
+                                    value={val}
+                                    placeholder={`Blank #${blankId} (${blankMeta?.points || 1} pt)`}
+                                    onChange={(e) => handleBlankResponseChange(currentQuestion.question_id, blankId, e.target.value)}
+                                    className="mx-1.5 px-3 py-1 bg-slate-950 border border-rose-500/40 focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20 text-rose-300 font-bold text-xs rounded-xl shadow-inner outline-none min-w-[130px] inline-block"
+                                  />
+                                )}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  // Fallback if [blank] tag wasn't in prompt
+                  return (
+                    <div className="space-y-4">
+                      <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Provide answers for each blank:</p>
+                      <div className="space-y-3">
+                        {(blanks.length > 0 ? blanks : [{ id: 1, points: 1 }]).map((b: any, bIdx: number) => {
+                          const blankId = b.id || bIdx + 1;
+                          const val = getBlankResponse(currentQuestion.question_id, blankId);
+
+                          return (
+                            <div key={bIdx} className="flex items-center gap-3 bg-slate-900/40 border border-slate-800 p-3 rounded-xl">
+                              <span className="text-xs font-black text-slate-400 shrink-0">Blank #{blankId} ({b.points || 1} pt):</span>
+                              <input
+                                type="text"
+                                value={val}
+                                placeholder="Type answer..."
+                                onChange={(e) => handleBlankResponseChange(currentQuestion.question_id, blankId, e.target.value)}
+                                className="flex-1 bg-slate-950 border border-slate-800 focus:border-rose-500 text-xs font-semibold text-slate-100 px-3 py-2 rounded-lg"
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })()}
 
               </div>
             </div>
