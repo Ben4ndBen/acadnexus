@@ -219,6 +219,7 @@ enum QuestionType {
   Identification
   Matching_Type
   Essay
+  Fill_In_The_Blanks
 }
 
 // --- 4. Workflows and Performance ---

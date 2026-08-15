@@ -331,6 +331,53 @@ export async function submitStudentExam(
         if (q.question_type === "Essay") {
           isCorrect = null;
           pointsAwarded = null;
+        } else if (q.question_type === "Fill_In_The_Blanks") {
+          try {
+            const parsedCorrect = JSON.parse(correct);
+            const expectedBlanks: Array<{ id: number | string; answer: string; points: number }> = parsedCorrect.blanks || [];
+            
+            let studentBlanks: Record<string, string> = {};
+            if (response.trim().startsWith("{")) {
+              const parsedResp = JSON.parse(response);
+              studentBlanks = parsedResp.blanks || {};
+            } else if (response.trim()) {
+              // Single string response
+              studentBlanks = { "1": response.trim() };
+            }
+
+            if (expectedBlanks.length > 0) {
+              let earned = 0;
+              let totalPossible = 0;
+              let allCorrect = true;
+
+              for (const blank of expectedBlanks) {
+                const bId = String(blank.id);
+                const bPoints = Number(blank.points) || 1;
+                totalPossible += bPoints;
+
+                const studentAns = (studentBlanks[bId] || "").trim().toLowerCase();
+                const expectedAns = (blank.answer || "").trim().toLowerCase();
+
+                if (studentAns !== "" && studentAns === expectedAns) {
+                  earned += bPoints;
+                } else {
+                  allCorrect = false;
+                }
+              }
+
+              pointsAwarded = earned;
+              isCorrect = allCorrect && earned > 0;
+              totalScore += earned;
+            } else {
+              isCorrect = response.trim().toLowerCase() === correct.trim().toLowerCase();
+              pointsAwarded = isCorrect ? q.points : 0;
+              if (isCorrect) totalScore += q.points;
+            }
+          } catch {
+            isCorrect = response.trim().toLowerCase() === correct.trim().toLowerCase();
+            pointsAwarded = isCorrect ? q.points : 0;
+            if (isCorrect) totalScore += q.points;
+          }
         } else if (q.question_type === "Matching_Type") {
           try {
             const parsedCorrect = JSON.parse(correct);
@@ -369,11 +416,13 @@ export async function submitStudentExam(
           isCorrect = response.trim().toLowerCase() === correct.trim().toLowerCase();
         }
 
-        if (isCorrect === true) {
-          totalScore += q.points;
-          pointsAwarded = q.points;
-        } else if (isCorrect === false) {
-          pointsAwarded = 0;
+        if (q.question_type !== "Fill_In_The_Blanks" && q.question_type !== "Essay") {
+          if (isCorrect === true) {
+            totalScore += q.points;
+            pointsAwarded = q.points;
+          } else if (isCorrect === false) {
+            pointsAwarded = 0;
+          }
         }
 
         if (ans) {

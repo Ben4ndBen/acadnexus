@@ -2138,6 +2138,8 @@ export function FacultyDashboardClient({
                 if (q.question_type === "True_False") typeColor = "bg-purple-50 text-purple-700 border-purple-100";
                 if (q.question_type === "Identification") typeColor = "bg-amber-50 text-amber-700 border-amber-100";
                 if (q.question_type === "Matching_Type") typeColor = "bg-indigo-50 text-indigo-700 border-indigo-100";
+                if (q.question_type === "Essay") typeColor = "bg-emerald-50 text-emerald-700 border-emerald-100";
+                if (q.question_type === "Fill_In_The_Blanks") typeColor = "bg-teal-50 text-teal-700 border-teal-100";
 
                 let promptPreview = q.question_text;
                 if (q.question_text.trim().startsWith("{")) {
@@ -2391,6 +2393,7 @@ export function FacultyDashboardClient({
                     <option value="Identification">Identification</option>
                     <option value="Matching_Type">Matching Type</option>
                     <option value="Essay">Essay</option>
+                    <option value="Fill_In_The_Blanks">Fill in the Blanks</option>
                   </select>
                 </div>
 
