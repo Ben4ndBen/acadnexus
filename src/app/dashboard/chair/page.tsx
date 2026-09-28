@@ -6,6 +6,8 @@ import { NotificationBell } from "@/app/components/NotificationBell";
 import { ClipboardCheck } from "lucide-react";
 import { ChairDashboardClient } from "@/app/components/ChairDashboardClient";
 
+import { ensureChairsAndDepartmentsExist } from "@/lib/chairServer";
+
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
@@ -25,6 +27,8 @@ export default async function ChairDashboard() {
   if (role !== "Chair") {
     redirect("/");
   }
+
+  await ensureChairsAndDepartmentsExist();
 
   // Fetch chair details from the database
   const dbUser = await db.user.findUnique({

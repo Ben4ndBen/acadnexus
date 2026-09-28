@@ -39,22 +39,22 @@ async function main() {
 
   console.log("Clean up completed.");
 
-  // 2. Seed Departments
+  // 2. Seed 5 Departments
   console.log("Seeding departments...");
   const itDept = await prisma.department.create({
     data: { department_name: "IT Department" },
   });
-  const ictDept = await prisma.department.create({
-    data: { department_name: "ICT Department" },
-  });
   const agriDept = await prisma.department.create({
     data: { department_name: "Agriculture Department" },
   });
-  const teacherEduDept = await prisma.department.create({
-    data: { department_name: "Teacher Education Department" },
-  });
   const hospitalityDept = await prisma.department.create({
     data: { department_name: "Hospitality and Tourism Management Department" },
+  });
+  const industrialDept = await prisma.department.create({
+    data: { department_name: "Industrial Technology Department" },
+  });
+  const teacherEduDept = await prisma.department.create({
+    data: { department_name: "Teacher Education Department" },
   });
 
   // 3. Seed Programs
@@ -66,32 +66,11 @@ async function main() {
       department_id: itDept.department_id,
     },
   });
-  const bsindtechProg = await prisma.academicProgram.create({
-    data: {
-      program_code: "BSINDTECH",
-      program_name: "Bachelor of Science in Industrial Technology",
-      department_id: ictDept.department_id,
-    },
-  });
   const bsaProg = await prisma.academicProgram.create({
     data: {
       program_code: "BSA",
       program_name: "Bachelor of Science in Agriculture",
       department_id: agriDept.department_id,
-    },
-  });
-  const beedProg = await prisma.academicProgram.create({
-    data: {
-      program_code: "BEED",
-      program_name: "Bachelor of Elementary Education",
-      department_id: teacherEduDept.department_id,
-    },
-  });
-  const bsedProg = await prisma.academicProgram.create({
-    data: {
-      program_code: "BSED",
-      program_name: "Bachelor of Secondary Education",
-      department_id: teacherEduDept.department_id,
     },
   });
   const bshmProg = await prisma.academicProgram.create({
@@ -108,8 +87,29 @@ async function main() {
       department_id: hospitalityDept.department_id,
     },
   });
+  const bsindtechProg = await prisma.academicProgram.create({
+    data: {
+      program_code: "BSINDTECH",
+      program_name: "Bachelor of Science in Industrial Technology",
+      department_id: industrialDept.department_id,
+    },
+  });
+  const beedProg = await prisma.academicProgram.create({
+    data: {
+      program_code: "BEED",
+      program_name: "Bachelor of Elementary Education",
+      department_id: teacherEduDept.department_id,
+    },
+  });
+  const bsedProg = await prisma.academicProgram.create({
+    data: {
+      program_code: "BSED",
+      program_name: "Bachelor of Secondary Education",
+      department_id: teacherEduDept.department_id,
+    },
+  });
 
-  // 4. Seed User Accounts
+  // 4. Seed User Accounts & Roles
   console.log("Seeding user accounts...");
 
   // --- Student ---
@@ -132,40 +132,6 @@ async function main() {
     },
   });
 
-  // --- Faculty ---
-  const facultyUser = await prisma.user.create({
-    data: {
-      institutional_id: "FACULTY-001",
-      password_hash: passwordHash,
-      role: "Faculty",
-    },
-  });
-
-  const faculty = await prisma.faculty.create({
-    data: {
-      faculty_id: facultyUser.user_id,
-      first_name: "Mark",
-      last_name: "Abad",
-      department_id: itDept.department_id,
-    },
-  });
-
-  // --- Chair ---
-  const chairUser = await prisma.user.create({
-    data: {
-      institutional_id: "CHAIR-001",
-      password_hash: passwordHash,
-      role: "Chair",
-    },
-  });
-
-  const chair = await prisma.chair.create({
-    data: {
-      chair_id: chairUser.user_id,
-      department_id: itDept.department_id,
-    },
-  });
-
   // --- Director ---
   const directorUser = await prisma.user.create({
     data: {
@@ -181,38 +147,332 @@ async function main() {
     },
   });
 
+  // --- Chairs & Faculty for all 5 Departments ---
+
+  // 1. IT Department Chair & Faculty
+  const itChairUser = await prisma.user.create({
+    data: {
+      institutional_id: "CHAIR-001",
+      username: "chair_it",
+      password_hash: passwordHash,
+      role: "Chair",
+    },
+  });
+  const itChair = await prisma.chair.create({
+    data: { chair_id: itChairUser.user_id, department_id: itDept.department_id },
+  });
+  const itFacultyUser = await prisma.user.create({
+    data: {
+      institutional_id: "FACULTY-001",
+      username: "faculty_it",
+      password_hash: passwordHash,
+      role: "Faculty",
+    },
+  });
+  const itFaculty = await prisma.faculty.create({
+    data: {
+      faculty_id: itFacultyUser.user_id,
+      first_name: "Mark",
+      last_name: "Abad",
+      department_id: itDept.department_id,
+    },
+  });
+
+  // 2. Agriculture Department Chair & Faculty
+  const agriChairUser = await prisma.user.create({
+    data: {
+      institutional_id: "CHAIR-AGRI",
+      username: "chair_agri",
+      password_hash: passwordHash,
+      role: "Chair",
+    },
+  });
+  const agriChair = await prisma.chair.create({
+    data: { chair_id: agriChairUser.user_id, department_id: agriDept.department_id },
+  });
+  const agriFacultyUser = await prisma.user.create({
+    data: {
+      institutional_id: "FACULTY-AGRI",
+      username: "faculty_agri",
+      password_hash: passwordHash,
+      role: "Faculty",
+    },
+  });
+  const agriFaculty = await prisma.faculty.create({
+    data: {
+      faculty_id: agriFacultyUser.user_id,
+      first_name: "Maria",
+      last_name: "Santos",
+      department_id: agriDept.department_id,
+    },
+  });
+
+  // 3. Hospitality & Tourism Chair & Faculty
+  const htmChairUser = await prisma.user.create({
+    data: {
+      institutional_id: "CHAIR-HTM",
+      username: "chair_htm",
+      password_hash: passwordHash,
+      role: "Chair",
+    },
+  });
+  const htmChair = await prisma.chair.create({
+    data: { chair_id: htmChairUser.user_id, department_id: hospitalityDept.department_id },
+  });
+  const htmFacultyUser = await prisma.user.create({
+    data: {
+      institutional_id: "FACULTY-HTM",
+      username: "faculty_htm",
+      password_hash: passwordHash,
+      role: "Faculty",
+    },
+  });
+  const htmFaculty = await prisma.faculty.create({
+    data: {
+      faculty_id: htmFacultyUser.user_id,
+      first_name: "Carlos",
+      last_name: "Reyes",
+      department_id: hospitalityDept.department_id,
+    },
+  });
+
+  // 4. Industrial Technology Chair & Faculty
+  const indtechChairUser = await prisma.user.create({
+    data: {
+      institutional_id: "CHAIR-INDTECH",
+      username: "chair_indtech",
+      password_hash: passwordHash,
+      role: "Chair",
+    },
+  });
+  const indtechChair = await prisma.chair.create({
+    data: { chair_id: indtechChairUser.user_id, department_id: industrialDept.department_id },
+  });
+  const indtechFacultyUser = await prisma.user.create({
+    data: {
+      institutional_id: "FACULTY-INDTECH",
+      username: "faculty_indtech",
+      password_hash: passwordHash,
+      role: "Faculty",
+    },
+  });
+  const indtechFaculty = await prisma.faculty.create({
+    data: {
+      faculty_id: indtechFacultyUser.user_id,
+      first_name: "Elena",
+      last_name: "Cruz",
+      department_id: industrialDept.department_id,
+    },
+  });
+
+  // 5. Teacher Education (TED) Chair & Faculty
+  const tedChairUser = await prisma.user.create({
+    data: {
+      institutional_id: "CHAIR-TED",
+      username: "chair_ted",
+      password_hash: passwordHash,
+      role: "Chair",
+    },
+  });
+  const tedChair = await prisma.chair.create({
+    data: { chair_id: tedChairUser.user_id, department_id: teacherEduDept.department_id },
+  });
+  const tedFacultyUser = await prisma.user.create({
+    data: {
+      institutional_id: "FACULTY-TED",
+      username: "faculty_ted",
+      password_hash: passwordHash,
+      role: "Faculty",
+    },
+  });
+  const tedFaculty = await prisma.faculty.create({
+    data: {
+      faculty_id: tedFacultyUser.user_id,
+      first_name: "Joseph",
+      last_name: "Garcia",
+      department_id: teacherEduDept.department_id,
+    },
+  });
+
   // 5. Seed Courses
   console.log("Seeding courses...");
   const dbCourse = await prisma.course.create({
-    data: {
-      course_code: "CS411",
-      course_title: "Advanced Database Systems",
-    },
+    data: { course_code: "CS411", course_title: "Advanced Database Systems" },
   });
-
   const seCourse = await prisma.course.create({
+    data: { course_code: "CS412", course_title: "Software Engineering II" },
+  });
+  const agriCourse = await prisma.course.create({
+    data: { course_code: "AGRI101", course_title: "Principles of Agricultural Extension" },
+  });
+  const htmCourse = await prisma.course.create({
+    data: { course_code: "THC1", course_title: "Macro Perspective of Tourism and Hospitality" },
+  });
+  const indCourse = await prisma.course.create({
+    data: { course_code: "IND101", course_title: "Basic Electronics and Circuitry" },
+  });
+  const tedCourse = await prisma.course.create({
+    data: { course_code: "EDUC101", course_title: "Child and Adolescent Learners and Learning Principles" },
+  });
+
+  // 6. Seed Examinations & Pending Approval Workflows for Each Department
+
+  // IT Dept Exam (Pending Chair Review)
+  const itExam = await prisma.examination.create({
     data: {
-      course_code: "CS412",
-      course_title: "Software Engineering II",
+      title: "Midterm Exam - Software Development Lifecycle",
+      course_id: seCourse.course_id,
+      faculty_id: itFaculty.faculty_id,
+      tos_file_path: "/uploads/tos/se_midterm.pdf",
+      time_limit_minutes: 60,
+      randomize_items: true,
+      current_status: "Pending_Chair",
+      questionBank: {
+        create: [
+          {
+            question_text: "Describe the differences between Agile and Waterfall methodologies.",
+            question_type: "Identification",
+            correct_answer: "Agile is iterative while Waterfall is linear.",
+            points: 20,
+          },
+        ],
+      },
+      approvalWorkflow: {
+        create: {
+          reviewed_by_chair_id: itChair.chair_id,
+          chair_review_status: "Pending",
+          di_review_status: "Hold",
+        },
+      },
     },
   });
 
-  const aiCourse = await prisma.course.create({
+  // Agriculture Exam (Pending Chair Review)
+  const agriExam = await prisma.examination.create({
     data: {
-      course_code: "CS413",
-      course_title: "Artificial Intelligence",
+      title: "Midterm Exam - Agricultural Extension Principles",
+      course_id: agriCourse.course_id,
+      faculty_id: agriFaculty.faculty_id,
+      tos_file_path: "/uploads/tos/agri_midterm.pdf",
+      time_limit_minutes: 60,
+      randomize_items: true,
+      current_status: "Pending_Chair",
+      questionBank: {
+        create: [
+          {
+            question_text: "What is the primary role of agricultural extension officers?",
+            question_type: "Multiple_Choice",
+            correct_answer: "Technology transfer and farmer education",
+            points: 10,
+          },
+        ],
+      },
+      approvalWorkflow: {
+        create: {
+          reviewed_by_chair_id: agriChair.chair_id,
+          chair_review_status: "Pending",
+          di_review_status: "Hold",
+        },
+      },
     },
   });
 
-  // 6. Seed Examinations, QuestionBank, and ExamTargets
-  console.log("Seeding examinations...");
+  // Hospitality Exam (Pending Chair Review)
+  const htmExam = await prisma.examination.create({
+    data: {
+      title: "Midterm Exam - Macro Perspective of Tourism",
+      course_id: htmCourse.course_id,
+      faculty_id: htmFaculty.faculty_id,
+      tos_file_path: "/uploads/tos/htm_midterm.pdf",
+      time_limit_minutes: 60,
+      randomize_items: true,
+      current_status: "Pending_Chair",
+      questionBank: {
+        create: [
+          {
+            question_text: "Define sustainable tourism management in heritage destinations.",
+            question_type: "Essay",
+            correct_answer: "Preserving natural and cultural heritage while ensuring economic viability.",
+            points: 15,
+          },
+        ],
+      },
+      approvalWorkflow: {
+        create: {
+          reviewed_by_chair_id: htmChair.chair_id,
+          chair_review_status: "Pending",
+          di_review_status: "Hold",
+        },
+      },
+    },
+  });
 
-  // Exam 1: Active (Midterm Database Systems)
+  // Industrial Tech Exam (Pending Chair Review)
+  const indtechExam = await prisma.examination.create({
+    data: {
+      title: "Midterm Exam - Electronic Circuits and Wiring",
+      course_id: indCourse.course_id,
+      faculty_id: indtechFaculty.faculty_id,
+      tos_file_path: "/uploads/tos/ind_midterm.pdf",
+      time_limit_minutes: 60,
+      randomize_items: true,
+      current_status: "Pending_Chair",
+      questionBank: {
+        create: [
+          {
+            question_text: "Ohm's law relates voltage, current, and resistance. True or False?",
+            question_type: "True_False",
+            correct_answer: "True",
+            points: 5,
+          },
+        ],
+      },
+      approvalWorkflow: {
+        create: {
+          reviewed_by_chair_id: indtechChair.chair_id,
+          chair_review_status: "Pending",
+          di_review_status: "Hold",
+        },
+      },
+    },
+  });
+
+  // Teacher Education Exam (Pending Chair Review)
+  const tedExam = await prisma.examination.create({
+    data: {
+      title: "Midterm Exam - Child & Adolescent Development",
+      course_id: tedCourse.course_id,
+      faculty_id: tedFaculty.faculty_id,
+      tos_file_path: "/uploads/tos/ted_midterm.pdf",
+      time_limit_minutes: 60,
+      randomize_items: true,
+      current_status: "Pending_Chair",
+      questionBank: {
+        create: [
+          {
+            question_text: "Who proposed the stages of cognitive development?",
+            question_type: "Multiple_Choice",
+            correct_answer: "Jean Piaget",
+            points: 10,
+          },
+        ],
+      },
+      approvalWorkflow: {
+        create: {
+          reviewed_by_chair_id: tedChair.chair_id,
+          chair_review_status: "Pending",
+          di_review_status: "Hold",
+        },
+      },
+    },
+  });
+
+  // Active Approved Exam for Student Testing
   const activeExam = await prisma.examination.create({
     data: {
       title: "Midterm Examination in Database Systems",
       course_id: dbCourse.course_id,
-      faculty_id: faculty.faculty_id,
+      faculty_id: itFaculty.faculty_id,
       tos_file_path: "/uploads/tos/db_midterm.pdf",
       time_limit_minutes: 60,
       randomize_items: true,
@@ -238,210 +498,25 @@ async function main() {
           {
             program_id: bsitProg.program_id,
             year_level: 4,
-<<<<<<< Updated upstream
             section: "General",
             scheduled_date: new Date(),
             start_time: new Date(new Date().setHours(0, 0, 0, 0)),
             end_time: new Date(new Date().setHours(23, 59, 59, 999)),
-=======
-            section: "A",
-            scheduled_date: new Date(Date.UTC(new Date().getFullYear(), new Date().getMonth(), new Date().getDate())),
-            start_time: new Date("1970-01-01T00:00:00.000Z"),
-            end_time: new Date("1970-01-01T23:59:59.999Z"),
->>>>>>> Stashed changes
           },
         ],
       },
-    },
-  });
-
-  // Exam 2: Upcoming (Final Software Engineering)
-  const upcomingExam = await prisma.examination.create({
-    data: {
-      title: "Final Examination in Software Engineering II",
-      course_id: seCourse.course_id,
-      faculty_id: faculty.faculty_id,
-      tos_file_path: "/uploads/tos/se_final.pdf",
-      time_limit_minutes: 120,
-      randomize_items: false,
-      current_status: "Approved",
-      questionBank: {
-        create: [
-          {
-            question_text: "What is CI/CD?",
-            question_type: "Identification",
-            correct_answer: "Continuous Integration and Continuous Deployment",
-            points: 10,
-          },
-        ],
-      },
-      examTargets: {
-        create: [
-          {
-            program_id: bsitProg.program_id,
-            year_level: 4,
-<<<<<<< Updated upstream
-            section: "General",
-            scheduled_date: new Date(new Date().setDate(new Date().getDate() + 2)), // 2 days from now
-            start_time: new Date(new Date().setHours(9, 0, 0, 0)),
-            end_time: new Date(new Date().setHours(12, 0, 0, 0)),
-=======
-            section: "A",
-            scheduled_date: new Date(Date.UTC(new Date().getFullYear(), new Date().getMonth(), new Date().getDate() + 2)), // 2 days from now
-            start_time: new Date("1970-01-01T09:00:00.000Z"),
-            end_time: new Date("1970-01-01T12:00:00.000Z"),
->>>>>>> Stashed changes
-          },
-        ],
-      },
-    },
-  });
-
-  // Exam 3: Completed (Quiz 1 - AI)
-  const completedExam = await prisma.examination.create({
-    data: {
-      title: "Quiz 1 - Introduction to AI",
-      course_id: aiCourse.course_id,
-      faculty_id: faculty.faculty_id,
-      tos_file_path: "/uploads/tos/ai_quiz1.pdf",
-      time_limit_minutes: 30,
-      randomize_items: true,
-      current_status: "Approved",
-      questionBank: {
-        create: [
-          {
-            question_text: "Who is known as the father of AI?",
-            question_type: "Multiple_Choice",
-            correct_answer: "John McCarthy",
-            points: 10,
-          },
-        ],
-      },
-      examTargets: {
-        create: [
-          {
-            program_id: bsitProg.program_id,
-            year_level: 4,
-<<<<<<< Updated upstream
-            section: "General",
-            scheduled_date: new Date(new Date().setDate(new Date().getDate() - 1)), // yesterday
-            start_time: new Date(new Date().setHours(10, 0, 0, 0)),
-            end_time: new Date(new Date().setHours(11, 0, 0, 0)),
-=======
-            section: "A",
-            scheduled_date: new Date(Date.UTC(new Date().getFullYear(), new Date().getMonth(), new Date().getDate() - 1)), // yesterday
-            start_time: new Date("1970-01-01T10:00:00.000Z"),
-            end_time: new Date("1970-01-01T11:00:00.000Z"),
->>>>>>> Stashed changes
-          },
-        ],
-      },
-    },
-  });
-
-  // Exam 4: Draft (Quiz 2 - Database Systems)
-  const draftExam = await prisma.examination.create({
-    data: {
-      title: "Quiz 2 - SQL Joins and Aggregations",
-      course_id: dbCourse.course_id,
-      faculty_id: faculty.faculty_id,
-      tos_file_path: "/uploads/tos/db_quiz2.pdf",
-      time_limit_minutes: 20,
-      randomize_items: true,
-      current_status: "Draft",
-      questionBank: {
-        create: [
-          {
-            question_text: "Which SQL join returns all records when there is a match in either left or right table?",
-            question_type: "Multiple_Choice",
-            correct_answer: "FULL OUTER JOIN",
-            points: 10,
-          },
-        ],
-      },
-    },
-  });
-
-  // Exam 5: Pending Chair (Midterm Software Engineering)
-  const pendingChairExam = await prisma.examination.create({
-    data: {
-      title: "Midterm Exam - Software Development Lifecycle",
-      course_id: seCourse.course_id,
-      faculty_id: faculty.faculty_id,
-      tos_file_path: "/uploads/tos/se_midterm.pdf",
-      time_limit_minutes: 60,
-      randomize_items: true,
-      current_status: "Pending_Chair",
-      questionBank: {
-        create: [
-          {
-            question_text: "Describe the differences between Agile and Waterfall methodologies.",
-            question_type: "Identification",
-            correct_answer: "Agile is iterative while Waterfall is linear.",
-            points: 20,
-          },
-        ],
-      },
-      approvalWorkflow: {
-        create: {
-          reviewed_by_chair_id: chair.chair_id,
-          chair_review_status: "Pending",
-          di_review_status: "Hold",
-        },
-      },
-    },
-  });
-
-  // Exam 6: Returned (Midterm AI)
-  const returnedExam = await prisma.examination.create({
-    data: {
-      title: "Midterm Exam - Search Algorithms and Heuristics",
-      course_id: aiCourse.course_id,
-      faculty_id: faculty.faculty_id,
-      tos_file_path: "/uploads/tos/ai_midterm.pdf",
-      time_limit_minutes: 90,
-      randomize_items: true,
-      current_status: "Returned",
-      questionBank: {
-        create: [
-          {
-            question_text: "A* search is always optimal. True or False?",
-            question_type: "True_False",
-            correct_answer: "True",
-            points: 10,
-          },
-        ],
-      },
-      approvalWorkflow: {
-        create: {
-          reviewed_by_chair_id: chair.chair_id,
-          chair_review_status: "Returned",
-          chair_comments: "Please rewrite Question 1. The true/false statement needs clarification regarding the admissibility of the heuristic function.",
-          chair_action_timestamp: new Date(),
-          di_review_status: "Hold",
-        },
-      },
-    },
-  });
-
-  // Create completed student exam record
-  await prisma.studentExam.create({
-    data: {
-      student_id: studentUser.user_id,
-      exam_id: completedExam.exam_id,
-      started_at: new Date(new Date().setDate(new Date().getDate() - 1)),
-      submitted_at: new Date(new Date().setDate(new Date().getDate() - 1)),
-      total_score: 10, // 100% score
-      submission_trigger: "Manual",
     },
   });
 
   console.log("Database seeding completed successfully!");
   console.log("Created test accounts (all passwords are 'password123'):");
-  console.log("  - Student: 2023-0001-AB (Janice Delfin - BSIT Year 4 Major General)");
-  console.log("  - Faculty: FACULTY-001 (Mark Abad - IT Department)");
-  console.log("  - Chair: CHAIR-001 (IT Department Chair)");
-  console.log("  - Director: DIRECTOR-001 (Office of the Director)");
+  console.log("  - Director: DIRECTOR-001");
+  console.log("  - Student: 2023-0001-AB (Janice Delfin)");
+  console.log("  - IT Chair: CHAIR-001 | Faculty: FACULTY-001");
+  console.log("  - Agriculture Chair: CHAIR-AGRI | Faculty: FACULTY-AGRI");
+  console.log("  - Hospitality & Tourism Chair: CHAIR-HTM | Faculty: FACULTY-HTM");
+  console.log("  - Industrial Tech Chair: CHAIR-INDTECH | Faculty: FACULTY-INDTECH");
+  console.log("  - Teacher Education (TED) Chair: CHAIR-TED | Faculty: FACULTY-TED");
 }
 
 main()

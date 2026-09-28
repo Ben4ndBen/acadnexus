@@ -6,6 +6,8 @@ import { NotificationBell } from "@/app/components/NotificationBell";
 import { BookOpen } from "lucide-react";
 import { FacultyDashboardClient } from "@/app/components/FacultyDashboardClient";
 
+import { ensureChairsAndDepartmentsExist } from "@/lib/chairServer";
+
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
@@ -25,6 +27,8 @@ export default async function FacultyDashboard() {
   if (role !== "Faculty") {
     redirect("/");
   }
+
+  await ensureChairsAndDepartmentsExist();
 
   // Fetch faculty details with full relations from database
   const dbUser = await db.user.findUnique({

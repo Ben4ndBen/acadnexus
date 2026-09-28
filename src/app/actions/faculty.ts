@@ -62,9 +62,17 @@ export async function updateExamStatus(examId: number, status: ExamStatus, userI
           return { error: "Faculty profile not found. Please contact an admin." };
         }
 
-        const chair = await tx.chair.findUnique({
+        let chair = await tx.chair.findUnique({
           where: { department_id: faculty.department_id },
         });
+
+        if (!chair) {
+          const { ensureChairsAndDepartmentsExist } = await import("@/lib/chairServer");
+          await ensureChairsAndDepartmentsExist();
+          chair = await tx.chair.findUnique({
+            where: { department_id: faculty.department_id },
+          });
+        }
 
         if (!chair) {
           return { error: "No department chair found for your department. Cannot submit exam for review." };
