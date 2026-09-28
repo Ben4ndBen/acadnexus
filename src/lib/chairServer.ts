@@ -38,7 +38,7 @@ export async function ensureChairsAndDepartmentsExist() {
         facultyFirstName: "Mark",
         facultyLastName: "Abad",
         programs: [
-          { code: "BSIT", name: "Bachelor of Science in Information Technology" },
+          { code: "BS Info Tech", name: "Bachelor of Science in Information Technology" },
         ],
       },
       {
@@ -49,7 +49,7 @@ export async function ensureChairsAndDepartmentsExist() {
         facultyFirstName: "Elena",
         facultyLastName: "Cruz",
         programs: [
-          { code: "BSINDTECH", name: "Bachelor of Science in Industrial Technology" },
+          { code: "BSIT", name: "Bachelor of Science in Industrial Technology" },
         ],
       },
       {
@@ -65,6 +65,41 @@ export async function ensureChairsAndDepartmentsExist() {
         ],
       },
     ];
+
+    // Migrate program codes if needed:
+    // 1. Old BSIT (Information Technology) -> "BS Info Tech"
+    await db.academicProgram.updateMany({
+      where: {
+        program_code: "BSIT",
+        OR: [
+          { program_name: { contains: "Information", mode: "insensitive" } },
+          { department: { department_name: { contains: "IT", mode: "insensitive" } } },
+        ],
+      },
+      data: {
+        program_code: "BS Info Tech",
+        program_name: "Bachelor of Science in Information Technology",
+      },
+    });
+
+    // 2. Old BSINDTECH (Industrial Technology) -> "BSIT"
+    await db.academicProgram.updateMany({
+      where: {
+        OR: [
+          { program_code: "BSINDTECH" },
+          {
+            AND: [
+              { program_name: { contains: "Industrial", mode: "insensitive" } },
+              { program_code: { not: "BSIT" } },
+            ],
+          },
+        ],
+      },
+      data: {
+        program_code: "BSIT",
+        program_name: "Bachelor of Science in Industrial Technology",
+      },
+    });
 
     for (const d of deptsData) {
       // 1. Ensure department exists

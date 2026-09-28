@@ -338,7 +338,12 @@ export function getCurriculumForProgram(programCode: string, yearLevel: number):
   const codeUpper = programCode.toUpperCase();
   let targetProgram: "BSIT" | "BSHM" | "BSA" | "BSTM" | null = null;
 
-  if (codeUpper === "BSIT" || codeUpper.includes("INFORMATION TECHNOLOGY")) {
+  if (
+    codeUpper === "BS INFO TECH" ||
+    codeUpper === "BSINFOTECH" ||
+    codeUpper.includes("INFORMATION TECHNOLOGY") ||
+    codeUpper.includes("INFO TECH")
+  ) {
     targetProgram = "BSIT";
   } else if (codeUpper === "BSHM" || (codeUpper.includes("HOSPITALITY") && !codeUpper.includes("TOURISM"))) {
     targetProgram = "BSHM";

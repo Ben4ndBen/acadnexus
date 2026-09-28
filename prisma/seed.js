@@ -61,7 +61,7 @@ async function main() {
   console.log("Seeding programs...");
   const bsitProg = await prisma.academicProgram.create({
     data: {
-      program_code: "BSIT",
+      program_code: "BS Info Tech",
       program_name: "Bachelor of Science in Information Technology",
       department_id: itDept.department_id,
     },
@@ -89,7 +89,7 @@ async function main() {
   });
   const bsindtechProg = await prisma.academicProgram.create({
     data: {
-      program_code: "BSINDTECH",
+      program_code: "BSIT",
       program_name: "Bachelor of Science in Industrial Technology",
       department_id: industrialDept.department_id,
     },

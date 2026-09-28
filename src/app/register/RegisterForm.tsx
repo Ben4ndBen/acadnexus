@@ -78,8 +78,13 @@ export function RegisterForm({
 
   // Map program names / codes -> available majors/tracks
   const PROGRAM_MAJORS: Record<string, string[]> = {
-    "information technology": [...BSIT_TRACKS, "General BSIT"],
-    "bsit": [...BSIT_TRACKS, "General BSIT"],
+    "bs info tech": [...BSIT_TRACKS, "General BS Info Tech"],
+    "info tech": [...BSIT_TRACKS, "General BS Info Tech"],
+    "information technology": [...BSIT_TRACKS, "General BS Info Tech"],
+    "bsit": ["Automotive Technology", "Architecture Technology", "Electronics Technology"],
+    "industrial technology": ["Automotive Technology", "Architecture Technology", "Electronics Technology"],
+    "industrial tech": ["Automotive Technology", "Architecture Technology", "Electronics Technology"],
+    "bsindtech": ["Automotive Technology", "Architecture Technology", "Electronics Technology"],
     "hospitality management": [...BSHM_MAJORS],
     "bshm": [...BSHM_MAJORS],
     "agriculture": [...BSA_MAJORS],
@@ -88,8 +93,6 @@ export function RegisterForm({
     "bstm": [...BSTM_MAJORS],
     "secondary education": ["English", "Science", "Mathematics"],
     "bsed": ["English", "Science", "Mathematics"],
-    "industrial technology": ["Automotive Technology", "Architecture Technology", "Electronics Technology"],
-    "bsindtech": ["Automotive Technology", "Architecture Technology", "Electronics Technology"],
   };
 
   /** Returns the major options for the currently selected program */
@@ -101,14 +104,14 @@ export function RegisterForm({
     const codeLower = prog.program_code.toLowerCase();
 
     for (const [keyword, majors] of Object.entries(PROGRAM_MAJORS)) {
-      if (nameLower.includes(keyword) || codeLower.includes(keyword)) {
+      if (codeLower === keyword || nameLower.includes(keyword) || codeLower.includes(keyword)) {
         return majors;
       }
     }
     return ["General Major"];
   }, [selectedProgramId, programs]);
 
-  // Identify active program code (BSIT, BSHM, BSA, etc.)
+  // Identify active program code (BS_INFO_TECH, BSHM, BSA, BSTM, etc.)
   const selectedProg = programs.find((p) => String(p.program_id) === selectedProgramId);
 
   const activeProgramCode = useMemo(() => {
@@ -116,7 +119,16 @@ export function RegisterForm({
     const codeUpper = selectedProg.program_code.toUpperCase();
     const nameLower = selectedProg.program_name.toLowerCase();
 
-    if (codeUpper === "BSIT" || nameLower.includes("information technology")) return "BSIT";
+    // Information Technology is now "BS Info Tech"
+    if (
+      codeUpper === "BS INFO TECH" ||
+      codeUpper === "BSINFOTECH" ||
+      codeUpper === "BS-IT" ||
+      nameLower.includes("information technology") ||
+      nameLower.includes("info tech")
+    ) {
+      return "BS_INFO_TECH";
+    }
     if (codeUpper === "BSHM" || (nameLower.includes("hospitality") && !nameLower.includes("tourism"))) return "BSHM";
     if (codeUpper === "BSA" || nameLower.includes("agriculture")) return "BSA";
     if (codeUpper === "BSTM" || nameLower.includes("tourism")) return "BSTM";
@@ -129,6 +141,7 @@ export function RegisterForm({
   const allottedCurriculumItems = useMemo(() => {
     if (!activeProgramCode) return [];
     let sourceCurriculum = BSIT_CURRICULUM;
+    if (activeProgramCode === "BS_INFO_TECH") sourceCurriculum = BSIT_CURRICULUM;
     if (activeProgramCode === "BSHM") sourceCurriculum = BSHM_CURRICULUM;
     if (activeProgramCode === "BSA") sourceCurriculum = BSA_CURRICULUM;
     if (activeProgramCode === "BSTM") sourceCurriculum = BSTM_CURRICULUM;
@@ -165,6 +178,7 @@ export function RegisterForm({
   // Helper to find curriculum metadata for a course
   const getCurriculumMeta = (courseCode: string): CurriculumItem | undefined => {
     let sourceCurriculum = BSIT_CURRICULUM;
+    if (activeProgramCode === "BS_INFO_TECH") sourceCurriculum = BSIT_CURRICULUM;
     if (activeProgramCode === "BSHM") sourceCurriculum = BSHM_CURRICULUM;
     if (activeProgramCode === "BSA") sourceCurriculum = BSA_CURRICULUM;
     if (activeProgramCode === "BSTM") sourceCurriculum = BSTM_CURRICULUM;

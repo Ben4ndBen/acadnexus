@@ -188,8 +188,12 @@ export function getDepartmentKey(identifier?: string | null): DepartmentKey {
   if (
     str.includes("indtech") ||
     str.includes("industrial technology") ||
+    str.includes("industrial tech") ||
     str.includes("bsindtech") ||
-    str.includes("industrial")
+    str.includes("industrial") ||
+    str === "bsit" ||
+    str === "chair_indtech" ||
+    str === "faculty-indtech"
   ) {
     return "indtech";
   }
@@ -205,9 +209,14 @@ export function getDepartmentKey(identifier?: string | null): DepartmentKey {
   }
 
   if (
-    str.includes("it") ||
+    str.includes("info tech") ||
     str.includes("information technology") ||
-    str.includes("bsit")
+    str.includes("bs info tech") ||
+    str.includes("bsinfotech") ||
+    str.includes("it department") ||
+    str === "it" ||
+    str === "chair_it" ||
+    str === "faculty-001"
   ) {
     return "it";
   }
