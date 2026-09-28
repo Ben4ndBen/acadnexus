@@ -90,16 +90,16 @@ export default async function LoginPage() {
               </p>
             </div>
 
-            {/* Banner Snippet with scale zoom effect */}
-            <div className="hidden sm:block group/banner relative rounded-xl overflow-hidden border border-white/10 shadow-lg bg-black/10 backdrop-blur-sm p-1 w-44 aspect-[16/6] transition-all duration-500 hover:border-[#E2A123]/50 hover:shadow-2xl">
-              <div className="relative w-full h-full rounded-lg overflow-hidden">
+            {/* AcadNexus Official Logo - Retained in original place with high visibility */}
+            <div className="group/banner relative rounded-2xl overflow-hidden border-2 border-[#E2A123] shadow-xl shadow-black/30 bg-[#580B0F] p-1.5 w-44 sm:w-56 md:w-60 aspect-[2/1] transition-all duration-500 hover:scale-105 hover:border-amber-300 hover:shadow-2xl hover:shadow-amber-500/20 cursor-pointer shrink-0">
+              <div className="relative w-full h-full rounded-xl overflow-hidden bg-[#580B0F] flex items-center justify-center">
                 <Image
                   src="/icon.png"
-                  alt="College Asset View"
+                  alt="AcadNexus Official Logo"
                   fill
-                  className="object-cover transition-transform duration-700 ease-out group-hover/banner:scale-110 group-hover/banner:rotate-1"
+                  className="object-contain filter drop-shadow-md transition-transform duration-500 ease-out group-hover/banner:scale-105"
+                  priority
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-[#420A0C]/50 via-transparent to-transparent transition-opacity duration-500 group-hover/banner:opacity-30" />
               </div>
             </div>
           </div>
@@ -120,22 +120,8 @@ export default async function LoginPage() {
             </p>
           </div>
 
-          {/* Core Interactive Login Form Container with Hovering Emblem */}
-          <div className="relative bg-white p-6 sm:p-8 pt-10 rounded-2xl border border-neutral-200/80 shadow-md transition-all duration-500 hover:shadow-2xl hover:shadow-neutral-300/50 hover:border-neutral-300">
-            {/* Hovering Logo Badge over top center of Sign-In Card */}
-            <div className="absolute -top-10 left-1/2 -translate-x-1/2 group/emblem cursor-pointer z-10">
-              <div className="relative p-1 bg-white rounded-full shadow-lg border-4 border-[#E2A123] transition-all duration-500 ease-out group-hover/emblem:scale-110 group-hover/emblem:-translate-y-2 group-hover/emblem:border-amber-400 group-hover/emblem:shadow-2xl group-hover/emblem:shadow-amber-500/40 animate-logo-float">
-                <Image
-                  src="/bsc-logo.png"
-                  alt="Batanes State College Seal"
-                  width={64}
-                  height={64}
-                  className="object-contain filter drop-shadow-md transition-transform duration-500 group-hover/emblem:scale-105"
-                  priority
-                />
-              </div>
-            </div>
-
+          {/* Core Interactive Login Form Container */}
+          <div className="bg-white p-6 sm:p-8 rounded-2xl border border-neutral-200/60 shadow-sm transition-all duration-500 hover:shadow-xl hover:shadow-neutral-200/40 hover:border-neutral-300/80">
             <LoginForm />
           </div>
 
