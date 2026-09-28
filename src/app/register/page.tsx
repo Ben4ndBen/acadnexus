@@ -3,7 +3,7 @@ import { RegisterForm } from "./RegisterForm";
 import Image from "next/image";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { ensureBsitCoursesExist } from "@/lib/bsitCurriculum";
+import { ensureBsitCoursesExist } from "@/lib/bsitCurriculumServer";
 
 export const dynamic = "force-dynamic";
 

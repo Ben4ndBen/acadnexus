@@ -1,5 +1,3 @@
-import db from "@/lib/db";
-
 export interface CurriculumItem {
   code: string;
   title: string;
@@ -100,21 +98,3 @@ export const BSIT_CURRICULUM: CurriculumItem[] = [
   { code: "ITD 310-MM", title: "3d Animation and Modeling (Elective 3)", yearLevel: 3, semester: 2, isTrackElective: true, trackName: "Multimedia Track", electiveNumber: 3 },
   { code: "ITD 311-MM", title: "Digital Marketing and Media Solutions (Elective 4)", yearLevel: 3, semester: 2, isTrackElective: true, trackName: "Multimedia Track", electiveNumber: 4 },
 ];
-
-/** Ensures all BSIT courses exist in the database table COURSES */
-export async function ensureBsitCoursesExist() {
-  try {
-    for (const item of BSIT_CURRICULUM) {
-      await db.course.upsert({
-        where: { course_code: item.code },
-        update: { course_title: item.title },
-        create: {
-          course_code: item.code,
-          course_title: item.title,
-        },
-      });
-    }
-  } catch (error) {
-    console.error("Error ensuring BSIT courses exist in DB:", error);
-  }
-}
