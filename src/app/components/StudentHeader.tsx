@@ -1,6 +1,7 @@
 "use client";
 
 import { LogoutButton } from "./LogoutButton";
+import { getDepartmentTheme } from "@/lib/departmentThemes";
 
 interface StudentHeaderProps {
   student: {
@@ -9,10 +10,12 @@ interface StudentHeaderProps {
     program: string;
     year_level: number;
     section: string;
+    department?: string;
   };
 }
 
 export default function StudentHeader({ student }: StudentHeaderProps) {
+  const deptTheme = getDepartmentTheme(student.department || student.program);
   const initials = student.name
     .split(" ")
     .map((n) => n[0])
@@ -21,7 +24,7 @@ export default function StudentHeader({ student }: StudentHeaderProps) {
     .toUpperCase();
 
   return (
-    <header className="student-header">
+    <header className="student-header" style={{ borderBottomColor: deptTheme.colors.primary }}>
       <div className="header-inner">
         {/* Branding */}
         <div className="header-brand">
@@ -42,6 +45,12 @@ export default function StudentHeader({ student }: StudentHeaderProps) {
             <span className="brand-name">AcadNexus</span>
             <span className="brand-sub">Batanes State College</span>
           </div>
+        </div>
+
+        {/* Dynamic Department Portal Pill */}
+        <div className={`hidden md:inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black shadow-xs ${deptTheme.colors.badgeBg} ${deptTheme.colors.badgeText} border ${deptTheme.colors.badgeBorder}`}>
+          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: deptTheme.colors.primary }} />
+          <span>{deptTheme.shortName} Portal ({deptTheme.themeLabel})</span>
         </div>
 
         {/* Nav links */}

@@ -8,6 +8,9 @@ import {
 } from "lucide-react";
 import * as XLSX from "xlsx";
 
+import { getDepartmentTheme } from "@/lib/departmentThemes";
+import { DepartmentBadge } from "@/app/components/DepartmentBadge";
+
 interface Course {
   course_id: number;
   course_code: string;
@@ -84,6 +87,9 @@ export function StudentDashboardClient({
   userId
 }: StudentDashboardClientProps) {
   const [activeTab, setActiveTab] = useState<TabType>("active");
+  const deptTheme = getDepartmentTheme(
+    student?.program?.department?.department_name || student?.program?.program_code
+  );
 
   const tabs = [
     {
@@ -130,10 +136,17 @@ export function StudentDashboardClient({
       <div className="lg:col-span-1 space-y-6">
         {/* Profile Card */}
         <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-6">
-          <h2 className="text-lg font-bold text-slate-800 border-b border-slate-100 pb-3 flex items-center gap-2">
-            <span className="w-1.5 h-6 bg-blue-600 rounded-full" />
-            Academic Profile
-          </h2>
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+              <span className="w-1.5 h-6 rounded-full" style={{ backgroundColor: deptTheme.colors.primary }} />
+              Academic Profile
+            </h2>
+            <DepartmentBadge
+              department={student?.program?.department?.department_name}
+              programCode={student?.program?.program_code}
+              size="sm"
+            />
+          </div>
           <div className="space-y-4">
             <div>
               <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Full Name</p>

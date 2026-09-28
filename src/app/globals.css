@@ -24,3 +24,50 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Department Portal Custom CSS Theme Tokens */
+.dept-portal-htm {
+  --portal-primary: #CA8A04;
+  --portal-accent: #FEF08A;
+  --portal-bg: #FEFCE8;
+  --portal-header-bg: #EAB308;
+  --portal-header-text: #0F172A;
+  --portal-border: #FACC15;
+}
+
+.dept-portal-agri {
+  --portal-primary: #16A34A;
+  --portal-accent: #BBF7D0;
+  --portal-bg: #F0FDF4;
+  --portal-header-bg: #16A34A;
+  --portal-header-text: #FFFFFF;
+  --portal-border: #4ADE80;
+}
+
+.dept-portal-indtech {
+  --portal-primary: #DB2777;
+  --portal-accent: #FBCFE8;
+  --portal-bg: #FDF2F8;
+  --portal-header-bg: #DB2777;
+  --portal-header-text: #FFFFFF;
+  --portal-border: #F472B6;
+}
+
+.dept-portal-ted {
+  --portal-primary: #2563EB;
+  --portal-accent: #BFDBFE;
+  --portal-bg: #EFF6FF;
+  --portal-header-bg: #2563EB;
+  --portal-header-text: #FFFFFF;
+  --portal-border: #60A5FA;
+}
+
+.dept-portal-it {
+  --portal-primary: #18181B;
+  --portal-accent: #E4E4E7;
+  --portal-bg: #FAFAFA;
+  --portal-header-bg: #18181B;
+  --portal-header-text: #FFFFFF;
+  --portal-border: #3F3F46;
+}
+

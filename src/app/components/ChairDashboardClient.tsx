@@ -11,6 +11,8 @@ import {
 import { reviewExamByChair } from "@/app/actions/chair";
 import { registerInstructorByAdminAction } from "@/app/actions/auth";
 import { Latex } from "@/app/components/Latex";
+import { getDepartmentTheme } from "@/lib/departmentThemes";
+import { DepartmentBadge } from "@/app/components/DepartmentBadge";
 
 interface ChairDashboardClientProps {
   chairUserId: number;
@@ -67,6 +69,7 @@ export function ChairDashboardClient({
 }: ChairDashboardClientProps) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<"overview" | "faculty" | "queue">("overview");
+  const deptTheme = getDepartmentTheme(departmentName);
 
   // State for Review Queue
   const [isSubmittingReview, setIsSubmittingReview] = useState<number | null>(null);
@@ -355,10 +358,13 @@ export function ChairDashboardClient({
       {activeTab === "overview" && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-6">
-            <h2 className="text-lg font-bold text-slate-800 border-b border-slate-100 pb-3 flex items-center gap-2">
-              <span className="w-1.5 h-6 bg-amber-600 rounded-full" />
-              Department Overview
-            </h2>
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                <span className="w-1.5 h-6 rounded-full" style={{ backgroundColor: deptTheme.colors.primary }} />
+                Department Overview
+              </h2>
+              <DepartmentBadge department={departmentName} size="sm" showThemeLabel />
+            </div>
             <div className="space-y-4">
               <div>
                 <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Department Name</p>

@@ -9,6 +9,8 @@ import {
 } from "lucide-react";
 import { reviewExamByDirector, toggleGlobalHold, toggleIndividualHold } from "@/app/actions/director";
 import { registerInstructorByAdminAction } from "@/app/actions/auth";
+import { getDepartmentTheme } from "@/lib/departmentThemes";
+import { DepartmentBadge } from "@/app/components/DepartmentBadge";
 
 interface DirectorDashboardClientProps {
   directorUserId: number;
@@ -608,8 +610,13 @@ export function DirectorDashboardClient({
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
             {departmentsData.map(dept => (
               <div key={dept.department_id} className="border border-slate-200 rounded-2xl p-6 hover:shadow-md transition-shadow bg-gradient-to-br from-white to-slate-50/50">
-                <div className="flex justify-between items-start mb-4">
-                  <h3 className="font-bold text-slate-800 text-base">{dept.department_name}</h3>
+                <div className="flex justify-between items-start mb-3 gap-2">
+                  <div>
+                    <h3 className="font-bold text-slate-800 text-base">{dept.department_name}</h3>
+                    <div className="mt-1">
+                      <DepartmentBadge department={dept.department_name} size="sm" showThemeLabel />
+                    </div>
+                  </div>
                   <div className={`text-xs font-extrabold px-2.5 py-1 rounded-full border ${
                     dept.compliance_score >= 80 ? "bg-emerald-50 text-emerald-700 border-emerald-200" :
                     dept.compliance_score >= 50 ? "bg-amber-50 text-amber-700 border-amber-200" :

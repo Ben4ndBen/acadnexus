@@ -33,6 +33,7 @@ import {
   BSA_MAJORS,
   CurriculumItem,
 } from "@/lib/bsitCurriculum";
+import { DepartmentBadge } from "@/app/components/DepartmentBadge";
 
 interface Program {
   program_id: number;
@@ -420,6 +421,11 @@ export function RegisterForm({
               </option>
             ))}
           </select>
+          {selectedProg && (
+            <div className="mt-2 flex items-center gap-1.5">
+              <DepartmentBadge programCode={selectedProg.program_code} size="sm" showThemeLabel />
+            </div>
+          )}
         </div>
 
         <div>
