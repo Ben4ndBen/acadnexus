@@ -1,10 +1,10 @@
 import db from "@/lib/db";
-import { BSIT_CURRICULUM } from "./bsitCurriculum";
+import { ALL_CURRICULUMS } from "./bsitCurriculum";
 
-/** Ensures all BSIT courses exist in the database table COURSES */
+/** Ensures all program curriculum courses (BSIT, BSHM, etc.) exist in the database table COURSES */
 export async function ensureBsitCoursesExist() {
   try {
-    for (const item of BSIT_CURRICULUM) {
+    for (const item of ALL_CURRICULUMS) {
       await db.course.upsert({
         where: { course_code: item.code },
         update: { course_title: item.title },
@@ -15,6 +15,6 @@ export async function ensureBsitCoursesExist() {
       });
     }
   } catch (error) {
-    console.error("Error ensuring BSIT courses exist in DB:", error);
+    console.error("Error ensuring curriculum courses exist in DB:", error);
   }
 }

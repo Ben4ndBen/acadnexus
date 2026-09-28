@@ -24,7 +24,13 @@ import {
   BookCheck,
 } from "lucide-react";
 import Link from "next/link";
-import { BSIT_CURRICULUM, CurriculumItem, BSIT_TRACKS } from "@/lib/bsitCurriculum";
+import {
+  BSIT_CURRICULUM,
+  BSHM_CURRICULUM,
+  BSIT_TRACKS,
+  BSHM_MAJORS,
+  CurriculumItem,
+} from "@/lib/bsitCurriculum";
 
 interface Program {
   program_id: number;
@@ -69,6 +75,8 @@ export function RegisterForm({
   const PROGRAM_MAJORS: Record<string, string[]> = {
     "information technology": [...BSIT_TRACKS, "General BSIT"],
     "bsit": [...BSIT_TRACKS, "General BSIT"],
+    "hospitality management": [...BSHM_MAJORS],
+    "bshm": [...BSHM_MAJORS],
     "secondary education": ["English", "Science", "Mathematics"],
     "bsed": ["English", "Science", "Mathematics"],
     "industrial technology": ["Automotive Technology", "Architecture Technology", "Electronics Technology"],
@@ -91,22 +99,27 @@ export function RegisterForm({
     return ["General Major"];
   }, [selectedProgramId, programs]);
 
-  // Identify if selected program is BSIT
+  // Identify active program code (BSIT, BSHM, etc.)
   const selectedProg = programs.find((p) => String(p.program_id) === selectedProgramId);
-  const isBsit = useMemo(() => {
-    if (!selectedProg) return false;
-    return (
-      selectedProg.program_code.toUpperCase() === "BSIT" ||
-      selectedProg.program_name.toLowerCase().includes("information technology")
-    );
+
+  const activeProgramCode = useMemo(() => {
+    if (!selectedProg) return null;
+    const codeUpper = selectedProg.program_code.toUpperCase();
+    const nameLower = selectedProg.program_name.toLowerCase();
+
+    if (codeUpper === "BSIT" || nameLower.includes("information technology")) return "BSIT";
+    if (codeUpper === "BSHM" || nameLower.includes("hospitality")) return "BSHM";
+    return null;
   }, [selectedProg]);
 
   const currentYearNum = Number(selectedYearLevel) || 1;
 
-  // Filter BSIT Curriculum items for current year level & track
-  const allottedBsitCurriculumItems = useMemo(() => {
-    if (!isBsit) return [];
-    return BSIT_CURRICULUM.filter((item) => {
+  // Filter curriculum items for current program & year level
+  const allottedCurriculumItems = useMemo(() => {
+    if (!activeProgramCode) return [];
+    const sourceCurriculum = activeProgramCode === "BSIT" ? BSIT_CURRICULUM : BSHM_CURRICULUM;
+
+    return sourceCurriculum.filter((item) => {
       if (item.yearLevel !== currentYearNum) return false;
 
       // Handle track electives filter if a track is selected
@@ -117,27 +130,28 @@ export function RegisterForm({
       }
       return true;
     });
-  }, [isBsit, currentYearNum, selectedMajor]);
+  }, [activeProgramCode, currentYearNum, selectedMajor]);
 
   // Map curriculum items to actual DB courses
   const allottedCourses = useMemo(() => {
     if (!selectedProgramId) return [];
-    if (!isBsit) return courses; // Fallback for other programs
+    if (!activeProgramCode) return courses; // Fallback for other programs
 
-    const allottedCodes = allottedBsitCurriculumItems.map((item) => item.code);
+    const allottedCodes = allottedCurriculumItems.map((item) => item.code);
 
     return courses.filter((c) => {
       if (allottedCodes.includes(c.course_code)) return true;
       // Match track elective variants like ITD 304-CS, ITD 304-WM, etc.
-      return allottedBsitCurriculumItems.some(
+      return allottedCurriculumItems.some(
         (item) => item.isTrackElective && c.course_code.startsWith(item.code.replace("*", ""))
       );
     });
-  }, [selectedProgramId, isBsit, allottedBsitCurriculumItems, courses]);
+  }, [selectedProgramId, activeProgramCode, allottedCurriculumItems, courses]);
 
   // Helper to find curriculum metadata for a course
   const getCurriculumMeta = (courseCode: string): CurriculumItem | undefined => {
-    return BSIT_CURRICULUM.find(
+    const sourceCurriculum = activeProgramCode === "BSHM" ? BSHM_CURRICULUM : BSIT_CURRICULUM;
+    return sourceCurriculum.find(
       (item) =>
         item.code === courseCode ||
         (item.isTrackElective && courseCode.startsWith(item.code.replace("*", "")))
@@ -148,11 +162,11 @@ export function RegisterForm({
   useEffect(() => {
     if (!selectedProgramId || !selectedYearLevel) return;
 
-    if (isBsit && allottedCourses.length > 0) {
+    if (activeProgramCode && allottedCourses.length > 0) {
       const ids = allottedCourses.map((c) => c.course_id);
       setSelectedCourseIds(ids);
     }
-  }, [selectedProgramId, selectedYearLevel, selectedMajor, isBsit, allottedCourses]);
+  }, [selectedProgramId, selectedYearLevel, selectedMajor, activeProgramCode, allottedCourses]);
 
   // Toggle subject selection
   const toggleCourse = (courseId: number) => {
@@ -240,7 +254,7 @@ export function RegisterForm({
 
   const getStrengthDetails = () => {
     if (isPasswordEmpty) return { label: "", color: "bg-stone-200", text: "text-stone-400", width: "w-0" };
-    if (strengthScore <= 2) return { label: "Weak Password", color: "bg-rose-500", text: "text-rose-600", width: "w-1/3" };
+    if (strengthScore <= 2) return { label: "Weak Password", color: "bg-rose-500", text: "text-[#7A151A]", width: "w-1/3" };
     if (strengthScore <= 4) return { label: "Medium Password", color: "bg-amber-500", text: "text-amber-600", width: "w-2/3" };
     return { label: "Strong Password", color: "bg-emerald-500", text: "text-emerald-600", width: "w-full" };
   };
@@ -578,7 +592,7 @@ export function RegisterForm({
                 </div>
 
                 {/* Quick Filter Semester Tabs */}
-                {isBsit && (
+                {activeProgramCode && (
                   <div className="flex items-center justify-between text-xs pt-1">
                     <div className="flex items-center gap-1 bg-stone-100/70 p-1 rounded-xl">
                       <button
