@@ -48,9 +48,8 @@ export default function StudentHeader({ student }: StudentHeaderProps) {
         </div>
 
         {/* Dynamic Department Portal Pill */}
-        <div className={`hidden md:inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black shadow-xs ${deptTheme.colors.badgeBg} ${deptTheme.colors.badgeText} border ${deptTheme.colors.badgeBorder}`}>
-          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: deptTheme.colors.primary }} />
-          <span>{deptTheme.shortName} Portal ({deptTheme.themeLabel})</span>
+        <div className={`hidden md:inline-flex items-center px-3 py-1 rounded-full text-xs font-black shadow-xs ${deptTheme.colors.badgeBg} ${deptTheme.colors.badgeText} border ${deptTheme.colors.badgeBorder}`}>
+          <span>{deptTheme.shortName} Portal</span>
         </div>
 
         {/* Nav links */}

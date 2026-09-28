@@ -363,7 +363,7 @@ export function ChairDashboardClient({
                 <span className="w-1.5 h-6 rounded-full" style={{ backgroundColor: deptTheme.colors.primary }} />
                 Department Overview
               </h2>
-              <DepartmentBadge department={departmentName} size="sm" showThemeLabel />
+              <DepartmentBadge department={departmentName} size="sm" />
             </div>
             <div className="space-y-4">
               <div>

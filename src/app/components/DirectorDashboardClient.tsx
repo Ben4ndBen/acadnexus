@@ -614,7 +614,7 @@ export function DirectorDashboardClient({
                   <div>
                     <h3 className="font-bold text-slate-800 text-base">{dept.department_name}</h3>
                     <div className="mt-1">
-                      <DepartmentBadge department={dept.department_name} size="sm" showThemeLabel />
+                      <DepartmentBadge department={dept.department_name} size="sm" />
                     </div>
                   </div>
                   <div className={`text-xs font-extrabold px-2.5 py-1 rounded-full border ${

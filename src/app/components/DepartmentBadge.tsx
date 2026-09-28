@@ -7,6 +7,7 @@ interface DepartmentBadgeProps {
   department?: string | null;
   programCode?: string | null;
   size?: "sm" | "md" | "lg";
+  showPulse?: boolean;
   showThemeLabel?: boolean;
   className?: string;
 }
@@ -15,6 +16,7 @@ export function DepartmentBadge({
   department,
   programCode,
   size = "md",
+  showPulse = false,
   showThemeLabel = false,
   className = "",
 }: DepartmentBadgeProps) {
@@ -30,18 +32,20 @@ export function DepartmentBadge({
   return (
     <span
       className={`inline-flex items-center rounded-full border shadow-xs font-semibold ${colors.badgeBg} ${colors.badgeText} ${colors.badgeBorder} ${sizeClasses[size]} ${className}`}
-      title={`${theme.fullName} (${theme.themeLabel} Portal Theme)`}
+      title={theme.fullName}
     >
-      <span className="relative flex h-2 w-2">
-        <span
-          className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75"
-          style={{ backgroundColor: colors.primary }}
-        />
-        <span
-          className="relative inline-flex rounded-full h-2 w-2"
-          style={{ backgroundColor: colors.primary }}
-        />
-      </span>
+      {showPulse && (
+        <span className="relative flex h-2 w-2">
+          <span
+            className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75"
+            style={{ backgroundColor: colors.primary }}
+          />
+          <span
+            className="relative inline-flex rounded-full h-2 w-2"
+            style={{ backgroundColor: colors.primary }}
+          />
+        </span>
+      )}
       <span>{theme.shortName} Portal</span>
       {showThemeLabel && (
         <span className="opacity-75 text-[10px] uppercase tracking-wider font-semibold border-l pl-2 border-current">
@@ -77,7 +81,7 @@ export function DepartmentPortalBanner({
       <div className="relative z-10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-2">
-            <DepartmentBadge department={department} programCode={programCode} size="sm" showThemeLabel />
+            <DepartmentBadge department={department} programCode={programCode} size="sm" />
           </div>
           <h1 className="text-2xl sm:text-3xl font-black tracking-tight">{title}</h1>
           {subtitle && (

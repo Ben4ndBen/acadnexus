@@ -423,7 +423,7 @@ export function RegisterForm({
           </select>
           {selectedProg && (
             <div className="mt-2 flex items-center gap-1.5">
-              <DepartmentBadge programCode={selectedProg.program_code} size="sm" showThemeLabel />
+              <DepartmentBadge programCode={selectedProg.program_code} size="sm" />
             </div>
           )}
         </div>
