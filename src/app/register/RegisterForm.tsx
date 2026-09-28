@@ -28,9 +28,11 @@ import {
   BSIT_CURRICULUM,
   BSHM_CURRICULUM,
   BSA_CURRICULUM,
+  BSTM_CURRICULUM,
   BSIT_TRACKS,
   BSHM_MAJORS,
   BSA_MAJORS,
+  BSTM_MAJORS,
   CurriculumItem,
 } from "@/lib/bsitCurriculum";
 import { DepartmentBadge } from "@/app/components/DepartmentBadge";
@@ -82,6 +84,8 @@ export function RegisterForm({
     "bshm": [...BSHM_MAJORS],
     "agriculture": [...BSA_MAJORS],
     "bsa": [...BSA_MAJORS],
+    "tourism": [...BSTM_MAJORS],
+    "bstm": [...BSTM_MAJORS],
     "secondary education": ["English", "Science", "Mathematics"],
     "bsed": ["English", "Science", "Mathematics"],
     "industrial technology": ["Automotive Technology", "Architecture Technology", "Electronics Technology"],
@@ -113,8 +117,9 @@ export function RegisterForm({
     const nameLower = selectedProg.program_name.toLowerCase();
 
     if (codeUpper === "BSIT" || nameLower.includes("information technology")) return "BSIT";
-    if (codeUpper === "BSHM" || nameLower.includes("hospitality")) return "BSHM";
+    if (codeUpper === "BSHM" || (nameLower.includes("hospitality") && !nameLower.includes("tourism"))) return "BSHM";
     if (codeUpper === "BSA" || nameLower.includes("agriculture")) return "BSA";
+    if (codeUpper === "BSTM" || nameLower.includes("tourism")) return "BSTM";
     return null;
   }, [selectedProg]);
 
@@ -126,6 +131,7 @@ export function RegisterForm({
     let sourceCurriculum = BSIT_CURRICULUM;
     if (activeProgramCode === "BSHM") sourceCurriculum = BSHM_CURRICULUM;
     if (activeProgramCode === "BSA") sourceCurriculum = BSA_CURRICULUM;
+    if (activeProgramCode === "BSTM") sourceCurriculum = BSTM_CURRICULUM;
 
     return sourceCurriculum.filter((item) => {
       if (item.yearLevel !== currentYearNum) return false;
@@ -161,6 +167,7 @@ export function RegisterForm({
     let sourceCurriculum = BSIT_CURRICULUM;
     if (activeProgramCode === "BSHM") sourceCurriculum = BSHM_CURRICULUM;
     if (activeProgramCode === "BSA") sourceCurriculum = BSA_CURRICULUM;
+    if (activeProgramCode === "BSTM") sourceCurriculum = BSTM_CURRICULUM;
 
     return sourceCurriculum.find(
       (item) =>
@@ -168,6 +175,13 @@ export function RegisterForm({
         (item.isTrackElective && courseCode.startsWith(item.code.replace("*", "")))
     );
   };
+
+  // Auto-select major if only one is available for the chosen program
+  useEffect(() => {
+    if (availableMajors.length === 1 && (!selectedMajor || selectedMajor !== availableMajors[0])) {
+      setSelectedMajor(availableMajors[0]);
+    }
+  }, [availableMajors, selectedMajor]);
 
   // Auto-preselect all allotted subjects whenever Program, Year Level, or Major changes
   useEffect(() => {
@@ -548,6 +562,7 @@ export function RegisterForm({
                   .map((c) => (
                     <span
                       key={c.course_id}
+                      title={getCurriculumMeta(c.course_code)?.title || c.course_title}
                       className="inline-flex items-center gap-1 bg-[#7A151A]/10 text-[#7A151A] border border-[#7A151A]/20 px-2.5 py-1 rounded-lg text-xs font-bold animate-in fade-in"
                     >
                       <span>{c.course_code}</span>
@@ -724,7 +739,7 @@ export function RegisterForm({
                                       )}
                                     </div>
                                     <p className="text-[11px] text-stone-500 font-medium leading-tight mt-0.5">
-                                      {course.course_title}
+                                      {meta?.title || course.course_title}
                                     </p>
                                   </div>
                                 </div>
@@ -784,7 +799,7 @@ export function RegisterForm({
                                       )}
                                     </div>
                                     <p className="text-[11px] text-stone-500 font-medium leading-tight mt-0.5">
-                                      {course.course_title}
+                                      {meta?.title || course.course_title}
                                     </p>
                                   </div>
                                 </div>

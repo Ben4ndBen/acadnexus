@@ -1,7 +1,7 @@
 export interface CurriculumItem {
   code: string;
   title: string;
-  programCode: "BSIT" | "BSHM" | "BSA" | "COMMON";
+  programCode: "BSIT" | "BSHM" | "BSA" | "BSTM" | "COMMON";
   yearLevel: number; // 1, 2, 3, 4
   semester: number;  // 1, 2
   isTrackElective?: boolean;
@@ -27,6 +27,10 @@ export const BSA_MAJORS = [
   "Soil Science Major",
   "Agricultural Extension Major",
   "General BSA",
+] as const;
+
+export const BSTM_MAJORS = [
+  "General Tourism Management",
 ] as const;
 
 // --- BSIT CURRICULUM ---
@@ -259,19 +263,89 @@ export const BSA_CURRICULUM: CurriculumItem[] = [
   { code: "CA", title: "Course Appraisal", programCode: "BSA", yearLevel: 4, semester: 2 },
 ];
 
-export const ALL_CURRICULUMS = [...BSIT_CURRICULUM, ...BSHM_CURRICULUM, ...BSA_CURRICULUM];
+// --- BSTM CURRICULUM ---
+export const BSTM_CURRICULUM: CurriculumItem[] = [
+  // --- FIRST YEAR - FIRST SEMESTER ---
+  { code: "GE 01", title: "Purposive Communication", programCode: "BSTM", yearLevel: 1, semester: 1 },
+  { code: "GE 02", title: "Readings in Philippine History", programCode: "BSTM", yearLevel: 1, semester: 1 },
+  { code: "GE 03", title: "Mathematics in the Modern World", programCode: "BSTM", yearLevel: 1, semester: 1 },
+  { code: "THC 1", title: "Macro Perspective of Tourism and Hospitality", programCode: "BSTM", yearLevel: 1, semester: 1 },
+  { code: "THC 2", title: "Risk Management as Applied to Safety, Security and Sanitation", programCode: "BSTM", yearLevel: 1, semester: 1 },
+  { code: "ITCH", title: "Ivatan Traditions, Culture and History", programCode: "BSTM", yearLevel: 1, semester: 1 },
+  { code: "PATHFit 11", title: "Movement Competency Training (MCT)", programCode: "BSTM", yearLevel: 1, semester: 1 },
+  { code: "NSTP 1", title: "National Service Training Program 1", programCode: "BSTM", yearLevel: 1, semester: 1 },
+
+  // --- FIRST YEAR - SECOND SEMESTER ---
+  { code: "TPC 1", title: "Global Tourism, Geography and Culture", programCode: "BSTM", yearLevel: 1, semester: 2 },
+  { code: "THC 3", title: "Tourism and Hospitality Service Quality Management", programCode: "BSTM", yearLevel: 1, semester: 2 },
+  { code: "THC 4", title: "Philippine Tourism, Geography and Culture", programCode: "BSTM", yearLevel: 1, semester: 2 },
+  { code: "TPC 2", title: "Tour & Travel Management", programCode: "BSTM", yearLevel: 1, semester: 2 },
+  { code: "GE 04", title: "Understanding the Self", programCode: "BSTM", yearLevel: 1, semester: 2 },
+  { code: "PATHFit 12", title: "Exercise-based Fitness Activities", programCode: "BSTM", yearLevel: 1, semester: 2 },
+  { code: "CDRM", title: "Climate Change and Disaster Risk Reduction Management", programCode: "BSTM", yearLevel: 1, semester: 2 },
+  { code: "NSTP 2", title: "National Service Training Program 2", programCode: "BSTM", yearLevel: 1, semester: 2 },
+
+  // --- SECOND YEAR - FIRST SEMESTER ---
+  { code: "TECH COMM", title: "Basic Technical Communication", programCode: "BSTM", yearLevel: 2, semester: 1 },
+  { code: "TPC 3", title: "Applied Business Tools and Technologies (GDS) with Lab", programCode: "BSTM", yearLevel: 2, semester: 1 },
+  { code: "TPC 4", title: "Sustainable Tourism", programCode: "BSTM", yearLevel: 2, semester: 1 },
+  { code: "THC 5", title: "Micro Perspective of Tourism and Hospitality", programCode: "BSTM", yearLevel: 2, semester: 1 },
+  { code: "TPE 1", title: "Tour Guiding", programCode: "BSTM", yearLevel: 2, semester: 1 },
+  { code: "GE 05", title: "Art Appreciation", programCode: "BSTM", yearLevel: 2, semester: 1 },
+  { code: "GE 06", title: "Ethics", programCode: "BSTM", yearLevel: 2, semester: 1 },
+  { code: "PATHFit 13", title: "Individual and Dual Sports", programCode: "BSTM", yearLevel: 2, semester: 1 },
+
+  // --- SECOND YEAR - SECOND SEMESTER ---
+  { code: "GE 07", title: "Science, Technology and Society", programCode: "BSTM", yearLevel: 2, semester: 2 },
+  { code: "GE 08", title: "The Contemporary World", programCode: "BSTM", yearLevel: 2, semester: 2 },
+  { code: "GE 09", title: "Life and Works of Rizal", programCode: "BSTM", yearLevel: 2, semester: 2 },
+  { code: "TPC 5", title: "Tourism Policy Planning and Development", programCode: "BSTM", yearLevel: 2, semester: 2 },
+  { code: "TPE 2", title: "Cruise Tourism", programCode: "BSTM", yearLevel: 2, semester: 2 },
+  { code: "THC 6", title: "Professional Development and Applied Ethics", programCode: "BSTM", yearLevel: 2, semester: 2 },
+  { code: "TPC 7", title: "Foreign Language 1", programCode: "BSTM", yearLevel: 2, semester: 2 },
+  { code: "PATHFit 14", title: "Dance, Sports, Group Exercises, Outdoor and Adventure Activities", programCode: "BSTM", yearLevel: 2, semester: 2 },
+
+  // --- THIRD YEAR - FIRST SEMESTER ---
+  { code: "TPC 8", title: "Foreign Language 2", programCode: "BSTM", yearLevel: 3, semester: 1 },
+  { code: "TPC 9", title: "Research in Tourism 1", programCode: "BSTM", yearLevel: 3, semester: 1 },
+  { code: "BME 1", title: "Operations Management in Tourism and Hospitality Industry", programCode: "BSTM", yearLevel: 3, semester: 1 },
+  { code: "THC 7", title: "Tourism and Hospitality Marketing", programCode: "BSTM", yearLevel: 3, semester: 1 },
+  { code: "TPE 3", title: "Agri Tourism", programCode: "BSTM", yearLevel: 3, semester: 1 },
+  { code: "ITRM 1", title: "Ivatan Geography and History", programCode: "BSTM", yearLevel: 3, semester: 1 },
+
+  // --- THIRD YEAR - SECOND SEMESTER ---
+  { code: "THC 8", title: "Legal Aspects in Tourism and Hospitality", programCode: "BSTM", yearLevel: 3, semester: 2 },
+  { code: "BME 2", title: "Strategic Management in Tourism and Hospitality Industry", programCode: "BSTM", yearLevel: 3, semester: 2 },
+  { code: "TPC 9A", title: "Research in Tourism 2", programCode: "BSTM", yearLevel: 3, semester: 2 },
+  { code: "THC 9", title: "Multicultural Diversity in Workplace for the Tourism Professional", programCode: "BSTM", yearLevel: 3, semester: 2 },
+  { code: "THC 10", title: "Entrepreneurship in Tourism and Hospitality", programCode: "BSTM", yearLevel: 3, semester: 2 },
+  { code: "TPC 10", title: "Transportation Management (Covers Air, Land and Sea)", programCode: "BSTM", yearLevel: 3, semester: 2 },
+
+  // --- FOURTH YEAR - FIRST SEMESTER ---
+  { code: "TPE 4", title: "Ecotourism Management", programCode: "BSTM", yearLevel: 4, semester: 1 },
+  { code: "TPC 6", title: "Introduction to Meetings, Incentives, Conferences and Events Management as Applied to Tourism", programCode: "BSTM", yearLevel: 4, semester: 1 },
+  { code: "TPE 5", title: "Travel Writing and Photography", programCode: "BSTM", yearLevel: 4, semester: 1 },
+  { code: "ITRM 2", title: "Ivatan Tradition and Culture", programCode: "BSTM", yearLevel: 4, semester: 1 },
+
+  // --- FOURTH YEAR - SECOND SEMESTER ---
+  { code: "OJT", title: "Tourism Practicum (min. of 600 hours)", programCode: "BSTM", yearLevel: 4, semester: 2 },
+];
+
+export const ALL_CURRICULUMS = [...BSIT_CURRICULUM, ...BSHM_CURRICULUM, ...BSA_CURRICULUM, ...BSTM_CURRICULUM];
 
 /** Gets curriculum items for a given program code & year level */
 export function getCurriculumForProgram(programCode: string, yearLevel: number): CurriculumItem[] {
   const codeUpper = programCode.toUpperCase();
-  let targetProgram: "BSIT" | "BSHM" | "BSA" | null = null;
+  let targetProgram: "BSIT" | "BSHM" | "BSA" | "BSTM" | null = null;
 
   if (codeUpper === "BSIT" || codeUpper.includes("INFORMATION TECHNOLOGY")) {
     targetProgram = "BSIT";
-  } else if (codeUpper === "BSHM" || codeUpper.includes("HOSPITALITY")) {
+  } else if (codeUpper === "BSHM" || (codeUpper.includes("HOSPITALITY") && !codeUpper.includes("TOURISM"))) {
     targetProgram = "BSHM";
   } else if (codeUpper === "BSA" || codeUpper.includes("AGRICULTURE")) {
     targetProgram = "BSA";
+  } else if (codeUpper === "BSTM" || codeUpper.includes("TOURISM")) {
+    targetProgram = "BSTM";
   }
 
   if (!targetProgram) return [];
