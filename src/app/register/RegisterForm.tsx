@@ -27,8 +27,10 @@ import Link from "next/link";
 import {
   BSIT_CURRICULUM,
   BSHM_CURRICULUM,
+  BSA_CURRICULUM,
   BSIT_TRACKS,
   BSHM_MAJORS,
+  BSA_MAJORS,
   CurriculumItem,
 } from "@/lib/bsitCurriculum";
 
@@ -77,6 +79,8 @@ export function RegisterForm({
     "bsit": [...BSIT_TRACKS, "General BSIT"],
     "hospitality management": [...BSHM_MAJORS],
     "bshm": [...BSHM_MAJORS],
+    "agriculture": [...BSA_MAJORS],
+    "bsa": [...BSA_MAJORS],
     "secondary education": ["English", "Science", "Mathematics"],
     "bsed": ["English", "Science", "Mathematics"],
     "industrial technology": ["Automotive Technology", "Architecture Technology", "Electronics Technology"],
@@ -99,7 +103,7 @@ export function RegisterForm({
     return ["General Major"];
   }, [selectedProgramId, programs]);
 
-  // Identify active program code (BSIT, BSHM, etc.)
+  // Identify active program code (BSIT, BSHM, BSA, etc.)
   const selectedProg = programs.find((p) => String(p.program_id) === selectedProgramId);
 
   const activeProgramCode = useMemo(() => {
@@ -109,6 +113,7 @@ export function RegisterForm({
 
     if (codeUpper === "BSIT" || nameLower.includes("information technology")) return "BSIT";
     if (codeUpper === "BSHM" || nameLower.includes("hospitality")) return "BSHM";
+    if (codeUpper === "BSA" || nameLower.includes("agriculture")) return "BSA";
     return null;
   }, [selectedProg]);
 
@@ -117,7 +122,9 @@ export function RegisterForm({
   // Filter curriculum items for current program & year level
   const allottedCurriculumItems = useMemo(() => {
     if (!activeProgramCode) return [];
-    const sourceCurriculum = activeProgramCode === "BSIT" ? BSIT_CURRICULUM : BSHM_CURRICULUM;
+    let sourceCurriculum = BSIT_CURRICULUM;
+    if (activeProgramCode === "BSHM") sourceCurriculum = BSHM_CURRICULUM;
+    if (activeProgramCode === "BSA") sourceCurriculum = BSA_CURRICULUM;
 
     return sourceCurriculum.filter((item) => {
       if (item.yearLevel !== currentYearNum) return false;
@@ -150,7 +157,10 @@ export function RegisterForm({
 
   // Helper to find curriculum metadata for a course
   const getCurriculumMeta = (courseCode: string): CurriculumItem | undefined => {
-    const sourceCurriculum = activeProgramCode === "BSHM" ? BSHM_CURRICULUM : BSIT_CURRICULUM;
+    let sourceCurriculum = BSIT_CURRICULUM;
+    if (activeProgramCode === "BSHM") sourceCurriculum = BSHM_CURRICULUM;
+    if (activeProgramCode === "BSA") sourceCurriculum = BSA_CURRICULUM;
+
     return sourceCurriculum.find(
       (item) =>
         item.code === courseCode ||
@@ -1034,7 +1044,7 @@ export function RegisterForm({
         disabled={isPending}
         className="w-full relative flex items-center justify-center bg-[#7A151A] hover:bg-[#580B0F] text-white font-bold rounded-xl py-3.5 text-sm shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-[#7A151A] focus:ring-offset-2 transition-all duration-300 disabled:opacity-85 disabled:cursor-not-allowed group overflow-hidden mt-6"
       >
-        <span className="absolute right-0 top-0 w-24 h-full bg-[#E2A123]/10 skew-x-12 translate-x-12 group-hover:translate-x-[-180px] transition-transform duration-1000 ease-out" />
+        <span className="absolute right-0 top-0 w-24 h-full bg-[#E2A123]/10 skew-x-12 translate-x-12 group-hover:translate-x-[#180px] transition-transform duration-1000 ease-out" />
         {isPending ? (
           <div className="flex items-center gap-2">
             <Loader2 className="w-5 h-5 animate-spin text-[#E2A123]" />

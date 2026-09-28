@@ -1,7 +1,7 @@
 export interface CurriculumItem {
   code: string;
   title: string;
-  programCode: "BSIT" | "BSHM" | "COMMON";
+  programCode: "BSIT" | "BSHM" | "BSA" | "COMMON";
   yearLevel: number; // 1, 2, 3, 4
   semester: number;  // 1, 2
   isTrackElective?: boolean;
@@ -19,6 +19,14 @@ export const BSHM_MAJORS = [
   "Culinary Arts Major",
   "Hotel & Lodging Operations Major",
   "General BSHM",
+] as const;
+
+export const BSA_MAJORS = [
+  "Crop Science Major",
+  "Animal Science Major",
+  "Soil Science Major",
+  "Agricultural Extension Major",
+  "General BSA",
 ] as const;
 
 // --- BSIT CURRICULUM ---
@@ -173,17 +181,97 @@ export const BSHM_CURRICULUM: CurriculumItem[] = [
   { code: "Prac", title: "Practicum (min. of 600 hours)", programCode: "BSHM", yearLevel: 4, semester: 2 },
 ];
 
-export const ALL_CURRICULUMS = [...BSIT_CURRICULUM, ...BSHM_CURRICULUM];
+// --- BSA CURRICULUM ---
+export const BSA_CURRICULUM: CurriculumItem[] = [
+  // --- FIRST YEAR - FIRST SEMESTER ---
+  { code: "GE 01", title: "Purposive Communication", programCode: "BSA", yearLevel: 1, semester: 1 },
+  { code: "GE 02", title: "Readings in Philippine History", programCode: "BSA", yearLevel: 1, semester: 1 },
+  { code: "GE 03", title: "Mathematics in the Modern World", programCode: "BSA", yearLevel: 1, semester: 1 },
+  { code: "AG EXT 1", title: "Principles of Agricultural Extension and Communication", programCode: "BSA", yearLevel: 1, semester: 1 },
+  { code: "PATHFit 11", title: "Movement Competency Training (MCT)", programCode: "BSA", yearLevel: 1, semester: 1 },
+  { code: "NSTP 1", title: "National Service Training Program 1", programCode: "BSA", yearLevel: 1, semester: 1 },
+  { code: "ITCH", title: "Ivatan Traditions, Culture, and History", programCode: "BSA", yearLevel: 1, semester: 1 },
+  { code: "AGRI 1", title: "Introduction to Agriculture", programCode: "BSA", yearLevel: 1, semester: 1 },
+  { code: "AGRI 4", title: "Organic Chemistry", programCode: "BSA", yearLevel: 1, semester: 1 },
+
+  // --- FIRST YEAR - SECOND SEMESTER ---
+  { code: "GE 04", title: "Understanding the Self", programCode: "BSA", yearLevel: 1, semester: 2 },
+  { code: "PATHFit 12", title: "Exercise-based Fitness Activities", programCode: "BSA", yearLevel: 1, semester: 2 },
+  { code: "NSTP 2", title: "National Service Training Program 2", programCode: "BSA", yearLevel: 1, semester: 2 },
+  { code: "CDRM", title: "Climate Change and Disaster Risk Reduction Management", programCode: "BSA", yearLevel: 1, semester: 2 },
+  { code: "ANSCI 1", title: "Introduction to Poultry and Swine Production", programCode: "BSA", yearLevel: 1, semester: 2 },
+  { code: "SOIL SCI 1", title: "Principles of Soil Science", programCode: "BSA", yearLevel: 1, semester: 2 },
+  { code: "CROP SCI 1", title: "Principles of Crop Production", programCode: "BSA", yearLevel: 1, semester: 2 },
+  { code: "CROP PROT 1", title: "Principles of Crop Protection", programCode: "BSA", yearLevel: 1, semester: 2 },
+  { code: "AGB 2", title: "Introduction to Agriculture Commodity System", programCode: "BSA", yearLevel: 1, semester: 2 },
+
+  // --- SECOND YEAR - FIRST SEMESTER ---
+  { code: "GE 05", title: "Art Appreciation", programCode: "BSA", yearLevel: 2, semester: 1 },
+  { code: "GE 06", title: "Ethics", programCode: "BSA", yearLevel: 2, semester: 1 },
+  { code: "TECH COMM", title: "Basic Technical Communication", programCode: "BSA", yearLevel: 2, semester: 1 },
+  { code: "PATHFit 13", title: "Individual and Dual Sports Activities", programCode: "BSA", yearLevel: 2, semester: 1 },
+  { code: "CROP PROT 2", title: "Approaches and Practices in Pest Management", programCode: "BSA", yearLevel: 2, semester: 1 },
+  { code: "CROP SCI 2", title: "Practices of Crop Science and Management", programCode: "BSA", yearLevel: 2, semester: 1 },
+  { code: "ANSCI 2", title: "Introduction to Small and Large Ruminant Production", programCode: "BSA", yearLevel: 2, semester: 1 },
+  { code: "SOIL SCI 2", title: "Soil Fertility, Conservation and Management", programCode: "BSA", yearLevel: 2, semester: 1 },
+  { code: "AGRI 3", title: "Principles of Genetics", programCode: "BSA", yearLevel: 2, semester: 1 },
+  { code: "PRACTICUM", title: "Practicum (Skills Development)", programCode: "BSA", yearLevel: 2, semester: 1 },
+  { code: "AGB 7", title: "Agricultural Business Management", programCode: "BSA", yearLevel: 2, semester: 1 },
+
+  // --- SECOND YEAR - SECOND SEMESTER ---
+  { code: "GE 07", title: "Science, Technology, and Society", programCode: "BSA", yearLevel: 2, semester: 2 },
+  { code: "GE 08", title: "The Contemporary World", programCode: "BSA", yearLevel: 2, semester: 2 },
+  { code: "GE 09", title: "Life and Works of Rizal", programCode: "BSA", yearLevel: 2, semester: 2 },
+  { code: "PATHFit 14", title: "Dance, Sports, Group Exercises, Outdoor and Adventure Activities", programCode: "BSA", yearLevel: 2, semester: 2 },
+  { code: "AGRI 5", title: "General Biochemistry", programCode: "BSA", yearLevel: 2, semester: 2 },
+  { code: "AGRI 6", title: "Methods of Agricultural Research", programCode: "BSA", yearLevel: 2, semester: 2 },
+  { code: "AGB 1", title: "Principles of Agricultural Entrepreneurship and Enterprise Development", programCode: "BSA", yearLevel: 2, semester: 2 },
+  { code: "AG EXT 2", title: "Agricultural Extension Program Planning and Technology Transfer", programCode: "BSA", yearLevel: 2, semester: 2 },
+
+  // --- THIRD YEAR - FIRST SEMESTER ---
+  { code: "AGRI 2", title: "Introduction to Organic Agriculture", programCode: "BSA", yearLevel: 3, semester: 1 },
+  { code: "ANSCI 3", title: "Slaughter of Animals and Animal Product Processing*", programCode: "BSA", yearLevel: 3, semester: 1 },
+  { code: "CROP SCI 3", title: "General Physiology and Toxicology*", programCode: "BSA", yearLevel: 3, semester: 1 },
+  { code: "SEM 1", title: "Seminar A", programCode: "BSA", yearLevel: 3, semester: 1 },
+  { code: "THESIS 1", title: "Thesis 1 Major Farm Practice (Outline)", programCode: "BSA", yearLevel: 3, semester: 1 },
+  { code: "AG EXT 3", title: "Agricultural Extension Monitoring and Evaluation", programCode: "BSA", yearLevel: 3, semester: 1 },
+
+  // --- THIRD YEAR - SECOND SEMESTER ---
+  { code: "AGB 3", title: "Introduction to Agricultural Policy and Development", programCode: "BSA", yearLevel: 3, semester: 2 },
+  { code: "AME 2", title: "Introduction to Agriculture Systems", programCode: "BSA", yearLevel: 3, semester: 2 },
+  { code: "SEM 2", title: "Seminar B", programCode: "BSA", yearLevel: 3, semester: 2 },
+  { code: "ANSCI 4", title: "Animal Nutrition**", programCode: "BSA", yearLevel: 3, semester: 2 },
+  { code: "SOIL SCI 3", title: "Soil Survey, Classification and Land Use**", programCode: "BSA", yearLevel: 3, semester: 2 },
+  { code: "AGRI 7", title: "Basic Farm Machineries, Mechanization, and Water Management and SMART Agriculture Technology", programCode: "BSA", yearLevel: 3, semester: 2 },
+  { code: "THESIS 2", title: "Thesis 2 Major Farm Practice (Experimental)", programCode: "BSA", yearLevel: 3, semester: 2 },
+  { code: "AGRI 8", title: "Natural Resource and Environmental Management", programCode: "BSA", yearLevel: 3, semester: 2 },
+  { code: "CROP SCI 4", title: "Plant Propagation and Nursery Management**", programCode: "BSA", yearLevel: 3, semester: 2 },
+  { code: "AME 1", title: "Colloquium", programCode: "BSA", yearLevel: 3, semester: 2 },
+  { code: "CROP PROT 3", title: "Principles of Plant Disease Management", programCode: "BSA", yearLevel: 3, semester: 2 },
+
+  // --- FOURTH YEAR - FIRST SEMESTER ---
+  { code: "THESIS 3", title: "Thesis 3 (Final Defense & Public Lecture)", programCode: "BSA", yearLevel: 4, semester: 1 },
+  { code: "CROP PROT 4", title: "Beneficial Arthropods and Microorganism*", programCode: "BSA", yearLevel: 4, semester: 1 },
+  { code: "CROP SCI 5", title: "Post-Harvest Handling and Seed Science", programCode: "BSA", yearLevel: 4, semester: 1 },
+
+  // --- FOURTH YEAR - SECOND SEMESTER ---
+  { code: "OJT", title: "On-the-Job Training (240 hours)", programCode: "BSA", yearLevel: 4, semester: 2 },
+  { code: "CA", title: "Course Appraisal", programCode: "BSA", yearLevel: 4, semester: 2 },
+];
+
+export const ALL_CURRICULUMS = [...BSIT_CURRICULUM, ...BSHM_CURRICULUM, ...BSA_CURRICULUM];
 
 /** Gets curriculum items for a given program code & year level */
 export function getCurriculumForProgram(programCode: string, yearLevel: number): CurriculumItem[] {
   const codeUpper = programCode.toUpperCase();
-  let targetProgram: "BSIT" | "BSHM" | null = null;
+  let targetProgram: "BSIT" | "BSHM" | "BSA" | null = null;
 
   if (codeUpper === "BSIT" || codeUpper.includes("INFORMATION TECHNOLOGY")) {
     targetProgram = "BSIT";
   } else if (codeUpper === "BSHM" || codeUpper.includes("HOSPITALITY")) {
     targetProgram = "BSHM";
+  } else if (codeUpper === "BSA" || codeUpper.includes("AGRICULTURE")) {
+    targetProgram = "BSA";
   }
 
   if (!targetProgram) return [];
