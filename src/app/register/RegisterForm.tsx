@@ -1,9 +1,30 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useEffect, useState, useMemo } from "react";
 import { registerAction } from "@/app/actions/auth";
-import { Eye, EyeOff, Lock, User, Loader2, AlertCircle, CheckCircle, GraduationCap, Check, X, BookOpen, ChevronDown, Search } from "lucide-react";
+import {
+  Eye,
+  EyeOff,
+  Lock,
+  User,
+  Loader2,
+  AlertCircle,
+  CheckCircle,
+  GraduationCap,
+  Check,
+  X,
+  BookOpen,
+  ChevronDown,
+  Search,
+  Sparkles,
+  Calendar,
+  Layers,
+  CheckSquare,
+  Square,
+  BookCheck,
+} from "lucide-react";
 import Link from "next/link";
+import { BSIT_CURRICULUM, CurriculumItem, BSIT_TRACKS } from "@/lib/bsitCurriculum";
 
 interface Program {
   program_id: number;
@@ -17,42 +38,47 @@ interface Course {
   course_title: string;
 }
 
-export function RegisterForm({ 
+export function RegisterForm({
   programs = [],
-  courses = []
-}: { 
+  courses = [],
+}: {
   programs?: Program[];
   courses?: Course[];
 }) {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  
+
   // Real-time Input States
   const [institutionalId, setInstitutionalId] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [selectedProgramId, setSelectedProgramId] = useState<string>("");
-  
+  const [selectedYearLevel, setSelectedYearLevel] = useState<string>("1");
+  const [selectedMajor, setSelectedMajor] = useState<string>("");
+
   // Multi-select Dropdown States for Enrolled Subjects
   const [selectedCourseIds, setSelectedCourseIds] = useState<number[]>([]);
   const [isSubjectDropdownOpen, setIsSubjectDropdownOpen] = useState(false);
   const [subjectSearchQuery, setSubjectSearchQuery] = useState("");
+  const [semesterTabFilter, setSemesterTabFilter] = useState<"all" | "1" | "2">("all");
 
   const [state, formAction, isPending] = useActionState(registerAction, null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
-  // Map program names / codes -> available majors
+  // Map program names / codes -> available majors/tracks
   const PROGRAM_MAJORS: Record<string, string[]> = {
+    "information technology": [...BSIT_TRACKS, "General BSIT"],
+    "bsit": [...BSIT_TRACKS, "General BSIT"],
     "secondary education": ["English", "Science", "Mathematics"],
     "bsed": ["English", "Science", "Mathematics"],
     "industrial technology": ["Automotive Technology", "Architecture Technology", "Electronics Technology"],
-    "bsit_ind": ["Automotive Technology", "Architecture Technology", "Electronics Technology"],
     "bsindtech": ["Automotive Technology", "Architecture Technology", "Electronics Technology"],
   };
 
   /** Returns the major options for the currently selected program */
-  const getMajorsForProgram = (programId: string): string[] => {
-    const prog = programs.find((p) => String(p.program_id) === programId);
+  const availableMajors = useMemo(() => {
+    if (!selectedProgramId) return [];
+    const prog = programs.find((p) => String(p.program_id) === selectedProgramId);
     if (!prog) return [];
     const nameLower = prog.program_name.toLowerCase();
     const codeLower = prog.program_code.toLowerCase();
@@ -63,34 +89,139 @@ export function RegisterForm({
       }
     }
     return ["General Major"];
+  }, [selectedProgramId, programs]);
+
+  // Identify if selected program is BSIT
+  const selectedProg = programs.find((p) => String(p.program_id) === selectedProgramId);
+  const isBsit = useMemo(() => {
+    if (!selectedProg) return false;
+    return (
+      selectedProg.program_code.toUpperCase() === "BSIT" ||
+      selectedProg.program_name.toLowerCase().includes("information technology")
+    );
+  }, [selectedProg]);
+
+  const currentYearNum = Number(selectedYearLevel) || 1;
+
+  // Filter BSIT Curriculum items for current year level & track
+  const allottedBsitCurriculumItems = useMemo(() => {
+    if (!isBsit) return [];
+    return BSIT_CURRICULUM.filter((item) => {
+      if (item.yearLevel !== currentYearNum) return false;
+
+      // Handle track electives filter if a track is selected
+      if (item.isTrackElective && item.trackName) {
+        if (selectedMajor && selectedMajor.includes("Track")) {
+          return item.trackName === selectedMajor;
+        }
+      }
+      return true;
+    });
+  }, [isBsit, currentYearNum, selectedMajor]);
+
+  // Map curriculum items to actual DB courses
+  const allottedCourses = useMemo(() => {
+    if (!selectedProgramId) return [];
+    if (!isBsit) return courses; // Fallback for other programs
+
+    const allottedCodes = allottedBsitCurriculumItems.map((item) => item.code);
+
+    return courses.filter((c) => {
+      if (allottedCodes.includes(c.course_code)) return true;
+      // Match track elective variants like ITD 304-CS, ITD 304-WM, etc.
+      return allottedBsitCurriculumItems.some(
+        (item) => item.isTrackElective && c.course_code.startsWith(item.code.replace("*", ""))
+      );
+    });
+  }, [selectedProgramId, isBsit, allottedBsitCurriculumItems, courses]);
+
+  // Helper to find curriculum metadata for a course
+  const getCurriculumMeta = (courseCode: string): CurriculumItem | undefined => {
+    return BSIT_CURRICULUM.find(
+      (item) =>
+        item.code === courseCode ||
+        (item.isTrackElective && courseCode.startsWith(item.code.replace("*", "")))
+    );
   };
 
-  const availableMajors = getMajorsForProgram(selectedProgramId);
+  // Auto-preselect all allotted subjects whenever Program, Year Level, or Major changes
+  useEffect(() => {
+    if (!selectedProgramId || !selectedYearLevel) return;
+
+    if (isBsit && allottedCourses.length > 0) {
+      const ids = allottedCourses.map((c) => c.course_id);
+      setSelectedCourseIds(ids);
+    }
+  }, [selectedProgramId, selectedYearLevel, selectedMajor, isBsit, allottedCourses]);
 
   // Toggle subject selection
   const toggleCourse = (courseId: number) => {
     setSelectedCourseIds((prev) =>
-      prev.includes(courseId)
-        ? prev.filter((id) => id !== courseId)
-        : [...prev, courseId]
+      prev.includes(courseId) ? prev.filter((id) => id !== courseId) : [...prev, courseId]
     );
   };
 
-  // Select all or clear subjects
-  const selectAllCourses = () => {
-    if (selectedCourseIds.length === courses.length) {
-      setSelectedCourseIds([]);
-    } else {
-      setSelectedCourseIds(courses.map((c) => c.course_id));
-    }
+  // Select all allotted courses for current year level
+  const selectAllAllottedCourses = () => {
+    const allottedIds = allottedCourses.map((c) => c.course_id);
+    setSelectedCourseIds(allottedIds);
   };
 
-  // Filtered courses for multi-select dropdown search
-  const filteredCourses = courses.filter(
-    (c) =>
-      c.course_code.toLowerCase().includes(subjectSearchQuery.toLowerCase()) ||
-      c.course_title.toLowerCase().includes(subjectSearchQuery.toLowerCase())
-  );
+  // Clear all selections
+  const clearAllCourses = () => {
+    setSelectedCourseIds([]);
+  };
+
+  // Select courses by semester (1 or 2)
+  const selectSemesterCourses = (semesterNum: number) => {
+    const semCourses = allottedCourses.filter((c) => {
+      const meta = getCurriculumMeta(c.course_code);
+      return meta?.semester === semesterNum;
+    });
+    const semIds = semCourses.map((c) => c.course_id);
+
+    // Add these semIds to existing selected course IDs without duplicates
+    setSelectedCourseIds((prev) => Array.from(new Set([...prev, ...semIds])));
+  };
+
+  // Filtered courses for multi-select dropdown search & semester tab filter
+  const filteredCourses = useMemo(() => {
+    return allottedCourses.filter((c) => {
+      const matchesSearch =
+        c.course_code.toLowerCase().includes(subjectSearchQuery.toLowerCase()) ||
+        c.course_title.toLowerCase().includes(subjectSearchQuery.toLowerCase());
+
+      if (!matchesSearch) return false;
+
+      if (semesterTabFilter === "all") return true;
+
+      const meta = getCurriculumMeta(c.course_code);
+      return meta?.semester === Number(semesterTabFilter);
+    });
+  }, [allottedCourses, subjectSearchQuery, semesterTabFilter]);
+
+  // Group filtered courses by semester for neat rendering
+  const sem1Courses = useMemo(() => {
+    return filteredCourses.filter((c) => {
+      const meta = getCurriculumMeta(c.course_code);
+      return meta?.semester === 1;
+    });
+  }, [filteredCourses]);
+
+  const sem2Courses = useMemo(() => {
+    return filteredCourses.filter((c) => {
+      const meta = getCurriculumMeta(c.course_code);
+      return meta?.semester === 2;
+    });
+  }, [filteredCourses]);
+
+  const otherCourses = useMemo(() => {
+    return filteredCourses.filter((c) => {
+      const meta = getCurriculumMeta(c.course_code);
+      return !meta || (meta.semester !== 1 && meta.semester !== 2);
+    });
+  }, [filteredCourses]);
+
   // Real-time Institutional ID check
   const isIdEmpty = institutionalId.trim() === "";
   const isIdValid = /^\d{4}-\d{4}-AB$/.test(institutionalId.trim().toUpperCase());
@@ -128,9 +259,9 @@ export function RegisterForm({
 
   if (successMsg) {
     return (
-      <div className="space-y-6 text-center py-6">
+      <div className="space-y-6 text-center py-6 animate-in fade-in zoom-in-95 duration-300">
         <div className="flex justify-center">
-          <div className="bg-emerald-50 text-emerald-600 p-4 rounded-full border border-emerald-100 animate-bounce">
+          <div className="bg-emerald-50 text-emerald-600 p-4 rounded-full border border-emerald-100 animate-bounce shadow-sm">
             <CheckCircle className="w-12 h-12" />
           </div>
         </div>
@@ -150,13 +281,24 @@ export function RegisterForm({
     );
   }
 
+  const yearLevelLabel =
+    selectedYearLevel === "1"
+      ? "1st Year"
+      : selectedYearLevel === "2"
+      ? "2nd Year"
+      : selectedYearLevel === "3"
+      ? "3rd Year"
+      : selectedYearLevel === "4"
+      ? "4th Year"
+      : "Year Level";
+
   return (
     <form action={formAction} className="space-y-5">
       <input type="hidden" name="role" value="Student" />
       <input type="hidden" name="enrolledCourses" value={selectedCourseIds.join(",")} />
 
       {state?.error && (
-        <div className="flex items-center gap-3 bg-rose-50 border border-rose-200 text-rose-900 px-4 py-3 rounded-lg text-sm">
+        <div className="flex items-center gap-3 bg-rose-50 border border-rose-200 text-rose-900 px-4 py-3 rounded-xl text-sm shadow-sm animate-in fade-in">
           <AlertCircle className="w-5 h-5 shrink-0 text-rose-600" />
           <p className="font-semibold">{state.error}</p>
         </div>
@@ -173,11 +315,11 @@ export function RegisterForm({
               Student Registration Portal
             </h4>
             <p className="text-[11px] text-stone-500 font-medium">
-              Only student account self-registration is enabled.
+              Dynamic Curriculum & Subject Selection Engine
             </p>
           </div>
         </div>
-        <span className="text-[10px] font-extrabold uppercase px-2.5 py-1 bg-[#7A151A] text-white rounded-md tracking-wider">
+        <span className="text-[10px] font-extrabold uppercase px-2.5 py-1 bg-[#7A151A] text-white rounded-md tracking-wider shadow-xs">
           Student
         </span>
       </div>
@@ -233,15 +375,18 @@ export function RegisterForm({
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-t border-stone-100 pt-4">
         <div>
           <label htmlFor="programId" className="block text-xs font-bold text-stone-600 uppercase tracking-wider mb-1.5">
-            Academic Program
+            Academic Program <span className="text-rose-500">*</span>
           </label>
           <select
             id="programId"
             name="programId"
             required
             value={selectedProgramId}
-            onChange={(e) => setSelectedProgramId(e.target.value)}
-            className="w-full bg-stone-50/60 focus:bg-white border border-stone-200/80 focus:border-[#7A151A] rounded-xl px-4 py-3 text-sm text-stone-900 focus:outline-none focus:ring-2 focus:ring-[#7A151A]/20 transition-all duration-200"
+            onChange={(e) => {
+              setSelectedProgramId(e.target.value);
+              setSelectedMajor("");
+            }}
+            className="w-full bg-stone-50/60 focus:bg-white border border-stone-200/80 focus:border-[#7A151A] rounded-xl px-4 py-3 text-sm text-stone-900 focus:outline-none focus:ring-2 focus:ring-[#7A151A]/20 transition-all duration-200 font-medium"
             disabled={isPending}
           >
             <option value="" disabled>Select Program</option>
@@ -255,15 +400,16 @@ export function RegisterForm({
 
         <div>
           <label htmlFor="yearLevel" className="block text-xs font-bold text-stone-600 uppercase tracking-wider mb-1.5">
-            Year Level
+            Year Level <span className="text-rose-500">*</span>
           </label>
           <select
             id="yearLevel"
             name="yearLevel"
             required
-            className="w-full bg-stone-50/60 focus:bg-white border border-stone-200/80 focus:border-[#7A151A] rounded-xl px-4 py-3 text-sm text-stone-900 focus:outline-none focus:ring-2 focus:ring-[#7A151A]/20 transition-all duration-200"
+            value={selectedYearLevel}
+            onChange={(e) => setSelectedYearLevel(e.target.value)}
+            className="w-full bg-stone-50/60 focus:bg-white border border-stone-200/80 focus:border-[#7A151A] rounded-xl px-4 py-3 text-sm text-stone-900 focus:outline-none focus:ring-2 focus:ring-[#7A151A]/20 transition-all duration-200 font-medium"
             disabled={isPending}
-            defaultValue="1"
           >
             <option value="1">1st Year</option>
             <option value="2">2nd Year</option>
@@ -274,15 +420,16 @@ export function RegisterForm({
 
         <div>
           <label htmlFor="major" className="block text-xs font-bold text-stone-600 uppercase tracking-wider mb-1.5">
-            Academic Major
+            Academic Major / Track <span className="text-rose-500">*</span>
           </label>
           <select
             id="major"
             name="section"
             required
-            className="w-full bg-stone-50/60 focus:bg-white border border-stone-200/80 focus:border-[#7A151A] rounded-xl px-4 py-3 text-sm text-stone-900 focus:outline-none focus:ring-2 focus:ring-[#7A151A]/20 transition-all duration-200 disabled:text-stone-400"
+            value={selectedMajor}
+            onChange={(e) => setSelectedMajor(e.target.value)}
+            className="w-full bg-stone-50/60 focus:bg-white border border-stone-200/80 focus:border-[#7A151A] rounded-xl px-4 py-3 text-sm text-stone-900 focus:outline-none focus:ring-2 focus:ring-[#7A151A]/20 transition-all duration-200 disabled:text-stone-400 font-medium"
             disabled={isPending || availableMajors.length === 0}
-            defaultValue=""
           >
             {availableMajors.length === 0 ? (
               <option value="" disabled>
@@ -290,7 +437,7 @@ export function RegisterForm({
               </option>
             ) : (
               <>
-                <option value="" disabled>Select Major</option>
+                <option value="" disabled>Select Major / Track</option>
                 {availableMajors.map((m) => (
                   <option key={m} value={m}>
                     {m}
@@ -302,65 +449,112 @@ export function RegisterForm({
         </div>
       </div>
 
-      {/* Multi-Select Dropdown for Enrolled Subjects */}
-      {courses.length > 0 && (
-        <div className="border-t border-stone-100 pt-4 space-y-1.5">
-          <label className="block text-xs font-bold text-stone-600 uppercase tracking-wider">
-            Enrolled Subjects (Multi-Select Dropdown)
+      {/* DYNAMIC MULTI-SELECT DROPDOWN FOR ENROLLED SUBJECTS */}
+      <div className="border-t border-stone-100 pt-4 space-y-2">
+        <div className="flex items-center justify-between">
+          <label className="block text-xs font-bold text-stone-700 uppercase tracking-wider flex items-center gap-1.5">
+            <BookOpen className="w-4 h-4 text-[#7A151A]" />
+            <span>Enrolled Subjects</span>
+            {selectedProgramId && (
+              <span className="text-[11px] font-semibold text-[#7A151A] bg-[#7A151A]/10 px-2 py-0.5 rounded-md normal-case border border-[#7A151A]/20">
+                {selectedProg?.program_code} • {yearLevelLabel} Allotted
+              </span>
+            )}
           </label>
-          
-          <div className="relative">
-            {/* Interactive Dropdown Trigger Button */}
-            <button
-              type="button"
-              onClick={() => setIsSubjectDropdownOpen(!isSubjectDropdownOpen)}
-              className={`w-full bg-stone-50/60 hover:bg-stone-50 focus:bg-white border rounded-xl px-4 py-3 text-left flex items-center justify-between transition-all duration-200 ${
-                isSubjectDropdownOpen ? "border-[#7A151A] ring-2 ring-[#7A151A]/20 bg-white" : "border-stone-200/80"
-              }`}
-              disabled={isPending}
-            >
-              <div className="flex items-center gap-1.5 flex-wrap max-w-[85%]">
-                {selectedCourseIds.length === 0 ? (
-                  <div className="flex items-center gap-2 text-stone-400 text-sm">
-                    <BookOpen className="w-4 h-4 text-stone-400 shrink-0" />
-                    <span>Select your enrolled subjects...</span>
-                  </div>
-                ) : (
-                  courses
-                    .filter((c) => selectedCourseIds.includes(c.course_id))
-                    .map((c) => (
-                      <span
-                        key={c.course_id}
-                        className="inline-flex items-center gap-1 bg-[#7A151A]/10 text-[#7A151A] border border-[#7A151A]/20 px-2.5 py-0.5 rounded-lg text-xs font-bold"
-                      >
-                        <span>{c.course_code}</span>
-                        <span
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toggleCourse(c.course_id);
-                          }}
-                          className="hover:text-rose-800 p-0.5 cursor-pointer"
-                        >
-                          <X className="w-3 h-3" />
-                        </span>
-                      </span>
-                    ))
-                )}
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                {selectedCourseIds.length > 0 && (
-                  <span className="text-[10px] font-black bg-[#7A151A] text-white px-2 py-0.5 rounded-full">
-                    {selectedCourseIds.length}
-                  </span>
-                )}
-                <ChevronDown className={`w-4 h-4 text-stone-400 transition-transform duration-200 ${isSubjectDropdownOpen ? "rotate-180" : ""}`} />
-              </div>
-            </button>
 
-            {/* Dropdown Menu Overlay */}
-            {isSubjectDropdownOpen && (
-              <div className="absolute z-30 left-0 right-0 mt-2 bg-white border border-stone-200 shadow-xl rounded-2xl p-3 space-y-2.5 animate-in fade-in zoom-in-95 duration-150">
-                {/* Search & Select All Toolbar */}
+          {selectedProgramId && allottedCourses.length > 0 && (
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={selectAllAllottedCourses}
+                className="text-[11px] font-bold text-[#7A151A] hover:bg-[#7A151A]/10 px-2 py-1 rounded-md transition-colors flex items-center gap-1"
+              >
+                <CheckSquare className="w-3.5 h-3.5" /> Select All {yearLevelLabel}
+              </button>
+              {selectedCourseIds.length > 0 && (
+                <button
+                  type="button"
+                  onClick={clearAllCourses}
+                  className="text-[11px] font-bold text-rose-600 hover:bg-rose-50 px-2 py-1 rounded-md transition-colors"
+                >
+                  Clear Selection
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="relative">
+          {/* Interactive Dropdown Trigger Button */}
+          <button
+            type="button"
+            onClick={() => {
+              if (!selectedProgramId) return;
+              setIsSubjectDropdownOpen(!isSubjectDropdownOpen);
+            }}
+            disabled={isPending || !selectedProgramId}
+            className={`w-full bg-stone-50/60 hover:bg-stone-50 focus:bg-white border rounded-xl px-4 py-3 text-left flex items-center justify-between transition-all duration-200 ${
+              !selectedProgramId
+                ? "cursor-not-allowed opacity-75 border-stone-200/80 bg-stone-100/50"
+                : isSubjectDropdownOpen
+                ? "border-[#7A151A] ring-2 ring-[#7A151A]/20 bg-white shadow-sm"
+                : "border-stone-200/80"
+            }`}
+          >
+            <div className="flex items-center gap-1.5 flex-wrap max-w-[85%]">
+              {!selectedProgramId ? (
+                <div className="flex items-center gap-2 text-stone-400 text-xs py-0.5">
+                  <Sparkles className="w-4 h-4 text-amber-500 shrink-0 animate-pulse" />
+                  <span>Please select your Academic Program above to view allotted subjects...</span>
+                </div>
+              ) : selectedCourseIds.length === 0 ? (
+                <div className="flex items-center gap-2 text-stone-400 text-xs py-0.5">
+                  <BookOpen className="w-4 h-4 text-stone-400 shrink-0" />
+                  <span>Select your enrolled subjects for {selectedProg?.program_code} ({yearLevelLabel})...</span>
+                </div>
+              ) : (
+                courses
+                  .filter((c) => selectedCourseIds.includes(c.course_id))
+                  .map((c) => (
+                    <span
+                      key={c.course_id}
+                      className="inline-flex items-center gap-1 bg-[#7A151A]/10 text-[#7A151A] border border-[#7A151A]/20 px-2.5 py-1 rounded-lg text-xs font-bold animate-in fade-in"
+                    >
+                      <span>{c.course_code}</span>
+                      <span
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleCourse(c.course_id);
+                        }}
+                        className="hover:text-rose-800 p-0.5 rounded hover:bg-[#7A151A]/20 cursor-pointer transition-colors"
+                        title={`Remove ${c.course_code}`}
+                      >
+                        <X className="w-3 h-3" />
+                      </span>
+                    </span>
+                  ))
+              )}
+            </div>
+            <div className="flex items-center gap-2 shrink-0 ml-2">
+              {selectedCourseIds.length > 0 && (
+                <span className="text-[11px] font-black bg-[#7A151A] text-white px-2.5 py-0.5 rounded-full shadow-xs">
+                  {selectedCourseIds.length}
+                </span>
+              )}
+              <ChevronDown
+                className={`w-4 h-4 text-stone-400 transition-transform duration-200 ${
+                  isSubjectDropdownOpen ? "rotate-180 text-[#7A151A]" : ""
+                }`}
+              />
+            </div>
+          </button>
+
+          {/* Dynamic Dropdown Menu Overlay */}
+          {isSubjectDropdownOpen && selectedProgramId && (
+            <div className="absolute z-40 left-0 right-0 mt-2 bg-white border border-stone-200 shadow-2xl rounded-2xl p-3.5 space-y-3 animate-in fade-in zoom-in-95 duration-150">
+              
+              {/* Top Toolbar: Search & Semester Filter Pills */}
+              <div className="space-y-2 pb-2 border-b border-stone-100">
                 <div className="flex items-center gap-2">
                   <div className="relative flex-1">
                     <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
@@ -368,61 +562,279 @@ export function RegisterForm({
                       type="text"
                       value={subjectSearchQuery}
                       onChange={(e) => setSubjectSearchQuery(e.target.value)}
-                      placeholder="Filter subjects..."
-                      className="w-full bg-stone-50 border border-stone-200 rounded-xl pl-8 pr-3 py-1.5 text-xs text-stone-800 focus:outline-none focus:border-[#7A151A]"
+                      placeholder={`Search ${selectedProg?.program_code} ${yearLevelLabel} subjects...`}
+                      className="w-full bg-stone-50 border border-stone-200 rounded-xl pl-8 pr-3 py-2 text-xs text-stone-800 focus:outline-none focus:border-[#7A151A] focus:ring-1 focus:ring-[#7A151A]"
                     />
+                    {subjectSearchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => setSubjectSearchQuery("")}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
-                  <button
-                    type="button"
-                    onClick={selectAllCourses}
-                    className="text-xs font-bold text-[#7A151A] hover:underline px-2 whitespace-nowrap"
-                  >
-                    {selectedCourseIds.length === courses.length ? "Deselect All" : "Select All"}
-                  </button>
                 </div>
 
-                {/* Filtered Course List */}
-                <div className="max-h-52 overflow-y-auto space-y-1 pr-1 divide-y divide-stone-100/60">
-                  {filteredCourses.length === 0 ? (
-                    <p className="text-xs text-stone-400 text-center py-4">No subjects matching search.</p>
-                  ) : (
-                    filteredCourses.map((course) => {
-                      const isSelected = selectedCourseIds.includes(course.course_id);
-                      return (
-                        <div
-                          key={course.course_id}
-                          onClick={() => toggleCourse(course.course_id)}
-                          className={`flex items-center justify-between p-2.5 rounded-xl cursor-pointer transition-colors ${
-                            isSelected
-                              ? "bg-[#7A151A]/10 text-[#7A151A] font-semibold"
-                              : "hover:bg-stone-50 text-stone-700"
-                          }`}
-                        >
-                          <div className="flex items-center gap-3">
-                            <div
-                              className={`w-4 h-4 rounded flex items-center justify-center border transition-colors ${
-                                isSelected
-                                  ? "bg-[#7A151A] border-[#7A151A] text-white"
-                                  : "border-stone-300 bg-white"
-                              }`}
-                            >
-                              {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
-                            </div>
-                            <div>
-                              <p className="text-xs font-bold">{course.course_code}</p>
-                              <p className="text-[11px] text-stone-500 font-medium">{course.course_title}</p>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
+                {/* Quick Filter Semester Tabs */}
+                {isBsit && (
+                  <div className="flex items-center justify-between text-xs pt-1">
+                    <div className="flex items-center gap-1 bg-stone-100/70 p-1 rounded-xl">
+                      <button
+                        type="button"
+                        onClick={() => setSemesterTabFilter("all")}
+                        className={`px-2.5 py-1 rounded-lg font-bold text-[11px] transition-all ${
+                          semesterTabFilter === "all"
+                            ? "bg-white text-[#7A151A] shadow-xs"
+                            : "text-stone-500 hover:text-stone-800"
+                        }`}
+                      >
+                        All ({allottedCourses.length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSemesterTabFilter("1")}
+                        className={`px-2.5 py-1 rounded-lg font-bold text-[11px] transition-all ${
+                          semesterTabFilter === "1"
+                            ? "bg-white text-[#7A151A] shadow-xs"
+                            : "text-stone-500 hover:text-stone-800"
+                        }`}
+                      >
+                        1st Semester
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSemesterTabFilter("2")}
+                        className={`px-2.5 py-1 rounded-lg font-bold text-[11px] transition-all ${
+                          semesterTabFilter === "2"
+                            ? "bg-white text-[#7A151A] shadow-xs"
+                            : "text-stone-500 hover:text-stone-800"
+                        }`}
+                      >
+                        2nd Semester
+                      </button>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => selectSemesterCourses(1)}
+                        className="text-[10px] font-bold text-stone-600 hover:text-[#7A151A] hover:underline"
+                      >
+                        + 1st Sem
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => selectSemesterCourses(2)}
+                        className="text-[10px] font-bold text-stone-600 hover:text-[#7A151A] hover:underline"
+                      >
+                        + 2nd Sem
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
+
+              {/* Course Listing Container */}
+              <div className="max-h-64 overflow-y-auto space-y-3 pr-1">
+                {filteredCourses.length === 0 ? (
+                  <div className="text-center py-6 space-y-1">
+                    <p className="text-xs font-semibold text-stone-500">No subjects matching search query.</p>
+                    <p className="text-[11px] text-stone-400">Try clearing filters or search term.</p>
+                  </div>
+                ) : (
+                  <>
+                    {/* First Semester Group */}
+                    {sem1Courses.length > 0 && (
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between px-2 py-1 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-900">
+                          <span className="text-[11px] font-bold uppercase tracking-wider flex items-center gap-1.5">
+                            <Calendar className="w-3.5 h-3.5 text-amber-700" />
+                            {yearLevelLabel} – First Semester
+                          </span>
+                          <span className="text-[10px] font-black bg-amber-200/80 text-amber-900 px-2 py-0.5 rounded-md">
+                            {sem1Courses.length} Subjects
+                          </span>
+                        </div>
+
+                        <div className="divide-y divide-stone-100">
+                          {sem1Courses.map((course) => {
+                            const isSelected = selectedCourseIds.includes(course.course_id);
+                            const meta = getCurriculumMeta(course.course_code);
+                            return (
+                              <div
+                                key={course.course_id}
+                                onClick={() => toggleCourse(course.course_id)}
+                                className={`flex items-start justify-between p-2.5 rounded-xl cursor-pointer transition-all ${
+                                  isSelected
+                                    ? "bg-[#7A151A]/10 text-[#7A151A] font-semibold"
+                                    : "hover:bg-stone-50 text-stone-700"
+                                }`}
+                              >
+                                <div className="flex items-start gap-3">
+                                  <div
+                                    className={`w-4 h-4 mt-0.5 rounded flex items-center justify-center border transition-colors shrink-0 ${
+                                      isSelected
+                                        ? "bg-[#7A151A] border-[#7A151A] text-white shadow-xs"
+                                        : "border-stone-300 bg-white"
+                                    }`}
+                                  >
+                                    {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                                  </div>
+                                  <div>
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-xs font-black tracking-tight">
+                                        {course.course_code}
+                                      </span>
+                                      {meta?.isTrackElective && (
+                                        <span className="text-[9px] font-bold px-1.5 py-0.2 bg-purple-100 text-purple-700 border border-purple-200 rounded">
+                                          {meta.trackName || "Track Elective"}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <p className="text-[11px] text-stone-500 font-medium leading-tight mt-0.5">
+                                      {course.course_title}
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Second Semester Group */}
+                    {sem2Courses.length > 0 && (
+                      <div className="space-y-1 pt-1">
+                        <div className="flex items-center justify-between px-2 py-1 bg-indigo-500/10 border border-indigo-500/20 rounded-lg text-indigo-900">
+                          <span className="text-[11px] font-bold uppercase tracking-wider flex items-center gap-1.5">
+                            <Calendar className="w-3.5 h-3.5 text-indigo-700" />
+                            {yearLevelLabel} – Second Semester
+                          </span>
+                          <span className="text-[10px] font-black bg-indigo-200/80 text-indigo-900 px-2 py-0.5 rounded-md">
+                            {sem2Courses.length} Subjects
+                          </span>
+                        </div>
+
+                        <div className="divide-y divide-stone-100">
+                          {sem2Courses.map((course) => {
+                            const isSelected = selectedCourseIds.includes(course.course_id);
+                            const meta = getCurriculumMeta(course.course_code);
+                            return (
+                              <div
+                                key={course.course_id}
+                                onClick={() => toggleCourse(course.course_id)}
+                                className={`flex items-start justify-between p-2.5 rounded-xl cursor-pointer transition-all ${
+                                  isSelected
+                                    ? "bg-[#7A151A]/10 text-[#7A151A] font-semibold"
+                                    : "hover:bg-stone-50 text-stone-700"
+                                }`}
+                              >
+                                <div className="flex items-start gap-3">
+                                  <div
+                                    className={`w-4 h-4 mt-0.5 rounded flex items-center justify-center border transition-colors shrink-0 ${
+                                      isSelected
+                                        ? "bg-[#7A151A] border-[#7A151A] text-white shadow-xs"
+                                        : "border-stone-300 bg-white"
+                                    }`}
+                                  >
+                                    {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                                  </div>
+                                  <div>
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-xs font-black tracking-tight">
+                                        {course.course_code}
+                                      </span>
+                                      {meta?.isTrackElective && (
+                                        <span className="text-[9px] font-bold px-1.5 py-0.2 bg-purple-100 text-purple-700 border border-purple-200 rounded">
+                                          {meta.trackName || "Track Elective"}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <p className="text-[11px] text-stone-500 font-medium leading-tight mt-0.5">
+                                      {course.course_title}
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Other / Unclassified Courses Group */}
+                    {otherCourses.length > 0 && (
+                      <div className="space-y-1 pt-1">
+                        <div className="flex items-center justify-between px-2 py-1 bg-stone-100 border border-stone-200 rounded-lg text-stone-800">
+                          <span className="text-[11px] font-bold uppercase tracking-wider flex items-center gap-1.5">
+                            <BookCheck className="w-3.5 h-3.5 text-stone-600" />
+                            Additional / Custom Subjects
+                          </span>
+                          <span className="text-[10px] font-black bg-stone-200 text-stone-800 px-2 py-0.5 rounded-md">
+                            {otherCourses.length} Subjects
+                          </span>
+                        </div>
+
+                        <div className="divide-y divide-stone-100">
+                          {otherCourses.map((course) => {
+                            const isSelected = selectedCourseIds.includes(course.course_id);
+                            return (
+                              <div
+                                key={course.course_id}
+                                onClick={() => toggleCourse(course.course_id)}
+                                className={`flex items-start justify-between p-2.5 rounded-xl cursor-pointer transition-all ${
+                                  isSelected
+                                    ? "bg-[#7A151A]/10 text-[#7A151A] font-semibold"
+                                    : "hover:bg-stone-50 text-stone-700"
+                                }`}
+                              >
+                                <div className="flex items-start gap-3">
+                                  <div
+                                    className={`w-4 h-4 mt-0.5 rounded flex items-center justify-center border transition-colors shrink-0 ${
+                                      isSelected
+                                        ? "bg-[#7A151A] border-[#7A151A] text-white shadow-xs"
+                                        : "border-stone-300 bg-white"
+                                    }`}
+                                  >
+                                    {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                                  </div>
+                                  <div>
+                                    <p className="text-xs font-black tracking-tight">{course.course_code}</p>
+                                    <p className="text-[11px] text-stone-500 font-medium leading-tight mt-0.5">
+                                      {course.course_title}
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+
+              {/* Bottom Actions Bar */}
+              <div className="pt-2 border-t border-stone-100 flex items-center justify-between text-xs">
+                <span className="text-[11px] text-stone-500 font-medium">
+                  {selectedCourseIds.length} of {allottedCourses.length} subjects selected
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setIsSubjectDropdownOpen(false)}
+                  className="bg-[#7A151A] hover:bg-[#580B0F] text-white font-bold px-3 py-1.5 rounded-xl text-xs transition-colors shadow-xs"
+                >
+                  Done Selecting
+                </button>
+              </div>
+            </div>
+          )}
         </div>
-      )}
+      </div>
 
       {/* Student Institutional ID Field */}
       <div className="border-t border-stone-100 pt-4">

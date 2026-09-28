@@ -3,6 +3,7 @@ import { RegisterForm } from "./RegisterForm";
 import Image from "next/image";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { ensureBsitCoursesExist } from "@/lib/bsitCurriculum";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +22,9 @@ export default async function RegisterPage() {
     if (role === "Director") redirect("/dashboard/director");
     redirect("/");
   }
+
+  // Ensure BSIT courses exist in database
+  await ensureBsitCoursesExist();
 
   // Fetch academic programs and courses for Student Registration
   const programs = await db.academicProgram.findMany({
