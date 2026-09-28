@@ -50,22 +50,26 @@ export default async function LoginPage() {
         <div className="relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-6 w-full max-w-6xl mx-auto">
           
           {/* Identity Info block */}
-          <div className="flex items-center gap-4 group/logo cursor-pointer">
-            <div className="bg-white p-1.5 rounded-full shadow-md border-2 border-[#E2A123] shrink-0 transition-all duration-500 ease-out group-hover/logo:scale-110 group-hover/logo:rotate-6 group-hover/logo:border-amber-400 group-hover/logo:shadow-xl group-hover/logo:shadow-[#7A151A]/40">
-              <Image
-                src="/bsc-logo.png" 
-                alt="Batanes State College Logo"
-                width={60}
-                height={60}
-                className="object-contain"
-                priority
-              />
+          <div className="flex items-center gap-5 group/logo cursor-pointer">
+            <div className="relative p-1 bg-[#420A0C]/40 rounded-full">
+              {/* Outer ambient glow halo */}
+              <div className="absolute -inset-1 rounded-full bg-gradient-to-r from-amber-400 to-[#E2A123] opacity-60 blur-md transition-all duration-500 group-hover/logo:opacity-100 group-hover/logo:blur-lg" />
+              <div className="relative bg-white p-2 rounded-full shadow-2xl border-4 border-[#E2A123] shrink-0 transition-all duration-500 ease-out group-hover/logo:scale-110 group-hover/logo:rotate-6 group-hover/logo:border-amber-300 logo-glow-ring animate-logo-float">
+                <Image
+                  src="/bsc-logo.png" 
+                  alt="Batanes State College Logo"
+                  width={72}
+                  height={72}
+                  className="object-contain filter drop-shadow-md transition-transform duration-500 group-hover/logo:scale-105"
+                  priority
+                />
+              </div>
             </div>
             <div className="space-y-0.5">
-              <h2 className="font-black tracking-wider text-base md:text-xl text-[#E2A123] uppercase leading-tight transition-colors duration-300 group-hover/logo:text-amber-300">
+              <h2 className="font-black tracking-wider text-base md:text-xl text-[#E2A123] uppercase leading-tight transition-colors duration-300 group-hover/logo:text-amber-300 drop-shadow-sm">
                 Batanes State College
               </h2>
-              <p className="italic text-xs text-amber-200/70 font-medium transition-all duration-500 group-hover/logo:translate-x-1 group-hover/logo:text-amber-100">
+              <p className="italic text-xs text-amber-200/90 font-medium transition-all duration-500 group-hover/logo:translate-x-1 group-hover/logo:text-amber-100">
                 "Builds minds, Serves communities, Creates opportunities"
               </p>
               <h1 className="text-xl md:text-2xl font-black text-white tracking-tight relative inline-block pt-1">
@@ -116,8 +120,22 @@ export default async function LoginPage() {
             </p>
           </div>
 
-          {/* Core Interactive Login Form Container */}
-          <div className="bg-white p-6 sm:p-8 rounded-2xl border border-neutral-200/60 shadow-sm transition-all duration-500 hover:shadow-xl hover:shadow-neutral-200/40 hover:border-neutral-300/80">
+          {/* Core Interactive Login Form Container with Hovering Emblem */}
+          <div className="relative bg-white p-6 sm:p-8 pt-10 rounded-2xl border border-neutral-200/80 shadow-md transition-all duration-500 hover:shadow-2xl hover:shadow-neutral-300/50 hover:border-neutral-300">
+            {/* Hovering Logo Badge over top center of Sign-In Card */}
+            <div className="absolute -top-10 left-1/2 -translate-x-1/2 group/emblem cursor-pointer z-10">
+              <div className="relative p-1 bg-white rounded-full shadow-lg border-4 border-[#E2A123] transition-all duration-500 ease-out group-hover/emblem:scale-110 group-hover/emblem:-translate-y-2 group-hover/emblem:border-amber-400 group-hover/emblem:shadow-2xl group-hover/emblem:shadow-amber-500/40 animate-logo-float">
+                <Image
+                  src="/bsc-logo.png"
+                  alt="Batanes State College Seal"
+                  width={64}
+                  height={64}
+                  className="object-contain filter drop-shadow-md transition-transform duration-500 group-hover/emblem:scale-105"
+                  priority
+                />
+              </div>
+            </div>
+
             <LoginForm />
           </div>
 

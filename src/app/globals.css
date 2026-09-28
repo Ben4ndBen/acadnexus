@@ -71,3 +71,28 @@ body {
   --portal-border: #3F3F46;
 }
 
+/* Hovering Logo Animations & High-Visibility Styles */
+@keyframes logo-float {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-6px) rotate(1deg);
+  }
+}
+
+.animate-logo-float {
+  animation: logo-float 3.5s ease-in-out infinite;
+}
+
+.logo-glow-ring {
+  box-shadow: 0 4px 20px rgba(226, 161, 35, 0.35), 0 0 30px rgba(226, 161, 35, 0.2);
+  transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.logo-glow-ring:hover {
+  box-shadow: 0 8px 30px rgba(251, 176, 23, 0.6), 0 0 45px rgba(251, 176, 23, 0.35);
+  transform: scale(1.08) translateY(-4px);
+}
+
+
