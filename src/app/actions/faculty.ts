@@ -409,6 +409,9 @@ export async function scheduleExamTarget(
   try {
     const exam = await db.examination.findUnique({
       where: { exam_id: examId },
+      include: {
+        course: true,
+      },
     });
 
     if (!exam) return { error: "Examination not found." };
@@ -418,6 +421,8 @@ export async function scheduleExamTarget(
     const dateObj = new Date(`${scheduledDate}T00:00:00.000Z`);
     const startObj = new Date(`1970-01-01T${startTime}:00.000Z`);
     const endObj = new Date(`1970-01-01T${endTime}:00.000Z`);
+
+    const targetSection = section?.trim() || "All Sections";
 
     // Check if an ExamTarget already exists for this exam
     const existingTarget = await db.examTarget.findFirst({
@@ -430,7 +435,7 @@ export async function scheduleExamTarget(
         data: {
           program_id: programId,
           year_level: yearLevel,
-          section: section,
+          section: targetSection,
           scheduled_date: dateObj,
           start_time: startObj,
           end_time: endObj,
@@ -442,7 +447,7 @@ export async function scheduleExamTarget(
           exam_id: examId,
           program_id: programId,
           year_level: yearLevel,
-          section: section,
+          section: targetSection,
           scheduled_date: dateObj,
           start_time: startObj,
           end_time: endObj,
@@ -450,17 +455,90 @@ export async function scheduleExamTarget(
       });
     }
 
+    // Query matching students by program and year level
+    const isTargetingAll = !targetSection || ["all", "all sections", "any", "all section", ""].includes(targetSection.toLowerCase());
+
+    let targetStudents = await db.student.findMany({
+      where: {
+        program_id: programId,
+        year_level: yearLevel,
+        ...(!isTargetingAll
+          ? {
+              OR: [
+                { section: { equals: targetSection, mode: "insensitive" } },
+                { section: "General" },
+                { section: "All Sections" },
+              ]
+            }
+          : {}),
+      },
+      include: {
+        user: true,
+      },
+    });
+
+    // Fallback if specific section yielded no students: notify all students in the targeted program and year level
+    if (targetStudents.length === 0) {
+      targetStudents = await db.student.findMany({
+        where: {
+          program_id: programId,
+          year_level: yearLevel,
+        },
+        include: {
+          user: true,
+        },
+      });
+    }
+
+    const formatTimeToAMPM = (timeStr: string) => {
+      try {
+        const [h, m] = timeStr.split(":").map(Number);
+        const period = h >= 12 ? "PM" : "AM";
+        const hour12 = h % 12 || 12;
+        return `${hour12}:${m < 10 ? '0' : ''}${m} ${period}`;
+      } catch {
+        return timeStr;
+      }
+    };
+
+    const formattedDate = dateObj.toLocaleDateString("en-US", {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      timeZone: "UTC",
+    });
+
+    const timeRangeStr = `${formatTimeToAMPM(startTime)} - ${formatTimeToAMPM(endTime)}`;
+    const courseCodeStr = exam.course?.course_code ? ` (${exam.course.course_code})` : "";
+
+    // Create notifications for all targeted students
+    if (targetStudents.length > 0) {
+      await db.notification.createMany({
+        data: targetStudents.map((s) => ({
+          user_id: s.student_id,
+          title: "Upcoming Examination Scheduled",
+          message: `The examination "${exam.title}"${courseCodeStr} has been scheduled for your program and year level on ${formattedDate} from ${timeRangeStr}.`,
+          is_read: false,
+        })),
+      });
+    }
+
     await db.auditLog.create({
       data: {
         user_id: facultyId,
-        action_performed: `Scheduled/updated exam target for "${exam.title}" (ID: ${examId}) on ${scheduledDate}`,
+        action_performed: `Scheduled/updated exam target for "${exam.title}" (ID: ${examId}) on ${scheduledDate} (${timeRangeStr}) notifying ${targetStudents.length} student(s)`,
         ip_address: "127.0.0.1",
       },
     });
 
-    revalidatePath("/dashboard/faculty");
-    revalidatePath("/dashboard/student");
-    return { success: true };
+    try {
+      revalidatePath("/dashboard/faculty");
+      revalidatePath("/dashboard/student");
+    } catch {
+      // Invariant: outside Next.js request context
+    }
+    return { success: true, notifiedCount: targetStudents.length };
   } catch (err: any) {
     console.error("Error in scheduleExamTarget:", err);
     return { error: err.message || "Failed to schedule the examination." };

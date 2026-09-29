@@ -86,7 +86,11 @@ export function StudentDashboardClient({
   institutionalId,
   userId
 }: StudentDashboardClientProps) {
-  const [activeTab, setActiveTab] = useState<TabType>("active");
+  const [activeTab, setActiveTab] = useState<TabType>(() => {
+    if (activeExams && activeExams.length > 0) return "active";
+    if (upcomingExams && upcomingExams.length > 0) return "upcoming";
+    return "active";
+  });
   const deptTheme = getDepartmentTheme(
     student?.program?.department?.department_name || student?.program?.program_code
   );

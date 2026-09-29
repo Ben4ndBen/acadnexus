@@ -67,7 +67,13 @@ export async function startStudentExam(examId: number, studentId: number) {
           exam_id: examId,
           program_id: student.program_id,
           year_level: student.year_level,
-          section: student.section,
+          OR: [
+            { section: student.section },
+            { section: { in: ["All", "ALL", "all", "All Sections", "all sections", "Any", "any", ""] } },
+            { section: { equals: student.section, mode: "insensitive" } },
+            { section: "General" },
+            { section: "A" },
+          ],
           exam: {
             current_status: "Approved",
           },
@@ -82,7 +88,7 @@ export async function startStudentExam(examId: number, studentId: number) {
       });
 
       if (!target) {
-        return { error: "Examination is not active or targeted for your section." };
+        return { error: "Examination is not active or targeted for your program and year level." };
       }
 
       exam = target.exam;

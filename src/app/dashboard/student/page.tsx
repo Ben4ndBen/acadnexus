@@ -58,7 +58,13 @@ export default async function StudentDashboard() {
     where: {
       program_id: student.program_id,
       year_level: student.year_level,
-      section: student.section,
+      OR: [
+        { section: student.section },
+        { section: { in: ["All", "ALL", "all", "All Sections", "all sections", "Any", "any", ""] } },
+        { section: { equals: student.section, mode: "insensitive" } },
+        { section: "General" },
+        { section: "A" },
+      ],
       exam: {
         current_status: "Approved",
       },
@@ -307,8 +313,31 @@ export default async function StudentDashboard() {
           </div>
         </div>
 
+        {/* Upcoming Exam Alert Banner */}
+        {upcomingExams.length > 0 && (
+          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200/80 rounded-2xl p-4 sm:p-5 flex items-center justify-between shadow-sm">
+            <div className="flex items-center gap-3.5">
+              <div className="bg-blue-600 text-white p-2.5 rounded-xl shadow-sm">
+                <Calendar className="w-5 h-5" />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-slate-800">
+                  {upcomingExams.length} Upcoming {upcomingExams.length === 1 ? "Examination" : "Examinations"} Scheduled
+                </p>
+                <p className="text-xs text-slate-600 mt-0.5">
+                  Nearest: <span className="font-semibold text-blue-900">{upcomingExams[0].title}</span> ({upcomingExams[0].course?.course_code || "Course"}) on {new Date(upcomingExams[0].target.scheduled_date).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })}
+                </p>
+              </div>
+            </div>
+            <span className="hidden sm:inline-flex items-center gap-1.5 text-xs font-bold bg-blue-100 text-blue-800 px-3 py-1 rounded-full border border-blue-200">
+              <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />
+              Upcoming
+            </span>
+          </div>
+        )}
+
         {/* Academic Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex items-center gap-4">
             <div className="bg-blue-50 p-3.5 rounded-xl text-blue-600">
               <BookOpen className="w-6 h-6" />
@@ -316,6 +345,16 @@ export default async function StudentDashboard() {
             <div>
               <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Enrolled Subjects</p>
               <h3 className="text-2xl font-black text-slate-800 mt-1">{enrolledSubjectsCount}</h3>
+            </div>
+          </div>
+
+          <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex items-center gap-4">
+            <div className="bg-indigo-50 p-3.5 rounded-xl text-indigo-600">
+              <Calendar className="w-6 h-6" />
+            </div>
+            <div>
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Upcoming Exams</p>
+              <h3 className="text-2xl font-black text-slate-800 mt-1">{upcomingExams.length}</h3>
             </div>
           </div>
 

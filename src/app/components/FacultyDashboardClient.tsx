@@ -446,7 +446,7 @@ export function FacultyDashboardClient({
   const [scheduleForm, setScheduleForm] = useState({
     program_id: "",
     year_level: "1",
-    section: "A",
+    section: "All Sections",
     scheduled_date: "",
     start_time: "",
     end_time: ""
@@ -474,7 +474,7 @@ export function FacultyDashboardClient({
       setScheduleForm({
         program_id: String(existingTarget.program_id),
         year_level: String(existingTarget.year_level),
-        section: existingTarget.section,
+        section: existingTarget.section || "All Sections",
         scheduled_date: existingTarget.scheduled_date.split("T")[0],
         start_time: formatTime(existingTarget.start_time),
         end_time: formatTime(existingTarget.end_time)
@@ -483,7 +483,7 @@ export function FacultyDashboardClient({
       setScheduleForm({
         program_id: programs.length > 0 ? String(programs[0].program_id) : "",
         year_level: "1",
-        section: "A",
+        section: "All Sections",
         scheduled_date: new Date().toISOString().split("T")[0],
         start_time: "09:00",
         end_time: "10:00"
@@ -513,7 +513,7 @@ export function FacultyDashboardClient({
     } else {
       setScheduleModalOpen(false);
       router.refresh();
-      alert("Examination scheduled successfully!");
+      alert(`Examination scheduled successfully! ${res.notifiedCount ?? 0} student(s) notified.`);
     }
   };
 
@@ -1981,14 +1981,15 @@ export function FacultyDashboardClient({
                   </select>
                 </div>
                 <div>
-                  <label className="text-xs font-bold text-slate-600 block mb-1">Section</label>
+                  <label className="text-xs font-bold text-slate-600 block mb-1">Section / Cohort</label>
                   <input 
                     type="text" required
                     value={scheduleForm.section}
                     onChange={e => setScheduleForm({...scheduleForm, section: e.target.value})}
-                    placeholder="e.g. A"
+                    placeholder="e.g. All Sections, A, General"
                     className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 text-sm font-medium text-slate-900 placeholder:text-slate-500 px-4 py-2.5 rounded-xl transition-all duration-300"
                   />
+                  <p className="text-[10px] text-slate-400 mt-1">Leave as "All Sections" to target all students in this year level.</p>
                 </div>
               </div>
 
