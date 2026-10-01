@@ -218,3 +218,98 @@ export async function toggleIndividualHold(userId: number, examId: number, place
   }
 }
 
+import type { AcademicPeriodSettings } from "@/lib/academicUtils";
+
+export async function getActiveAcademicPeriod(): Promise<AcademicPeriodSettings> {
+  try {
+    const settings = await db.systemSetting.findMany({
+      where: {
+        key: {
+          in: [
+            "active_academic_year",
+            "active_semester",
+            "sem1_start",
+            "sem1_end",
+            "sem2_start",
+            "sem2_end",
+          ],
+        },
+      },
+    });
+
+    const map = new Map(settings.map(s => [s.key, s.value]));
+
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const defaultAY = now.getMonth() >= 5 ? `${currentYear}-${currentYear + 1}` : `${currentYear - 1}-${currentYear}`;
+
+    return {
+      active_academic_year: map.get("active_academic_year") || defaultAY,
+      active_semester: map.get("active_semester") || (now.getMonth() >= 7 ? "1st Semester" : "2nd Semester"),
+      sem1_start: map.get("sem1_start") || `${currentYear}-08-01`,
+      sem1_end: map.get("sem1_end") || `${currentYear}-12-31`,
+      sem2_start: map.get("sem2_start") || `${currentYear + 1}-01-01`,
+      sem2_end: map.get("sem2_end") || `${currentYear + 1}-05-31`,
+    };
+  } catch (err) {
+    console.error("Error fetching academic period:", err);
+    return {
+      active_academic_year: "2026-2027",
+      active_semester: "1st Semester",
+      sem1_start: "2026-08-01",
+      sem1_end: "2026-12-31",
+      sem2_start: "2027-01-01",
+      sem2_end: "2027-05-31",
+    };
+  }
+}
+
+export async function saveActiveAcademicPeriod(
+  userId: number,
+  data: Partial<AcademicPeriodSettings>
+) {
+  try {
+    const user = await db.user.findUnique({
+      where: { user_id: userId },
+    });
+
+    if (!user || user.role !== "Director") {
+      return { error: "Unauthorized. Only the Director of Instruction can configure the academic period." };
+    }
+
+    const updates: Array<{ key: string; value: string }> = [];
+    if (data.active_academic_year) updates.push({ key: "active_academic_year", value: data.active_academic_year.trim() });
+    if (data.active_semester) updates.push({ key: "active_semester", value: data.active_semester.trim() });
+    if (data.sem1_start) updates.push({ key: "sem1_start", value: data.sem1_start.trim() });
+    if (data.sem1_end) updates.push({ key: "sem1_end", value: data.sem1_end.trim() });
+    if (data.sem2_start) updates.push({ key: "sem2_start", value: data.sem2_start.trim() });
+    if (data.sem2_end) updates.push({ key: "sem2_end", value: data.sem2_end.trim() });
+
+    for (const item of updates) {
+      await db.systemSetting.upsert({
+        where: { key: item.key },
+        update: { value: item.value },
+        create: { key: item.key, value: item.value },
+      });
+    }
+
+    await db.auditLog.create({
+      data: {
+        user_id: userId,
+        action_performed: `Director updated Active Academic Period settings: ${JSON.stringify(data)}`,
+        ip_address: "127.0.0.1",
+      },
+    });
+
+    revalidatePath("/dashboard/director");
+    revalidatePath("/dashboard/faculty");
+    return { success: true };
+  } catch (err: any) {
+    console.error("Error saving academic period settings:", err);
+    return { error: err.message || "Failed to save academic period settings." };
+  }
+}
+
+
+
+

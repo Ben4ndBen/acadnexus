@@ -161,6 +161,11 @@ current_status     ExamStatus
 time_penalty_seconds Int            @default(60)
 score_penalty_points Int            @default(2)
 academic_year      String?          @db.VarChar(20)
+term               String?          @db.VarChar(50)
+exam_date          DateTime?        @db.Date
+semester           String?          @db.VarChar(50)
+document_reference String?          @db.VarChar(100)
+selected_student_ids Int[]          @default([])
 is_archived        Boolean          @default(false)
 
 examTargets        ExamTarget[]
