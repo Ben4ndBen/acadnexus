@@ -178,6 +178,22 @@ export async function saveExamConfig(formData: FormData) {
     const timePenaltySeconds = Number(formData.get("timePenaltySeconds") || "60");
     const scorePenaltyPoints = Number(formData.get("scorePenaltyPoints") || "2");
 
+    const term = formData.get("term") as string | null;
+    const examDate = formData.get("examDate") as string | null;
+    const semester = formData.get("semester") as string | null;
+    const academicYear = formData.get("academicYear") as string | null;
+    const documentReference = formData.get("documentReference") as string | null;
+    const selectedStudentIdsRaw = formData.get("selectedStudentIds") as string | null;
+
+    let parsedStudentIds: number[] = [];
+    if (selectedStudentIdsRaw) {
+      try {
+        parsedStudentIds = JSON.parse(selectedStudentIdsRaw);
+      } catch {
+        parsedStudentIds = selectedStudentIdsRaw.split(",").map(Number).filter(n => !isNaN(n));
+      }
+    }
+
     if (!examId || !facultyId || !title || !courseId || !timeLimitMinutes) {
       return { error: "Missing required configuration fields." };
     }
@@ -207,6 +223,8 @@ export async function saveExamConfig(formData: FormData) {
       tosFilePath = `/uploads/${uniqueFilename}`;
     }
 
+    const parsedExamDate = examDate ? new Date(`${examDate}T00:00:00.000Z`) : null;
+
     const updatedExam = await db.examination.update({
       where: { exam_id: examId },
       data: {
@@ -217,14 +235,69 @@ export async function saveExamConfig(formData: FormData) {
         tos_file_path: tosFilePath,
         time_penalty_seconds: timePenaltySeconds,
         score_penalty_points: scorePenaltyPoints,
+        term: term || undefined,
+        exam_date: parsedExamDate || undefined,
+        semester: semester || undefined,
+        academic_year: academicYear || undefined,
+        document_reference: documentReference || undefined,
+        selected_student_ids: parsedStudentIds,
       },
     });
+
+    // Automatically sync ExamTarget if examDate is provided
+    if (parsedExamDate) {
+      let programId = 1;
+      let yearLevel = 1;
+      let section = "All Sections";
+
+      if (parsedStudentIds.length > 0) {
+        const studentSample = await db.student.findFirst({
+          where: { student_id: { in: parsedStudentIds } },
+        });
+        if (studentSample) {
+          programId = studentSample.program_id;
+          yearLevel = studentSample.year_level;
+          section = studentSample.section || "All Sections";
+        }
+      }
+
+      const existingTarget = await db.examTarget.findFirst({
+        where: { exam_id: examId },
+      });
+
+      const startTime = new Date("1970-01-01T00:00:00.000Z");
+      const endTime = new Date("1970-01-01T23:59:59.000Z");
+
+      if (existingTarget) {
+        await db.examTarget.update({
+          where: { target_id: existingTarget.target_id },
+          data: {
+            scheduled_date: parsedExamDate,
+            program_id: programId,
+            year_level: yearLevel,
+            section: section,
+          },
+        });
+      } else {
+        await db.examTarget.create({
+          data: {
+            exam_id: examId,
+            program_id: programId,
+            year_level: yearLevel,
+            section: section,
+            scheduled_date: parsedExamDate,
+            start_time: startTime,
+            end_time: endTime,
+          },
+        });
+      }
+    }
 
     // Log audit
     await db.auditLog.create({
       data: {
         user_id: facultyId,
-        action_performed: `Updated exam config for "${title}" (ID: ${examId})`,
+        action_performed: `Updated exam config for "${title}" (ID: ${examId}, Ref: ${documentReference || "N/A"})`,
         ip_address: "127.0.0.1",
       },
     });
@@ -236,6 +309,73 @@ export async function saveExamConfig(formData: FormData) {
   } catch (err: any) {
     console.error("Error in saveExamConfig:", err);
     return { error: err.message || "Failed to save exam configurations." };
+  }
+}
+
+export async function getAssignedStudentsForCourse(courseId: number) {
+  try {
+    // 1. Fetch students directly enrolled in this course via StudentCourse
+    const enrolled = await db.studentCourse.findMany({
+      where: { course_id: courseId },
+      include: {
+        student: {
+          include: {
+            user: true,
+            program: true,
+          },
+        },
+      },
+      orderBy: {
+        student: {
+          last_name: "asc",
+        },
+      },
+    });
+
+    if (enrolled.length > 0) {
+      return {
+        success: true,
+        students: enrolled.map((e) => ({
+          student_id: e.student.student_id,
+          institutional_id: e.student.user.institutional_id,
+          first_name: e.student.first_name,
+          last_name: e.student.last_name,
+          program_code: e.student.program.program_code,
+          program_name: e.student.program.program_name,
+          year_level: e.student.year_level,
+          section: e.student.section,
+        })),
+      };
+    }
+
+    // 2. Fallback: If no student courses specifically match this course yet, fetch enrolled students
+    const allStudents = await db.student.findMany({
+      include: {
+        user: true,
+        program: true,
+      },
+      orderBy: {
+        last_name: "asc",
+      },
+      take: 50,
+    });
+
+    return {
+      success: true,
+      students: allStudents.map((s) => ({
+        student_id: s.student_id,
+        institutional_id: s.user.institutional_id,
+        first_name: s.first_name,
+        last_name: s.last_name,
+        program_code: s.program.program_code,
+        program_name: s.program.program_name,
+        year_level: s.year_level,
+        section: s.section,
+      })),
+    };
+  } catch (err: any) {
+    console.error("Error getting assigned students for course:", err);
+    return { error: err.message || "Failed to fetch enrolled students." };
   }
 }
 

@@ -6,15 +6,28 @@ import {
   Settings, BookOpen, ClipboardCheck, ArrowLeft, ArrowRight, Save, 
   Upload, Trash2, Plus, Check, Eye, Trash, ArrowUp, ArrowDown, FileText, 
   Shuffle, AlertCircle, RefreshCw, FileUp, Sparkles, CheckCircle, Search, X,
-  Tag, Layers, Sliders, Hash, ListFilter
+  Tag, Layers, Sliders, Hash, ListFilter, Calendar, GraduationCap, Users,
+  CheckSquare, Square
 } from "lucide-react";
-import { saveExamConfig, saveExamQuestions, updateExamStatus, uploadQuestionAttachment, getQuestionBankQuestions, importQuestionsToExam } from "@/app/actions/faculty";
+import { saveExamConfig, saveExamQuestions, updateExamStatus, uploadQuestionAttachment, getQuestionBankQuestions, importQuestionsToExam, getAssignedStudentsForCourse } from "@/app/actions/faculty";
+import { determineSemesterFromDate } from "@/lib/academicUtils";
 import { Latex } from "@/app/components/Latex";
 
 interface Course {
   course_id: number;
   course_code: string;
   course_title: string;
+}
+
+interface StudentItem {
+  student_id: number;
+  institutional_id: string;
+  first_name: string;
+  last_name: string;
+  program_code: string;
+  program_name: string;
+  year_level: number;
+  section: string;
 }
 
 interface Exam {
@@ -28,6 +41,12 @@ interface Exam {
   score_penalty_points?: number;
   current_status: "Draft" | "Pending_Chair" | "Pending_DI" | "Approved" | "Returned";
   course: Course;
+  academic_year?: string | null;
+  term?: string | null;
+  exam_date?: Date | string | null;
+  semester?: string | null;
+  document_reference?: string | null;
+  selected_student_ids?: number[];
   questionBank: Array<{
     question_id: number;
     question_text: string;
@@ -40,7 +59,17 @@ interface Exam {
 interface ExamBuilderWizardProps {
   exam: Exam;
   courses: Course[];
+  assignedSubjects?: Course[];
   facultyId: number;
+  academicPeriodSettings?: {
+    active_academic_year: string;
+    active_semester: string;
+    sem1_start: string;
+    sem1_end: string;
+    sem2_start: string;
+    sem2_end: string;
+  };
+  initialAssignedStudents?: StudentItem[];
 }
 
 interface QuestionState {
@@ -211,19 +240,121 @@ function serializeQuestions(questions: QuestionState[]) {
   });
 }
 
-export function ExamBuilderWizard({ exam, courses, facultyId }: ExamBuilderWizardProps) {
+export function ExamBuilderWizard({ 
+  exam, 
+  courses, 
+  assignedSubjects = [], 
+  facultyId,
+  academicPeriodSettings,
+  initialAssignedStudents = []
+}: ExamBuilderWizardProps) {
   const router = useRouter();
 
   // Steps: 1 = Config, 2 = Questions, 3 = Preview & Submit
   const [step, setStep] = useState<number>(1);
-  
+
+  // 1. Examination Term & Date (First Asked!)
+  const [term, setTerm] = useState<string>(exam.term || "Midterm");
+  const [examDate, setExamDate] = useState<string>(
+    exam.exam_date
+      ? typeof exam.exam_date === "string"
+        ? exam.exam_date.split("T")[0]
+        : new Date(exam.exam_date).toISOString().split("T")[0]
+      : new Date().toISOString().split("T")[0]
+  );
+
+  // Document / Reference Number (Top right field, like BSC-ODLF-017)
+  const [documentReference, setDocumentReference] = useState<string>(
+    exam.document_reference || "BSC-ODLF-017"
+  );
+
+  // 2. Assigned Subjects (Faculty's load)
+  const effectiveAssignedSubjects = assignedSubjects.length > 0 ? assignedSubjects : courses;
+  const [courseId, setCourseId] = useState<number>(exam.course_id || effectiveAssignedSubjects[0]?.course_id || 0);
+
+  // Selected Course Object (for auto-populating course code and course title)
+  const selectedCourse = effectiveAssignedSubjects.find(c => c.course_id === courseId)
+    || courses.find(c => c.course_id === courseId)
+    || exam.course
+    || { course_id: courseId, course_code: "", course_title: "" };
+
   // Configuration Settings State
-  const [title, setTitle] = useState<string>(exam.title);
-  const [courseId, setCourseId] = useState<number>(exam.course_id);
+  const [title, setTitle] = useState<string>(
+    exam.title && exam.title !== "New Examination Draft"
+      ? exam.title
+      : `${term} Examination in ${selectedCourse.course_title || selectedCourse.course_code}`
+  );
   const [timeLimit, setTimeLimit] = useState<number>(exam.time_limit_minutes);
   const [randomizeItems, setRandomizeItems] = useState<boolean>(exam.randomize_items);
   const [timePenalty, setTimePenalty] = useState<number>(exam.time_penalty_seconds ?? 60);
   const [scorePenalty, setScorePenalty] = useState<number>(exam.score_penalty_points ?? 2);
+
+  // 3. Assigned Students Selection
+  const [assignedStudents, setAssignedStudents] = useState<StudentItem[]>(initialAssignedStudents);
+  const [selectedStudentIds, setSelectedStudentIds] = useState<number[]>(
+    exam.selected_student_ids && exam.selected_student_ids.length > 0
+      ? exam.selected_student_ids
+      : initialAssignedStudents.map(s => s.student_id)
+  );
+  const [loadingStudents, setLoadingStudents] = useState<boolean>(false);
+
+  // Automatically determine applicable semester based on exam date and active academic period configured by DI
+  const defaultPeriodSettings = {
+    active_academic_year: "2026-2027",
+    active_semester: "1st Semester",
+    sem1_start: "2026-08-01",
+    sem1_end: "2026-12-31",
+    sem2_start: "2027-01-01",
+    sem2_end: "2027-05-31",
+  };
+  const activeSettings = academicPeriodSettings || defaultPeriodSettings;
+  const determinedSemesterInfo = determineSemesterFromDate(examDate, activeSettings);
+  const applicableSemester = determinedSemesterInfo.semester;
+  const applicableAcademicYear = determinedSemesterInfo.academicYear;
+  const applicableSemesterLabel = determinedSemesterInfo.label;
+
+  const handleCourseChange = async (newId: number) => {
+    setCourseId(newId);
+    const newCourse = effectiveAssignedSubjects.find(c => c.course_id === newId) || courses.find(c => c.course_id === newId);
+    if (newCourse) {
+      setTitle(`${term} Examination in ${newCourse.course_title || newCourse.course_code}`);
+    }
+    setLoadingStudents(true);
+    try {
+      const res = await getAssignedStudentsForCourse(newId);
+      if (res.success && res.students) {
+        setAssignedStudents(res.students);
+        setSelectedStudentIds(res.students.map(s => s.student_id));
+      }
+    } catch (err) {
+      console.error("Failed to load students for course:", err);
+    } finally {
+      setLoadingStudents(false);
+    }
+  };
+
+  const handleTermChange = (newTerm: string) => {
+    setTerm(newTerm);
+    if (selectedCourse?.course_title) {
+      setTitle(`${newTerm} Examination in ${selectedCourse.course_title}`);
+    }
+  };
+
+  const handleToggleStudent = (studentId: number) => {
+    setSelectedStudentIds(prev =>
+      prev.includes(studentId)
+        ? prev.filter(id => id !== studentId)
+        : [...prev, studentId]
+    );
+  };
+
+  const handleSelectAllStudents = () => {
+    setSelectedStudentIds(assignedStudents.map(s => s.student_id));
+  };
+
+  const handleDeselectAllStudents = () => {
+    setSelectedStudentIds([]);
+  };
 
   // Question Bank State
   const [questions, setQuestions] = useState<QuestionState[]>(deserializeQuestions(exam.questionBank));
@@ -346,7 +477,7 @@ export function ExamBuilderWizard({ exam, courses, facultyId }: ExamBuilderWizar
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   // Step 1 Validation
-  const isConfigValid = title.trim() !== "" && courseId > 0 && timeLimit > 0;
+  const isConfigValid = title.trim() !== "" && courseId > 0 && timeLimit > 0 && examDate.trim() !== "";
 
   // Question Image Upload handlers
   const [uploadingImage, setUploadingImage] = useState<boolean>(false);
@@ -670,6 +801,12 @@ export function ExamBuilderWizard({ exam, courses, facultyId }: ExamBuilderWizar
     configData.append("randomizeItems", String(randomizeItems));
     configData.append("timePenaltySeconds", String(timePenalty));
     configData.append("scorePenaltyPoints", String(scorePenalty));
+    configData.append("term", term);
+    configData.append("examDate", examDate);
+    configData.append("semester", applicableSemester);
+    configData.append("academicYear", applicableAcademicYear);
+    configData.append("documentReference", documentReference);
+    configData.append("selectedStudentIds", JSON.stringify(selectedStudentIds));
 
     const configRes = await saveExamConfig(configData);
     if (configRes.error) {
@@ -706,6 +843,12 @@ export function ExamBuilderWizard({ exam, courses, facultyId }: ExamBuilderWizar
     configData.append("randomizeItems", String(randomizeItems));
     configData.append("timePenaltySeconds", String(timePenalty));
     configData.append("scorePenaltyPoints", String(scorePenalty));
+    configData.append("term", term);
+    configData.append("examDate", examDate);
+    configData.append("semester", applicableSemester);
+    configData.append("academicYear", applicableAcademicYear);
+    configData.append("documentReference", documentReference);
+    configData.append("selectedStudentIds", JSON.stringify(selectedStudentIds));
 
     const configRes = await saveExamConfig(configData);
     if (configRes.error) {
@@ -758,8 +901,23 @@ export function ExamBuilderWizard({ exam, courses, facultyId }: ExamBuilderWizar
           </div>
         </div>
 
-        {/* Wizard Action Buttons */}
-        <div className="flex items-center gap-3">
+        {/* Wizard Action Buttons & Document Reference on Top Right */}
+        <div className="flex flex-wrap items-center gap-3 sm:ml-auto">
+          {/* Top Right Field for Exam Document / Reference Number (like BSC-ODLF-017) */}
+          <div className="flex items-center gap-2 bg-slate-50 border border-slate-200/90 px-3.5 py-1.5 rounded-2xl shadow-inner">
+            <FileText className="w-4 h-4 text-emerald-600 shrink-0" />
+            <div className="flex flex-col">
+              <span className="text-[9px] font-extrabold text-slate-500 uppercase tracking-wider">Doc / Ref No.</span>
+              <input
+                type="text"
+                value={documentReference}
+                onChange={(e) => setDocumentReference(e.target.value)}
+                placeholder="e.g. BSC-ODLF-017"
+                className="bg-transparent text-xs font-mono font-black text-slate-800 placeholder:text-slate-400 focus:outline-none w-32 uppercase"
+              />
+            </div>
+          </div>
+
           <button
             onClick={handleSaveDraft}
             className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 border border-slate-300/60 text-slate-700 text-xs font-bold px-4 py-2.5 rounded-xl transition-all shadow-sm"
@@ -875,39 +1033,235 @@ export function ExamBuilderWizard({ exam, courses, facultyId }: ExamBuilderWizar
           <div className="lg:col-span-2 bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6">
             <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
               <span className="w-1.5 h-6 bg-emerald-600 rounded-full" />
-              Main Parameters
+              Examination Setup & Roster
             </h2>
 
-            <div className="space-y-4">
-              {/* Exam Title */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-extrabold text-slate-600 block">Exam Title</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Midterm Examination in Artificial Intelligence"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 text-sm font-medium text-slate-800 placeholder:text-slate-400 px-4 py-2.5 rounded-xl transition-all duration-300"
-                />
+            <div className="space-y-6">
+              {/* 1. Examination Term & Exam Date (First Asked!) */}
+              <div className="bg-gradient-to-r from-emerald-950 via-slate-900 to-emerald-900 text-white rounded-2xl p-5 sm:p-6 space-y-4 shadow-md border border-emerald-800/40">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-white/10 pb-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
+                      <Calendar className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h2 className="text-base font-extrabold text-white tracking-tight">1. Examination Term & Scheduled Date</h2>
+                      <p className="text-xs text-emerald-200/80">Select examination term and planned test administration date first.</p>
+                    </div>
+                  </div>
+                  <span className="self-start sm:self-auto bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-[10px] font-black uppercase px-2.5 py-1 rounded-full">
+                    Required First
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* Examination Term */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-emerald-200 block">Examination Term <span className="text-rose-400">*</span></label>
+                    <select
+                      value={term}
+                      onChange={(e) => handleTermChange(e.target.value)}
+                      className="w-full bg-slate-900/90 border border-emerald-500/40 text-white text-sm font-bold px-3.5 py-2.5 rounded-xl focus:ring-2 focus:ring-emerald-400 focus:outline-none"
+                    >
+                      <option value="Midterm" className="bg-slate-900 text-white">Midterm Examination</option>
+                      <option value="Final" className="bg-slate-900 text-white">Final Examination</option>
+                      <option value="Prelim" className="bg-slate-900 text-white">Prelim Examination</option>
+                      <option value="Semi-Final" className="bg-slate-900 text-white">Semi-Final Examination</option>
+                    </select>
+                  </div>
+
+                  {/* Exam Date */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-emerald-200 block">Exam Administration Date <span className="text-rose-400">*</span></label>
+                    <input
+                      type="date"
+                      required
+                      value={examDate}
+                      onChange={(e) => setExamDate(e.target.value)}
+                      className="w-full bg-slate-900/90 border border-emerald-500/40 text-white text-sm font-bold px-3.5 py-2.5 rounded-xl focus:ring-2 focus:ring-emerald-400 focus:outline-none [color-scheme:dark]"
+                    />
+                  </div>
+                </div>
+
+                {/* Automatically Determined Applicable Semester Banner */}
+                <div className="bg-white/10 backdrop-blur-md border border-white/15 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-1.5 text-xs font-extrabold text-emerald-300">
+                      <CheckCircle className="w-4 h-4 text-emerald-400" />
+                      <span>Applicable Academic Semester:</span>
+                    </div>
+                    <p className="text-[11px] text-slate-300">
+                      Automatically determined based on exam date (<span className="text-white font-mono font-bold">{examDate}</span>) and active academic period configured by the DI.
+                    </p>
+                  </div>
+                  <div className="bg-emerald-500 text-slate-950 text-xs font-black px-3.5 py-1.5 rounded-xl shadow-sm shrink-0 flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>{applicableSemesterLabel}</span>
+                  </div>
+                </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* Course Selection */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-extrabold text-slate-600 block">Course Assignment</label>
+              {/* 2. Assigned Subject Selection (Auto-populated Course Code & Title) */}
+              <div className="space-y-4 border-t border-slate-100 pt-5">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
+                    <GraduationCap className="w-4 h-4 text-emerald-600" />
+                    2. Assigned Subject
+                  </h3>
+                  <span className="text-[10px] font-black uppercase text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
+                    Auto-Populated Details
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400">
+                  Select from your assigned teaching load. Course code and course title are automatically populated.
+                </p>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-extrabold text-slate-700 block">Select Assigned Subject <span className="text-rose-500">*</span></label>
                   <select
                     value={courseId}
-                    onChange={(e) => setCourseId(Number(e.target.value))}
-                    className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 text-sm font-bold text-slate-700 px-4 py-2.5 rounded-xl transition-all duration-300"
+                    onChange={(e) => handleCourseChange(Number(e.target.value))}
+                    className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 text-sm font-bold text-slate-800 px-4 py-2.5 rounded-xl transition-all duration-300"
                   >
-                    {courses.map(course => (
-                      <option key={course.course_id} value={course.course_id}>
-                        {course.course_code} - {course.course_title}
+                    {effectiveAssignedSubjects.map((c) => (
+                      <option key={c.course_id} value={c.course_id}>
+                        {c.course_code} — {c.course_title}
                       </option>
                     ))}
                   </select>
                 </div>
+
+                {/* Auto-populated Course Code & Title Badges */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="bg-slate-50/80 border border-slate-200/80 rounded-2xl p-3.5 space-y-1">
+                    <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Course Code (Auto)</span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-base font-black text-slate-900 bg-white border border-slate-200 px-2.5 py-1 rounded-lg shadow-sm">
+                        {selectedCourse.course_code || "N/A"}
+                      </span>
+                      <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">✓ Verified</span>
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-50/80 border border-slate-200/80 rounded-2xl p-3.5 space-y-1">
+                    <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Course Title (Auto)</span>
+                    <p className="text-sm font-bold text-slate-800 line-clamp-1">
+                      {selectedCourse.course_title || "N/A"}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Official Exam Title */}
+                <div className="space-y-1.5 pt-2">
+                  <label className="text-xs font-extrabold text-slate-700 block">Examination Official Title</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Midterm Examination in Database Systems"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 text-sm font-medium text-slate-800 placeholder:text-slate-400 px-4 py-2.5 rounded-xl transition-all duration-300"
+                  />
+                </div>
+              </div>
+
+              {/* 3. Assigned Students Selection (Who will take the exam) */}
+              <div className="space-y-4 border-t border-slate-100 pt-5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
+                      <Users className="w-4 h-4 text-emerald-600" />
+                      3. Assigned Students for Selected Subject
+                    </h3>
+                    <p className="text-xs text-slate-400">
+                      Designate which enrolled students will take this examination.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleSelectAllStudents}
+                      className="text-[11px] font-bold text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                    >
+                      Select All
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleDeselectAllStudents}
+                      className="text-[11px] font-bold text-slate-600 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                    >
+                      Deselect All
+                    </button>
+                    <span className="text-xs font-black text-emerald-800 bg-emerald-100 px-2.5 py-1 rounded-full border border-emerald-300/60">
+                      {selectedStudentIds.length} / {assignedStudents.length} Selected
+                    </span>
+                  </div>
+                </div>
+
+                {loadingStudents ? (
+                  <div className="p-8 text-center bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
+                    <RefreshCw className="w-6 h-6 animate-spin text-emerald-600 mx-auto" />
+                    <p className="text-xs font-bold text-slate-500">Loading enrolled students for this subject...</p>
+                  </div>
+                ) : assignedStudents.length === 0 ? (
+                  <div className="p-6 text-center bg-amber-50/60 border border-amber-200/80 rounded-2xl space-y-1">
+                    <p className="text-xs font-bold text-amber-800">No students currently enrolled in this subject record.</p>
+                    <p className="text-[11px] text-amber-600">Students who register or enroll in this course code will automatically become eligible.</p>
+                  </div>
+                ) : (
+                  <div className="border border-slate-200/80 rounded-2xl overflow-hidden divide-y divide-slate-100 max-h-64 overflow-y-auto bg-slate-50/40">
+                    {assignedStudents.map((student) => {
+                      const isSelected = selectedStudentIds.includes(student.student_id);
+                      return (
+                        <div
+                          key={student.student_id}
+                          onClick={() => handleToggleStudent(student.student_id)}
+                          className={`p-3.5 flex items-center justify-between gap-3 transition-colors cursor-pointer ${
+                            isSelected ? "bg-emerald-50/60 hover:bg-emerald-50" : "bg-white hover:bg-slate-50"
+                          }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className={`w-5 h-5 rounded flex items-center justify-center border transition-all ${
+                              isSelected ? "bg-emerald-600 border-emerald-600 text-white" : "border-slate-300 bg-white"
+                            }`}>
+                              {isSelected && <Check className="w-3.5 h-3.5" />}
+                            </div>
+                            <div className="w-8 h-8 rounded-full bg-slate-200 text-slate-700 flex items-center justify-center text-xs font-black uppercase">
+                              {student.first_name[0]}{student.last_name[0]}
+                            </div>
+                            <div>
+                              <p className="text-xs font-bold text-slate-900">
+                                {student.first_name} {student.last_name}
+                              </p>
+                              <p className="text-[10px] text-slate-400 font-mono">
+                                ID: {student.institutional_id}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="text-right">
+                            <span className="text-[11px] font-bold text-slate-700 block">
+                              {student.program_code} — Year {student.year_level}
+                            </span>
+                            <span className="text-[10px] text-slate-400 block">
+                              {student.section}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* 4. Strict Time Limit */}
+              <div className="border-t border-slate-100 pt-5 space-y-4">
+                <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
+                  <Sliders className="w-4 h-4 text-emerald-600" />
+                  4. Time Limit & Item Shuffling
+                </h3>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
 
                 {/* Strict Time Limit */}
                 <div className="space-y-1.5">
@@ -993,6 +1347,7 @@ export function ExamBuilderWizard({ exam, courses, facultyId }: ExamBuilderWizar
               </div>
             </div>
           </div>
+        </div>
 
           {/* Table of Specifications (TOS) Native System Card */}
           <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm flex flex-col justify-between space-y-6">

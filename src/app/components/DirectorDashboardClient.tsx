@@ -5,9 +5,10 @@ import { useRouter } from "next/navigation";
 import { 
   BarChart3, ShieldCheck, Map, List, CheckCircle, 
   XCircle, Clock, AlertCircle, RefreshCw, Search, Building2,
-  UserPlus, X, Loader2, Eye, EyeOff, Award
+  UserPlus, X, Loader2, Eye, EyeOff, Award, Calendar, Sparkles
 } from "lucide-react";
-import { reviewExamByDirector, toggleGlobalHold, toggleIndividualHold } from "@/app/actions/director";
+import { reviewExamByDirector, toggleGlobalHold, toggleIndividualHold, saveActiveAcademicPeriod } from "@/app/actions/director";
+import type { AcademicPeriodSettings } from "@/lib/academicUtils";
 import { registerInstructorByAdminAction } from "@/app/actions/auth";
 import { getDepartmentTheme } from "@/lib/departmentThemes";
 import { DepartmentBadge } from "@/app/components/DepartmentBadge";
@@ -76,6 +77,7 @@ interface DirectorDashboardClientProps {
     department_id: number;
     department_name: string;
   }>;
+  academicPeriodSettings?: AcademicPeriodSettings;
 }
 
 export function DirectorDashboardClient({ 
@@ -86,10 +88,47 @@ export function DirectorDashboardClient({
   auditLogs,
   allExaminations,
   globalHoldActive,
-  departmentsList = []
+  departmentsList = [],
+  academicPeriodSettings
 }: DirectorDashboardClientProps) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<"overview" | "compliance" | "logs" | "exams">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "compliance" | "logs" | "exams" | "period">("overview");
+
+  // State for Academic Period Configuration (Configured by DI)
+  const [periodAY, setPeriodAY] = useState(academicPeriodSettings?.active_academic_year || "2026-2027");
+  const [periodSem, setPeriodSem] = useState(academicPeriodSettings?.active_semester || "1st Semester");
+  const [sem1Start, setSem1Start] = useState(academicPeriodSettings?.sem1_start || "2026-08-01");
+  const [sem1End, setSem1End] = useState(academicPeriodSettings?.sem1_end || "2026-12-31");
+  const [sem2Start, setSem2Start] = useState(academicPeriodSettings?.sem2_start || "2027-01-01");
+  const [sem2End, setSem2End] = useState(academicPeriodSettings?.sem2_end || "2027-05-31");
+  const [isSavingPeriod, setIsSavingPeriod] = useState(false);
+  const [periodSaveMsg, setPeriodSaveMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  const handleSaveAcademicPeriod = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingPeriod(true);
+    setPeriodSaveMsg(null);
+    try {
+      const res = await saveActiveAcademicPeriod(directorUserId, {
+        active_academic_year: periodAY,
+        active_semester: periodSem,
+        sem1_start: sem1Start,
+        sem1_end: sem1End,
+        sem2_start: sem2Start,
+        sem2_end: sem2End,
+      });
+      if (res.error) {
+        setPeriodSaveMsg({ type: "error", text: res.error });
+      } else {
+        setPeriodSaveMsg({ type: "success", text: "Active academic period configured successfully!" });
+        router.refresh();
+      }
+    } catch (err: any) {
+      setPeriodSaveMsg({ type: "error", text: err.message || "Failed to save configuration." });
+    } finally {
+      setIsSavingPeriod(false);
+    }
+  };
 
   // State for Review Queue
   const [isSubmittingReview, setIsSubmittingReview] = useState<number | null>(null);
@@ -307,6 +346,17 @@ export function DirectorDashboardClient({
         >
           <List className="w-4 h-4" />
           Global System Action Logs
+        </button>
+        <button
+          onClick={() => setActiveTab("period")}
+          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-bold rounded-xl transition-all duration-300 ${
+            activeTab === "period"
+              ? "bg-indigo-700 text-white shadow-md shadow-indigo-700/20"
+              : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+          }`}
+        >
+          <Calendar className="w-4 h-4" />
+          Academic Period Configuration
         </button>
 
         <button
@@ -727,6 +777,160 @@ export function DirectorDashboardClient({
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {/* ACADEMIC PERIOD CONFIGURATION TAB */}
+      {activeTab === "period" && (
+        <div className="bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-5">
+            <div>
+              <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                <span className="w-1.5 h-6 bg-indigo-700 rounded-full" />
+                Active Academic Period & Semester Scheduling
+              </h2>
+              <p className="text-slate-500 text-xs mt-1">
+                Configure the institutional academic calendar. Examination dates set by faculty will automatically compute and bind to the correct semester and academic year based on these active boundaries.
+              </p>
+            </div>
+            <div className="bg-indigo-50 border border-indigo-200/80 px-3.5 py-1.5 rounded-2xl flex items-center gap-2 shrink-0">
+              <Sparkles className="w-4 h-4 text-indigo-700" />
+              <span className="text-xs font-black text-indigo-900">
+                Current: {periodSem}, AY {periodAY}
+              </span>
+            </div>
+          </div>
+
+          {periodSaveMsg && (
+            <div className={`p-4 rounded-xl border text-xs font-bold flex items-center gap-2 ${
+              periodSaveMsg.type === "success" 
+                ? "bg-emerald-50 text-emerald-800 border-emerald-100" 
+                : "bg-rose-50 text-rose-800 border-rose-100"
+            }`}>
+              {periodSaveMsg.type === "success" ? <CheckCircle className="w-4 h-4 text-emerald-600" /> : <AlertCircle className="w-4 h-4 text-rose-600" />}
+              <span>{periodSaveMsg.text}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleSaveAcademicPeriod} className="space-y-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              {/* Active Academic Year */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700 block">
+                  Active Academic Year <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={periodAY}
+                  onChange={(e) => setPeriodAY(e.target.value)}
+                  placeholder="e.g. 2026-2027"
+                  className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 text-sm font-bold text-slate-800 px-4 py-2.5 rounded-xl transition-all"
+                />
+                <p className="text-[11px] text-slate-400">Institutional academic cycle format (e.g. 2026-2027)</p>
+              </div>
+
+              {/* Active Semester */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700 block">
+                  Active Semester Status <span className="text-rose-500">*</span>
+                </label>
+                <select
+                  value={periodSem}
+                  onChange={(e) => setPeriodSem(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 text-sm font-bold text-slate-800 px-4 py-2.5 rounded-xl transition-all"
+                >
+                  <option value="1st Semester">1st Semester</option>
+                  <option value="2nd Semester">2nd Semester</option>
+                  <option value="Midyear / Summer">Midyear / Summer</option>
+                </select>
+                <p className="text-[11px] text-slate-400">Current officially active collegiate term</p>
+              </div>
+            </div>
+
+            {/* Semester Date Ranges */}
+            <div className="border border-slate-100 rounded-2xl p-5 bg-slate-50/50 space-y-4">
+              <h3 className="text-sm font-black text-slate-800 flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-indigo-700" />
+                Semester Date Windows (For Automatic Determination)
+              </h3>
+              <p className="text-xs text-slate-500">
+                When faculty pick an exam date, the system evaluates these date windows to automatically determine whether the examination belongs to the 1st or 2nd Semester.
+              </p>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
+                {/* 1st Semester Range */}
+                <div className="bg-white border border-slate-200 p-4 rounded-xl space-y-3">
+                  <h4 className="text-xs font-black uppercase text-indigo-900 tracking-wider">1st Semester Range</h4>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Start Date</label>
+                      <input
+                        type="date"
+                        value={sem1Start}
+                        onChange={(e) => setSem1Start(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 text-xs font-medium text-slate-800 p-2 rounded-lg"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">End Date</label>
+                      <input
+                        type="date"
+                        value={sem1End}
+                        onChange={(e) => setSem1End(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 text-xs font-medium text-slate-800 p-2 rounded-lg"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2nd Semester Range */}
+                <div className="bg-white border border-slate-200 p-4 rounded-xl space-y-3">
+                  <h4 className="text-xs font-black uppercase text-indigo-900 tracking-wider">2nd Semester Range</h4>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Start Date</label>
+                      <input
+                        type="date"
+                        value={sem2Start}
+                        onChange={(e) => setSem2Start(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 text-xs font-medium text-slate-800 p-2 rounded-lg"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">End Date</label>
+                      <input
+                        type="date"
+                        value={sem2End}
+                        onChange={(e) => setSem2End(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 text-xs font-medium text-slate-800 p-2 rounded-lg"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-2 flex justify-end">
+              <button
+                type="submit"
+                disabled={isSavingPeriod}
+                className="bg-indigo-700 hover:bg-indigo-800 text-white text-xs font-black px-6 py-3 rounded-xl shadow-md transition-all flex items-center gap-2 disabled:opacity-50"
+              >
+                {isSavingPeriod ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>Saving Academic Period...</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle className="w-4 h-4" />
+                    <span>Save Academic Period Policy</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
         </div>
       )}
 

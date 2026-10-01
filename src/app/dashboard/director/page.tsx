@@ -131,6 +131,10 @@ export default async function DirectorDashboard() {
     log_id: log.log_id.toString(),
   }));
 
+  // Fetch active academic period configured by DI
+  const { getActiveAcademicPeriod } = await import("@/app/actions/director");
+  const academicPeriod = await getActiveAcademicPeriod();
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
       {/* Navbar */}
@@ -168,7 +172,7 @@ export default async function DirectorDashboard() {
               Welcome, Director!
             </h1>
             <p className="text-indigo-100 max-w-xl text-sm leading-relaxed">
-              Verify institution-wide compliance charts, approve final-round examinations, monitor system audit logs, and oversee college-wide parameters.
+              Verify institution-wide compliance charts, approve final-round examinations, monitor system audit logs, configure academic periods, and oversee college-wide parameters.
             </p>
           </div>
         </div>
@@ -188,6 +192,7 @@ export default async function DirectorDashboard() {
           auditLogs={serializedLogs as any}
           allExaminations={allExaminations as any}
           globalHoldActive={globalHoldActive}
+          academicPeriodSettings={academicPeriod}
         />
       </main>
 
