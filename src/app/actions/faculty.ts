@@ -1517,6 +1517,309 @@ export async function getFacultyEnrolledStudentsAndGrades(facultyId: number) {
   }
 }
 
+export async function getCourseRoster(courseId: number) {
+  try {
+    const enrollments = await db.studentCourse.findMany({
+      where: { course_id: courseId },
+      include: {
+        student: {
+          include: {
+            user: true,
+            program: true,
+          },
+        },
+      },
+      orderBy: {
+        student: {
+          last_name: "asc",
+        },
+      },
+    });
+
+    const students = enrollments.map((e) => ({
+      student_id: e.student.student_id,
+      institutional_id: e.student.user.institutional_id,
+      first_name: e.student.first_name,
+      last_name: e.student.last_name,
+      program_id: e.student.program_id,
+      program_code: e.student.program.program_code,
+      program_name: e.student.program.program_name,
+      year_level: e.student.year_level,
+      section: e.student.section,
+      enrolled_at: e.enrolled_at.toISOString(),
+    }));
+
+    return { success: true, students };
+  } catch (err: any) {
+    console.error("Error in getCourseRoster:", err);
+    return { error: err.message || "Failed to fetch course roster." };
+  }
+}
+
+export async function enrollStudentInCourse(
+  facultyId: number,
+  courseId: number,
+  data: {
+    institutionalId: string;
+    firstName: string;
+    lastName: string;
+    programId?: number;
+    yearLevel?: number;
+    section?: string;
+  }
+) {
+  const rawId = data.institutionalId?.trim();
+  if (!rawId) {
+    return { error: "Student ID number is required." };
+  }
+
+  const formattedId = rawId.toUpperCase();
+
+  try {
+    const bcrypt = await import("bcryptjs");
+
+    // 1. Verify that course exists
+    const course = await db.course.findUnique({
+      where: { course_id: courseId },
+    });
+    if (!course) {
+      return { error: "Selected course was not found." };
+    }
+
+    // 2. Check if user already exists
+    const existingUser = await db.user.findUnique({
+      where: { institutional_id: formattedId },
+      include: { student: true },
+    });
+
+    let targetStudentId: number;
+
+    if (existingUser) {
+      if (existingUser.role !== "Student") {
+        return {
+          error: `Institutional ID ${formattedId} is already assigned to a ${existingUser.role} account.`,
+        };
+      }
+
+      targetStudentId = existingUser.user_id;
+
+      // Check if already enrolled in this specific course
+      const existingEnrollment = await db.studentCourse.findUnique({
+        where: {
+          student_id_course_id: {
+            student_id: targetStudentId,
+            course_id: courseId,
+          },
+        },
+      });
+
+      if (existingEnrollment) {
+        return {
+          error: `Student ${formattedId} is already enrolled in ${course.course_code}.`,
+        };
+      }
+
+      // Enroll existing student
+      await db.studentCourse.create({
+        data: {
+          student_id: targetStudentId,
+          course_id: courseId,
+        },
+      });
+
+      // Update student profile details if provided
+      if (data.firstName?.trim() || data.lastName?.trim()) {
+        await db.student.update({
+          where: { student_id: targetStudentId },
+          data: {
+            first_name: data.firstName.trim() || undefined,
+            last_name: data.lastName.trim() || undefined,
+            year_level: data.yearLevel ? Number(data.yearLevel) : undefined,
+            section: data.section ? data.section.trim() : undefined,
+          },
+        });
+      }
+    } else {
+      // 3. User does not exist: Provision new Student user account
+      // Initial default password is set to their Student ID number
+      const salt = await bcrypt.genSalt(10);
+      const defaultPasswordHash = await bcrypt.hash(formattedId, salt);
+
+      // Determine default program if not specified
+      let programId = data.programId ? Number(data.programId) : undefined;
+      if (!programId) {
+        const defaultProg = await db.academicProgram.findFirst({
+          orderBy: { program_id: "asc" },
+        });
+        programId = defaultProg?.program_id || 1;
+      }
+
+      const created = await db.$transaction(async (tx) => {
+        const newUser = await tx.user.create({
+          data: {
+            institutional_id: formattedId,
+            password_hash: defaultPasswordHash,
+            role: "Student",
+            require_password_update: true,
+            is_active: true,
+          },
+        });
+
+        await tx.student.create({
+          data: {
+            student_id: newUser.user_id,
+            first_name: data.firstName?.trim() || "Student",
+            last_name: data.lastName?.trim() || formattedId,
+            program_id: programId!,
+            year_level: Number(data.yearLevel) || 1,
+            section: data.section?.trim() || "A",
+          },
+        });
+
+        await tx.studentCourse.create({
+          data: {
+            student_id: newUser.user_id,
+            course_id: courseId,
+          },
+        });
+
+        return newUser;
+      });
+
+      targetStudentId = created.user_id;
+    }
+
+    // 4. Log audit log
+    await db.auditLog.create({
+      data: {
+        user_id: facultyId,
+        action_performed: `Faculty enrolled student ${formattedId} into Course ${course.course_code} (${course.course_title})`,
+        ip_address: "127.0.0.1",
+      },
+    });
+
+    revalidatePath("/dashboard/faculty");
+    revalidatePath("/dashboard/faculty/exams");
+    revalidatePath("/dashboard/student");
+
+    return {
+      success: true,
+      message: `Student ${formattedId} successfully enrolled in ${course.course_code}!`,
+      studentId: targetStudentId,
+    };
+  } catch (err: any) {
+    console.error("Error in enrollStudentInCourse:", err);
+    return { error: err.message || "Failed to enroll student." };
+  }
+}
+
+export async function bulkEnrollStudentsInCourse(
+  facultyId: number,
+  courseId: number,
+  rawInput: string,
+  defaultProgramId?: number,
+  defaultYearLevel?: number,
+  defaultSection?: string
+) {
+  if (!rawInput?.trim()) {
+    return { error: "Please enter at least one Student ID number." };
+  }
+
+  try {
+    const lines = rawInput
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter(Boolean);
+
+    let enrolledCount = 0;
+    let skippedCount = 0;
+    const errors: string[] = [];
+
+    for (const line of lines) {
+      // Support comma, tab, or pipe separated values: ID, FirstName, LastName
+      const parts = line.split(/[,|\t]+/).map((p) => p.trim());
+      const instId = parts[0]?.toUpperCase();
+      const fName = parts[1] || "";
+      const lName = parts[2] || "";
+
+      if (!instId) continue;
+
+      const res = await enrollStudentInCourse(facultyId, courseId, {
+        institutionalId: instId,
+        firstName: fName,
+        lastName: lName,
+        programId: defaultProgramId,
+        yearLevel: defaultYearLevel,
+        section: defaultSection,
+      });
+
+      if (res.success) {
+        enrolledCount++;
+      } else {
+        skippedCount++;
+        errors.push(`${instId}: ${res.error}`);
+      }
+    }
+
+    revalidatePath("/dashboard/faculty");
+    revalidatePath("/dashboard/student");
+
+    return {
+      success: true,
+      enrolledCount,
+      skippedCount,
+      errors: errors.slice(0, 5),
+      message: `Enrolled ${enrolledCount} student(s)${skippedCount > 0 ? ` (${skippedCount} skipped or already enrolled)` : ""}.`,
+    };
+  } catch (err: any) {
+    console.error("Error in bulkEnrollStudentsInCourse:", err);
+    return { error: err.message || "Failed to perform bulk enrollment." };
+  }
+}
+
+export async function unenrollStudentFromCourse(
+  facultyId: number,
+  courseId: number,
+  studentId: number
+) {
+  try {
+    const course = await db.course.findUnique({
+      where: { course_id: courseId },
+    });
+
+    const student = await db.student.findUnique({
+      where: { student_id: studentId },
+      include: { user: true },
+    });
+
+    await db.studentCourse.delete({
+      where: {
+        student_id_course_id: {
+          student_id: studentId,
+          course_id: courseId,
+        },
+      },
+    });
+
+    await db.auditLog.create({
+      data: {
+        user_id: facultyId,
+        action_performed: `Faculty removed student ${student?.user.institutional_id || studentId} from Course ${course?.course_code || courseId}`,
+        ip_address: "127.0.0.1",
+      },
+    });
+
+    revalidatePath("/dashboard/faculty");
+    revalidatePath("/dashboard/student");
+
+    return { success: true };
+  } catch (err: any) {
+    console.error("Error in unenrollStudentFromCourse:", err);
+    return { error: err.message || "Failed to unenroll student." };
+  }
+}
+
+
 
 
 

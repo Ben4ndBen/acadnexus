@@ -402,6 +402,7 @@ export default async function StudentDashboard() {
           averagePerformance={averagePerformance}
           institutionalId={institutionalId}
           userId={dbUser.user_id}
+          requirePasswordUpdate={!!dbUser?.require_password_update}
         />
       </main>
 

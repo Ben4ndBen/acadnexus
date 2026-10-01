@@ -104,12 +104,12 @@ export function LoginForm() {
         )}
       </button>
 
-      <div className="text-center pt-3 border-t border-stone-100 mt-2">
-        <p className="text-xs text-stone-500">
-          New student?{" "}
-          <Link href="/register" className="font-bold text-[#7A151A] hover:underline transition-all">
-            Create Student Account
-          </Link>
+      <div className="text-center pt-3 border-t border-stone-100 mt-2 space-y-1">
+        <p className="text-xs text-stone-600 font-medium">
+          Students: Accounts are enrolled directly by your course instructor.
+        </p>
+        <p className="text-[11px] text-stone-400">
+          Initial default password is your Student ID number. Please consult your faculty if you are not yet enrolled.
         </p>
       </div>
     </form>

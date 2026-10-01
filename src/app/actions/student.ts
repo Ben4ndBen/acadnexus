@@ -615,3 +615,89 @@ export async function keepAliveStudentExam(
     return { error: err.message || "Failed to save timer state." };
   }
 }
+
+export async function updateStudentPassword(
+  studentId: number,
+  currentPassword: string,
+  newPassword: string,
+  confirmPassword: string
+) {
+  if (!currentPassword || !newPassword || !confirmPassword) {
+    return { error: "Please fill in all password fields." };
+  }
+
+  if (newPassword !== confirmPassword) {
+    return { error: "New password and confirmation do not match." };
+  }
+
+  // Validate password strength
+  const hasUppercase = /[A-Z]/.test(newPassword);
+  const hasLowercase = /[a-z]/.test(newPassword);
+  const hasDigit = /\d/.test(newPassword);
+  const hasSpecial = /[^A-Za-z0-9]/.test(newPassword);
+  if (
+    newPassword.length < 8 ||
+    !hasUppercase ||
+    !hasLowercase ||
+    !hasDigit ||
+    !hasSpecial
+  ) {
+    return {
+      error:
+        "Password must be at least 8 characters long and contain uppercase, lowercase, numbers, and special characters.",
+    };
+  }
+
+  try {
+    const bcrypt = await import("bcryptjs");
+
+    // 1. Fetch user by user_id
+    const user = await db.user.findUnique({
+      where: { user_id: studentId },
+    });
+
+    if (!user) {
+      return { error: "Student account not found." };
+    }
+
+    if (user.role !== "Student") {
+      return { error: "Only student accounts can perform this action." };
+    }
+
+    // 2. Verify current password
+    const passwordMatch = await bcrypt.compare(currentPassword, user.password_hash);
+    if (!passwordMatch) {
+      return { error: "Current password is incorrect." };
+    }
+
+    // 3. Hash new password
+    const salt = await bcrypt.genSalt(10);
+    const passwordHash = await bcrypt.hash(newPassword, salt);
+
+    // 4. Update user record
+    await db.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { user_id: studentId },
+        data: {
+          password_hash: passwordHash,
+          require_password_update: false,
+        },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          user_id: studentId,
+          action_performed: "Student updated their password.",
+          ip_address: "127.0.0.1",
+        },
+      });
+    });
+
+    revalidatePath("/dashboard/student");
+    return { success: true, message: "Password updated successfully!" };
+  } catch (err: any) {
+    console.error("Error in updateStudentPassword:", err);
+    return { error: err.message || "Failed to update password." };
+  }
+}
+
