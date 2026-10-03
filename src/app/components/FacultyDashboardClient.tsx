@@ -2599,7 +2599,7 @@ export function FacultyDashboardClient({
                         <th className="py-3 px-4">Student ID Number</th>
                         <th className="py-3 px-4">Student Full Name</th>
                         <th className="py-3 px-4">Program</th>
-                        <th className="py-3 px-4">Year & Section</th>
+                        <th className="py-3 px-4">Year Level</th>
                         <th className="py-3 px-4">Date Enrolled</th>
                         <th className="py-3 px-4 text-right">Actions</th>
                       </tr>
@@ -2621,7 +2621,7 @@ export function FacultyDashboardClient({
                             </span>
                           </td>
                           <td className="py-3 px-4 font-medium text-slate-600">
-                            Year {s.year_level} - Sec {s.section}
+                            Year {s.year_level}
                           </td>
                           <td className="py-3 px-4 text-slate-400 text-[11px]">
                             {new Date(s.enrolled_at).toLocaleDateString()}
@@ -2800,34 +2800,20 @@ export function FacultyDashboardClient({
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-extrabold text-slate-700 block mb-1">
-                    Year Level
-                  </label>
-                  <select
-                    value={enrollForm.yearLevel}
-                    onChange={(e) => setEnrollForm({ ...enrollForm, yearLevel: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 focus:bg-white text-xs font-bold text-slate-900 px-3.5 py-2.5 rounded-xl transition-all"
-                  >
-                    <option value="1">1st Year</option>
-                    <option value="2">2nd Year</option>
-                    <option value="3">3rd Year</option>
-                    <option value="4">4th Year</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-xs font-extrabold text-slate-700 block mb-1">
-                    Section
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. A"
-                    value={enrollForm.section}
-                    onChange={(e) => setEnrollForm({ ...enrollForm, section: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 focus:bg-white text-xs font-medium text-slate-900 px-3.5 py-2.5 rounded-xl transition-all"
-                  />
-                </div>
+              <div>
+                <label className="text-xs font-extrabold text-slate-700 block mb-1">
+                  Year Level
+                </label>
+                <select
+                  value={enrollForm.yearLevel}
+                  onChange={(e) => setEnrollForm({ ...enrollForm, yearLevel: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-200 focus:bg-white text-xs font-bold text-slate-900 px-3.5 py-2.5 rounded-xl transition-all"
+                >
+                  <option value="1">1st Year</option>
+                  <option value="2">2nd Year</option>
+                  <option value="3">3rd Year</option>
+                  <option value="4">4th Year</option>
+                </select>
               </div>
             </div>
 
@@ -2912,7 +2898,7 @@ export function FacultyDashboardClient({
                 />
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-[11px] font-extrabold text-slate-700 block mb-1">
                     Default Program
@@ -2943,17 +2929,6 @@ export function FacultyDashboardClient({
                     <option value="3">3rd Year</option>
                     <option value="4">4th Year</option>
                   </select>
-                </div>
-                <div>
-                  <label className="text-[11px] font-extrabold text-slate-700 block mb-1">
-                    Default Section
-                  </label>
-                  <input
-                    type="text"
-                    value={bulkSection}
-                    onChange={(e) => setBulkSection(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 text-xs font-bold text-slate-900 p-2 rounded-xl"
-                  />
                 </div>
               </div>
             </div>

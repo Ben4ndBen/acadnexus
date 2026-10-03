@@ -207,19 +207,11 @@ export function StudentDashboardClient({
                 {student?.program?.department?.department_name || "Batanes State College"}
               </p>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Year Level</p>
-                <p className="text-sm font-bold text-slate-800 mt-0.5">
-                  {student ? `Year ${student.year_level}` : "Not Seeded"}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Section / Major</p>
-                <p className="text-sm font-bold text-slate-800 mt-0.5">
-                  {student ? student.section : "Not Seeded"}
-                </p>
-              </div>
+            <div>
+              <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Year Level</p>
+              <p className="text-sm font-bold text-slate-800 mt-0.5">
+                {student ? `Year ${student.year_level}` : "Not Seeded"}
+              </p>
             </div>
 
             {/* Enrolled Subjects List Section */}

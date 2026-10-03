@@ -458,8 +458,8 @@ export function RegisterForm({
         </div>
       </div>
 
-      {/* Student Onboarding Academic Program, Year Level & Major */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-t border-stone-100 pt-4">
+      {/* Student Onboarding Academic Program & Year Level */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-stone-100 pt-4">
         <div>
           <label htmlFor="programId" className="block text-xs font-bold text-stone-600 uppercase tracking-wider mb-1.5">
             Academic Program <span className="text-rose-500">*</span>
@@ -471,7 +471,6 @@ export function RegisterForm({
             value={selectedProgramId}
             onChange={(e) => {
               setSelectedProgramId(e.target.value);
-              setSelectedMajor("");
             }}
             className="w-full bg-stone-50/60 focus:bg-white border border-stone-200/80 focus:border-[#7A151A] rounded-xl px-4 py-3 text-sm text-stone-900 focus:outline-none focus:ring-2 focus:ring-[#7A151A]/20 transition-all duration-200 font-medium"
             disabled={isPending}
@@ -509,48 +508,8 @@ export function RegisterForm({
             <option value="4">4th Year</option>
           </select>
         </div>
-
-        {availableMajors.length > 0 ? (
-          <div>
-            <label htmlFor="major" className="block text-xs font-bold text-stone-600 uppercase tracking-wider mb-1.5">
-              Academic Major / Track <span className="text-rose-500">*</span>
-            </label>
-            <select
-              id="major"
-              name="section"
-              required
-              value={selectedMajor}
-              onChange={(e) => setSelectedMajor(e.target.value)}
-              className="w-full bg-stone-50/60 focus:bg-white border border-stone-200/80 focus:border-[#7A151A] rounded-xl px-4 py-3 text-sm text-stone-900 focus:outline-none focus:ring-2 focus:ring-[#7A151A]/20 transition-all duration-200 disabled:text-stone-400 font-medium"
-              disabled={isPending}
-            >
-              <option value="" disabled>Select Major / Track</option>
-              {availableMajors.map((m) => (
-                <option key={m} value={m}>
-                  {m}
-                </option>
-              ))}
-            </select>
-          </div>
-        ) : (
-          <div>
-            <label htmlFor="section" className="block text-xs font-bold text-stone-600 uppercase tracking-wider mb-1.5">
-              Section <span className="text-rose-500">*</span>
-            </label>
-            <input
-              id="section"
-              name="section"
-              type="text"
-              required
-              placeholder="e.g. A"
-              value={selectedMajor || "A"}
-              onChange={(e) => setSelectedMajor(e.target.value)}
-              className="w-full bg-stone-50/60 focus:bg-white border border-stone-200/80 focus:border-[#7A151A] rounded-xl px-4 py-3 text-sm text-stone-900 focus:outline-none focus:ring-2 focus:ring-[#7A151A]/20 transition-all duration-200 font-medium"
-              disabled={isPending}
-            />
-          </div>
-        )}
       </div>
+      <input type="hidden" name="section" value="A" />
 
       {/* DYNAMIC MULTI-SELECT DROPDOWN FOR ENROLLED SUBJECTS */}
       <div className="border-t border-stone-100 pt-4 space-y-2">

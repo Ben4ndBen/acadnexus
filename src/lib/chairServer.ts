@@ -60,8 +60,8 @@ export async function ensureChairsAndDepartmentsExist() {
         facultyFirstName: "Joseph",
         facultyLastName: "Garcia",
         programs: [
-          { code: "BEED", name: "Bachelor of Elementary Education" },
-          { code: "BSED", name: "Bachelor of Secondary Education" },
+          { code: "BEED", name: "Bachelor of science in elementary education" },
+          { code: "BSED", name: "Bachelor of Science in Secondary education" },
         ],
       },
     ];
@@ -101,6 +101,31 @@ export async function ensureChairsAndDepartmentsExist() {
       },
     });
 
+    // 3. Teacher Education Department names
+    await db.academicProgram.updateMany({
+      where: {
+        OR: [
+          { program_code: "BSED" },
+          { program_name: { contains: "Secondary", mode: "insensitive" } },
+        ],
+      },
+      data: {
+        program_name: "Bachelor of Science in Secondary education",
+      },
+    });
+
+    await db.academicProgram.updateMany({
+      where: {
+        OR: [
+          { program_code: "BEED" },
+          { program_name: { contains: "Elementary", mode: "insensitive" } },
+        ],
+      },
+      data: {
+        program_name: "Bachelor of science in elementary education",
+      },
+    });
+
     for (const d of deptsData) {
       // 1. Ensure department exists
       let dept = await db.department.findFirst({
@@ -125,6 +150,11 @@ export async function ensureChairsAndDepartmentsExist() {
               program_name: p.name,
               department_id: dept.department_id,
             },
+          });
+        } else if (prog.program_name !== p.name) {
+          await db.academicProgram.update({
+            where: { program_id: prog.program_id },
+            data: { program_name: p.name },
           });
         }
       }

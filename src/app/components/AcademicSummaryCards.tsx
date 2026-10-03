@@ -83,10 +83,9 @@ export default function AcademicSummaryCards({
         <div className="stat-divider" aria-hidden="true" />
         <div className="stat-card">
           <span className="stat-value">
-            {student.program} — Y{student.year_level}
-            {student.section}
+            {student.program} — Year {student.year_level}
           </span>
-          <span className="stat-label">Program · Section</span>
+          <span className="stat-label">Program · Year</span>
         </div>
       </div>
 
