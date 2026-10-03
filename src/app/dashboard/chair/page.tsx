@@ -46,7 +46,12 @@ export default async function ChairDashboard() {
                       academic_year: "desc",
                     },
                     take: 1
-                  }
+                  },
+                  facultyCourses: {
+                    include: {
+                      course: true,
+                    },
+                  },
                 },
               },
             },
@@ -112,6 +117,11 @@ export default async function ChairDashboard() {
   // Extract all department exams
   const departmentExams = department.faculty.flatMap(f => f.examinations);
 
+  // Fetch courses for assignment
+  const courses = await db.course.findMany({
+    orderBy: { course_code: "asc" }
+  });
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
       {/* Navbar */}
@@ -164,6 +174,7 @@ export default async function ChairDashboard() {
           facultyMembers={formattedFaculty as any}
           pendingApprovals={formattedApprovals as any}
           departmentExams={departmentExams as any}
+          courses={courses}
         />
       </main>
 

@@ -14,7 +14,8 @@ import {
   getQuestionBankQuestions, saveQuestionBankQuestion, deleteQuestionBankQuestion,
   archiveExamination, reuseArchivedExamination, getArchivedExaminations,
   getCurrentAcademicYear, getFacultyEnrolledStudentsAndGrades,
-  getCourseRoster, enrollStudentInCourse, bulkEnrollStudentsInCourse, unenrollStudentFromCourse
+  getCourseRoster, enrollStudentInCourse, bulkEnrollStudentsInCourse, unenrollStudentFromCourse,
+  acknowledgeAssignedCoursesAction
 } from "@/app/actions/faculty";
 import { 
   exportStudentGradesRosterToExcel, 
@@ -80,6 +81,8 @@ interface FacultyDashboardClientProps {
   institutionalId: string;
   programs?: Array<{ program_id: number; program_code: string; program_name: string; department_id: number }>;
   courses?: Array<{ course_id: number; course_code: string; course_title: string }>;
+  assignedCourses?: Array<{ course_id: number; course_code: string; course_title: string; syllabus_file_path?: string | null }>;
+  hasSeenCourseAssignment?: boolean;
   requirePasswordUpdate?: boolean;
   username?: string;
   studentExams?: any[];
@@ -90,12 +93,38 @@ export function FacultyDashboardClient({
   institutionalId, 
   programs = [], 
   courses = [],
+  assignedCourses = [],
+  hasSeenCourseAssignment = false,
   requirePasswordUpdate = false, 
   username,
   studentExams = []
 }: FacultyDashboardClientProps) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<"overview" | "tracker" | "submissions" | "profile" | "override" | "question_bank" | "archive" | "students">("overview");
+
+  // Popup modal state for newly assigned courses upon first / new login
+  const [showAssignedCoursesModal, setShowAssignedCoursesModal] = useState<boolean>(() => {
+    return !hasSeenCourseAssignment && assignedCourses.length > 0 && !requirePasswordUpdate;
+  });
+  const [isAcknowledgingCourses, setIsAcknowledgingCourses] = useState(false);
+
+  useEffect(() => {
+    if (!requirePasswordUpdate && !hasSeenCourseAssignment && assignedCourses.length > 0) {
+      setShowAssignedCoursesModal(true);
+    }
+  }, [requirePasswordUpdate, hasSeenCourseAssignment, assignedCourses.length]);
+
+  const handleAcknowledgeCourses = async () => {
+    setIsAcknowledgingCourses(true);
+    try {
+      await acknowledgeAssignedCoursesAction(faculty.faculty_id);
+    } catch (err) {
+      console.error("Error acknowledging assigned courses:", err);
+    } finally {
+      setIsAcknowledgingCourses(false);
+      setShowAssignedCoursesModal(false);
+    }
+  };
 
   // --- Class Roster & Student Enrollment Tab State ---
   const [selectedRosterCourseId, setSelectedRosterCourseId] = useState<number>(() => {
@@ -1072,6 +1101,44 @@ export function FacultyDashboardClient({
                   </div>
                 </div>
               </div>
+            </div>
+
+            {/* Assigned Courses / Teaching Load */}
+            <div className="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-sm space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                  <span className="w-1.5 h-6 bg-emerald-600 rounded-full" />
+                  Assigned Teaching Load
+                </h2>
+                <span className="text-[10px] bg-emerald-100 text-emerald-800 font-extrabold px-2.5 py-0.5 rounded-full">
+                  {assignedCourses.length} Assigned
+                </span>
+              </div>
+              {assignedCourses.length > 0 ? (
+                <div className="space-y-2.5">
+                  {assignedCourses.map((c) => (
+                    <div key={c.course_id} className="p-3 bg-slate-50 border border-slate-200/70 rounded-2xl flex items-center justify-between gap-3 hover:border-emerald-200 transition-colors">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-xs font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-100 shrink-0">
+                            {c.course_code}
+                          </span>
+                        </div>
+                        <p className="text-xs font-bold text-slate-800 truncate mt-1">
+                          {c.course_title}
+                        </p>
+                      </div>
+                      <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/60 shrink-0">
+                        Active
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-6 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
+                  <p className="text-xs text-slate-500">No courses assigned yet by DI/Chair.</p>
+                </div>
+              )}
             </div>
 
             {/* Compliance Matrix */}
@@ -3516,6 +3583,92 @@ export function FacultyDashboardClient({
                 className="bg-slate-900 hover:bg-slate-800 text-white text-xs font-extrabold px-5 py-2.5 rounded-xl transition-all cursor-pointer"
               >
                 Close Roster
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ASSIGNED COURSES INITIAL LOGIN POPUP MODAL */}
+      {showAssignedCoursesModal && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 overflow-y-auto animate-in fade-in duration-300">
+          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-xl w-full shadow-2xl border border-slate-200 space-y-6 my-8">
+            <div className="flex items-start gap-4">
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-700 text-white flex items-center justify-center shrink-0 shadow-lg shadow-emerald-500/20">
+                <GraduationCap className="w-7 h-7" />
+              </div>
+              <div className="flex-1">
+                <span className="text-[10px] font-extrabold uppercase tracking-widest text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                  Official Teaching Load Assignment
+                </span>
+                <h3 className="text-xl font-black text-slate-900 mt-1">
+                  Assigned Teaching Courses
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Designated by the Director of Instruction (DI) & Academic Administration
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-emerald-50/60 border border-emerald-100 rounded-2xl p-4 text-xs text-slate-700 leading-relaxed space-y-2">
+              <p>
+                Welcome, <strong className="font-bold text-slate-900">Instructor {faculty.first_name} {faculty.last_name}</strong>! 
+                You have been officially assigned to facilitate the following course(s) for the current academic term:
+              </p>
+            </div>
+
+            {/* List of Assigned Courses */}
+            <div className="space-y-2.5 max-h-64 overflow-y-auto pr-1">
+              {assignedCourses.map((c, idx) => (
+                <div 
+                  key={c.course_id || idx}
+                  className="bg-white border border-slate-200 hover:border-emerald-300 rounded-2xl p-4 flex items-center justify-between gap-4 shadow-sm hover:shadow transition-all group"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="font-mono text-xs font-black px-2.5 py-1.5 rounded-xl bg-slate-900 text-emerald-400 shrink-0">
+                      {c.course_code}
+                    </span>
+                    <div>
+                      <h4 className="text-xs font-black text-slate-800 group-hover:text-emerald-700 transition-colors">
+                        {c.course_title}
+                      </h4>
+                      <p className="text-[10px] text-slate-400 mt-0.5">
+                        Active Curriculum Course
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-200/60 shrink-0">
+                    Assigned
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            <div className="bg-slate-50 border border-slate-100 rounded-xl p-3 text-[11px] text-slate-500 flex items-start gap-2">
+              <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+              <span>
+                Your <strong>Question Bank</strong>, <strong>Examination Creator</strong>, and <strong>Student Rosters</strong> have been pre-scoped to these assigned courses.
+              </span>
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button
+                type="button"
+                disabled={isAcknowledgingCourses}
+                onClick={handleAcknowledgeCourses}
+                className="w-full sm:w-auto px-6 py-3 text-xs font-extrabold text-white bg-emerald-600 hover:bg-emerald-700 active:scale-95 rounded-xl shadow-md shadow-emerald-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                {isAcknowledgingCourses ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Confirming...</span>
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-4 h-4" />
+                    <span>Acknowledge & Access Workspace</span>
+                  </>
+                )}
               </button>
             </div>
           </div>

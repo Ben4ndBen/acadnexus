@@ -124,14 +124,22 @@ export async function updateExamStatus(examId: number, status: ExamStatus, userI
 
 export async function createExamDraft(facultyId: number, courseId?: number) {
   try {
-    // If courseId is not provided, find the first course in the database
+    // If courseId is not provided, check faculty's assigned courses first
     let targetCourseId = courseId;
     if (!targetCourseId) {
-      const firstCourse = await db.course.findFirst();
-      if (!firstCourse) {
-        return { error: "No courses found in the database. Please contact an admin." };
+      const assignedFc = await db.facultyCourse.findFirst({
+        where: { faculty_id: facultyId },
+        select: { course_id: true },
+      });
+      if (assignedFc) {
+        targetCourseId = assignedFc.course_id;
+      } else {
+        const firstCourse = await db.course.findFirst();
+        if (!firstCourse) {
+          return { error: "No courses found in the database. Please contact an admin." };
+        }
+        targetCourseId = firstCourse.course_id;
       }
-      targetCourseId = firstCourse.course_id;
     }
 
     const newExam = await db.examination.create({
@@ -1818,6 +1826,67 @@ export async function unenrollStudentFromCourse(
     return { error: err.message || "Failed to unenroll student." };
   }
 }
+
+export async function acknowledgeAssignedCoursesAction(facultyId: number) {
+  try {
+    await db.faculty.update({
+      where: { faculty_id: facultyId },
+      data: { has_seen_course_assignment: true },
+    });
+    revalidatePath("/dashboard/faculty");
+    return { success: true };
+  } catch (err: any) {
+    console.error("Error acknowledging assigned courses:", err);
+    return { error: err.message || "Failed to acknowledge assigned courses." };
+  }
+}
+
+export async function assignCoursesToFacultyAction(facultyId: number, courseIds: number[]) {
+  try {
+    const { createClient } = await import("@/lib/supabase/server");
+    const supabase = await createClient();
+    const { data: { user: currentUser } } = await supabase.auth.getUser();
+    if (!currentUser) return { error: "Unauthorized. Please log in first." };
+
+    const currentRole = currentUser.user_metadata?.role;
+    if (currentRole !== "Director" && currentRole !== "Chair") {
+      return { error: "Unauthorized. Only Director or Chair can assign courses to faculty." };
+    }
+
+    await db.$transaction(async (tx) => {
+      // Delete previous assignments
+      await tx.facultyCourse.deleteMany({
+        where: { faculty_id: facultyId },
+      });
+
+      // Insert new assignments
+      if (courseIds && courseIds.length > 0) {
+        await tx.facultyCourse.createMany({
+          data: courseIds.map((cId) => ({
+            faculty_id: facultyId,
+            course_id: Number(cId),
+          })),
+        });
+      }
+
+      // Reset has_seen_course_assignment so the faculty sees the newly assigned courses modal on next visit!
+      await tx.faculty.update({
+        where: { faculty_id: facultyId },
+        data: { has_seen_course_assignment: false },
+      });
+    });
+
+    revalidatePath("/dashboard/director");
+    revalidatePath("/dashboard/chair");
+    revalidatePath("/dashboard/faculty");
+
+    return { success: true };
+  } catch (err: any) {
+    console.error("Error assigning courses to faculty:", err);
+    return { error: err.message || "Failed to update course assignments." };
+  }
+}
+
 
 
 

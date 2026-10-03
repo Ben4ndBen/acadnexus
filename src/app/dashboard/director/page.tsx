@@ -135,6 +135,52 @@ export default async function DirectorDashboard() {
   const { getActiveAcademicPeriod } = await import("@/app/actions/director");
   const academicPeriod = await getActiveAcademicPeriod();
 
+  // Fetch all courses for assignment by DI
+  const courses = await db.course.findMany({
+    orderBy: { course_code: "asc" },
+  });
+
+  // Fetch all faculty members with assigned courses and compliance
+  const facultyMembers = await db.faculty.findMany({
+    include: {
+      user: {
+        select: {
+          institutional_id: true,
+          username: true,
+          is_active: true,
+        },
+      },
+      department: true,
+      facultyCourses: {
+        include: {
+          course: true,
+        },
+      },
+      examinations: {
+        select: {
+          exam_id: true,
+          title: true,
+          current_status: true,
+        },
+      },
+      facultyPortfolios: {
+        orderBy: { academic_year: "desc" },
+        take: 1,
+      },
+    },
+    orderBy: {
+      last_name: "asc",
+    },
+  });
+
+  const sanitizedFacultyMembers = facultyMembers.map((f) => ({
+    ...f,
+    facultyPortfolios: f.facultyPortfolios.map((p) => ({
+      ...p,
+      compliance_percentage: p.compliance_percentage.toString(),
+    })),
+  }));
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
       {/* Navbar */}
@@ -193,6 +239,8 @@ export default async function DirectorDashboard() {
           allExaminations={allExaminations as any}
           globalHoldActive={globalHoldActive}
           academicPeriodSettings={academicPeriod}
+          courses={courses}
+          facultyMembers={sanitizedFacultyMembers as any}
         />
       </main>
 

@@ -255,6 +255,20 @@ export async function registerInstructorByAdminAction(prevState: any, formData: 
       }
     }
 
+    // Parse assigned courses if provided
+    const courseIdsRaw = formData.get("courseIds") as string;
+    let selectedCourseIds: number[] = [];
+    if (courseIdsRaw) {
+      try {
+        const parsed = JSON.parse(courseIdsRaw);
+        if (Array.isArray(parsed)) {
+          selectedCourseIds = parsed.map(Number).filter((n) => !isNaN(n) && n > 0);
+        }
+      } catch {
+        selectedCourseIds = courseIdsRaw.split(",").map(Number).filter((n) => !isNaN(n) && n > 0);
+      }
+    }
+
     // Hash password
     const salt = await bcrypt.genSalt(10);
     const passwordHash = await bcrypt.hash(password, salt);
@@ -278,8 +292,18 @@ export async function registerInstructorByAdminAction(prevState: any, formData: 
           middle_name: middleName ? middleName.trim() : null,
           last_name: lastName.trim(),
           department_id: Number(departmentIdStr),
+          has_seen_course_assignment: false,
         },
       });
+
+      if (selectedCourseIds.length > 0) {
+        await tx.facultyCourse.createMany({
+          data: selectedCourseIds.map((cId) => ({
+            faculty_id: user.user_id,
+            course_id: cId,
+          })),
+        });
+      }
 
       return user;
     });
@@ -292,7 +316,7 @@ export async function registerInstructorByAdminAction(prevState: any, formData: 
       await db.auditLog.create({
         data: {
           user_id: dbAdminUser.user_id,
-          action_performed: `${currentRole} registered new instructor ${firstName} ${lastName} (${formattedId}) with generated username: ${username}`,
+          action_performed: `${currentRole} registered new instructor ${firstName} ${lastName} (${formattedId}) with generated username: ${username}${selectedCourseIds.length > 0 ? ` and ${selectedCourseIds.length} assigned subject(s)` : ""}`,
           ip_address: "127.0.0.1",
         },
       });
@@ -306,6 +330,7 @@ export async function registerInstructorByAdminAction(prevState: any, formData: 
       username,
       institutionalId: formattedId,
       name: `${firstName} ${lastName}`,
+      assignedCoursesCount: selectedCourseIds.length,
     };
   } catch (err: any) {
     console.error("Error registering instructor by admin:", err);
