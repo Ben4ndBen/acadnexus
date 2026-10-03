@@ -1,7 +1,16 @@
 import db from "@/lib/db";
 import bcrypt from "bcryptjs";
 
-export async function ensureChairsAndDepartmentsExist() {
+let seededChairsFlag = false;
+let lastSeededTime = 0;
+const CACHE_TTL_MS = 1000 * 60 * 60; // Cache for 1 hour
+
+export async function ensureChairsAndDepartmentsExist(force = false) {
+  const now = Date.now();
+  if (!force && seededChairsFlag && (now - lastSeededTime < CACHE_TTL_MS)) {
+    return;
+  }
+
   try {
     const salt = await bcrypt.genSalt(10);
     const passwordHash = await bcrypt.hash("password123", salt);
@@ -227,6 +236,8 @@ export async function ensureChairsAndDepartmentsExist() {
         });
       }
     }
+    seededChairsFlag = true;
+    lastSeededTime = now;
   } catch (err) {
     console.error("Error in ensureChairsAndDepartmentsExist:", err);
   }

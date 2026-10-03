@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import db from "@/lib/db";
+import { getSystemSettingCached } from "@/lib/cache";
 import { LogoutButton } from "@/app/components/LogoutButton";
 import { NotificationBell } from "@/app/components/NotificationBell";
 import { ShieldCheck } from "lucide-react";
@@ -34,60 +35,75 @@ export default async function DirectorDashboard() {
     redirect("/");
   }
 
-  // Fetch director-level overview details from the database
-  const totalStudents = await db.student.count();
-  const totalFaculty = await db.faculty.count();
-  const totalDepartments = await db.department.count();
-  const totalExams = await db.examination.count();
-
-  // Fetch pending workflows requiring Director review
-  const pendingApprovals = await db.approvalWorkflow.findMany({
-    where: {
-      chair_review_status: "Approved",
-      di_review_status: "Hold", // Represents pending final director approval in standard states
-    },
-    include: {
-      exam: {
-        include: {
-          faculty: true,
-          course: true,
+  // Fetch all overview details concurrently in parallel
+  const [
+    totalStudents,
+    totalFaculty,
+    totalDepartments,
+    totalExams,
+    pendingApprovals,
+    allExaminations,
+    globalHoldSetting,
+    rawDepartments,
+    auditLogs,
+  ] = await Promise.all([
+    db.student.count(),
+    db.faculty.count(),
+    db.department.count(),
+    db.examination.count(),
+    db.approvalWorkflow.findMany({
+      where: {
+        chair_review_status: "Approved",
+        di_review_status: "Hold",
+      },
+      include: {
+        exam: {
+          include: {
+            faculty: true,
+            course: true,
+          },
         },
       },
-    },
-  });
+    }),
+    db.examination.findMany({
+      include: {
+        faculty: true,
+        course: true,
+        approvalWorkflow: true,
+      },
+      orderBy: {
+        exam_id: "desc",
+      },
+    }),
+    getSystemSettingCached("global_administrative_hold"),
+    db.department.findMany({
+      include: {
+        faculty: {
+          include: {
+            examinations: true,
+            facultyPortfolios: {
+              orderBy: { academic_year: "desc" },
+              take: 1,
+            },
+          },
+        },
+      },
+    }),
+    db.auditLog.findMany({
+      orderBy: { timestamp: "desc" },
+      take: 100,
+      include: {
+        user: {
+          select: {
+            institutional_id: true,
+            role: true,
+          },
+        },
+      },
+    }),
+  ]);
 
-  // Fetch all examinations (to allow manual holds)
-  const allExaminations = await db.examination.findMany({
-    include: {
-      faculty: true,
-      course: true,
-      approvalWorkflow: true,
-    },
-    orderBy: {
-      exam_id: "desc",
-    },
-  });
-
-  // Fetch global administrative hold setting
-  const globalHoldSetting = await db.systemSetting.findUnique({
-    where: { key: "global_administrative_hold" },
-  });
   const globalHoldActive = globalHoldSetting?.value === "true";
-
-  // Fetch departments data with compliance scoring
-  const rawDepartments = await db.department.findMany({
-    include: {
-      faculty: {
-        include: {
-          examinations: true,
-          facultyPortfolios: {
-            orderBy: { academic_year: "desc" },
-            take: 1
-          }
-        }
-      }
-    }
-  });
 
   const departmentsData = rawDepartments.map(dept => {
     let totalScore = 0;
@@ -109,20 +125,6 @@ export default async function DirectorDashboard() {
       total_faculty: dept.faculty.length,
       total_exams: dept.faculty.reduce((sum, f) => sum + f.examinations.length, 0),
     };
-  });
-
-  // Fetch global audit logs
-  const auditLogs = await db.auditLog.findMany({
-    orderBy: { timestamp: "desc" },
-    take: 100, // Limit to recent 100 logs
-    include: {
-      user: {
-        select: {
-          institutional_id: true,
-          role: true,
-        }
-      }
-    }
   });
 
   // Convert BigInt to string to pass to client

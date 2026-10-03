@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import db from "@/lib/db";
+import { getAcademicProgramsCached, getCoursesCached } from "@/lib/cache";
 import { LogoutButton } from "@/app/components/LogoutButton";
 import { NotificationBell } from "@/app/components/NotificationBell";
 import { BookOpen } from "lucide-react";
@@ -120,7 +121,8 @@ export default async function FacultyDashboard() {
     facultyPortfolios: sanitizedPortfolios,
   };
 
-  const programs = await db.academicProgram.findMany();
+  const programs = await getAcademicProgramsCached();
+  const courses = await getCoursesCached();
 
   const studentExams = await db.studentExam.findMany({
     where: {
@@ -197,7 +199,7 @@ export default async function FacultyDashboard() {
         </div>
 
         {/* Render interactive Faculty Dashboard Client */}
-        {(() => {
+{(() => {
           return db.course.findMany({
             orderBy: { course_code: "asc" }
           }).then(async (allCourses) => {

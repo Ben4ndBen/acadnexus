@@ -29,24 +29,34 @@ export async function createClient() {
     }
   );
 
-  if (!process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY) {
-    // @ts-ignore - Mock auth for offline/development fallback
-    client.auth.getUser = async () => {
-      const mockSession = cookieStore.get("acadnexus_mock_session")?.value;
-      if (mockSession) {
-        try {
-          return { data: { user: JSON.parse(mockSession) }, error: null };
-        } catch {}
+  const originalGetUser = client.auth.getUser.bind(client.auth);
+  // @ts-ignore - Wrapped to provide seamless fallback for mock session cookies
+  client.auth.getUser = async () => {
+    try {
+      const { data, error } = await originalGetUser();
+      if (data?.user) {
+        return { data, error };
       }
-      return { data: { user: null }, error: null };
-    };
+    } catch (e) {}
 
-    // @ts-ignore
-    client.auth.signOut = async () => {
-      cookieStore.set("acadnexus_mock_session", "", { maxAge: -1 });
-      return { error: null };
-    };
-  }
+    const mockSession = cookieStore.get("acadnexus_mock_session")?.value;
+    if (mockSession) {
+      try {
+        return { data: { user: JSON.parse(mockSession) }, error: null };
+      } catch {}
+    }
+    return { data: { user: null }, error: null };
+  };
+
+  const originalSignOut = client.auth.signOut.bind(client.auth);
+  // @ts-ignore
+  client.auth.signOut = async () => {
+    try {
+      await originalSignOut();
+    } catch (e) {}
+    cookieStore.set("acadnexus_mock_session", "", { maxAge: -1 });
+    return { error: null };
+  };
 
   return client;
 }
