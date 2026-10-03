@@ -296,11 +296,10 @@ async function main() {
 
   // 5. Seed Courses
   console.log("Seeding courses...");
-  const dbCourse = await prisma.course.create({
-    data: { course_code: "CS411", course_title: "Advanced Database Systems" },
-  });
-  const seCourse = await prisma.course.create({
-    data: { course_code: "CS412", course_title: "Software Engineering II" },
+  const itCourse = await prisma.course.upsert({
+    where: { course_code: "ITC 101" },
+    update: {},
+    create: { course_code: "ITC 101", course_title: "Introduction To Computing" },
   });
   const agriCourse = await prisma.course.create({
     data: { course_code: "AGRI101", course_title: "Principles of Agricultural Extension" },
@@ -320,8 +319,8 @@ async function main() {
   // IT Dept Exam (Pending Chair Review)
   const itExam = await prisma.examination.create({
     data: {
-      title: "Midterm Exam - Software Development Lifecycle",
-      course_id: seCourse.course_id,
+      title: "Midterm Exam - Introduction to Computing",
+      course_id: itCourse.course_id,
       faculty_id: itFaculty.faculty_id,
       tos_file_path: "/uploads/tos/se_midterm.pdf",
       time_limit_minutes: 60,

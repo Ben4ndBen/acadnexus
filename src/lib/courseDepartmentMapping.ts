@@ -118,7 +118,6 @@ export function isCourseInDepartmentOrProgram(
       code.startsWith("ITE") ||
       code.startsWith("ITM") ||
       code.startsWith("ITD") ||
-      code.startsWith("CS") ||
       code === "ENT 403";
     return isITCourse;
   }
