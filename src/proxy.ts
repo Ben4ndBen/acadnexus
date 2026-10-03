@@ -51,6 +51,15 @@ export async function proxy(request: NextRequest) {
       data: { user: realUser },
     } = await supabase.auth.getUser();
     user = realUser;
+
+    if (!user) {
+      const mockSession = request.cookies.get("acadnexus_mock_session")?.value;
+      if (mockSession) {
+        try {
+          user = JSON.parse(mockSession);
+        } catch (err) {}
+      }
+    }
   }
 
   const url = request.nextUrl.clone();

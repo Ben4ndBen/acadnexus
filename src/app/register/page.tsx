@@ -1,4 +1,4 @@
-import db from "@/lib/db";
+import { getAcademicProgramsCached, getCoursesCached } from "@/lib/cache";
 import { RegisterForm } from "./RegisterForm";
 import Image from "next/image";
 import { redirect } from "next/navigation";
@@ -23,17 +23,12 @@ export default async function RegisterPage() {
     redirect("/");
   }
 
-  // Ensure BSIT courses exist in database
+  // Ensure BSIT courses exist in database (cached execution)
   await ensureBsitCoursesExist();
 
-  // Fetch academic programs and courses for Student Registration
-  const programs = await db.academicProgram.findMany({
-    orderBy: { program_name: "asc" },
-  });
-
-  const courses = await db.course.findMany({
-    orderBy: { course_code: "asc" },
-  });
+  // Fetch academic programs and courses for Student Registration using Data Cache
+  const programs = await getAcademicProgramsCached();
+  const courses = await getCoursesCached();
 
   // Academic Year Indicator Logic
   const today = new Date();

@@ -1,8 +1,17 @@
 import db from "@/lib/db";
 import { ALL_CURRICULUMS } from "./bsitCurriculum";
 
+let seededBsitCoursesFlag = false;
+let lastBsitSeededTime = 0;
+const CACHE_TTL_MS = 1000 * 60 * 60; // 1 hour
+
 /** Ensures all program curriculum courses (BSIT, BSHM, BSA, BSTM, etc.) and programs exist in DB */
-export async function ensureBsitCoursesExist() {
+export async function ensureBsitCoursesExist(force = false) {
+  const now = Date.now();
+  if (!force && seededBsitCoursesFlag && (now - lastBsitSeededTime < CACHE_TTL_MS)) {
+    return;
+  }
+
   try {
     // A. Rename old Information Technology (if it still has code BSIT) to "BS Info Tech"
     await db.academicProgram.updateMany({
@@ -84,6 +93,8 @@ export async function ensureBsitCoursesExist() {
         },
       });
     }
+    seededBsitCoursesFlag = true;
+    lastBsitSeededTime = now;
   } catch (error) {
     console.error("Error ensuring curriculum courses exist in DB:", error);
   }

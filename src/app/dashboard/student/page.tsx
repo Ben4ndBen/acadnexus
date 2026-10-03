@@ -53,82 +53,74 @@ export default async function StudentDashboard() {
     redirect("/");
   }
 
-  // 1. Fetch targeted examinations via ExamTarget
-  const targets = await db.examTarget.findMany({
-    where: {
-      program_id: student.program_id,
-      year_level: student.year_level,
-      OR: [
-        { section: student.section },
-        { section: { in: ["All", "ALL", "all", "All Sections", "all sections", "Any", "any", ""] } },
-        { section: { equals: student.section, mode: "insensitive" } },
-        { section: "General" },
-        { section: "A" },
-      ],
-      exam: {
-        current_status: "Approved",
+  // 1. Concurrently fetch targeted examinations, active student overrides, and completed exams
+  const [targets, studentOverrides, completedExams] = await Promise.all([
+    db.examTarget.findMany({
+      where: {
+        program_id: student.program_id,
+        year_level: student.year_level,
+        OR: [
+          { section: student.section },
+          { section: { in: ["All", "ALL", "all", "All Sections", "all sections", "Any", "any", ""] } },
+          { section: { equals: student.section, mode: "insensitive" } },
+          { section: "General" },
+          { section: "A" },
+        ],
+        exam: {
+          current_status: "Approved",
+        },
       },
-    },
-    include: {
-      exam: {
-        include: {
-          course: true,
-          questionBank: {
-            select: {
-              points: true,
+      include: {
+        exam: {
+          include: {
+            course: true,
+            questionBank: {
+              select: {
+                points: true,
+              },
             },
           },
         },
       },
-    },
-  });
-
-  console.log("=== DEBUG PORTAL ===");
-  console.log("User:", institutionalId, "Role:", role);
-  console.log("Student Data:", student.program_id, student.year_level, student.section);
-  console.log("Targets found:", targets.length);
-  console.log("====================");
-
-  // 2. Fetch active student overrides
-  const studentOverrides = await db.studentOverride.findMany({
-    where: {
-      student_id: student.student_id,
-      is_active: true
-    },
-    include: {
-      exam: {
-        include: {
-          course: true,
-          questionBank: {
-            select: {
-              points: true,
+    }),
+    db.studentOverride.findMany({
+      where: {
+        student_id: student.student_id,
+        is_active: true,
+      },
+      include: {
+        exam: {
+          include: {
+            course: true,
+            questionBank: {
+              select: {
+                points: true,
+              },
             },
           },
         },
       },
-    },
-  });
+    }),
+    db.studentExam.findMany({
+      where: {
+        student_id: student.student_id,
+      },
+      include: {
+        exam: {
+          include: {
+            course: true,
+            questionBank: {
+              select: {
+                points: true,
+              },
+            },
+          },
+        },
+      },
+    }),
+  ]);
 
   const overrideExamIds = new Set(studentOverrides.map(o => o.exam_id));
-
-  // 3. Fetch completed student exams
-  const completedExams = await db.studentExam.findMany({
-    where: {
-      student_id: student.student_id,
-    },
-    include: {
-      exam: {
-        include: {
-          course: true,
-          questionBank: {
-            select: {
-              points: true,
-            },
-          },
-        },
-      },
-    },
-  });
 
   // Calculate metrics
   // Enrolled courses count: combines student's indicated subjects from signup and any targeted exam subjects
