@@ -228,6 +228,7 @@ export async function getActiveAcademicPeriod(): Promise<AcademicPeriodSettings>
           in: [
             "active_academic_year",
             "active_semester",
+            "active_term",
             "sem1_start",
             "sem1_end",
             "sem2_start",
@@ -246,6 +247,7 @@ export async function getActiveAcademicPeriod(): Promise<AcademicPeriodSettings>
     return {
       active_academic_year: map.get("active_academic_year") || defaultAY,
       active_semester: map.get("active_semester") || (now.getMonth() >= 7 ? "1st Semester" : "2nd Semester"),
+      active_term: map.get("active_term") || "Midterm",
       sem1_start: map.get("sem1_start") || `${currentYear}-08-01`,
       sem1_end: map.get("sem1_end") || `${currentYear}-12-31`,
       sem2_start: map.get("sem2_start") || `${currentYear + 1}-01-01`,
@@ -256,6 +258,7 @@ export async function getActiveAcademicPeriod(): Promise<AcademicPeriodSettings>
     return {
       active_academic_year: "2026-2027",
       active_semester: "1st Semester",
+      active_term: "Midterm",
       sem1_start: "2026-08-01",
       sem1_end: "2026-12-31",
       sem2_start: "2027-01-01",
@@ -280,6 +283,7 @@ export async function saveActiveAcademicPeriod(
     const updates: Array<{ key: string; value: string }> = [];
     if (data.active_academic_year) updates.push({ key: "active_academic_year", value: data.active_academic_year.trim() });
     if (data.active_semester) updates.push({ key: "active_semester", value: data.active_semester.trim() });
+    if (data.active_term) updates.push({ key: "active_term", value: data.active_term.trim() });
     if (data.sem1_start) updates.push({ key: "sem1_start", value: data.sem1_start.trim() });
     if (data.sem1_end) updates.push({ key: "sem1_end", value: data.sem1_end.trim() });
     if (data.sem2_start) updates.push({ key: "sem2_start", value: data.sem2_start.trim() });
