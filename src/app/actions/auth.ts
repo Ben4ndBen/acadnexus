@@ -130,7 +130,7 @@ export async function loginAction(prevState: any, formData: FormData) {
             institutional_id: user.institutional_id,
           },
         });
-      } catch (e) {}
+      } catch (e) { }
 
       return { success: true, role: user.role };
     }
@@ -186,7 +186,6 @@ export async function logoutAction() {
 
 export async function registerAction(prevState: any, formData: FormData): Promise<{ success?: boolean; error?: string; role?: string }> {
   return { error: "Student self-registration has been disabled. Course instructors are in charge of enrolling students and provisioning their accounts." };
-}
 }
 
 export async function registerInstructorByAdminAction(prevState: any, formData: FormData) {
