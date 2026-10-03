@@ -77,20 +77,11 @@ export function RegisterForm({
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   // Map program names / codes -> available majors/tracks
+  // Note: BS Info Tech, BS Agri, BS Tourism, BS Hospitality Management, and BS Elementary Education do not have majors/tracks.
   const PROGRAM_MAJORS: Record<string, string[]> = {
-    "bs info tech": [...BSIT_TRACKS, "General BS Info Tech"],
-    "info tech": [...BSIT_TRACKS, "General BS Info Tech"],
-    "information technology": [...BSIT_TRACKS, "General BS Info Tech"],
-    "bsit": ["Automotive Technology", "Architecture Technology", "Electronics Technology"],
     "industrial technology": ["Automotive Technology", "Architecture Technology", "Electronics Technology"],
     "industrial tech": ["Automotive Technology", "Architecture Technology", "Electronics Technology"],
     "bsindtech": ["Automotive Technology", "Architecture Technology", "Electronics Technology"],
-    "hospitality management": [...BSHM_MAJORS],
-    "bshm": [...BSHM_MAJORS],
-    "agriculture": [...BSA_MAJORS],
-    "bsa": [...BSA_MAJORS],
-    "tourism": [...BSTM_MAJORS],
-    "bstm": [...BSTM_MAJORS],
     "secondary education": ["English", "Science", "Mathematics"],
     "bsed": ["English", "Science", "Mathematics"],
   };
@@ -103,12 +94,47 @@ export function RegisterForm({
     const nameLower = prog.program_name.toLowerCase();
     const codeLower = prog.program_code.toLowerCase();
 
+    // Explicitly exclude programs that do not have major/track choices:
+    // BS Info Tech, BS Agri, BS Tourism, BS Hospitality Management, BS Elementary Education
+    if (
+      codeLower.includes("info") ||
+      nameLower.includes("information") ||
+      codeLower.includes("agri") ||
+      nameLower.includes("agriculture") ||
+      codeLower === "bsa" ||
+      codeLower.includes("tourism") ||
+      nameLower.includes("tourism") ||
+      codeLower === "bstm" ||
+      codeLower.includes("hospitality") ||
+      nameLower.includes("hospitality") ||
+      codeLower === "bshm" ||
+      codeLower.includes("elementary") ||
+      nameLower.includes("elementary") ||
+      codeLower === "beed"
+    ) {
+      return [];
+    }
+
+    // Industrial Technology has majors (BSIT / BSINDTECH with industrial)
+    if (
+      codeLower === "bsindtech" ||
+      nameLower.includes("industrial") ||
+      (codeLower === "bsit" && !nameLower.includes("information"))
+    ) {
+      return ["Automotive Technology", "Architecture Technology", "Electronics Technology"];
+    }
+
+    // Secondary Education has majors
+    if (codeLower === "bsed" || nameLower.includes("secondary education")) {
+      return ["English", "Science", "Mathematics"];
+    }
+
     for (const [keyword, majors] of Object.entries(PROGRAM_MAJORS)) {
       if (codeLower === keyword || nameLower.includes(keyword) || codeLower.includes(keyword)) {
         return majors;
       }
     }
-    return ["General Major"];
+    return [];
   }, [selectedProgramId, programs]);
 
   // Identify active program code (BS_INFO_TECH, BSHM, BSA, BSTM, etc.)
@@ -190,10 +216,18 @@ export function RegisterForm({
     );
   };
 
-  // Auto-select major if only one is available for the chosen program
+  // Auto-select major if available; if no majors (e.g. BS Info Tech, BS Agri, etc.), default to section "A"
   useEffect(() => {
     if (availableMajors.length === 1 && (!selectedMajor || selectedMajor !== availableMajors[0])) {
       setSelectedMajor(availableMajors[0]);
+    } else if (availableMajors.length === 0) {
+      if (!selectedMajor || selectedMajor.includes("Major") || selectedMajor.includes("Track")) {
+        setSelectedMajor("A");
+      }
+    } else if (availableMajors.length > 1) {
+      if (selectedMajor && !availableMajors.includes(selectedMajor)) {
+        setSelectedMajor("");
+      }
     }
   }, [availableMajors, selectedMajor]);
 
@@ -476,35 +510,46 @@ export function RegisterForm({
           </select>
         </div>
 
-        <div>
-          <label htmlFor="major" className="block text-xs font-bold text-stone-600 uppercase tracking-wider mb-1.5">
-            Academic Major / Track <span className="text-rose-500">*</span>
-          </label>
-          <select
-            id="major"
-            name="section"
-            required
-            value={selectedMajor}
-            onChange={(e) => setSelectedMajor(e.target.value)}
-            className="w-full bg-stone-50/60 focus:bg-white border border-stone-200/80 focus:border-[#7A151A] rounded-xl px-4 py-3 text-sm text-stone-900 focus:outline-none focus:ring-2 focus:ring-[#7A151A]/20 transition-all duration-200 disabled:text-stone-400 font-medium"
-            disabled={isPending || availableMajors.length === 0}
-          >
-            {availableMajors.length === 0 ? (
-              <option value="" disabled>
-                {selectedProgramId ? "No majors for this program" : "Select a program first"}
-              </option>
-            ) : (
-              <>
-                <option value="" disabled>Select Major / Track</option>
-                {availableMajors.map((m) => (
-                  <option key={m} value={m}>
-                    {m}
-                  </option>
-                ))}
-              </>
-            )}
-          </select>
-        </div>
+        {availableMajors.length > 0 ? (
+          <div>
+            <label htmlFor="major" className="block text-xs font-bold text-stone-600 uppercase tracking-wider mb-1.5">
+              Academic Major / Track <span className="text-rose-500">*</span>
+            </label>
+            <select
+              id="major"
+              name="section"
+              required
+              value={selectedMajor}
+              onChange={(e) => setSelectedMajor(e.target.value)}
+              className="w-full bg-stone-50/60 focus:bg-white border border-stone-200/80 focus:border-[#7A151A] rounded-xl px-4 py-3 text-sm text-stone-900 focus:outline-none focus:ring-2 focus:ring-[#7A151A]/20 transition-all duration-200 disabled:text-stone-400 font-medium"
+              disabled={isPending}
+            >
+              <option value="" disabled>Select Major / Track</option>
+              {availableMajors.map((m) => (
+                <option key={m} value={m}>
+                  {m}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : (
+          <div>
+            <label htmlFor="section" className="block text-xs font-bold text-stone-600 uppercase tracking-wider mb-1.5">
+              Section <span className="text-rose-500">*</span>
+            </label>
+            <input
+              id="section"
+              name="section"
+              type="text"
+              required
+              placeholder="e.g. A"
+              value={selectedMajor || "A"}
+              onChange={(e) => setSelectedMajor(e.target.value)}
+              className="w-full bg-stone-50/60 focus:bg-white border border-stone-200/80 focus:border-[#7A151A] rounded-xl px-4 py-3 text-sm text-stone-900 focus:outline-none focus:ring-2 focus:ring-[#7A151A]/20 transition-all duration-200 font-medium"
+              disabled={isPending}
+            />
+          </div>
+        )}
       </div>
 
       {/* DYNAMIC MULTI-SELECT DROPDOWN FOR ENROLLED SUBJECTS */}

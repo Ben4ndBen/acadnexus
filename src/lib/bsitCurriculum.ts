@@ -9,29 +9,13 @@ export interface CurriculumItem {
   electiveNumber?: number; // 1, 2, 3, 4
 }
 
-export const BSIT_TRACKS = [
-  "Cyber Security Track",
-  "Web and Mobile Application Development Track",
-  "Multimedia Track",
-] as const;
+export const BSIT_TRACKS = [] as const;
 
-export const BSHM_MAJORS = [
-  "Culinary Arts Major",
-  "Hotel & Lodging Operations Major",
-  "General BSHM",
-] as const;
+export const BSHM_MAJORS = [] as const;
 
-export const BSA_MAJORS = [
-  "Crop Science Major",
-  "Animal Science Major",
-  "Soil Science Major",
-  "Agricultural Extension Major",
-  "General BSA",
-] as const;
+export const BSA_MAJORS = [] as const;
 
-export const BSTM_MAJORS = [
-  "General Tourism Management",
-] as const;
+export const BSTM_MAJORS = [] as const;
 
 // --- BSIT CURRICULUM ---
 export const BSIT_CURRICULUM: CurriculumItem[] = [
@@ -79,16 +63,16 @@ export const BSIT_CURRICULUM: CurriculumItem[] = [
   { code: "ITM 301", title: "Networking 2", programCode: "BSIT", yearLevel: 3, semester: 1 },
   { code: "ITM 302", title: "Systems Integration and Architecture", programCode: "BSIT", yearLevel: 3, semester: 1 },
   { code: "ITE 303", title: "Web Systems and Technologies 2", programCode: "BSIT", yearLevel: 3, semester: 1 },
-  { code: "ITD 304", title: "Track Elective 1*", programCode: "BSIT", yearLevel: 3, semester: 1, isTrackElective: true, electiveNumber: 1 },
-  { code: "ITD 305", title: "Track Elective 2*", programCode: "BSIT", yearLevel: 3, semester: 1, isTrackElective: true, electiveNumber: 2 },
+  { code: "ITD 304", title: "IT Elective 1", programCode: "BSIT", yearLevel: 3, semester: 1 },
+  { code: "ITD 305", title: "IT Elective 2", programCode: "BSIT", yearLevel: 3, semester: 1 },
   { code: "ITM 306", title: "Information Assurance and Security 1", programCode: "BSIT", yearLevel: 3, semester: 1 },
   { code: "ITM 309", title: "Quantitative Methods (w/ Modeling and Simulation)", programCode: "BSIT", yearLevel: 3, semester: 1 },
 
   // --- THIRD YEAR - SECOND SEMESTER ---
   { code: "ITM 307", title: "Social And Professional Issues (Professional Ethics)", programCode: "BSIT", yearLevel: 3, semester: 2 },
   { code: "ITC 308", title: "Application Development and Emerging Technologies", programCode: "BSIT", yearLevel: 3, semester: 2 },
-  { code: "ITD 310", title: "Track Elective 3*", programCode: "BSIT", yearLevel: 3, semester: 2, isTrackElective: true, electiveNumber: 3 },
-  { code: "ITD 311", title: "Track Elective 4*", programCode: "BSIT", yearLevel: 3, semester: 2, isTrackElective: true, electiveNumber: 4 },
+  { code: "ITD 310", title: "IT Elective 3", programCode: "BSIT", yearLevel: 3, semester: 2 },
+  { code: "ITD 311", title: "IT Elective 4", programCode: "BSIT", yearLevel: 3, semester: 2 },
   { code: "ITM 312", title: "Information Assurance and Security 2", programCode: "BSIT", yearLevel: 3, semester: 2 },
   { code: "ITM 313", title: "Capstone Project 1", programCode: "BSIT", yearLevel: 3, semester: 2 },
 
@@ -99,24 +83,6 @@ export const BSIT_CURRICULUM: CurriculumItem[] = [
 
   // --- FOURTH YEAR - SECOND SEMESTER ---
   { code: "ITM 404", title: "Practicum / OJT / Immersion", programCode: "BSIT", yearLevel: 4, semester: 2 },
-
-  // --- TRACK ELECTIVES (CYBER SECURITY) ---
-  { code: "ITD 304-CS", title: "Fundamentals of Cyber Security (Elective 1)", programCode: "BSIT", yearLevel: 3, semester: 1, isTrackElective: true, trackName: "Cyber Security Track", electiveNumber: 1 },
-  { code: "ITD 305-CS", title: "Data And Application Security (Elective 2)", programCode: "BSIT", yearLevel: 3, semester: 1, isTrackElective: true, trackName: "Cyber Security Track", electiveNumber: 2 },
-  { code: "ITD 310-CS", title: "Ethical Hacking and Penetration Testing (Elective 3)", programCode: "BSIT", yearLevel: 3, semester: 2, isTrackElective: true, trackName: "Cyber Security Track", electiveNumber: 3 },
-  { code: "ITD 311-CS", title: "Incident Response and Forensics (Elective 4)", programCode: "BSIT", yearLevel: 3, semester: 2, isTrackElective: true, trackName: "Cyber Security Track", electiveNumber: 4 },
-
-  // --- TRACK ELECTIVES (WEB AND MOBILE APP DEV) ---
-  { code: "ITD 304-WM", title: "Server-Side Development (Elective 1)", programCode: "BSIT", yearLevel: 3, semester: 1, isTrackElective: true, trackName: "Web and Mobile Application Development Track", electiveNumber: 1 },
-  { code: "ITD 305-WM", title: "Mobile App Development (Elective 2)", programCode: "BSIT", yearLevel: 3, semester: 1, isTrackElective: true, trackName: "Web and Mobile Application Development Track", electiveNumber: 2 },
-  { code: "ITD 310-WM", title: "APIs AND Web Services (Elective 3)", programCode: "BSIT", yearLevel: 3, semester: 2, isTrackElective: true, trackName: "Web and Mobile Application Development Track", electiveNumber: 3 },
-  { code: "ITD 311-WM", title: "Project Management (Elective 4)", programCode: "BSIT", yearLevel: 3, semester: 2, isTrackElective: true, trackName: "Web and Mobile Application Development Track", electiveNumber: 4 },
-
-  // --- TRACK ELECTIVES (MULTIMEDIA) ---
-  { code: "ITD 304-MM", title: "Digital Photography (Elective 1)", programCode: "BSIT", yearLevel: 3, semester: 1, isTrackElective: true, trackName: "Multimedia Track", electiveNumber: 1 },
-  { code: "ITD 305-MM", title: "Digital Video Production (Elective 2)", programCode: "BSIT", yearLevel: 3, semester: 1, isTrackElective: true, trackName: "Multimedia Track", electiveNumber: 2 },
-  { code: "ITD 310-MM", title: "3d Animation and Modeling (Elective 3)", programCode: "BSIT", yearLevel: 3, semester: 2, isTrackElective: true, trackName: "Multimedia Track", electiveNumber: 3 },
-  { code: "ITD 311-MM", title: "Digital Marketing and Media Solutions (Elective 4)", programCode: "BSIT", yearLevel: 3, semester: 2, isTrackElective: true, trackName: "Multimedia Track", electiveNumber: 4 },
 ];
 
 // --- BSHM CURRICULUM ---
