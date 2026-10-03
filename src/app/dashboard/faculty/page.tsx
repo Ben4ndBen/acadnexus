@@ -63,6 +63,16 @@ export default async function FacultyDashboard() {
               academic_year: "desc",
             },
           },
+          facultyCourses: {
+            include: {
+              course: true,
+            },
+            orderBy: {
+              course: {
+                course_code: "asc",
+              },
+            },
+          },
         },
       },
     },
@@ -189,15 +199,29 @@ export default async function FacultyDashboard() {
         </div>
 
         {/* Render interactive Faculty Dashboard Client */}
-        <FacultyDashboardClient
-          faculty={sanitizedFaculty as any}
-          institutionalId={institutionalId}
-          programs={programs}
-          courses={courses}
-          requirePasswordUpdate={!!dbUser?.require_password_update}
-          username={dbUser?.username || undefined}
-          studentExams={sanitizedStudentExams as any}
-        />
+{(() => {
+          return db.course.findMany({
+            orderBy: { course_code: "asc" }
+          }).then(async (allCourses) => {
+            const facultyAssignedCourses = faculty.facultyCourses.map((fc) => fc.course);
+            // When faculty creates exam and in the question bank, the only courses that should appear are the assigned ones!
+            const effectiveCourses = facultyAssignedCourses.length > 0 ? facultyAssignedCourses : allCourses;
+
+            return (
+              <FacultyDashboardClient
+                faculty={sanitizedFaculty as any}
+                institutionalId={institutionalId}
+                programs={programs}
+                courses={effectiveCourses}
+                assignedCourses={facultyAssignedCourses}
+                hasSeenCourseAssignment={faculty.has_seen_course_assignment}
+                requirePasswordUpdate={!!dbUser?.require_password_update}
+                username={dbUser?.username || undefined}
+                studentExams={sanitizedStudentExams as any}
+              />
+            );
+          });
+        })()}
       </main>
 
       {/* Footer */}

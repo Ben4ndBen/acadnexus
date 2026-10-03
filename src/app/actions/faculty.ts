@@ -124,14 +124,22 @@ export async function updateExamStatus(examId: number, status: ExamStatus, userI
 
 export async function createExamDraft(facultyId: number, courseId?: number) {
   try {
-    // If courseId is not provided, find the first course in the database
+    // If courseId is not provided, check faculty's assigned courses first
     let targetCourseId = courseId;
     if (!targetCourseId) {
-      const firstCourse = await db.course.findFirst();
-      if (!firstCourse) {
-        return { error: "No courses found in the database. Please contact an admin." };
+      const assignedFc = await db.facultyCourse.findFirst({
+        where: { faculty_id: facultyId },
+        select: { course_id: true },
+      });
+      if (assignedFc) {
+        targetCourseId = assignedFc.course_id;
+      } else {
+        const firstCourse = await db.course.findFirst();
+        if (!firstCourse) {
+          return { error: "No courses found in the database. Please contact an admin." };
+        }
+        targetCourseId = firstCourse.course_id;
       }
-      targetCourseId = firstCourse.course_id;
     }
 
     const newExam = await db.examination.create({
@@ -178,6 +186,22 @@ export async function saveExamConfig(formData: FormData) {
     const timePenaltySeconds = Number(formData.get("timePenaltySeconds") || "60");
     const scorePenaltyPoints = Number(formData.get("scorePenaltyPoints") || "2");
 
+    const term = formData.get("term") as string | null;
+    const examDate = formData.get("examDate") as string | null;
+    const semester = formData.get("semester") as string | null;
+    const academicYear = formData.get("academicYear") as string | null;
+    const documentReference = formData.get("documentReference") as string | null;
+    const selectedStudentIdsRaw = formData.get("selectedStudentIds") as string | null;
+
+    let parsedStudentIds: number[] = [];
+    if (selectedStudentIdsRaw) {
+      try {
+        parsedStudentIds = JSON.parse(selectedStudentIdsRaw);
+      } catch {
+        parsedStudentIds = selectedStudentIdsRaw.split(",").map(Number).filter(n => !isNaN(n));
+      }
+    }
+
     if (!examId || !facultyId || !title || !courseId || !timeLimitMinutes) {
       return { error: "Missing required configuration fields." };
     }
@@ -207,6 +231,8 @@ export async function saveExamConfig(formData: FormData) {
       tosFilePath = `/uploads/${uniqueFilename}`;
     }
 
+    const parsedExamDate = examDate ? new Date(`${examDate}T00:00:00.000Z`) : null;
+
     const updatedExam = await db.examination.update({
       where: { exam_id: examId },
       data: {
@@ -217,14 +243,69 @@ export async function saveExamConfig(formData: FormData) {
         tos_file_path: tosFilePath,
         time_penalty_seconds: timePenaltySeconds,
         score_penalty_points: scorePenaltyPoints,
+        term: term || undefined,
+        exam_date: parsedExamDate || undefined,
+        semester: semester || undefined,
+        academic_year: academicYear || undefined,
+        document_reference: documentReference || undefined,
+        selected_student_ids: parsedStudentIds,
       },
     });
+
+    // Automatically sync ExamTarget if examDate is provided
+    if (parsedExamDate) {
+      let programId = 1;
+      let yearLevel = 1;
+      let section = "All Sections";
+
+      if (parsedStudentIds.length > 0) {
+        const studentSample = await db.student.findFirst({
+          where: { student_id: { in: parsedStudentIds } },
+        });
+        if (studentSample) {
+          programId = studentSample.program_id;
+          yearLevel = studentSample.year_level;
+          section = studentSample.section || "All Sections";
+        }
+      }
+
+      const existingTarget = await db.examTarget.findFirst({
+        where: { exam_id: examId },
+      });
+
+      const startTime = new Date("1970-01-01T00:00:00.000Z");
+      const endTime = new Date("1970-01-01T23:59:59.000Z");
+
+      if (existingTarget) {
+        await db.examTarget.update({
+          where: { target_id: existingTarget.target_id },
+          data: {
+            scheduled_date: parsedExamDate,
+            program_id: programId,
+            year_level: yearLevel,
+            section: section,
+          },
+        });
+      } else {
+        await db.examTarget.create({
+          data: {
+            exam_id: examId,
+            program_id: programId,
+            year_level: yearLevel,
+            section: section,
+            scheduled_date: parsedExamDate,
+            start_time: startTime,
+            end_time: endTime,
+          },
+        });
+      }
+    }
 
     // Log audit
     await db.auditLog.create({
       data: {
         user_id: facultyId,
-        action_performed: `Updated exam config for "${title}" (ID: ${examId})`,
+        action_performed: `Updated exam config for "${title}" (ID: ${examId}, Ref: ${documentReference || "N/A"})`,
         ip_address: "127.0.0.1",
       },
     });
@@ -236,6 +317,73 @@ export async function saveExamConfig(formData: FormData) {
   } catch (err: any) {
     console.error("Error in saveExamConfig:", err);
     return { error: err.message || "Failed to save exam configurations." };
+  }
+}
+
+export async function getAssignedStudentsForCourse(courseId: number) {
+  try {
+    // 1. Fetch students directly enrolled in this course via StudentCourse
+    const enrolled = await db.studentCourse.findMany({
+      where: { course_id: courseId },
+      include: {
+        student: {
+          include: {
+            user: true,
+            program: true,
+          },
+        },
+      },
+      orderBy: {
+        student: {
+          last_name: "asc",
+        },
+      },
+    });
+
+    if (enrolled.length > 0) {
+      return {
+        success: true,
+        students: enrolled.map((e) => ({
+          student_id: e.student.student_id,
+          institutional_id: e.student.user.institutional_id,
+          first_name: e.student.first_name,
+          last_name: e.student.last_name,
+          program_code: e.student.program.program_code,
+          program_name: e.student.program.program_name,
+          year_level: e.student.year_level,
+          section: e.student.section,
+        })),
+      };
+    }
+
+    // 2. Fallback: If no student courses specifically match this course yet, fetch enrolled students
+    const allStudents = await db.student.findMany({
+      include: {
+        user: true,
+        program: true,
+      },
+      orderBy: {
+        last_name: "asc",
+      },
+      take: 50,
+    });
+
+    return {
+      success: true,
+      students: allStudents.map((s) => ({
+        student_id: s.student_id,
+        institutional_id: s.user.institutional_id,
+        first_name: s.first_name,
+        last_name: s.last_name,
+        program_code: s.program.program_code,
+        program_name: s.program.program_name,
+        year_level: s.year_level,
+        section: s.section,
+      })),
+    };
+  } catch (err: any) {
+    console.error("Error getting assigned students for course:", err);
+    return { error: err.message || "Failed to fetch enrolled students." };
   }
 }
 
@@ -1376,6 +1524,370 @@ export async function getFacultyEnrolledStudentsAndGrades(facultyId: number) {
     return { error: err.message || "Failed to fetch enrolled students and grades." };
   }
 }
+
+export async function getCourseRoster(courseId: number) {
+  try {
+    const enrollments = await db.studentCourse.findMany({
+      where: { course_id: courseId },
+      include: {
+        student: {
+          include: {
+            user: true,
+            program: true,
+          },
+        },
+      },
+      orderBy: {
+        student: {
+          last_name: "asc",
+        },
+      },
+    });
+
+    const students = enrollments.map((e) => ({
+      student_id: e.student.student_id,
+      institutional_id: e.student.user.institutional_id,
+      first_name: e.student.first_name,
+      last_name: e.student.last_name,
+      program_id: e.student.program_id,
+      program_code: e.student.program.program_code,
+      program_name: e.student.program.program_name,
+      year_level: e.student.year_level,
+      section: e.student.section,
+      enrolled_at: e.enrolled_at.toISOString(),
+    }));
+
+    return { success: true, students };
+  } catch (err: any) {
+    console.error("Error in getCourseRoster:", err);
+    return { error: err.message || "Failed to fetch course roster." };
+  }
+}
+
+export async function enrollStudentInCourse(
+  facultyId: number,
+  courseId: number,
+  data: {
+    institutionalId: string;
+    firstName: string;
+    lastName: string;
+    programId?: number;
+    yearLevel?: number;
+    section?: string;
+  }
+) {
+  const rawId = data.institutionalId?.trim();
+  if (!rawId) {
+    return { error: "Student ID number is required." };
+  }
+
+  const formattedId = rawId.toUpperCase();
+
+  try {
+    const bcrypt = await import("bcryptjs");
+
+    // 1. Verify that course exists
+    const course = await db.course.findUnique({
+      where: { course_id: courseId },
+    });
+    if (!course) {
+      return { error: "Selected course was not found." };
+    }
+
+    // 2. Check if user already exists
+    const existingUser = await db.user.findUnique({
+      where: { institutional_id: formattedId },
+      include: { student: true },
+    });
+
+    let targetStudentId: number;
+
+    if (existingUser) {
+      if (existingUser.role !== "Student") {
+        return {
+          error: `Institutional ID ${formattedId} is already assigned to a ${existingUser.role} account.`,
+        };
+      }
+
+      targetStudentId = existingUser.user_id;
+
+      // Check if already enrolled in this specific course
+      const existingEnrollment = await db.studentCourse.findUnique({
+        where: {
+          student_id_course_id: {
+            student_id: targetStudentId,
+            course_id: courseId,
+          },
+        },
+      });
+
+      if (existingEnrollment) {
+        return {
+          error: `Student ${formattedId} is already enrolled in ${course.course_code}.`,
+        };
+      }
+
+      // Enroll existing student
+      await db.studentCourse.create({
+        data: {
+          student_id: targetStudentId,
+          course_id: courseId,
+        },
+      });
+
+      // Update student profile details if provided
+      if (data.firstName?.trim() || data.lastName?.trim()) {
+        await db.student.update({
+          where: { student_id: targetStudentId },
+          data: {
+            first_name: data.firstName.trim() || undefined,
+            last_name: data.lastName.trim() || undefined,
+            year_level: data.yearLevel ? Number(data.yearLevel) : undefined,
+            section: data.section ? data.section.trim() : undefined,
+          },
+        });
+      }
+    } else {
+      // 3. User does not exist: Provision new Student user account
+      // Initial default password is set to their Student ID number
+      const salt = await bcrypt.genSalt(10);
+      const defaultPasswordHash = await bcrypt.hash(formattedId, salt);
+
+      // Determine default program if not specified
+      let programId = data.programId ? Number(data.programId) : undefined;
+      if (!programId) {
+        const defaultProg = await db.academicProgram.findFirst({
+          orderBy: { program_id: "asc" },
+        });
+        programId = defaultProg?.program_id || 1;
+      }
+
+      const created = await db.$transaction(async (tx) => {
+        const newUser = await tx.user.create({
+          data: {
+            institutional_id: formattedId,
+            password_hash: defaultPasswordHash,
+            role: "Student",
+            require_password_update: true,
+            is_active: true,
+          },
+        });
+
+        await tx.student.create({
+          data: {
+            student_id: newUser.user_id,
+            first_name: data.firstName?.trim() || "Student",
+            last_name: data.lastName?.trim() || formattedId,
+            program_id: programId!,
+            year_level: Number(data.yearLevel) || 1,
+            section: data.section?.trim() || "A",
+          },
+        });
+
+        await tx.studentCourse.create({
+          data: {
+            student_id: newUser.user_id,
+            course_id: courseId,
+          },
+        });
+
+        return newUser;
+      });
+
+      targetStudentId = created.user_id;
+    }
+
+    // 4. Log audit log
+    await db.auditLog.create({
+      data: {
+        user_id: facultyId,
+        action_performed: `Faculty enrolled student ${formattedId} into Course ${course.course_code} (${course.course_title})`,
+        ip_address: "127.0.0.1",
+      },
+    });
+
+    revalidatePath("/dashboard/faculty");
+    revalidatePath("/dashboard/faculty/exams");
+    revalidatePath("/dashboard/student");
+
+    return {
+      success: true,
+      message: `Student ${formattedId} successfully enrolled in ${course.course_code}!`,
+      studentId: targetStudentId,
+    };
+  } catch (err: any) {
+    console.error("Error in enrollStudentInCourse:", err);
+    return { error: err.message || "Failed to enroll student." };
+  }
+}
+
+export async function bulkEnrollStudentsInCourse(
+  facultyId: number,
+  courseId: number,
+  rawInput: string,
+  defaultProgramId?: number,
+  defaultYearLevel?: number,
+  defaultSection?: string
+) {
+  if (!rawInput?.trim()) {
+    return { error: "Please enter at least one Student ID number." };
+  }
+
+  try {
+    const lines = rawInput
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter(Boolean);
+
+    let enrolledCount = 0;
+    let skippedCount = 0;
+    const errors: string[] = [];
+
+    for (const line of lines) {
+      // Support comma, tab, or pipe separated values: ID, FirstName, LastName
+      const parts = line.split(/[,|\t]+/).map((p) => p.trim());
+      const instId = parts[0]?.toUpperCase();
+      const fName = parts[1] || "";
+      const lName = parts[2] || "";
+
+      if (!instId) continue;
+
+      const res = await enrollStudentInCourse(facultyId, courseId, {
+        institutionalId: instId,
+        firstName: fName,
+        lastName: lName,
+        programId: defaultProgramId,
+        yearLevel: defaultYearLevel,
+        section: defaultSection,
+      });
+
+      if (res.success) {
+        enrolledCount++;
+      } else {
+        skippedCount++;
+        errors.push(`${instId}: ${res.error}`);
+      }
+    }
+
+    revalidatePath("/dashboard/faculty");
+    revalidatePath("/dashboard/student");
+
+    return {
+      success: true,
+      enrolledCount,
+      skippedCount,
+      errors: errors.slice(0, 5),
+      message: `Enrolled ${enrolledCount} student(s)${skippedCount > 0 ? ` (${skippedCount} skipped or already enrolled)` : ""}.`,
+    };
+  } catch (err: any) {
+    console.error("Error in bulkEnrollStudentsInCourse:", err);
+    return { error: err.message || "Failed to perform bulk enrollment." };
+  }
+}
+
+export async function unenrollStudentFromCourse(
+  facultyId: number,
+  courseId: number,
+  studentId: number
+) {
+  try {
+    const course = await db.course.findUnique({
+      where: { course_id: courseId },
+    });
+
+    const student = await db.student.findUnique({
+      where: { student_id: studentId },
+      include: { user: true },
+    });
+
+    await db.studentCourse.delete({
+      where: {
+        student_id_course_id: {
+          student_id: studentId,
+          course_id: courseId,
+        },
+      },
+    });
+
+    await db.auditLog.create({
+      data: {
+        user_id: facultyId,
+        action_performed: `Faculty removed student ${student?.user.institutional_id || studentId} from Course ${course?.course_code || courseId}`,
+        ip_address: "127.0.0.1",
+      },
+    });
+
+    revalidatePath("/dashboard/faculty");
+    revalidatePath("/dashboard/student");
+
+    return { success: true };
+  } catch (err: any) {
+    console.error("Error in unenrollStudentFromCourse:", err);
+    return { error: err.message || "Failed to unenroll student." };
+  }
+}
+
+export async function acknowledgeAssignedCoursesAction(facultyId: number) {
+  try {
+    await db.faculty.update({
+      where: { faculty_id: facultyId },
+      data: { has_seen_course_assignment: true },
+    });
+    revalidatePath("/dashboard/faculty");
+    return { success: true };
+  } catch (err: any) {
+    console.error("Error acknowledging assigned courses:", err);
+    return { error: err.message || "Failed to acknowledge assigned courses." };
+  }
+}
+
+export async function assignCoursesToFacultyAction(facultyId: number, courseIds: number[]) {
+  try {
+    const { createClient } = await import("@/lib/supabase/server");
+    const supabase = await createClient();
+    const { data: { user: currentUser } } = await supabase.auth.getUser();
+    if (!currentUser) return { error: "Unauthorized. Please log in first." };
+
+    const currentRole = currentUser.user_metadata?.role;
+    if (currentRole !== "Director" && currentRole !== "Chair") {
+      return { error: "Unauthorized. Only Director or Chair can assign courses to faculty." };
+    }
+
+    await db.$transaction(async (tx) => {
+      // Delete previous assignments
+      await tx.facultyCourse.deleteMany({
+        where: { faculty_id: facultyId },
+      });
+
+      // Insert new assignments
+      if (courseIds && courseIds.length > 0) {
+        await tx.facultyCourse.createMany({
+          data: courseIds.map((cId) => ({
+            faculty_id: facultyId,
+            course_id: Number(cId),
+          })),
+        });
+      }
+
+      // Reset has_seen_course_assignment so the faculty sees the newly assigned courses modal on next visit!
+      await tx.faculty.update({
+        where: { faculty_id: facultyId },
+        data: { has_seen_course_assignment: false },
+      });
+    });
+
+    revalidatePath("/dashboard/director");
+    revalidatePath("/dashboard/chair");
+    revalidatePath("/dashboard/faculty");
+
+    return { success: true };
+  } catch (err: any) {
+    console.error("Error assigning courses to faculty:", err);
+    return { error: err.message || "Failed to update course assignments." };
+  }
+}
+
+
 
 
 

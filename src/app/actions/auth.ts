@@ -184,203 +184,9 @@ export async function logoutAction() {
   }
 }
 
-export async function registerAction(prevState: any, formData: FormData) {
-  const institutionalId = formData.get("institutionalId") as string;
-  const password = formData.get("password") as string;
-  const confirmPassword = (formData.get("confirmPassword") as string) || password;
-  const firstName = formData.get("firstName") as string;
-  const middleName = formData.get("middleName") as string;
-  const lastName = formData.get("lastName") as string;
-  const role = formData.get("role") as string;
-
-  // Onboarding fields
-  const programIdStr = formData.get("programId") as string;
-  const yearLevelStr = formData.get("yearLevel") as string;
-  // Support both 'major' (alternative forms) and 'section' (main register portal form)
-  const major = (formData.get("major") || formData.get("section")) as string;
-  const departmentIdStr = formData.get("departmentId") as string;
-  const enrolledCoursesStr = (formData.get("enrolledCourses") as string) || "";
-  const courseIds = enrolledCoursesStr ? enrolledCoursesStr.split(",").map(Number).filter(Boolean) : [];
-
-  if (!institutionalId || !password || !confirmPassword || !firstName || !lastName || !role) {
-    return { error: "Please fill in all required fields." };
-  }
-
-  if (role !== "Student") {
-    return { error: "Self-registration is restricted to students only. Faculty accounts are provisioned by Department Chairs and Directors." };
-  }
-
-  if (password !== confirmPassword) {
-    return { error: "Passwords do not match." };
-  }
-
-  // Validate password strength
-  const hasUppercase = /[A-Z]/.test(password);
-  const hasLowercase = /[a-z]/.test(password);
-  const hasDigit = /\d/.test(password);
-  const hasSpecial = /[^A-Za-z0-9]/.test(password);
-  if (
-    password.length < 8 ||
-    !hasUppercase ||
-    !hasLowercase ||
-    !hasDigit ||
-    !hasSpecial
-  ) {
-    return {
-      error: "Password must be at least 8 characters long and contain uppercase, lowercase, numbers, and special characters.",
-    };
-  }
-
-  // Validate Student ID format (YYYY-NNNN-AB)
-  const formattedId = institutionalId.trim().toUpperCase();
-  if (!/^\d{4}-\d{4}-AB$/.test(formattedId)) {
-    return { error: "Student ID must follow the standard format: YYYY-NNNN-AB (e.g. 2023-0001-AB)." };
-  }
-
-  try {
-    // Check if institutional ID already registered
-    const existingUser = await db.user.findUnique({
-      where: { institutional_id: formattedId },
-    });
-
-    if (existingUser) {
-      return { error: "Institutional ID already registered." };
-    }
-
-    // Hash the password
-    const salt = await bcrypt.genSalt(10);
-    const passwordHash = await bcrypt.hash(password, salt);
-
-    // Create User and Student record in transaction
-    const newUser = await db.$transaction(async (tx) => {
-      const user = await tx.user.create({
-        data: {
-          institutional_id: formattedId,
-          username: null,
-          password_hash: passwordHash,
-          role: "Student",
-          require_password_update: false,
-        },
-      });
-
-      if (!programIdStr || !yearLevelStr || !major) {
-        throw new Error("Please provide program, year level, and major for student onboarding.");
-      }
-
-      await tx.student.create({
-        data: {
-          student_id: user.user_id,
-          first_name: firstName,
-          last_name: lastName,
-          program_id: Number(programIdStr),
-          year_level: Number(yearLevelStr),
-          section: major, // Storing 'Major' in the section column
-        },
-      });
-
-      if (courseIds && courseIds.length > 0) {
-        await tx.studentCourse.createMany({
-          data: courseIds.map((cId) => ({
-            student_id: user.user_id,
-            course_id: cId,
-          })),
-        });
-
-        await tx.auditLog.create({
-          data: {
-            user_id: user.user_id,
-            action_performed: `Registered student account with ${courseIds.length} indicated enrolled subject(s) (Course IDs: ${courseIds.join(", ")})`,
-            ip_address: "127.0.0.1",
-          },
-        });
-      }
-
-      return user;
-    });
-
-    // Sync with Supabase Auth or mock session cookie
-    const isMockAuth = !process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
-    const email = `${formattedId.trim().toLowerCase()}@acadnexus.edu.ph`;
-
-    if (isMockAuth) {
-      const mockUser = {
-        id: `mock-${newUser.user_id}`,
-        user_metadata: {
-          role: newUser.role,
-          institutional_id: formattedId,
-        },
-      };
-
-      await db.user.update({
-        where: { user_id: newUser.user_id },
-        data: { supabase_uid: mockUser.id },
-      });
-
-      const cookieStore = await cookies();
-      cookieStore.set("acadnexus_mock_session", JSON.stringify(mockUser), {
-        path: "/",
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        maxAge: 60 * 60 * 24,
-      });
-    } else {
-      const supabase = await createClient();
-      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            institutional_id: formattedId,
-            role: newUser.role,
-          },
-        },
-      });
-
-      if (signUpError) {
-        console.warn("Supabase registration notice:", signUpError.message);
-        // Local DB creation succeeded; fallback to mock session cookie so student is not blocked
-        const mockUser = {
-          id: `mock-${newUser.user_id}`,
-          user_metadata: {
-            role: newUser.role,
-            institutional_id: formattedId,
-          },
-        };
-
-        await db.user.update({
-          where: { user_id: newUser.user_id },
-          data: { supabase_uid: mockUser.id },
-        });
-
-        const cookieStore = await cookies();
-        cookieStore.set("acadnexus_mock_session", JSON.stringify(mockUser), {
-          path: "/",
-          httpOnly: true,
-          secure: process.env.NODE_ENV === "production",
-          maxAge: 60 * 60 * 24,
-        });
-      } else if (signUpData?.user) {
-        await db.user.update({
-          where: { user_id: newUser.user_id },
-          data: { supabase_uid: signUpData.user.id },
-        });
-
-        // Automatically log in
-        await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
-      }
-    }
-
-    return { 
-      success: true, 
-      role: newUser.role 
-    };
-  } catch (err: any) {
-    console.error("Register action error:", err);
-    return { error: err.message || "An unexpected error occurred during registration." };
-  }
+export async function registerAction(prevState: any, formData: FormData): Promise<{ success?: boolean; error?: string; role?: string }> {
+  return { error: "Student self-registration has been disabled. Course instructors are in charge of enrolling students and provisioning their accounts." };
+}
 }
 
 export async function registerInstructorByAdminAction(prevState: any, formData: FormData) {
@@ -479,6 +285,20 @@ export async function registerInstructorByAdminAction(prevState: any, formData: 
       }
     }
 
+    // Parse assigned courses if provided
+    const courseIdsRaw = formData.get("courseIds") as string;
+    let selectedCourseIds: number[] = [];
+    if (courseIdsRaw) {
+      try {
+        const parsed = JSON.parse(courseIdsRaw);
+        if (Array.isArray(parsed)) {
+          selectedCourseIds = parsed.map(Number).filter((n) => !isNaN(n) && n > 0);
+        }
+      } catch {
+        selectedCourseIds = courseIdsRaw.split(",").map(Number).filter((n) => !isNaN(n) && n > 0);
+      }
+    }
+
     // Hash password
     const salt = await bcrypt.genSalt(10);
     const passwordHash = await bcrypt.hash(password, salt);
@@ -502,8 +322,18 @@ export async function registerInstructorByAdminAction(prevState: any, formData: 
           middle_name: middleName ? middleName.trim() : null,
           last_name: lastName.trim(),
           department_id: Number(departmentIdStr),
+          has_seen_course_assignment: false,
         },
       });
+
+      if (selectedCourseIds.length > 0) {
+        await tx.facultyCourse.createMany({
+          data: selectedCourseIds.map((cId) => ({
+            faculty_id: user.user_id,
+            course_id: cId,
+          })),
+        });
+      }
 
       return user;
     });
@@ -516,7 +346,7 @@ export async function registerInstructorByAdminAction(prevState: any, formData: 
       await db.auditLog.create({
         data: {
           user_id: dbAdminUser.user_id,
-          action_performed: `${currentRole} registered new instructor ${firstName} ${lastName} (${formattedId}) with generated username: ${username}`,
+          action_performed: `${currentRole} registered new instructor ${firstName} ${lastName} (${formattedId}) with generated username: ${username}${selectedCourseIds.length > 0 ? ` and ${selectedCourseIds.length} assigned subject(s)` : ""}`,
           ip_address: "127.0.0.1",
         },
       });
@@ -530,6 +360,7 @@ export async function registerInstructorByAdminAction(prevState: any, formData: 
       username,
       institutionalId: formattedId,
       name: `${firstName} ${lastName}`,
+      assignedCoursesCount: selectedCourseIds.length,
     };
   } catch (err: any) {
     console.error("Error registering instructor by admin:", err);

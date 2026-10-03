@@ -97,14 +97,14 @@ async function main() {
   const beedProg = await prisma.academicProgram.create({
     data: {
       program_code: "BEED",
-      program_name: "Bachelor of Elementary Education",
+      program_name: "Bachelor of science in elementary education",
       department_id: teacherEduDept.department_id,
     },
   });
   const bsedProg = await prisma.academicProgram.create({
     data: {
       program_code: "BSED",
-      program_name: "Bachelor of Secondary Education",
+      program_name: "Bachelor of Science in Secondary education",
       department_id: teacherEduDept.department_id,
     },
   });

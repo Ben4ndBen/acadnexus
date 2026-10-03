@@ -5,10 +5,13 @@ import { useRouter } from "next/navigation";
 import { 
   BarChart3, ShieldCheck, Map, List, CheckCircle, 
   XCircle, Clock, AlertCircle, RefreshCw, Search, Building2,
-  UserPlus, X, Loader2, Eye, EyeOff, Award
+  UserPlus, X, Loader2, Eye, EyeOff, Award, Calendar, Sparkles,
+  Users, BookOpen
 } from "lucide-react";
-import { reviewExamByDirector, toggleGlobalHold, toggleIndividualHold } from "@/app/actions/director";
+import { reviewExamByDirector, toggleGlobalHold, toggleIndividualHold, saveActiveAcademicPeriod } from "@/app/actions/director";
+import type { AcademicPeriodSettings } from "@/lib/academicUtils";
 import { registerInstructorByAdminAction } from "@/app/actions/auth";
+import { assignCoursesToFacultyAction } from "@/app/actions/faculty";
 import { getDepartmentTheme } from "@/lib/departmentThemes";
 import { DepartmentBadge } from "@/app/components/DepartmentBadge";
 
@@ -76,6 +79,17 @@ interface DirectorDashboardClientProps {
     department_id: number;
     department_name: string;
   }>;
+  academicPeriodSettings?: AcademicPeriodSettings;
+  courses?: Array<{ course_id: number; course_code: string; course_title: string }>;
+  facultyMembers?: Array<{
+    faculty_id: number;
+    first_name: string;
+    middle_name?: string | null;
+    last_name: string;
+    department?: { department_name: string } | null;
+    user?: { institutional_id: string; username?: string | null; is_active: boolean };
+    facultyCourses?: Array<{ course: { course_id: number; course_code: string; course_title: string } }>;
+  }>;
 }
 
 export function DirectorDashboardClient({ 
@@ -86,10 +100,49 @@ export function DirectorDashboardClient({
   auditLogs,
   allExaminations,
   globalHoldActive,
-  departmentsList = []
+  departmentsList = [],
+  academicPeriodSettings,
+  courses = [],
+  facultyMembers = []
 }: DirectorDashboardClientProps) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<"overview" | "compliance" | "logs" | "exams">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "compliance" | "logs" | "exams" | "period" | "faculty">("overview");
+
+  // State for Academic Period Configuration (Configured by DI)
+  const [periodAY, setPeriodAY] = useState(academicPeriodSettings?.active_academic_year || "2026-2027");
+  const [periodSem, setPeriodSem] = useState(academicPeriodSettings?.active_semester || "1st Semester");
+  const [sem1Start, setSem1Start] = useState(academicPeriodSettings?.sem1_start || "2026-08-01");
+  const [sem1End, setSem1End] = useState(academicPeriodSettings?.sem1_end || "2026-12-31");
+  const [sem2Start, setSem2Start] = useState(academicPeriodSettings?.sem2_start || "2027-01-01");
+  const [sem2End, setSem2End] = useState(academicPeriodSettings?.sem2_end || "2027-05-31");
+  const [isSavingPeriod, setIsSavingPeriod] = useState(false);
+  const [periodSaveMsg, setPeriodSaveMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  const handleSaveAcademicPeriod = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingPeriod(true);
+    setPeriodSaveMsg(null);
+    try {
+      const res = await saveActiveAcademicPeriod(directorUserId, {
+        active_academic_year: periodAY,
+        active_semester: periodSem,
+        sem1_start: sem1Start,
+        sem1_end: sem1End,
+        sem2_start: sem2Start,
+        sem2_end: sem2End,
+      });
+      if (res.error) {
+        setPeriodSaveMsg({ type: "error", text: res.error });
+      } else {
+        setPeriodSaveMsg({ type: "success", text: "Active academic period configured successfully!" });
+        router.refresh();
+      }
+    } catch (err: any) {
+      setPeriodSaveMsg({ type: "error", text: err.message || "Failed to save configuration." });
+    } finally {
+      setIsSavingPeriod(false);
+    }
+  };
 
   // State for Review Queue
   const [isSubmittingReview, setIsSubmittingReview] = useState<number | null>(null);
@@ -124,9 +177,20 @@ export function DirectorDashboardClient({
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPass, setShowPass] = useState(false);
+  const [selectedCourseIds, setSelectedCourseIds] = useState<number[]>([]);
+  const [courseSearchQuery, setCourseSearchQuery] = useState("");
   const [regError, setRegError] = useState<string | null>(null);
-  const [regSuccess, setRegSuccess] = useState<{ username: string; institutionalId: string; name: string } | null>(null);
+  const [regSuccess, setRegSuccess] = useState<{ username: string; institutionalId: string; name: string; assignedCoursesCount?: number } | null>(null);
   const [isSubmittingReg, setIsSubmittingReg] = useState(false);
+
+  // State for Managing existing instructor's courses
+  const [assignModalOpen, setAssignModalOpen] = useState(false);
+  const [assignFacultyTarget, setAssignFacultyTarget] = useState<any | null>(null);
+  const [editCourseIds, setEditCourseIds] = useState<number[]>([]);
+  const [editCourseSearchQuery, setEditCourseSearchQuery] = useState("");
+  const [isSavingAssignedCourses, setIsSavingAssignedCourses] = useState(false);
+  const [assignMessage, setAssignMessage] = useState<string | null>(null);
+  const [facultySearchQuery, setFacultySearchQuery] = useState("");
 
   const handleRegisterInstructorSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -142,6 +206,7 @@ export function DirectorDashboardClient({
     formData.append("departmentId", deptId);
     formData.append("password", password);
     formData.append("confirmPassword", confirmPassword);
+    formData.append("courseIds", JSON.stringify(selectedCourseIds));
 
     const res = await registerInstructorByAdminAction(null, formData);
     setIsSubmittingReg(false);
@@ -153,7 +218,31 @@ export function DirectorDashboardClient({
         username: res.username!,
         institutionalId: res.institutionalId!,
         name: res.name!,
+        assignedCoursesCount: res.assignedCoursesCount,
       });
+      router.refresh();
+    }
+  };
+
+  const handleOpenAssignModal = (faculty: any) => {
+    setAssignFacultyTarget(faculty);
+    const currentCourseIds = faculty.facultyCourses?.map((fc: any) => fc.course.course_id) || [];
+    setEditCourseIds(currentCourseIds);
+    setEditCourseSearchQuery("");
+    setAssignMessage(null);
+    setAssignModalOpen(true);
+  };
+
+  const handleSaveAssignedCourses = async () => {
+    if (!assignFacultyTarget) return;
+    setIsSavingAssignedCourses(true);
+    setAssignMessage(null);
+    const res = await assignCoursesToFacultyAction(assignFacultyTarget.faculty_id, editCourseIds);
+    setIsSavingAssignedCourses(false);
+    if (res.error) {
+      setAssignMessage(res.error);
+    } else {
+      setAssignModalOpen(false);
       router.refresh();
     }
   };
@@ -308,6 +397,28 @@ export function DirectorDashboardClient({
           <List className="w-4 h-4" />
           Global System Action Logs
         </button>
+        <button
+          onClick={() => setActiveTab("period")}
+          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-bold rounded-xl transition-all duration-300 ${
+            activeTab === "period"
+              ? "bg-indigo-700 text-white shadow-md shadow-indigo-700/20"
+              : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+          }`}
+        >
+          <Calendar className="w-4 h-4" />
+          Academic Period Configuration
+        </button>
+        <button
+          onClick={() => setActiveTab("faculty")}
+          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-bold rounded-xl transition-all duration-300 ${
+            activeTab === "faculty"
+              ? "bg-indigo-700 text-white shadow-md shadow-indigo-700/20"
+              : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+          }`}
+        >
+          <Users className="w-4 h-4" />
+          Faculty & Assigned Courses
+        </button>
 
         <button
           onClick={() => {
@@ -317,6 +428,8 @@ export function DirectorDashboardClient({
             setFirstName("");
             setMiddleName("");
             setLastName("");
+            setSelectedCourseIds([]);
+            setCourseSearchQuery("");
             setDeptId(departmentsList.length > 0 ? String(departmentsList[0].department_id) : "");
             setPassword("");
             setConfirmPassword("");
@@ -730,6 +843,280 @@ export function DirectorDashboardClient({
         </div>
       )}
 
+      {/* ACADEMIC PERIOD CONFIGURATION TAB */}
+      {activeTab === "period" && (
+        <div className="bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-5">
+            <div>
+              <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                <span className="w-1.5 h-6 bg-indigo-700 rounded-full" />
+                Active Academic Period & Semester Scheduling
+              </h2>
+              <p className="text-slate-500 text-xs mt-1">
+                Configure the institutional academic calendar. Examination dates set by faculty will automatically compute and bind to the correct semester and academic year based on these active boundaries.
+              </p>
+            </div>
+            <div className="bg-indigo-50 border border-indigo-200/80 px-3.5 py-1.5 rounded-2xl flex items-center gap-2 shrink-0">
+              <Sparkles className="w-4 h-4 text-indigo-700" />
+              <span className="text-xs font-black text-indigo-900">
+                Current: {periodSem}, AY {periodAY}
+              </span>
+            </div>
+          </div>
+
+          {periodSaveMsg && (
+            <div className={`p-4 rounded-xl border text-xs font-bold flex items-center gap-2 ${
+              periodSaveMsg.type === "success" 
+                ? "bg-emerald-50 text-emerald-800 border-emerald-100" 
+                : "bg-rose-50 text-rose-800 border-rose-100"
+            }`}>
+              {periodSaveMsg.type === "success" ? <CheckCircle className="w-4 h-4 text-emerald-600" /> : <AlertCircle className="w-4 h-4 text-rose-600" />}
+              <span>{periodSaveMsg.text}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleSaveAcademicPeriod} className="space-y-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              {/* Active Academic Year */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700 block">
+                  Active Academic Year <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={periodAY}
+                  onChange={(e) => setPeriodAY(e.target.value)}
+                  placeholder="e.g. 2026-2027"
+                  className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 text-sm font-bold text-slate-800 px-4 py-2.5 rounded-xl transition-all"
+                />
+                <p className="text-[11px] text-slate-400">Institutional academic cycle format (e.g. 2026-2027)</p>
+              </div>
+
+              {/* Active Semester */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700 block">
+                  Active Semester Status <span className="text-rose-500">*</span>
+                </label>
+                <select
+                  value={periodSem}
+                  onChange={(e) => setPeriodSem(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 text-sm font-bold text-slate-800 px-4 py-2.5 rounded-xl transition-all"
+                >
+                  <option value="1st Semester">1st Semester</option>
+                  <option value="2nd Semester">2nd Semester</option>
+                  <option value="Midyear / Summer">Midyear / Summer</option>
+                </select>
+                <p className="text-[11px] text-slate-400">Current officially active collegiate term</p>
+              </div>
+            </div>
+
+            {/* Semester Date Ranges */}
+            <div className="border border-slate-100 rounded-2xl p-5 bg-slate-50/50 space-y-4">
+              <h3 className="text-sm font-black text-slate-800 flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-indigo-700" />
+                Semester Date Windows (For Automatic Determination)
+              </h3>
+              <p className="text-xs text-slate-500">
+                When faculty pick an exam date, the system evaluates these date windows to automatically determine whether the examination belongs to the 1st or 2nd Semester.
+              </p>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
+                {/* 1st Semester Range */}
+                <div className="bg-white border border-slate-200 p-4 rounded-xl space-y-3">
+                  <h4 className="text-xs font-black uppercase text-indigo-900 tracking-wider">1st Semester Range</h4>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Start Date</label>
+                      <input
+                        type="date"
+                        value={sem1Start}
+                        onChange={(e) => setSem1Start(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 text-xs font-medium text-slate-800 p-2 rounded-lg"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">End Date</label>
+                      <input
+                        type="date"
+                        value={sem1End}
+                        onChange={(e) => setSem1End(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 text-xs font-medium text-slate-800 p-2 rounded-lg"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2nd Semester Range */}
+                <div className="bg-white border border-slate-200 p-4 rounded-xl space-y-3">
+                  <h4 className="text-xs font-black uppercase text-indigo-900 tracking-wider">2nd Semester Range</h4>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Start Date</label>
+                      <input
+                        type="date"
+                        value={sem2Start}
+                        onChange={(e) => setSem2Start(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 text-xs font-medium text-slate-800 p-2 rounded-lg"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">End Date</label>
+                      <input
+                        type="date"
+                        value={sem2End}
+                        onChange={(e) => setSem2End(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 text-xs font-medium text-slate-800 p-2 rounded-lg"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-2 flex justify-end">
+              <button
+                type="submit"
+                disabled={isSavingPeriod}
+                className="bg-indigo-700 hover:bg-indigo-800 text-white text-xs font-black px-6 py-3 rounded-xl shadow-md transition-all flex items-center gap-2 disabled:opacity-50"
+              >
+                {isSavingPeriod ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>Saving Academic Period...</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle className="w-4 h-4" />
+                    <span>Save Academic Period Policy</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* FACULTY DIRECTORY & ASSIGNED COURSES TAB */}
+      {activeTab === "faculty" && (
+        <div className="bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-5 border-b border-slate-100 gap-4">
+            <div>
+              <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                <span className="w-1.5 h-6 bg-indigo-600 rounded-full" />
+                Faculty Directory & Teaching Load Allocation
+              </h2>
+              <p className="text-slate-500 text-xs mt-1">
+                View department instructors and configure their official assigned teaching subjects.
+              </p>
+            </div>
+
+            <div className="w-full sm:w-72 relative">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+              <input
+                type="text"
+                placeholder="Search faculty name or ID..."
+                value={facultySearchQuery}
+                onChange={(e) => setFacultySearchQuery(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-4 py-2 text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-indigo-500 shadow-sm"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            {facultyMembers
+              .filter((f) => {
+                if (!facultySearchQuery.trim()) return true;
+                const q = facultySearchQuery.toLowerCase();
+                const fullName = `${f.first_name} ${f.last_name}`.toLowerCase();
+                const instId = (f.user?.institutional_id || "").toLowerCase();
+                const uName = (f.user?.username || "").toLowerCase();
+                return fullName.includes(q) || instId.includes(q) || uName.includes(q);
+              })
+              .map((faculty) => {
+                const assigned = faculty.facultyCourses?.map((fc: any) => fc.course) || [];
+                return (
+                  <div
+                    key={faculty.faculty_id}
+                    className="border border-slate-200 rounded-2xl p-5 hover:shadow-md transition-all duration-300 bg-gradient-to-br from-white to-slate-50/40 flex flex-col justify-between gap-4"
+                  >
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-start gap-3">
+                        <div className="flex items-center gap-3">
+                          <div className="w-11 h-11 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-sm shrink-0">
+                            {faculty.first_name[0]}{faculty.last_name[0]}
+                          </div>
+                          <div>
+                            <h3 className="text-sm font-bold text-slate-900">
+                              {faculty.first_name} {faculty.middle_name ? `${faculty.middle_name.charAt(0)}. ` : ""}{faculty.last_name}
+                            </h3>
+                            <p className="text-[11px] text-slate-500 font-mono mt-0.5">
+                              {faculty.user?.institutional_id || `ID: ${faculty.faculty_id}`}
+                              {faculty.user?.username && <span className="text-indigo-600 font-semibold ml-1.5">(@{faculty.user.username})</span>}
+                            </p>
+                          </div>
+                        </div>
+
+                        {faculty.department?.department_name && (
+                          <DepartmentBadge department={faculty.department.department_name} size="sm" />
+                        )}
+                      </div>
+
+                      {/* Assigned Courses Badges */}
+                      <div className="pt-2 border-t border-slate-100 space-y-1.5">
+                        <div className="flex items-center justify-between text-[11px] font-bold text-slate-600">
+                          <span className="flex items-center gap-1.5">
+                            <BookOpen className="w-3.5 h-3.5 text-indigo-600" />
+                            Assigned Courses ({assigned.length})
+                          </span>
+                        </div>
+
+                        {assigned.length > 0 ? (
+                          <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
+                            {assigned.map((c: any) => (
+                              <span
+                                key={c.course_id}
+                                className="inline-flex items-center gap-1 text-[10px] font-bold bg-indigo-50 text-indigo-800 border border-indigo-200/80 px-2 py-0.5 rounded-lg"
+                                title={c.course_title}
+                              >
+                                <span className="font-mono font-black">{c.course_code}</span>
+                                <span className="max-w-[120px] truncate text-[9px] text-indigo-600">
+                                  {c.course_title}
+                                </span>
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-[11px] text-amber-600 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200/60 inline-block font-semibold">
+                            No courses assigned yet.
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="pt-3 border-t border-slate-100 flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenAssignModal(faculty)}
+                        className="px-3.5 py-2 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <BookOpen className="w-3.5 h-3.5" />
+                        <span>Assign / Edit Subjects</span>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+
+            {facultyMembers.length === 0 && (
+              <div className="col-span-full text-center py-16 border-2 border-dashed border-slate-200 rounded-3xl">
+                <p className="text-slate-500 text-xs">No faculty instructors registered in the institution yet.</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* HOLD REMARKS MODAL */}
       {holdModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
@@ -928,6 +1315,106 @@ export function DirectorDashboardClient({
                   </select>
                 </div>
 
+                {/* Course / Subject Assignment Section */}
+                <div className="space-y-2.5 border border-slate-200/80 rounded-2xl p-4 bg-slate-50/50">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <label className="text-xs font-extrabold text-slate-800 block">
+                        Assign Courses / Subjects
+                      </label>
+                      <p className="text-[10px] text-slate-500">
+                        Designate official teaching load. Faculty will only see these subjects.
+                      </p>
+                    </div>
+                    {selectedCourseIds.length > 0 && (
+                      <span className="text-[10px] font-black bg-indigo-100 text-indigo-800 px-2.5 py-0.5 rounded-full">
+                        {selectedCourseIds.length} Selected
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Search box for subjects */}
+                  <div className="relative">
+                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+                    <input
+                      type="text"
+                      placeholder="Search by course code or title..."
+                      value={courseSearchQuery}
+                      onChange={(e) => setCourseSearchQuery(e.target.value)}
+                      className="w-full bg-white border border-slate-200 rounded-xl pl-8 pr-3 py-1.5 text-xs text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-sm"
+                    />
+                  </div>
+
+                  {/* Selected Courses Chips */}
+                  {selectedCourseIds.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 max-h-20 overflow-y-auto py-1">
+                      {selectedCourseIds.map((cId) => {
+                        const courseObj = courses.find((c) => c.course_id === cId);
+                        if (!courseObj) return null;
+                        return (
+                          <span
+                            key={cId}
+                            className="inline-flex items-center gap-1 text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded-lg"
+                          >
+                            <span className="font-mono">{courseObj.course_code}</span>
+                            <button
+                              type="button"
+                              onClick={() => setSelectedCourseIds((prev) => prev.filter((id) => id !== cId))}
+                              className="hover:text-rose-600 cursor-pointer ml-0.5"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Checkbox List of Available Courses */}
+                  <div className="max-h-40 overflow-y-auto space-y-1 bg-white border border-slate-200 rounded-xl p-2">
+                    {courses
+                      .filter((c) => {
+                        if (!courseSearchQuery.trim()) return true;
+                        const q = courseSearchQuery.toLowerCase();
+                        return (
+                          c.course_code.toLowerCase().includes(q) ||
+                          c.course_title.toLowerCase().includes(q)
+                        );
+                      })
+                      .map((c) => {
+                        const isChecked = selectedCourseIds.includes(c.course_id);
+                        return (
+                          <label
+                            key={c.course_id}
+                            className={`flex items-center gap-2 p-1.5 rounded-lg text-xs cursor-pointer transition-colors ${
+                              isChecked ? "bg-indigo-50/80 font-bold text-indigo-900" : "hover:bg-slate-50 text-slate-700 font-medium"
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedCourseIds((prev) => [...prev, c.course_id]);
+                                } else {
+                                  setSelectedCourseIds((prev) => prev.filter((id) => id !== c.course_id));
+                                }
+                              }}
+                              className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5"
+                            />
+                            <span className="font-mono text-[11px] font-black text-slate-900 bg-slate-100 px-1.5 py-0.5 rounded shrink-0">
+                              {c.course_code}
+                            </span>
+                            <span className="truncate">{c.course_title}</span>
+                          </label>
+                        );
+                      })}
+                    {courses.length === 0 && (
+                      <p className="text-[11px] text-slate-400 text-center py-2">No courses available.</p>
+                    )}
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="text-xs font-bold text-slate-700 block mb-1">
@@ -994,6 +1481,159 @@ export function DirectorDashboardClient({
                 </div>
               </form>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ASSIGN / EDIT COURSES MODAL */}
+      {assignModalOpen && assignFacultyTarget && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-lg w-full shadow-2xl border border-slate-200 my-8 space-y-5">
+            <div className="flex justify-between items-start">
+              <div className="flex items-center gap-3">
+                <div className="bg-indigo-100 text-indigo-700 p-2.5 rounded-2xl">
+                  <BookOpen className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-extrabold text-slate-900">
+                    Assign Teaching Load
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Instructor: <strong className="text-slate-800">{assignFacultyTarget.first_name} {assignFacultyTarget.last_name}</strong>
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setAssignModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-full hover:bg-slate-100 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {assignMessage && (
+              <div className="bg-rose-50 border border-rose-200 text-rose-700 p-3 rounded-xl text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{assignMessage}</span>
+              </div>
+            )}
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-700">
+                  Select Courses to Assign
+                </span>
+                <span className="text-[10px] font-black bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-full border border-indigo-200">
+                  {editCourseIds.length} Selected
+                </span>
+              </div>
+
+              {/* Search box */}
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+                <input
+                  type="text"
+                  placeholder="Filter courses by code or title..."
+                  value={editCourseSearchQuery}
+                  onChange={(e) => setEditCourseSearchQuery(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-8 pr-3 py-2 text-xs text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                />
+              </div>
+
+              {/* Selected chips */}
+              {editCourseIds.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 max-h-20 overflow-y-auto py-1">
+                  {editCourseIds.map((cId) => {
+                    const c = courses.find((item) => item.course_id === cId);
+                    if (!c) return null;
+                    return (
+                      <span
+                        key={cId}
+                        className="inline-flex items-center gap-1 text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded-lg"
+                      >
+                        <span className="font-mono">{c.course_code}</span>
+                        <button
+                          type="button"
+                          onClick={() => setEditCourseIds((prev) => prev.filter((id) => id !== cId))}
+                          className="hover:text-rose-600 cursor-pointer ml-0.5"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* List of courses */}
+              <div className="max-h-60 overflow-y-auto space-y-1.5 border border-slate-200 rounded-2xl p-2.5 bg-slate-50/50">
+                {courses
+                  .filter((c) => {
+                    if (!editCourseSearchQuery.trim()) return true;
+                    const q = editCourseSearchQuery.toLowerCase();
+                    return c.course_code.toLowerCase().includes(q) || c.course_title.toLowerCase().includes(q);
+                  })
+                  .map((c) => {
+                    const isChecked = editCourseIds.includes(c.course_id);
+                    return (
+                      <label
+                        key={c.course_id}
+                        className={`flex items-center gap-2 p-2 rounded-xl text-xs cursor-pointer transition-colors ${
+                          isChecked ? "bg-indigo-50 font-bold text-indigo-900 border border-indigo-200" : "bg-white hover:bg-slate-100/80 text-slate-700 font-medium border border-transparent"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setEditCourseIds((prev) => [...prev, c.course_id]);
+                            } else {
+                              setEditCourseIds((prev) => prev.filter((id) => id !== c.course_id));
+                            }
+                          }}
+                          className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5"
+                        />
+                        <span className="font-mono text-[11px] font-black text-slate-900 bg-slate-100 px-1.5 py-0.5 rounded shrink-0">
+                          {c.course_code}
+                        </span>
+                        <span className="truncate">{c.course_title}</span>
+                      </label>
+                    );
+                  })}
+                {courses.length === 0 && (
+                  <p className="text-xs text-slate-400 text-center py-4">No courses available.</p>
+                )}
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setAssignModalOpen(false)}
+                className="px-5 py-2.5 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isSavingAssignedCourses}
+                onClick={handleSaveAssignedCourses}
+                className="px-5 py-2.5 text-xs font-extrabold text-white bg-indigo-700 hover:bg-indigo-800 rounded-xl shadow-md transition-all flex items-center gap-2 disabled:opacity-50 cursor-pointer"
+              >
+                {isSavingAssignedCourses ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Saving...</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle className="w-4 h-4" />
+                    <span>Save Course Allocations</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

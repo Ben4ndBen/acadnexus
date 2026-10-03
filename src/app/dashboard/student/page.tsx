@@ -122,6 +122,33 @@ export default async function StudentDashboard() {
 
   const overrideExamIds = new Set(studentOverrides.map(o => o.exam_id));
 
+  // 3. Fetch completed student exams
+  const completedExams = await db.studentExam.findMany({
+    where: {
+      student_id: student.student_id,
+    },
+    include: {
+      exam: {
+        include: {
+          course: true,
+          questionBank: {
+            select: {
+              points: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  // Filter targets to only include those where the student is selected (or no restriction set)
+  const eligibleTargets = targets.filter((t) => {
+    const selectedIds = t.exam.selected_student_ids;
+    if (selectedIds && Array.isArray(selectedIds) && selectedIds.length > 0) {
+      return selectedIds.includes(student.student_id);
+    }
+    return true;
+  });
   // Calculate metrics
   // Enrolled courses count: combines student's indicated subjects from signup and any targeted exam subjects
   const uniqueCoursesMap = new Map<number, { course_id: number; course_code: string; course_title: string }>();
@@ -136,7 +163,7 @@ export default async function StudentDashboard() {
   }
 
   // 2. Add subjects from targeted exams
-  targets.forEach((t) => {
+  eligibleTargets.forEach((t) => {
     const course = t.exam.course;
     if (course) {
       uniqueCoursesMap.set(course.course_id, course);
@@ -167,7 +194,7 @@ export default async function StudentDashboard() {
 
   const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
 
-  targets.forEach(t => {
+  eligibleTargets.forEach(t => {
     if (completedExamIds.has(t.exam_id)) {
       return;
     }
@@ -385,6 +412,7 @@ export default async function StudentDashboard() {
           averagePerformance={averagePerformance}
           institutionalId={institutionalId}
           userId={dbUser.user_id}
+          requirePasswordUpdate={!!dbUser?.require_password_update}
         />
       </main>
 

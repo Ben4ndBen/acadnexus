@@ -13,7 +13,9 @@ import {
   scheduleExamTarget, configureFacultyAccount, getStudentExamLogs,
   getQuestionBankQuestions, saveQuestionBankQuestion, deleteQuestionBankQuestion,
   archiveExamination, reuseArchivedExamination, getArchivedExaminations,
-  getCurrentAcademicYear, getFacultyEnrolledStudentsAndGrades
+  getCurrentAcademicYear, getFacultyEnrolledStudentsAndGrades,
+  getCourseRoster, enrollStudentInCourse, bulkEnrollStudentsInCourse, unenrollStudentFromCourse,
+  acknowledgeAssignedCoursesAction
 } from "@/app/actions/faculty";
 import { 
   exportStudentGradesRosterToExcel, 
@@ -79,6 +81,8 @@ interface FacultyDashboardClientProps {
   institutionalId: string;
   programs?: Array<{ program_id: number; program_code: string; program_name: string; department_id: number }>;
   courses?: Array<{ course_id: number; course_code: string; course_title: string }>;
+  assignedCourses?: Array<{ course_id: number; course_code: string; course_title: string; syllabus_file_path?: string | null }>;
+  hasSeenCourseAssignment?: boolean;
   requirePasswordUpdate?: boolean;
   username?: string;
   studentExams?: any[];
@@ -89,12 +93,90 @@ export function FacultyDashboardClient({
   institutionalId, 
   programs = [], 
   courses = [],
+  assignedCourses = [],
+  hasSeenCourseAssignment = false,
   requirePasswordUpdate = false, 
   username,
   studentExams = []
 }: FacultyDashboardClientProps) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<"overview" | "tracker" | "submissions" | "profile" | "override" | "question_bank" | "archive">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "tracker" | "submissions" | "profile" | "override" | "question_bank" | "archive" | "students">("overview");
+
+  // Popup modal state for newly assigned courses upon first / new login
+  const [showAssignedCoursesModal, setShowAssignedCoursesModal] = useState<boolean>(() => {
+    return !hasSeenCourseAssignment && assignedCourses.length > 0 && !requirePasswordUpdate;
+  });
+  const [isAcknowledgingCourses, setIsAcknowledgingCourses] = useState(false);
+
+  useEffect(() => {
+    if (!requirePasswordUpdate && !hasSeenCourseAssignment && assignedCourses.length > 0) {
+      setShowAssignedCoursesModal(true);
+    }
+  }, [requirePasswordUpdate, hasSeenCourseAssignment, assignedCourses.length]);
+
+  const handleAcknowledgeCourses = async () => {
+    setIsAcknowledgingCourses(true);
+    try {
+      await acknowledgeAssignedCoursesAction(faculty.faculty_id);
+    } catch (err) {
+      console.error("Error acknowledging assigned courses:", err);
+    } finally {
+      setIsAcknowledgingCourses(false);
+      setShowAssignedCoursesModal(false);
+    }
+  };
+
+  // --- Class Roster & Student Enrollment Tab State ---
+  const [selectedRosterCourseId, setSelectedRosterCourseId] = useState<number>(() => {
+    return courses[0]?.course_id || 0;
+  });
+  const [classRosterStudents, setClassRosterStudents] = useState<any[]>([]);
+  const [loadingClassRoster, setLoadingClassRoster] = useState(false);
+  const [rosterSearch, setRosterSearch] = useState("");
+  const [enrollModalOpen, setEnrollModalOpen] = useState(false);
+  const [bulkEnrollModalOpen, setBulkEnrollModalOpen] = useState(false);
+
+  // Single Enroll Form State
+  const [enrollForm, setEnrollForm] = useState({
+    institutionalId: "",
+    firstName: "",
+    lastName: "",
+    programId: programs[0]?.program_id ? String(programs[0].program_id) : "",
+    yearLevel: "1",
+    section: "A",
+  });
+  const [isSubmittingEnroll, setIsSubmittingEnroll] = useState(false);
+  const [enrollError, setEnrollError] = useState<string | null>(null);
+  const [enrollSuccess, setEnrollSuccess] = useState<string | null>(null);
+
+  // Bulk Enroll Form State
+  const [bulkInput, setBulkInput] = useState("");
+  const [bulkProgramId, setBulkProgramId] = useState(programs[0]?.program_id ? String(programs[0].program_id) : "");
+  const [bulkYearLevel, setBulkYearLevel] = useState("1");
+  const [bulkSection, setBulkSection] = useState("A");
+  const [isSubmittingBulk, setIsSubmittingBulk] = useState(false);
+  const [bulkResult, setBulkResult] = useState<{ message: string; errors?: string[] } | null>(null);
+
+  // Unenroll state
+  const [unenrollingId, setUnenrollingId] = useState<number | null>(null);
+
+  const fetchRoster = async (cId: number) => {
+    if (!cId) return;
+    setLoadingClassRoster(true);
+    const res = await getCourseRoster(cId);
+    setLoadingClassRoster(false);
+    if (res.success) {
+      setClassRosterStudents(res.students || []);
+    } else {
+      setClassRosterStudents([]);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === "students" && selectedRosterCourseId) {
+      fetchRoster(selectedRosterCourseId);
+    }
+  }, [activeTab, selectedRosterCourseId]);
 
   // --- Question Bank Tab State ---
   const [qbFilters, setQbFilters] = useState({
@@ -517,6 +599,89 @@ export function FacultyDashboardClient({
     }
   };
 
+  const handleSingleEnroll = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setEnrollError(null);
+    setEnrollSuccess(null);
+    setIsSubmittingEnroll(true);
+
+    const res = await enrollStudentInCourse(faculty.faculty_id, selectedRosterCourseId, {
+      institutionalId: enrollForm.institutionalId,
+      firstName: enrollForm.firstName,
+      lastName: enrollForm.lastName,
+      programId: Number(enrollForm.programId),
+      yearLevel: Number(enrollForm.yearLevel),
+      section: enrollForm.section,
+    });
+    setIsSubmittingEnroll(false);
+
+    if (res.error) {
+      setEnrollError(res.error);
+    } else {
+      setEnrollSuccess(res.message || "Student enrolled successfully!");
+      fetchRoster(selectedRosterCourseId);
+      setTimeout(() => {
+        setEnrollModalOpen(false);
+        setEnrollForm({
+          institutionalId: "",
+          firstName: "",
+          lastName: "",
+          programId: programs[0]?.program_id ? String(programs[0].program_id) : "",
+          yearLevel: "1",
+          section: "A",
+        });
+        setEnrollSuccess(null);
+      }, 1200);
+    }
+  };
+
+  const handleBulkEnroll = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBulkResult(null);
+    setIsSubmittingBulk(true);
+
+    const res = await bulkEnrollStudentsInCourse(
+      faculty.faculty_id,
+      selectedRosterCourseId,
+      bulkInput,
+      Number(bulkProgramId),
+      Number(bulkYearLevel),
+      bulkSection
+    );
+    setIsSubmittingBulk(false);
+
+    if (res.error) {
+      setBulkResult({ message: res.error, errors: [] });
+    } else {
+      setBulkResult({
+        message: res.message || `Successfully enrolled ${res.enrolledCount} students!`,
+        errors: res.errors,
+      });
+      fetchRoster(selectedRosterCourseId);
+      if (res.enrolledCount && res.enrolledCount > 0) {
+        setTimeout(() => {
+          setBulkEnrollModalOpen(false);
+          setBulkInput("");
+          setBulkResult(null);
+        }, 2000);
+      }
+    }
+  };
+
+  const handleUnenroll = async (studentId: number, studentName: string) => {
+    if (!confirm(`Are you sure you want to unenroll ${studentName} from this class?`)) {
+      return;
+    }
+    setUnenrollingId(studentId);
+    const res = await unenrollStudentFromCourse(faculty.faculty_id, selectedRosterCourseId, studentId);
+    setUnenrollingId(null);
+    if (res.error) {
+      alert(res.error);
+    } else {
+      fetchRoster(selectedRosterCourseId);
+    }
+  };
+
   const handleCreateExam = async () => {
     setIsCreatingExam(true);
     const res = await createExamDraft(faculty.faculty_id);
@@ -781,6 +946,17 @@ export function FacultyDashboardClient({
           Examination Workflow Tracker
         </button>
         <button
+          onClick={() => setActiveTab("students")}
+          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-bold rounded-xl transition-all duration-300 ${
+            activeTab === "students"
+              ? "bg-emerald-600 text-white shadow-md shadow-emerald-600/20"
+              : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+          }`}
+        >
+          <GraduationCap className="w-4 h-4" />
+          Class Students & Enrollment
+        </button>
+        <button
           onClick={() => setActiveTab("submissions")}
           className={`flex items-center gap-2 px-4 py-2.5 text-sm font-bold rounded-xl transition-all duration-300 ${
             activeTab === "submissions"
@@ -925,6 +1101,44 @@ export function FacultyDashboardClient({
                   </div>
                 </div>
               </div>
+            </div>
+
+            {/* Assigned Courses / Teaching Load */}
+            <div className="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-sm space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                  <span className="w-1.5 h-6 bg-emerald-600 rounded-full" />
+                  Assigned Teaching Load
+                </h2>
+                <span className="text-[10px] bg-emerald-100 text-emerald-800 font-extrabold px-2.5 py-0.5 rounded-full">
+                  {assignedCourses.length} Assigned
+                </span>
+              </div>
+              {assignedCourses.length > 0 ? (
+                <div className="space-y-2.5">
+                  {assignedCourses.map((c) => (
+                    <div key={c.course_id} className="p-3 bg-slate-50 border border-slate-200/70 rounded-2xl flex items-center justify-between gap-3 hover:border-emerald-200 transition-colors">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-xs font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-100 shrink-0">
+                            {c.course_code}
+                          </span>
+                        </div>
+                        <p className="text-xs font-bold text-slate-800 truncate mt-1">
+                          {c.course_title}
+                        </p>
+                      </div>
+                      <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/60 shrink-0">
+                        Active
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-6 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
+                  <p className="text-xs text-slate-500">No courses assigned yet by DI/Chair.</p>
+                </div>
+              )}
             </div>
 
             {/* Compliance Matrix */}
@@ -2314,6 +2528,505 @@ export function FacultyDashboardClient({
         </div>
       )}
 
+      {/* CLASS ROSTER & STUDENT ENROLLMENT TAB */}
+      {activeTab === "students" && (() => {
+        const selectedCourse = courses.find((c) => c.course_id === selectedRosterCourseId) || courses[0];
+        const filteredRosterStudents = classRosterStudents.filter((s) => {
+          if (!rosterSearch.trim()) return true;
+          const q = rosterSearch.toLowerCase();
+          return (
+            s.institutional_id.toLowerCase().includes(q) ||
+            s.first_name.toLowerCase().includes(q) ||
+            s.last_name.toLowerCase().includes(q) ||
+            (s.program_code && s.program_code.toLowerCase().includes(q)) ||
+            (s.section && s.section.toLowerCase().includes(q))
+          );
+        });
+
+        return (
+          <div className="bg-white border border-slate-200/80 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6">
+            {/* Header & Controls */}
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border-b border-slate-100 pb-6">
+              <div>
+                <h2 className="text-xl font-extrabold text-slate-900 flex items-center gap-2">
+                  <span className="w-1.5 h-6 bg-emerald-600 rounded-full" />
+                  Class Roster & Student Enrollment
+                </h2>
+                <p className="text-slate-500 text-xs mt-1">
+                  Insert and manage student ID numbers enrolled in your classes. Students can only log in once their ID is enrolled here.
+                </p>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex flex-wrap items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEnrollError(null);
+                    setEnrollSuccess(null);
+                    setEnrollModalOpen(true);
+                  }}
+                  className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-xl text-xs font-bold shadow-sm transition-all"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Enroll Student</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBulkResult(null);
+                    setBulkEnrollModalOpen(true);
+                  }}
+                  className="flex items-center gap-2 bg-slate-800 hover:bg-slate-900 text-white px-4 py-2.5 rounded-xl text-xs font-bold shadow-sm transition-all"
+                >
+                  <Users className="w-4 h-4" />
+                  <span>Batch Insert IDs</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => fetchRoster(selectedRosterCourseId)}
+                  disabled={loadingClassRoster}
+                  title="Refresh Roster"
+                  className="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl transition-all"
+                >
+                  <RefreshCw className={`w-4 h-4 ${loadingClassRoster ? "animate-spin text-emerald-600" : ""}`} />
+                </button>
+              </div>
+            </div>
+
+            {/* Course Selector & Search Filter Bar */}
+            <div className="bg-slate-50 border border-slate-200/80 p-4 sm:p-5 rounded-2xl flex flex-col md:flex-row gap-4 items-center justify-between">
+              {/* Course Dropdown */}
+              <div className="w-full md:w-auto flex-1 flex flex-col sm:flex-row sm:items-center gap-3">
+                <label className="text-[11px] font-black uppercase text-slate-500 tracking-wider shrink-0">
+                  Select Course:
+                </label>
+                <select
+                  value={selectedRosterCourseId}
+                  onChange={(e) => setSelectedRosterCourseId(Number(e.target.value))}
+                  className="w-full sm:max-w-md bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 px-3.5 py-2.5 focus:outline-emerald-500 shadow-sm"
+                >
+                  {courses.map((c) => (
+                    <option key={c.course_id} value={c.course_id}>
+                      {c.course_code} - {c.course_title}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Search Bar */}
+              <div className="w-full md:w-72 relative">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+                <input
+                  type="text"
+                  placeholder="Filter student ID or name..."
+                  value={rosterSearch}
+                  onChange={(e) => setRosterSearch(e.target.value)}
+                  className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-4 py-2 text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-emerald-500 shadow-sm"
+                />
+              </div>
+            </div>
+
+            {/* Current Course Summary Banner */}
+            {selectedCourse && (
+              <div className="flex items-center justify-between bg-emerald-50/60 border border-emerald-100 rounded-2xl px-5 py-3.5">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-black text-xs shadow-sm">
+                    {selectedCourse.course_code.split(" ")[0] || "IT"}
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-black text-slate-900">
+                      {selectedCourse.course_code} - {selectedCourse.course_title}
+                    </h4>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      Enrolled student roster for this class
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-bold text-emerald-800 bg-emerald-100/70 border border-emerald-200 px-3 py-1 rounded-full">
+                    {classRosterStudents.length} Students Enrolled
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Roster Table */}
+            {loadingClassRoster ? (
+              <div className="flex flex-col items-center justify-center py-20 text-slate-400 space-y-3">
+                <Loader2 className="w-8 h-8 animate-spin text-emerald-600" />
+                <p className="text-xs font-bold text-slate-500">Loading enrolled class roster...</p>
+              </div>
+            ) : filteredRosterStudents.length > 0 ? (
+              <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50/80 border-b border-slate-200 text-[10.5px] font-black uppercase text-slate-500 tracking-wider">
+                        <th className="py-3 px-4">Student ID Number</th>
+                        <th className="py-3 px-4">Student Full Name</th>
+                        <th className="py-3 px-4">Program</th>
+                        <th className="py-3 px-4">Year Level</th>
+                        <th className="py-3 px-4">Date Enrolled</th>
+                        <th className="py-3 px-4 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-xs">
+                      {filteredRosterStudents.map((s) => (
+                        <tr key={s.student_id} className="hover:bg-slate-50/60 transition-colors">
+                          <td className="py-3 px-4">
+                            <span className="font-mono font-black text-xs px-2.5 py-1 bg-slate-100 text-slate-800 border border-slate-200 rounded-lg">
+                              {s.institutional_id}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 font-bold text-slate-800">
+                            {s.last_name}, {s.first_name}
+                          </td>
+                          <td className="py-3 px-4">
+                            <span className="font-semibold text-slate-600 bg-slate-50 px-2 py-0.5 rounded border border-slate-200 text-[11px]">
+                              {s.program_code || "BSIT"}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 font-medium text-slate-600">
+                            Year {s.year_level}
+                          </td>
+                          <td className="py-3 px-4 text-slate-400 text-[11px]">
+                            {new Date(s.enrolled_at).toLocaleDateString()}
+                          </td>
+                          <td className="py-3 px-4 text-right">
+                            <button
+                              type="button"
+                              disabled={unenrollingId === s.student_id}
+                              onClick={() => handleUnenroll(s.student_id, `${s.first_name} ${s.last_name}`)}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-200 text-xs font-bold transition-all disabled:opacity-50"
+                            >
+                              {unenrollingId === s.student_id ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <Trash2 className="w-3.5 h-3.5" />
+                              )}
+                              <span>Unenroll</span>
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-16 px-4 border-2 border-dashed border-slate-200 rounded-3xl space-y-3">
+                <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto border border-emerald-100">
+                  <Users className="w-6 h-6" />
+                </div>
+                <h3 className="text-sm font-bold text-slate-800">
+                  {rosterSearch.trim() ? "No students match your search" : "No students currently enrolled in this class"}
+                </h3>
+                <p className="text-xs text-slate-400 max-w-md mx-auto">
+                  {rosterSearch.trim()
+                    ? "Try adjusting your search criteria or clear the filter."
+                    : "Insert student ID numbers to enroll students in this course. Once enrolled, students can log in to take examinations."}
+                </p>
+                {!rosterSearch.trim() && (
+                  <div className="pt-2 flex justify-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEnrollError(null);
+                        setEnrollSuccess(null);
+                        setEnrollModalOpen(true);
+                      }}
+                      className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-sm transition-all"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>Enroll Student</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setBulkResult(null);
+                        setBulkEnrollModalOpen(true);
+                      }}
+                      className="flex items-center gap-2 bg-slate-800 hover:bg-slate-900 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-sm transition-all"
+                    >
+                      <Users className="w-4 h-4" />
+                      <span>Batch Insert IDs</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
+      {/* SINGLE STUDENT ENROLLMENT MODAL */}
+      {enrollModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
+          <form
+            onSubmit={handleSingleEnroll}
+            className="bg-white border border-slate-200 rounded-3xl max-w-md w-full p-6 sm:p-7 shadow-2xl space-y-4 relative"
+          >
+            <div className="flex justify-between items-start border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+                  <GraduationCap className="w-5 h-5 text-emerald-600" />
+                  Enroll Student in Class
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Insert student ID number to grant course & login access
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEnrollModalOpen(false)}
+                className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-400 hover:text-slate-700"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Info notice */}
+            <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-xl text-xs text-emerald-900 leading-relaxed">
+              <span className="font-bold">Automatic Account Provisioning: </span>
+              If the student is not yet in the system, an account is created with their Student ID as the initial password. They will be required to set a personal password upon first login.
+            </div>
+
+            {/* Error & Success */}
+            {enrollError && (
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs font-bold text-rose-800 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>{enrollError}</span>
+              </div>
+            )}
+            {enrollSuccess && (
+              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs font-bold text-emerald-800 flex items-center gap-2">
+                <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>{enrollSuccess}</span>
+              </div>
+            )}
+
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-extrabold text-slate-700 block mb-1">
+                  Student ID Number <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. 2023-0001-AB"
+                  value={enrollForm.institutionalId}
+                  onChange={(e) => setEnrollForm({ ...enrollForm, institutionalId: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-200 focus:bg-white text-xs font-bold text-slate-900 px-3.5 py-2.5 rounded-xl transition-all"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-extrabold text-slate-700 block mb-1">
+                    First Name <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Juan"
+                    value={enrollForm.firstName}
+                    onChange={(e) => setEnrollForm({ ...enrollForm, firstName: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 focus:bg-white text-xs font-medium text-slate-900 px-3.5 py-2.5 rounded-xl transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-extrabold text-slate-700 block mb-1">
+                    Last Name <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Dela Cruz"
+                    value={enrollForm.lastName}
+                    onChange={(e) => setEnrollForm({ ...enrollForm, lastName: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 focus:bg-white text-xs font-medium text-slate-900 px-3.5 py-2.5 rounded-xl transition-all"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-extrabold text-slate-700 block mb-1">
+                  Academic Program
+                </label>
+                <select
+                  value={enrollForm.programId}
+                  onChange={(e) => setEnrollForm({ ...enrollForm, programId: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-200 focus:bg-white text-xs font-bold text-slate-900 px-3.5 py-2.5 rounded-xl transition-all"
+                >
+                  {programs.map((p) => (
+                    <option key={p.program_id} value={p.program_id}>
+                      {p.program_code} - {p.program_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs font-extrabold text-slate-700 block mb-1">
+                  Year Level
+                </label>
+                <select
+                  value={enrollForm.yearLevel}
+                  onChange={(e) => setEnrollForm({ ...enrollForm, yearLevel: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-200 focus:bg-white text-xs font-bold text-slate-900 px-3.5 py-2.5 rounded-xl transition-all"
+                >
+                  <option value="1">1st Year</option>
+                  <option value="2">2nd Year</option>
+                  <option value="3">3rd Year</option>
+                  <option value="4">4th Year</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="border-t border-slate-100 pt-3 flex justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setEnrollModalOpen(false)}
+                className="px-4 py-2.5 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isSubmittingEnroll}
+                className="flex items-center gap-2 px-5 py-2.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-sm transition-all disabled:opacity-75"
+              >
+                {isSubmittingEnroll ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Enrolling...</span>
+                  </>
+                ) : (
+                  <span>Enroll Student</span>
+                )}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* BATCH INSERT STUDENT IDS MODAL */}
+      {bulkEnrollModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
+          <form
+            onSubmit={handleBulkEnroll}
+            className="bg-white border border-slate-200 rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl space-y-4 relative"
+          >
+            <div className="flex justify-between items-start border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+                  <Users className="w-5 h-5 text-emerald-600" />
+                  Batch Insert Student IDs
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Paste multiple student IDs to enroll them in this class simultaneously
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setBulkEnrollModalOpen(false)}
+                className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-400 hover:text-slate-700"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {bulkResult && (
+              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-900 space-y-1">
+                <p className="font-bold">{bulkResult.message}</p>
+                {bulkResult.errors && bulkResult.errors.length > 0 && (
+                  <ul className="list-disc pl-4 text-rose-700 text-[11px] space-y-0.5 mt-1">
+                    {bulkResult.errors.map((err, i) => (
+                      <li key={i}>{err}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-extrabold text-slate-700 block mb-1">
+                  Paste Student IDs (One per line, or ID, First Name, Last Name):
+                </label>
+                <textarea
+                  rows={5}
+                  required
+                  placeholder={"2023-0001-AB, Juan, Dela Cruz\n2023-0002-AB, Maria, Santos\n2023-0003-AB"}
+                  value={bulkInput}
+                  onChange={(e) => setBulkInput(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 focus:bg-white text-xs font-mono text-slate-900 p-3 rounded-xl transition-all"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[11px] font-extrabold text-slate-700 block mb-1">
+                    Default Program
+                  </label>
+                  <select
+                    value={bulkProgramId}
+                    onChange={(e) => setBulkProgramId(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 text-xs font-bold text-slate-900 p-2 rounded-xl"
+                  >
+                    {programs.map((p) => (
+                      <option key={p.program_id} value={p.program_id}>
+                        {p.program_code}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[11px] font-extrabold text-slate-700 block mb-1">
+                    Default Year
+                  </label>
+                  <select
+                    value={bulkYearLevel}
+                    onChange={(e) => setBulkYearLevel(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 text-xs font-bold text-slate-900 p-2 rounded-xl"
+                  >
+                    <option value="1">1st Year</option>
+                    <option value="2">2nd Year</option>
+                    <option value="3">3rd Year</option>
+                    <option value="4">4th Year</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div className="border-t border-slate-100 pt-3 flex justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setBulkEnrollModalOpen(false)}
+                className="px-4 py-2.5 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isSubmittingBulk}
+                className="flex items-center gap-2 px-5 py-2.5 text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 rounded-xl shadow-sm transition-all disabled:opacity-75"
+              >
+                {isSubmittingBulk ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Processing Batch...</span>
+                  </>
+                ) : (
+                  <span>Batch Enroll Students</span>
+                )}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
       {/* QUESTION CRUD MODAL */}
       {qModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
@@ -2870,6 +3583,92 @@ export function FacultyDashboardClient({
                 className="bg-slate-900 hover:bg-slate-800 text-white text-xs font-extrabold px-5 py-2.5 rounded-xl transition-all cursor-pointer"
               >
                 Close Roster
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ASSIGNED COURSES INITIAL LOGIN POPUP MODAL */}
+      {showAssignedCoursesModal && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 overflow-y-auto animate-in fade-in duration-300">
+          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-xl w-full shadow-2xl border border-slate-200 space-y-6 my-8">
+            <div className="flex items-start gap-4">
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-700 text-white flex items-center justify-center shrink-0 shadow-lg shadow-emerald-500/20">
+                <GraduationCap className="w-7 h-7" />
+              </div>
+              <div className="flex-1">
+                <span className="text-[10px] font-extrabold uppercase tracking-widest text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                  Official Teaching Load Assignment
+                </span>
+                <h3 className="text-xl font-black text-slate-900 mt-1">
+                  Assigned Teaching Courses
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Designated by the Director of Instruction (DI) & Academic Administration
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-emerald-50/60 border border-emerald-100 rounded-2xl p-4 text-xs text-slate-700 leading-relaxed space-y-2">
+              <p>
+                Welcome, <strong className="font-bold text-slate-900">Instructor {faculty.first_name} {faculty.last_name}</strong>! 
+                You have been officially assigned to facilitate the following course(s) for the current academic term:
+              </p>
+            </div>
+
+            {/* List of Assigned Courses */}
+            <div className="space-y-2.5 max-h-64 overflow-y-auto pr-1">
+              {assignedCourses.map((c, idx) => (
+                <div 
+                  key={c.course_id || idx}
+                  className="bg-white border border-slate-200 hover:border-emerald-300 rounded-2xl p-4 flex items-center justify-between gap-4 shadow-sm hover:shadow transition-all group"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="font-mono text-xs font-black px-2.5 py-1.5 rounded-xl bg-slate-900 text-emerald-400 shrink-0">
+                      {c.course_code}
+                    </span>
+                    <div>
+                      <h4 className="text-xs font-black text-slate-800 group-hover:text-emerald-700 transition-colors">
+                        {c.course_title}
+                      </h4>
+                      <p className="text-[10px] text-slate-400 mt-0.5">
+                        Active Curriculum Course
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-200/60 shrink-0">
+                    Assigned
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            <div className="bg-slate-50 border border-slate-100 rounded-xl p-3 text-[11px] text-slate-500 flex items-start gap-2">
+              <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+              <span>
+                Your <strong>Question Bank</strong>, <strong>Examination Creator</strong>, and <strong>Student Rosters</strong> have been pre-scoped to these assigned courses.
+              </span>
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button
+                type="button"
+                disabled={isAcknowledgingCourses}
+                onClick={handleAcknowledgeCourses}
+                className="w-full sm:w-auto px-6 py-3 text-xs font-extrabold text-white bg-emerald-600 hover:bg-emerald-700 active:scale-95 rounded-xl shadow-md shadow-emerald-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                {isAcknowledgingCourses ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Confirming...</span>
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-4 h-4" />
+                    <span>Acknowledge & Access Workspace</span>
+                  </>
+                )}
               </button>
             </div>
           </div>
