@@ -122,24 +122,6 @@ export default async function StudentDashboard() {
 
   const overrideExamIds = new Set(studentOverrides.map(o => o.exam_id));
 
-  // 3. Fetch completed student exams
-  const completedExams = await db.studentExam.findMany({
-    where: {
-      student_id: student.student_id,
-    },
-    include: {
-      exam: {
-        include: {
-          course: true,
-          questionBank: {
-            select: {
-              points: true,
-            },
-          },
-        },
-      },
-    },
-  });
 
   // Filter targets to only include those where the student is selected (or no restriction set)
   const eligibleTargets = targets.filter((t) => {
