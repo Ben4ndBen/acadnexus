@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { 
   BarChart3, ShieldCheck, Map, List, CheckCircle, 
@@ -14,6 +14,11 @@ import { registerInstructorByAdminAction } from "@/app/actions/auth";
 import { assignCoursesToFacultyAction } from "@/app/actions/faculty";
 import { getDepartmentTheme } from "@/lib/departmentThemes";
 import { DepartmentBadge } from "@/app/components/DepartmentBadge";
+import { 
+  getProgramsForDepartment, 
+  filterCoursesForDepartment, 
+  isCourseInDepartmentOrProgram 
+} from "@/lib/courseDepartmentMapping";
 
 interface DirectorDashboardClientProps {
   directorUserId: number;
@@ -174,6 +179,8 @@ export function DirectorDashboardClient({
   const [middleName, setMiddleName] = useState("");
   const [lastName, setLastName] = useState("");
   const [deptId, setDeptId] = useState("");
+  const [regProgramCode, setRegProgramCode] = useState("");
+  const [regIncludeGE, setRegIncludeGE] = useState(false);
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPass, setShowPass] = useState(false);
@@ -186,11 +193,48 @@ export function DirectorDashboardClient({
   // State for Managing existing instructor's courses
   const [assignModalOpen, setAssignModalOpen] = useState(false);
   const [assignFacultyTarget, setAssignFacultyTarget] = useState<any | null>(null);
+  const [editProgramCode, setEditProgramCode] = useState("");
+  const [editIncludeGE, setEditIncludeGE] = useState(false);
   const [editCourseIds, setEditCourseIds] = useState<number[]>([]);
   const [editCourseSearchQuery, setEditCourseSearchQuery] = useState("");
   const [isSavingAssignedCourses, setIsSavingAssignedCourses] = useState(false);
   const [assignMessage, setAssignMessage] = useState<string | null>(null);
   const [facultySearchQuery, setFacultySearchQuery] = useState("");
+
+  // Handler for changing department in registration modal
+  const handleDeptChange = (newDeptId: string) => {
+    setDeptId(newDeptId);
+    setRegProgramCode("");
+    // Clean up selected courses that don't belong to the newly selected department
+    setSelectedCourseIds((prev) =>
+      prev.filter((id) => {
+        const c = courses.find((item) => item.course_id === id);
+        if (!c) return false;
+        return isCourseInDepartmentOrProgram(c.course_code, newDeptId, null, regIncludeGE);
+      })
+    );
+  };
+
+  // Filtered courses for Register Instructor Modal based on selected Department & Program
+  const availableRegisterCourses = useMemo(() => {
+    if (!deptId) return [];
+    return filterCoursesForDepartment(courses, deptId, {
+      programCode: regProgramCode,
+      includeGeneralEducation: regIncludeGE,
+      searchQuery: courseSearchQuery,
+    });
+  }, [courses, deptId, regProgramCode, regIncludeGE, courseSearchQuery]);
+
+  // Filtered courses for Assign / Edit Modal based on target Instructor's Department & Program
+  const availableEditCourses = useMemo(() => {
+    if (!assignFacultyTarget) return [];
+    const targetDeptId = assignFacultyTarget.department_id || assignFacultyTarget.department?.department_id;
+    return filterCoursesForDepartment(courses, targetDeptId, {
+      programCode: editProgramCode,
+      includeGeneralEducation: editIncludeGE,
+      searchQuery: editCourseSearchQuery,
+    });
+  }, [courses, assignFacultyTarget, editProgramCode, editIncludeGE, editCourseSearchQuery]);
 
   const handleRegisterInstructorSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -229,6 +273,8 @@ export function DirectorDashboardClient({
     const currentCourseIds = faculty.facultyCourses?.map((fc: any) => fc.course.course_id) || [];
     setEditCourseIds(currentCourseIds);
     setEditCourseSearchQuery("");
+    setEditProgramCode("");
+    setEditIncludeGE(false);
     setAssignMessage(null);
     setAssignModalOpen(true);
   };
@@ -430,7 +476,9 @@ export function DirectorDashboardClient({
             setLastName("");
             setSelectedCourseIds([]);
             setCourseSearchQuery("");
-            setDeptId(departmentsList.length > 0 ? String(departmentsList[0].department_id) : "");
+            setDeptId("");
+            setRegProgramCode("");
+            setRegIncludeGE(false);
             setPassword("");
             setConfirmPassword("");
             setRegisterModalOpen(true);
@@ -1303,10 +1351,10 @@ export function DirectorDashboardClient({
                   <select
                     required
                     value={deptId}
-                    onChange={(e) => setDeptId(e.target.value)}
+                    onChange={(e) => handleDeptChange(e.target.value)}
                     className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-xs font-medium text-slate-800 p-3 rounded-xl outline-none"
                   >
-                    <option value="" disabled>Select Department</option>
+                    <option value="" disabled>-- Select Department --</option>
                     {departmentsList.map((d) => (
                       <option key={d.department_id} value={d.department_id}>
                         {d.department_name}
@@ -1333,86 +1381,128 @@ export function DirectorDashboardClient({
                     )}
                   </div>
 
-                  {/* Search box for subjects */}
-                  <div className="relative">
-                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
-                    <input
-                      type="text"
-                      placeholder="Search by course code or title..."
-                      value={courseSearchQuery}
-                      onChange={(e) => setCourseSearchQuery(e.target.value)}
-                      className="w-full bg-white border border-slate-200 rounded-xl pl-8 pr-3 py-1.5 text-xs text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-sm"
-                    />
-                  </div>
-
-                  {/* Selected Courses Chips */}
-                  {selectedCourseIds.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 max-h-20 overflow-y-auto py-1">
-                      {selectedCourseIds.map((cId) => {
-                        const courseObj = courses.find((c) => c.course_id === cId);
-                        if (!courseObj) return null;
-                        return (
-                          <span
-                            key={cId}
-                            className="inline-flex items-center gap-1 text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded-lg"
-                          >
-                            <span className="font-mono">{courseObj.course_code}</span>
-                            <button
-                              type="button"
-                              onClick={() => setSelectedCourseIds((prev) => prev.filter((id) => id !== cId))}
-                              className="hover:text-rose-600 cursor-pointer ml-0.5"
-                            >
-                              <X className="w-3 h-3" />
-                            </button>
-                          </span>
-                        );
-                      })}
+                  {!deptId ? (
+                    <div className="bg-amber-50/80 border border-dashed border-amber-300 rounded-xl p-4 text-center space-y-1">
+                      <BookOpen className="w-5 h-5 text-amber-600 mx-auto opacity-90" />
+                      <p className="text-xs font-bold text-amber-900">Please Select a Department Above</p>
+                      <p className="text-[11px] text-amber-700">
+                        The subjects list will dynamically load only the curriculum offerings for that department and program.
+                      </p>
                     </div>
-                  )}
+                  ) : (
+                    <>
+                      {/* Program & General Education Filters */}
+                      <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-200/60">
+                        {getProgramsForDepartment(deptId).length > 1 ? (
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[11px] font-bold text-slate-600">Program:</span>
+                            <select
+                              value={regProgramCode}
+                              onChange={(e) => setRegProgramCode(e.target.value)}
+                              className="bg-white border border-slate-200 text-[11px] font-semibold text-slate-800 rounded-lg px-2 py-1 outline-none focus:ring-2 focus:ring-indigo-500/20"
+                            >
+                              <option value="">All Department Programs</option>
+                              {getProgramsForDepartment(deptId).map((p) => (
+                                <option key={p.code} value={p.code}>
+                                  {p.name} ({p.code})
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        ) : (
+                          <div className="text-[11px] text-slate-600 font-medium">
+                            Program: <span className="font-bold text-slate-800">{getProgramsForDepartment(deptId)[0]?.name || "Department Core"}</span>
+                          </div>
+                        )}
 
-                  {/* Checkbox List of Available Courses */}
-                  <div className="max-h-40 overflow-y-auto space-y-1 bg-white border border-slate-200 rounded-xl p-2">
-                    {courses
-                      .filter((c) => {
-                        if (!courseSearchQuery.trim()) return true;
-                        const q = courseSearchQuery.toLowerCase();
-                        return (
-                          c.course_code.toLowerCase().includes(q) ||
-                          c.course_title.toLowerCase().includes(q)
-                        );
-                      })
-                      .map((c) => {
-                        const isChecked = selectedCourseIds.includes(c.course_id);
-                        return (
-                          <label
-                            key={c.course_id}
-                            className={`flex items-center gap-2 p-1.5 rounded-lg text-xs cursor-pointer transition-colors ${
-                              isChecked ? "bg-indigo-50/80 font-bold text-indigo-900" : "hover:bg-slate-50 text-slate-700 font-medium"
-                            }`}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={isChecked}
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  setSelectedCourseIds((prev) => [...prev, c.course_id]);
-                                } else {
-                                  setSelectedCourseIds((prev) => prev.filter((id) => id !== c.course_id));
-                                }
-                              }}
-                              className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5"
-                            />
-                            <span className="font-mono text-[11px] font-black text-slate-900 bg-slate-100 px-1.5 py-0.5 rounded shrink-0">
-                              {c.course_code}
-                            </span>
-                            <span className="truncate">{c.course_title}</span>
-                          </label>
-                        );
-                      })}
-                    {courses.length === 0 && (
-                      <p className="text-[11px] text-slate-400 text-center py-2">No courses available.</p>
-                    )}
-                  </div>
+                        <label className="flex items-center gap-1.5 text-[11px] font-medium text-slate-600 cursor-pointer select-none bg-white border border-slate-200/80 px-2 py-1 rounded-lg hover:border-slate-300">
+                          <input
+                            type="checkbox"
+                            checked={regIncludeGE}
+                            onChange={(e) => setRegIncludeGE(e.target.checked)}
+                            className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 w-3 h-3"
+                          />
+                          <span>Include General Education (GE)</span>
+                        </label>
+                      </div>
+
+                      {/* Search box for subjects */}
+                      <div className="relative">
+                        <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+                        <input
+                          type="text"
+                          placeholder="Search department subjects by code or title..."
+                          value={courseSearchQuery}
+                          onChange={(e) => setCourseSearchQuery(e.target.value)}
+                          className="w-full bg-white border border-slate-200 rounded-xl pl-8 pr-3 py-1.5 text-xs text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-sm"
+                        />
+                      </div>
+
+                      {/* Selected Courses Chips */}
+                      {selectedCourseIds.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 max-h-20 overflow-y-auto py-1">
+                          {selectedCourseIds.map((cId) => {
+                            const courseObj = courses.find((c) => c.course_id === cId);
+                            if (!courseObj) return null;
+                            return (
+                              <span
+                                key={cId}
+                                className="inline-flex items-center gap-1 text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded-lg shadow-xs"
+                              >
+                                <span className="font-mono">{courseObj.course_code}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedCourseIds((prev) => prev.filter((id) => id !== cId))}
+                                  className="hover:text-rose-600 cursor-pointer ml-0.5"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </span>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {/* Checkbox List of Available Department Courses */}
+                      <div className="max-h-44 overflow-y-auto space-y-1 bg-white border border-slate-200 rounded-xl p-2">
+                        {availableRegisterCourses.map((c) => {
+                          const isChecked = selectedCourseIds.includes(c.course_id);
+                          return (
+                            <label
+                              key={c.course_id}
+                              className={`flex items-center gap-2 p-1.5 rounded-lg text-xs cursor-pointer transition-colors ${
+                                isChecked
+                                  ? "bg-indigo-50/80 font-bold text-indigo-900 border border-indigo-200/60"
+                                  : "hover:bg-slate-50 text-slate-700 font-medium border border-transparent"
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSelectedCourseIds((prev) => [...prev, c.course_id]);
+                                  } else {
+                                    setSelectedCourseIds((prev) => prev.filter((id) => id !== c.course_id));
+                                  }
+                                }}
+                                className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5"
+                              />
+                              <span className="font-mono text-[11px] font-black text-slate-900 bg-slate-100 px-1.5 py-0.5 rounded shrink-0">
+                                {c.course_code}
+                              </span>
+                              <span className="truncate">{c.course_title}</span>
+                            </label>
+                          );
+                        })}
+                        {availableRegisterCourses.length === 0 && (
+                          <p className="text-[11px] text-slate-400 text-center py-4">
+                            No subjects found matching this department / program filter.
+                          </p>
+                        )}
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1518,10 +1608,49 @@ export function DirectorDashboardClient({
               </div>
             )}
 
+            {assignFacultyTarget && (
+              <div className="bg-indigo-50/60 border border-indigo-100 rounded-xl p-3 flex flex-wrap items-center justify-between gap-2 text-xs">
+                <div>
+                  <span className="text-slate-500">Department:</span>{" "}
+                  <strong className="text-indigo-950 font-bold">
+                    {assignFacultyTarget.department?.department_name ||
+                      departmentsList.find((d) => d.department_id === assignFacultyTarget.department_id)?.department_name ||
+                      "Assigned Department"}
+                  </strong>
+                </div>
+                {getProgramsForDepartment(assignFacultyTarget.department_id || assignFacultyTarget.department?.department_id).length > 1 && (
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[11px] font-bold text-slate-600">Program:</span>
+                    <select
+                      value={editProgramCode}
+                      onChange={(e) => setEditProgramCode(e.target.value)}
+                      className="bg-white border border-slate-200 text-[11px] font-semibold text-slate-800 rounded-lg px-2 py-1 outline-none focus:ring-2 focus:ring-indigo-500/20"
+                    >
+                      <option value="">All Department Programs</option>
+                      {getProgramsForDepartment(assignFacultyTarget.department_id || assignFacultyTarget.department?.department_id).map((p) => (
+                        <option key={p.code} value={p.code}>
+                          {p.name} ({p.code})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                <label className="flex items-center gap-1.5 text-[11px] font-medium text-slate-600 cursor-pointer select-none bg-white border border-slate-200/80 px-2 py-1 rounded-lg hover:border-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={editIncludeGE}
+                    onChange={(e) => setEditIncludeGE(e.target.checked)}
+                    className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 w-3 h-3"
+                  />
+                  <span>Include GE Subjects</span>
+                </label>
+              </div>
+            )}
+
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-slate-700">
-                  Select Courses to Assign
+                  Select Department Courses to Assign
                 </span>
                 <span className="text-[10px] font-black bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-full border border-indigo-200">
                   {editCourseIds.length} Selected
@@ -1533,7 +1662,7 @@ export function DirectorDashboardClient({
                 <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
                 <input
                   type="text"
-                  placeholder="Filter courses by code or title..."
+                  placeholder="Filter department subjects by code or title..."
                   value={editCourseSearchQuery}
                   onChange={(e) => setEditCourseSearchQuery(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-8 pr-3 py-2 text-xs text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
@@ -1567,42 +1696,36 @@ export function DirectorDashboardClient({
 
               {/* List of courses */}
               <div className="max-h-60 overflow-y-auto space-y-1.5 border border-slate-200 rounded-2xl p-2.5 bg-slate-50/50">
-                {courses
-                  .filter((c) => {
-                    if (!editCourseSearchQuery.trim()) return true;
-                    const q = editCourseSearchQuery.toLowerCase();
-                    return c.course_code.toLowerCase().includes(q) || c.course_title.toLowerCase().includes(q);
-                  })
-                  .map((c) => {
-                    const isChecked = editCourseIds.includes(c.course_id);
-                    return (
-                      <label
-                        key={c.course_id}
-                        className={`flex items-center gap-2 p-2 rounded-xl text-xs cursor-pointer transition-colors ${
-                          isChecked ? "bg-indigo-50 font-bold text-indigo-900 border border-indigo-200" : "bg-white hover:bg-slate-100/80 text-slate-700 font-medium border border-transparent"
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setEditCourseIds((prev) => [...prev, c.course_id]);
-                            } else {
-                              setEditCourseIds((prev) => prev.filter((id) => id !== c.course_id));
-                            }
-                          }}
-                          className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5"
-                        />
-                        <span className="font-mono text-[11px] font-black text-slate-900 bg-slate-100 px-1.5 py-0.5 rounded shrink-0">
-                          {c.course_code}
-                        </span>
-                        <span className="truncate">{c.course_title}</span>
-                      </label>
-                    );
-                  })}
-                {courses.length === 0 && (
-                  <p className="text-xs text-slate-400 text-center py-4">No courses available.</p>
+                {availableEditCourses.map((c) => {
+                  const isChecked = editCourseIds.includes(c.course_id);
+                  return (
+                    <label
+                      key={c.course_id}
+                      className={`flex items-center gap-2 p-2 rounded-xl text-xs cursor-pointer transition-colors ${
+                        isChecked ? "bg-indigo-50 font-bold text-indigo-900 border border-indigo-200" : "bg-white hover:bg-slate-100/80 text-slate-700 font-medium border border-transparent"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setEditCourseIds((prev) => [...prev, c.course_id]);
+                          } else {
+                            setEditCourseIds((prev) => prev.filter((id) => id !== c.course_id));
+                          }
+                        }}
+                        className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5"
+                      />
+                      <span className="font-mono text-[11px] font-black text-slate-900 bg-slate-100 px-1.5 py-0.5 rounded shrink-0">
+                        {c.course_code}
+                      </span>
+                      <span className="truncate">{c.course_title}</span>
+                    </label>
+                  );
+                })}
+                {availableEditCourses.length === 0 && (
+                  <p className="text-xs text-slate-400 text-center py-4">No subjects found matching this department / program.</p>
                 )}
               </div>
             </div>

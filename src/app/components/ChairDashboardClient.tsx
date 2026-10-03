@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { 
   Activity, Users, ClipboardCheck, CheckCircle, 
@@ -14,6 +14,10 @@ import { assignCoursesToFacultyAction } from "@/app/actions/faculty";
 import { Latex } from "@/app/components/Latex";
 import { getDepartmentTheme } from "@/lib/departmentThemes";
 import { DepartmentBadge } from "@/app/components/DepartmentBadge";
+import { 
+  getProgramsForDepartment, 
+  filterCoursesForDepartment 
+} from "@/lib/courseDepartmentMapping";
 
 interface ChairDashboardClientProps {
   chairUserId: number;
@@ -104,6 +108,8 @@ export function ChairDashboardClient({
   const [firstName, setFirstName] = useState("");
   const [middleName, setMiddleName] = useState("");
   const [lastName, setLastName] = useState("");
+  const [regProgramCode, setRegProgramCode] = useState("");
+  const [regIncludeGE, setRegIncludeGE] = useState(false);
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPass, setShowPass] = useState(false);
@@ -116,10 +122,30 @@ export function ChairDashboardClient({
   // State for Managing existing instructor's courses
   const [assignModalOpen, setAssignModalOpen] = useState(false);
   const [assignFacultyTarget, setAssignFacultyTarget] = useState<any | null>(null);
+  const [editProgramCode, setEditProgramCode] = useState("");
+  const [editIncludeGE, setEditIncludeGE] = useState(false);
   const [editCourseIds, setEditCourseIds] = useState<number[]>([]);
   const [editCourseSearchQuery, setEditCourseSearchQuery] = useState("");
   const [isSavingAssignedCourses, setIsSavingAssignedCourses] = useState(false);
   const [assignMessage, setAssignMessage] = useState<string | null>(null);
+
+  // Filtered courses for Register Instructor Modal based on Chair's Department & Program
+  const availableChairRegisterCourses = useMemo(() => {
+    return filterCoursesForDepartment(courses || [], departmentId || departmentName, {
+      programCode: regProgramCode,
+      includeGeneralEducation: regIncludeGE,
+      searchQuery: courseSearchQuery,
+    });
+  }, [courses, departmentId, departmentName, regProgramCode, regIncludeGE, courseSearchQuery]);
+
+  // Filtered courses for Assign / Edit Modal based on Chair's Department & Program
+  const availableChairEditCourses = useMemo(() => {
+    return filterCoursesForDepartment(courses || [], departmentId || departmentName, {
+      programCode: editProgramCode,
+      includeGeneralEducation: editIncludeGE,
+      searchQuery: editCourseSearchQuery,
+    });
+  }, [courses, departmentId, departmentName, editProgramCode, editIncludeGE, editCourseSearchQuery]);
 
   const handleRegisterInstructorSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -162,6 +188,8 @@ export function ChairDashboardClient({
     const currentCourseIds = faculty.facultyCourses?.map((fc: any) => fc.course.course_id) || [];
     setEditCourseIds(currentCourseIds);
     setEditCourseSearchQuery("");
+    setEditProgramCode("");
+    setEditIncludeGE(false);
     setAssignMessage(null);
     setAssignModalOpen(true);
   };
@@ -390,6 +418,8 @@ export function ChairDashboardClient({
             setLastName("");
             setSelectedCourseIds([]);
             setCourseSearchQuery("");
+            setRegProgramCode("");
+            setRegIncludeGE(false);
             setPassword("");
             setConfirmPassword("");
             setRegisterModalOpen(true);
@@ -1470,12 +1500,47 @@ export function ChairDashboardClient({
                     )}
                   </div>
 
+                  {/* Program & General Education Filters */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-200/60">
+                    {getProgramsForDepartment(departmentId || departmentName).length > 1 ? (
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[11px] font-bold text-slate-600">Program:</span>
+                        <select
+                          value={regProgramCode}
+                          onChange={(e) => setRegProgramCode(e.target.value)}
+                          className="bg-white border border-slate-200 text-[11px] font-semibold text-slate-800 rounded-lg px-2 py-1 outline-none focus:ring-2 focus:ring-amber-500/20"
+                        >
+                          <option value="">All {departmentName} Subjects</option>
+                          {getProgramsForDepartment(departmentId || departmentName).map((p) => (
+                            <option key={p.code} value={p.code}>
+                              {p.name} ({p.code})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    ) : (
+                      <div className="text-[11px] text-slate-600 font-medium">
+                        Program: <span className="font-bold text-slate-800">{getProgramsForDepartment(departmentId || departmentName)[0]?.name || departmentName}</span>
+                      </div>
+                    )}
+
+                    <label className="flex items-center gap-1.5 text-[11px] font-medium text-slate-600 cursor-pointer select-none bg-white border border-slate-200/80 px-2 py-1 rounded-lg hover:border-slate-300">
+                      <input
+                        type="checkbox"
+                        checked={regIncludeGE}
+                        onChange={(e) => setRegIncludeGE(e.target.checked)}
+                        className="rounded border-slate-300 text-amber-600 focus:ring-amber-500 w-3 h-3"
+                      />
+                      <span>Include General Education (GE)</span>
+                    </label>
+                  </div>
+
                   {/* Search box for subjects */}
                   <div className="relative">
                     <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
                     <input
                       type="text"
-                      placeholder="Search by course code or title..."
+                      placeholder="Search department subjects by code or title..."
                       value={courseSearchQuery}
                       onChange={(e) => setCourseSearchQuery(e.target.value)}
                       className="w-full bg-white border border-slate-200 rounded-xl pl-8 pr-3 py-1.5 text-xs text-slate-800 outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 shadow-sm"
@@ -1491,7 +1556,7 @@ export function ChairDashboardClient({
                         return (
                           <span
                             key={cId}
-                            className="inline-flex items-center gap-1 text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded-lg"
+                            className="inline-flex items-center gap-1 text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded-lg shadow-xs"
                           >
                             <span className="font-mono">{courseObj.course_code}</span>
                             <button
@@ -1507,47 +1572,42 @@ export function ChairDashboardClient({
                     </div>
                   )}
 
-                  {/* Checkbox List of Available Courses */}
-                  <div className="max-h-40 overflow-y-auto space-y-1 bg-white border border-slate-200 rounded-xl p-2">
-                    {courses
-                      .filter((c) => {
-                        if (!courseSearchQuery.trim()) return true;
-                        const q = courseSearchQuery.toLowerCase();
-                        return (
-                          c.course_code.toLowerCase().includes(q) ||
-                          c.course_title.toLowerCase().includes(q)
-                        );
-                      })
-                      .map((c) => {
-                        const isChecked = selectedCourseIds.includes(c.course_id);
-                        return (
-                          <label
-                            key={c.course_id}
-                            className={`flex items-center gap-2 p-1.5 rounded-lg text-xs cursor-pointer transition-colors ${
-                              isChecked ? "bg-amber-50/80 font-bold text-amber-900" : "hover:bg-slate-50 text-slate-700 font-medium"
-                            }`}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={isChecked}
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  setSelectedCourseIds((prev) => [...prev, c.course_id]);
-                                } else {
-                                  setSelectedCourseIds((prev) => prev.filter((id) => id !== c.course_id));
-                                }
-                              }}
-                              className="rounded border-slate-300 text-amber-600 focus:ring-amber-500 w-3.5 h-3.5"
-                            />
-                            <span className="font-mono text-[11px] font-black text-slate-900 bg-slate-100 px-1.5 py-0.5 rounded shrink-0">
-                              {c.course_code}
-                            </span>
-                            <span className="truncate">{c.course_title}</span>
-                          </label>
-                        );
-                      })}
-                    {courses.length === 0 && (
-                      <p className="text-[11px] text-slate-400 text-center py-2">No courses available.</p>
+                  {/* Checkbox List of Available Department Courses */}
+                  <div className="max-h-44 overflow-y-auto space-y-1 bg-white border border-slate-200 rounded-xl p-2">
+                    {availableChairRegisterCourses.map((c) => {
+                      const isChecked = selectedCourseIds.includes(c.course_id);
+                      return (
+                        <label
+                          key={c.course_id}
+                          className={`flex items-center gap-2 p-1.5 rounded-lg text-xs cursor-pointer transition-colors ${
+                            isChecked
+                              ? "bg-amber-50/80 font-bold text-amber-900 border border-amber-200/60"
+                              : "hover:bg-slate-50 text-slate-700 font-medium border border-transparent"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedCourseIds((prev) => [...prev, c.course_id]);
+                              } else {
+                                setSelectedCourseIds((prev) => prev.filter((id) => id !== c.course_id));
+                              }
+                            }}
+                            className="rounded border-slate-300 text-amber-600 focus:ring-amber-500 w-3.5 h-3.5"
+                          />
+                          <span className="font-mono text-[11px] font-black text-slate-900 bg-slate-100 px-1.5 py-0.5 rounded shrink-0">
+                            {c.course_code}
+                          </span>
+                          <span className="truncate">{c.course_title}</span>
+                        </label>
+                      );
+                    })}
+                    {availableChairRegisterCourses.length === 0 && (
+                      <p className="text-[11px] text-slate-400 text-center py-4">
+                        No subjects found matching this department / program filter.
+                      </p>
                     )}
                   </div>
                 </div>
@@ -1655,10 +1715,43 @@ export function ChairDashboardClient({
               </div>
             )}
 
+            <div className="bg-amber-50/60 border border-amber-200/80 rounded-xl p-3 flex flex-wrap items-center justify-between gap-2 text-xs">
+              <div>
+                <span className="text-slate-500">Department:</span>{" "}
+                <strong className="text-amber-950 font-bold">{departmentName}</strong>
+              </div>
+              {getProgramsForDepartment(departmentId || departmentName).length > 1 && (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] font-bold text-slate-600">Program:</span>
+                  <select
+                    value={editProgramCode}
+                    onChange={(e) => setEditProgramCode(e.target.value)}
+                    className="bg-white border border-slate-200 text-[11px] font-semibold text-slate-800 rounded-lg px-2 py-1 outline-none focus:ring-2 focus:ring-amber-500/20"
+                  >
+                    <option value="">All Department Programs</option>
+                    {getProgramsForDepartment(departmentId || departmentName).map((p) => (
+                      <option key={p.code} value={p.code}>
+                        {p.name} ({p.code})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              <label className="flex items-center gap-1.5 text-[11px] font-medium text-slate-600 cursor-pointer select-none bg-white border border-slate-200/80 px-2 py-1 rounded-lg hover:border-slate-300">
+                <input
+                  type="checkbox"
+                  checked={editIncludeGE}
+                  onChange={(e) => setEditIncludeGE(e.target.checked)}
+                  className="rounded border-slate-300 text-amber-600 focus:ring-amber-500 w-3 h-3"
+                />
+                <span>Include GE Subjects</span>
+              </label>
+            </div>
+
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-slate-700">
-                  Select Courses to Assign
+                  Select Department Courses to Assign
                 </span>
                 <span className="text-[10px] font-black bg-amber-50 text-amber-800 px-2 py-0.5 rounded-full border border-amber-200">
                   {editCourseIds.length} Selected
@@ -1670,7 +1763,7 @@ export function ChairDashboardClient({
                 <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
                 <input
                   type="text"
-                  placeholder="Filter courses by code or title..."
+                  placeholder="Filter department subjects by code or title..."
                   value={editCourseSearchQuery}
                   onChange={(e) => setEditCourseSearchQuery(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-8 pr-3 py-2 text-xs text-slate-800 outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
@@ -1704,42 +1797,36 @@ export function ChairDashboardClient({
 
               {/* List of courses */}
               <div className="max-h-60 overflow-y-auto space-y-1.5 border border-slate-200 rounded-2xl p-2.5 bg-slate-50/50">
-                {courses
-                  .filter((c) => {
-                    if (!editCourseSearchQuery.trim()) return true;
-                    const q = editCourseSearchQuery.toLowerCase();
-                    return c.course_code.toLowerCase().includes(q) || c.course_title.toLowerCase().includes(q);
-                  })
-                  .map((c) => {
-                    const isChecked = editCourseIds.includes(c.course_id);
-                    return (
-                      <label
-                        key={c.course_id}
-                        className={`flex items-center gap-2 p-2 rounded-xl text-xs cursor-pointer transition-colors ${
-                          isChecked ? "bg-amber-50 font-bold text-amber-900 border border-amber-200" : "bg-white hover:bg-slate-100/80 text-slate-700 font-medium border border-transparent"
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setEditCourseIds((prev) => [...prev, c.course_id]);
-                            } else {
-                              setEditCourseIds((prev) => prev.filter((id) => id !== c.course_id));
-                            }
-                          }}
-                          className="rounded border-slate-300 text-amber-600 focus:ring-amber-500 w-3.5 h-3.5"
-                        />
-                        <span className="font-mono text-[11px] font-black text-slate-900 bg-slate-100 px-1.5 py-0.5 rounded shrink-0">
-                          {c.course_code}
-                        </span>
-                        <span className="truncate">{c.course_title}</span>
-                      </label>
-                    );
-                  })}
-                {courses.length === 0 && (
-                  <p className="text-xs text-slate-400 text-center py-4">No courses available.</p>
+                {availableChairEditCourses.map((c) => {
+                  const isChecked = editCourseIds.includes(c.course_id);
+                  return (
+                    <label
+                      key={c.course_id}
+                      className={`flex items-center gap-2 p-2 rounded-xl text-xs cursor-pointer transition-colors ${
+                        isChecked ? "bg-amber-50 font-bold text-amber-900 border border-amber-200" : "bg-white hover:bg-slate-100/80 text-slate-700 font-medium border border-transparent"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setEditCourseIds((prev) => [...prev, c.course_id]);
+                          } else {
+                            setEditCourseIds((prev) => prev.filter((id) => id !== c.course_id));
+                          }
+                        }}
+                        className="rounded border-slate-300 text-amber-600 focus:ring-amber-500 w-3.5 h-3.5"
+                      />
+                      <span className="font-mono text-[11px] font-black text-slate-900 bg-slate-100 px-1.5 py-0.5 rounded shrink-0">
+                        {c.course_code}
+                      </span>
+                      <span className="truncate">{c.course_title}</span>
+                    </label>
+                  );
+                })}
+                {availableChairEditCourses.length === 0 && (
+                  <p className="text-xs text-slate-400 text-center py-4">No subjects found matching this department / program.</p>
                 )}
               </div>
             </div>
