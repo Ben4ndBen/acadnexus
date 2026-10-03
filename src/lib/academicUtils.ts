@@ -1,6 +1,7 @@
 export interface AcademicPeriodSettings {
   active_academic_year: string;
   active_semester: string;
+  active_term?: string;
   sem1_start: string;
   sem1_end: string;
   sem2_start: string;

@@ -116,6 +116,7 @@ export function DirectorDashboardClient({
   // State for Academic Period Configuration (Configured by DI)
   const [periodAY, setPeriodAY] = useState(academicPeriodSettings?.active_academic_year || "2026-2027");
   const [periodSem, setPeriodSem] = useState(academicPeriodSettings?.active_semester || "1st Semester");
+  const [periodTerm, setPeriodTerm] = useState(academicPeriodSettings?.active_term || "Midterm");
   const [sem1Start, setSem1Start] = useState(academicPeriodSettings?.sem1_start || "2026-08-01");
   const [sem1End, setSem1End] = useState(academicPeriodSettings?.sem1_end || "2026-12-31");
   const [sem2Start, setSem2Start] = useState(academicPeriodSettings?.sem2_start || "2027-01-01");
@@ -123,14 +124,58 @@ export function DirectorDashboardClient({
   const [isSavingPeriod, setIsSavingPeriod] = useState(false);
   const [periodSaveMsg, setPeriodSaveMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
+  // Automatically update semester date range if date/year of academic year is edited
+  const handleAcademicYearChange = (newAY: string) => {
+    setPeriodAY(newAY);
+    const numbers = newAY.match(/\d{4}/g);
+    if (numbers && numbers.length >= 1) {
+      const startYear = parseInt(numbers[0], 10);
+      const endYear = numbers.length >= 2 ? parseInt(numbers[1], 10) : startYear + 1;
+      setSem1Start(`${startYear}-08-01`);
+      setSem1End(`${startYear}-12-31`);
+      setSem2Start(`${endYear}-01-01`);
+      setSem2End(`${endYear}-05-31`);
+    }
+  };
+
+  // Validate semester date ranges before saving
+  const semesterRangeValidation = useMemo(() => {
+    if (!periodAY.trim() || !/\d{4}/.test(periodAY)) {
+      return { isValid: false, message: "Academic Year must be specified in a valid format (e.g. 2026-2027)." };
+    }
+    if (!sem1Start || !sem1End || !sem2Start || !sem2End) {
+      return { isValid: false, message: "All semester range start and end dates must be selected." };
+    }
+    const d1Start = new Date(sem1Start).getTime();
+    const d1End = new Date(sem1End).getTime();
+    const d2Start = new Date(sem2Start).getTime();
+    const d2End = new Date(sem2End).getTime();
+
+    if (isNaN(d1Start) || isNaN(d1End) || isNaN(d2Start) || isNaN(d2End)) {
+      return { isValid: false, message: "Invalid dates entered in semester range." };
+    }
+    if (d1Start >= d1End) {
+      return { isValid: false, message: "1st Semester start date must be before its end date." };
+    }
+    if (d2Start >= d2End) {
+      return { isValid: false, message: "2nd Semester start date must be before its end date." };
+    }
+    if (d1End >= d2Start) {
+      return { isValid: false, message: "1st Semester end date must be before 2nd Semester start date." };
+    }
+    return { isValid: true, message: "" };
+  }, [periodAY, sem1Start, sem1End, sem2Start, sem2End]);
+
   const handleSaveAcademicPeriod = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!semesterRangeValidation.isValid) return;
     setIsSavingPeriod(true);
     setPeriodSaveMsg(null);
     try {
       const res = await saveActiveAcademicPeriod(directorUserId, {
         active_academic_year: periodAY,
         active_semester: periodSem,
+        active_term: periodTerm,
         sem1_start: sem1Start,
         sem1_end: sem1End,
         sem2_start: sem2Start,
@@ -924,7 +969,7 @@ export function DirectorDashboardClient({
           )}
 
           <form onSubmit={handleSaveAcademicPeriod} className="space-y-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
               {/* Active Academic Year */}
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-slate-700 block">
@@ -934,11 +979,11 @@ export function DirectorDashboardClient({
                   type="text"
                   required
                   value={periodAY}
-                  onChange={(e) => setPeriodAY(e.target.value)}
+                  onChange={(e) => handleAcademicYearChange(e.target.value)}
                   placeholder="e.g. 2026-2027"
                   className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 text-sm font-bold text-slate-800 px-4 py-2.5 rounded-xl transition-all"
                 />
-                <p className="text-[11px] text-slate-400">Institutional academic cycle format (e.g. 2026-2027)</p>
+                <p className="text-[11px] text-slate-400">Editing auto-generates 1st & 2nd semester date ranges</p>
               </div>
 
               {/* Active Semester */}
@@ -956,6 +1001,24 @@ export function DirectorDashboardClient({
                   <option value="Midyear / Summer">Midyear / Summer</option>
                 </select>
                 <p className="text-[11px] text-slate-400">Current officially active collegiate term</p>
+              </div>
+
+              {/* Active Examination Term */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700 block">
+                  Active Examination Term <span className="text-rose-500">*</span>
+                </label>
+                <select
+                  value={periodTerm}
+                  onChange={(e) => setPeriodTerm(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 text-sm font-bold text-slate-800 px-4 py-2.5 rounded-xl transition-all"
+                >
+                  <option value="Midterm">Midterm Examination</option>
+                  <option value="Final">Final Examination</option>
+                  <option value="Prelim">Prelim Examination</option>
+                  <option value="Semi-Final">Semi-Final Examination</option>
+                </select>
+                <p className="text-[11px] text-slate-400">Default term locked for exam creation across faculty</p>
               </div>
             </div>
 
@@ -1022,11 +1085,19 @@ export function DirectorDashboardClient({
               </div>
             </div>
 
+            {/* Validation warning banner */}
+            {!semesterRangeValidation.isValid && (
+              <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs font-bold flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>Cannot save configuration: {semesterRangeValidation.message}</span>
+              </div>
+            )}
+
             <div className="pt-2 flex justify-end">
               <button
                 type="submit"
-                disabled={isSavingPeriod}
-                className="bg-indigo-700 hover:bg-indigo-800 text-white text-xs font-black px-6 py-3 rounded-xl shadow-md transition-all flex items-center gap-2 disabled:opacity-50"
+                disabled={!semesterRangeValidation.isValid || isSavingPeriod}
+                className="bg-indigo-700 hover:bg-indigo-800 text-white text-xs font-black px-6 py-3 rounded-xl shadow-md transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isSavingPeriod ? (
                   <>

@@ -2,6 +2,7 @@ import Image from "next/image";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { LoginForm } from "@/app/components/LoginForm";
+import { getActiveAcademicPeriod } from "@/app/actions/director";
 
 export default async function LoginPage() {
   // Server-side redirection check
@@ -18,21 +19,9 @@ export default async function LoginPage() {
     if (role === "Director") redirect("/dashboard/director");
   }
 
-  // Smart Academic Year Indicator Logic
-  const today = new Date();
-  const currentYear = today.getFullYear();
-  const currentMonth = today.getMonth(); // 0 = January, 5 = June, 11 = December
-
-  let startYear = currentYear;
-  let endYear = currentYear + 1;
-
-  // If we are between January and June, we are still in the previous year's academic cycle
-  if (currentMonth <= 5) {
-    startYear = currentYear - 1;
-    endYear = currentYear;
-  }
-
-  const academicYearString = `${startYear}-${endYear}`;
+  // Academic Year Indicator based on DI Active Period configuration
+  const academicPeriod = await getActiveAcademicPeriod();
+  const academicYearString = academicPeriod.active_academic_year;
 
   return (
     <div className="min-h-screen flex flex-col bg-[#FAF6F0] font-sans text-neutral-800 antialiased select-none">

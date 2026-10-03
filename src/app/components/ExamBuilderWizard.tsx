@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { 
   Settings, BookOpen, ClipboardCheck, ArrowLeft, ArrowRight, Save, 
@@ -64,6 +64,7 @@ interface ExamBuilderWizardProps {
   academicPeriodSettings?: {
     active_academic_year: string;
     active_semester: string;
+    active_term?: string;
     sem1_start: string;
     sem1_end: string;
     sem2_start: string;
@@ -253,8 +254,8 @@ export function ExamBuilderWizard({
   // Steps: 1 = Config, 2 = Questions, 3 = Preview & Submit
   const [step, setStep] = useState<number>(1);
 
-  // 1. Examination Term & Date (First Asked!)
-  const [term, setTerm] = useState<string>(exam.term || "Midterm");
+  // 1. Examination Term (Default from DI choice, non-editable by faculty) & Date
+  const term = exam.term || academicPeriodSettings?.active_term || "Midterm";
   const [examDate, setExamDate] = useState<string>(
     exam.exam_date
       ? typeof exam.exam_date === "string"
@@ -278,7 +279,7 @@ export function ExamBuilderWizard({
     || exam.course
     || { course_id: courseId, course_code: "", course_title: "" };
 
-  // Configuration Settings State
+  // Configuration Settings State - Title is auto-populated and not manually edited
   const [title, setTitle] = useState<string>(
     exam.title && exam.title !== "New Examination Draft"
       ? exam.title
@@ -289,7 +290,7 @@ export function ExamBuilderWizard({
   const [timePenalty, setTimePenalty] = useState<number>(exam.time_penalty_seconds ?? 60);
   const [scorePenalty, setScorePenalty] = useState<number>(exam.score_penalty_points ?? 2);
 
-  // 3. Assigned Students Selection
+  // 3. Assigned Students Selection with Sort & Filter
   const [assignedStudents, setAssignedStudents] = useState<StudentItem[]>(initialAssignedStudents);
   const [selectedStudentIds, setSelectedStudentIds] = useState<number[]>(
     exam.selected_student_ids && exam.selected_student_ids.length > 0
@@ -297,6 +298,48 @@ export function ExamBuilderWizard({
       : initialAssignedStudents.map(s => s.student_id)
   );
   const [loadingStudents, setLoadingStudents] = useState<boolean>(false);
+
+  // Filter & Sort State for Assigned Students (Sorted strictly by Name options)
+  const [studentSearch, setStudentSearch] = useState<string>("");
+  const [studentProgramFilter, setStudentProgramFilter] = useState<string>("ALL");
+  const [studentYearFilter, setStudentYearFilter] = useState<string>("ALL");
+  const [studentSortBy, setStudentSortBy] = useState<"lastNameAsc" | "lastNameDesc" | "firstNameAsc" | "firstNameDesc">("lastNameAsc");
+
+  const availableStudentPrograms = useMemo(() => {
+    return Array.from(new Set(assignedStudents.map(s => s.program_code).filter(Boolean)));
+  }, [assignedStudents]);
+
+  const availableStudentYears = useMemo(() => {
+    return Array.from(new Set(assignedStudents.map(s => s.year_level).filter(Boolean))).sort((a, b) => a - b);
+  }, [assignedStudents]);
+
+  const filteredAndSortedStudents = useMemo(() => {
+    return assignedStudents
+      .filter(s => {
+        if (studentProgramFilter !== "ALL" && s.program_code !== studentProgramFilter) return false;
+        if (studentYearFilter !== "ALL" && String(s.year_level) !== studentYearFilter) return false;
+        if (studentSearch.trim()) {
+          const q = studentSearch.toLowerCase();
+          const fullName = `${s.first_name} ${s.last_name}`.toLowerCase();
+          const instId = (s.institutional_id || "").toLowerCase();
+          const sec = (s.section || "").toLowerCase();
+          return fullName.includes(q) || instId.includes(q) || sec.includes(q);
+        }
+        return true;
+      })
+      .sort((a, b) => {
+        if (studentSortBy === "lastNameAsc") {
+          return a.last_name.localeCompare(b.last_name) || a.first_name.localeCompare(b.first_name);
+        } else if (studentSortBy === "lastNameDesc") {
+          return b.last_name.localeCompare(a.last_name) || b.first_name.localeCompare(a.first_name);
+        } else if (studentSortBy === "firstNameAsc") {
+          return a.first_name.localeCompare(b.first_name) || a.last_name.localeCompare(b.last_name);
+        } else if (studentSortBy === "firstNameDesc") {
+          return b.first_name.localeCompare(a.first_name) || b.last_name.localeCompare(a.last_name);
+        }
+        return 0;
+      });
+  }, [assignedStudents, studentSearch, studentProgramFilter, studentYearFilter, studentSortBy]);
 
   // Automatically determine applicable semester based on exam date and active academic period configured by DI
   const defaultPeriodSettings = {
@@ -330,13 +373,6 @@ export function ExamBuilderWizard({
       console.error("Failed to load students for course:", err);
     } finally {
       setLoadingStudents(false);
-    }
-  };
-
-  const handleTermChange = (newTerm: string) => {
-    setTerm(newTerm);
-    if (selectedCourse?.course_title) {
-      setTitle(`${newTerm} Examination in ${selectedCourse.course_title}`);
     }
   };
 
@@ -1055,19 +1091,17 @@ export function ExamBuilderWizard({
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {/* Examination Term */}
+                  {/* Examination Term (Configured by DI - Non-editable) */}
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-emerald-200 block">Examination Term <span className="text-rose-400">*</span></label>
-                    <select
-                      value={term}
-                      onChange={(e) => handleTermChange(e.target.value)}
-                      className="w-full bg-slate-900/90 border border-emerald-500/40 text-white text-sm font-bold px-3.5 py-2.5 rounded-xl focus:ring-2 focus:ring-emerald-400 focus:outline-none"
-                    >
-                      <option value="Midterm" className="bg-slate-900 text-white">Midterm Examination</option>
-                      <option value="Final" className="bg-slate-900 text-white">Final Examination</option>
-                      <option value="Prelim" className="bg-slate-900 text-white">Prelim Examination</option>
-                      <option value="Semi-Final" className="bg-slate-900 text-white">Semi-Final Examination</option>
-                    </select>
+                    <label className="text-xs font-bold text-emerald-200 block">
+                      Examination Term <span className="text-emerald-300/80 font-normal">(Configured by DI)</span>
+                    </label>
+                    <div className="w-full bg-slate-900/90 border border-emerald-500/40 text-emerald-300 text-sm font-extrabold px-3.5 py-2.5 rounded-xl flex items-center justify-between">
+                      <span>{term} Examination</span>
+                      <span className="text-[10px] font-black uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 px-2 py-0.5 rounded-md">
+                        Locked by DI
+                      </span>
+                    </div>
                   </div>
 
                   {/* Exam Date */}
@@ -1150,19 +1184,6 @@ export function ExamBuilderWizard({
                     </p>
                   </div>
                 </div>
-
-                {/* Official Exam Title */}
-                <div className="space-y-1.5 pt-2">
-                  <label className="text-xs font-extrabold text-slate-700 block">Examination Official Title</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Midterm Examination in Database Systems"
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 text-sm font-medium text-slate-800 placeholder:text-slate-400 px-4 py-2.5 rounded-xl transition-all duration-300"
-                  />
-                </div>
               </div>
 
               {/* 3. Assigned Students Selection (Who will take the exam) */}
@@ -1198,6 +1219,70 @@ export function ExamBuilderWizard({
                   </div>
                 </div>
 
+                {/* Sort & Filter Controls Toolbar for Assigned Students */}
+                {assignedStudents.length > 0 && (
+                  <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-3.5 space-y-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
+                      {/* Search */}
+                      <div className="relative sm:col-span-1">
+                        <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+                        <input
+                          type="text"
+                          placeholder="Search student..."
+                          value={studentSearch}
+                          onChange={(e) => setStudentSearch(e.target.value)}
+                          className="w-full bg-white border border-slate-200 rounded-xl pl-8 pr-3 py-1.5 text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                        />
+                      </div>
+
+                      {/* Sort By (Name, Year Level, Program) */}
+                      <div className="sm:col-span-1">
+                        <select
+                          value={studentSortBy}
+                          onChange={(e) => setStudentSortBy(e.target.value as any)}
+                          className="w-full bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                        >
+                          <option value="lastNameAsc">Sort by Last Name (A-Z)</option>
+                          <option value="lastNameDesc">Sort by Last Name (Z-A)</option>
+                          <option value="firstNameAsc">Sort by First Name (A-Z)</option>
+                          <option value="firstNameDesc">Sort by First Name (Z-A)</option>
+                          <option value="yearAsc">Sort by Year Level (1 to 4)</option>
+                          <option value="yearDesc">Sort by Year Level (4 to 1)</option>
+                          <option value="programAsc">Sort by Program Code</option>
+                        </select>
+                      </div>
+
+                      {/* Filter by Program */}
+                      <div className="sm:col-span-1">
+                        <select
+                          value={studentProgramFilter}
+                          onChange={(e) => setStudentProgramFilter(e.target.value)}
+                          className="w-full bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                        >
+                          <option value="ALL">Program: All Programs</option>
+                          {availableStudentPrograms.map(prog => (
+                            <option key={prog} value={prog}>{prog}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Filter by Year Level */}
+                      <div className="sm:col-span-1">
+                        <select
+                          value={studentYearFilter}
+                          onChange={(e) => setStudentYearFilter(e.target.value)}
+                          className="w-full bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                        >
+                          <option value="ALL">Year: All Years</option>
+                          {availableStudentYears.map(yr => (
+                            <option key={yr} value={String(yr)}>Year Level {yr}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {loadingStudents ? (
                   <div className="p-8 text-center bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
                     <RefreshCw className="w-6 h-6 animate-spin text-emerald-600 mx-auto" />
@@ -1208,9 +1293,13 @@ export function ExamBuilderWizard({
                     <p className="text-xs font-bold text-amber-800">No students currently enrolled in this subject record.</p>
                     <p className="text-[11px] text-amber-600">Students who register or enroll in this course code will automatically become eligible.</p>
                   </div>
+                ) : filteredAndSortedStudents.length === 0 ? (
+                  <div className="p-6 text-center bg-slate-50 border border-slate-200 rounded-2xl">
+                    <p className="text-xs font-bold text-slate-500">No students match the selected filter criteria.</p>
+                  </div>
                 ) : (
                   <div className="border border-slate-200/80 rounded-2xl overflow-hidden divide-y divide-slate-100 max-h-64 overflow-y-auto bg-slate-50/40">
-                    {assignedStudents.map((student) => {
+                    {filteredAndSortedStudents.map((student) => {
                       const isSelected = selectedStudentIds.includes(student.student_id);
                       return (
                         <div
@@ -1231,7 +1320,7 @@ export function ExamBuilderWizard({
                             </div>
                             <div>
                               <p className="text-xs font-bold text-slate-900">
-                                {student.first_name} {student.last_name}
+                                {student.last_name}, {student.first_name}
                               </p>
                               <p className="text-[10px] text-slate-400 font-mono">
                                 ID: {student.institutional_id}
