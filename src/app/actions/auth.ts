@@ -130,7 +130,7 @@ export async function loginAction(prevState: any, formData: FormData) {
             institutional_id: user.institutional_id,
           },
         });
-      } catch (e) {}
+      } catch (e) { }
 
       return { success: true, role: user.role };
     }
