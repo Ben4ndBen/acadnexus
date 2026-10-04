@@ -2429,44 +2429,6 @@ export function ExamBuilderWizard({
       {step === 2 && (
         <div className="space-y-6">
           
-          {/* Header */}
-          <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-[#7A151A] text-white p-5 sm:p-6 rounded-3xl shadow-lg border border-slate-700/50 space-y-4">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <div className="bg-[#E2A123]/20 p-2.5 rounded-2xl border border-[#E2A123]/40 text-[#E2A123]">
-                  <Layers className="w-6 h-6" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h2 className="text-base sm:text-lg font-black tracking-tight text-white">
-                      Table of Specifications (TOS) Question Bank by Topic
-                    </h2>
-                  </div>
-                  <p className="text-xs text-slate-300 font-medium">
-                    Questions are grouped by topic. Click any topic header to drop down (expand) or collapse items.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Quick Summary Badges */}
-            <div className="flex flex-wrap items-center gap-4 text-xs font-bold border-t border-white/10 pt-3 text-slate-300">
-              <span className="flex items-center gap-1.5">
-                <BookOpen className="w-4 h-4 text-emerald-400" />
-                Total Questions: <strong className="text-white font-black">{questions.length} Items</strong>
-              </span>
-              <span>&bull;</span>
-              <span className="flex items-center gap-1.5">
-                <CheckCircle className="w-4 h-4 text-amber-400" />
-                Total Points: <strong className="text-white font-black">{questions.reduce((sum, q) => sum + q.points, 0)} Points</strong>
-              </span>
-              <span>&bull;</span>
-              <span className="flex items-center gap-1.5">
-                <Layers className="w-4 h-4 text-indigo-400" />
-                TOS Matrix Topics: <strong className="text-emerald-400 font-black">{tosDistribution.length} Topics</strong>
-              </span>
-            </div>
-          </div>
 
           {/* Topics Accordion Dropdown List (Click topic header to drop down items) */}
           <div className="space-y-4">
