@@ -104,14 +104,6 @@ export function LoginForm() {
         )}
       </button>
 
-      <div className="text-center pt-3 border-t border-stone-100 mt-2 space-y-1">
-        <p className="text-xs text-stone-600 font-medium">
-          Students: Accounts are enrolled directly by your course instructor.
-        </p>
-        <p className="text-[11px] text-stone-400">
-          Initial default password for students is <strong className="font-bold text-stone-600">dukay</strong>. Please update your password upon first login.
-        </p>
-      </div>
     </form>
   );
 }

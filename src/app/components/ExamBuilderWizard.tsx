@@ -7,9 +7,9 @@ import {
   Upload, Trash2, Plus, Check, Eye, Trash, ArrowUp, ArrowDown, FileText, 
   Shuffle, AlertCircle, RefreshCw, FileUp, Sparkles, CheckCircle, Search, X,
   Tag, Layers, Sliders, Hash, ListFilter, Calendar, GraduationCap, Users,
-  CheckSquare, Square, ChevronDown, ChevronUp, ChevronRight
+  CheckSquare, Square, ChevronDown, ChevronUp, ChevronRight, Printer
 } from "lucide-react";
-import { saveExamConfig, saveExamQuestions, updateExamStatus, uploadQuestionAttachment, getQuestionBankQuestions, importQuestionsToExam, getAssignedStudentsForCourse } from "@/app/actions/faculty";
+import { saveExamConfig, saveExamQuestions, updateExamStatus, uploadQuestionAttachment, uploadTosFileAction, getQuestionBankQuestions, importQuestionsToExam, getAssignedStudentsForCourse } from "@/app/actions/faculty";
 import { determineSemesterFromDate, formatStudentName } from "@/lib/academicUtils";
 import { Latex } from "@/app/components/Latex";
 
@@ -563,34 +563,6 @@ export function ExamBuilderWizard({
     return parts.join("; ");
   };
 
-  // Dynamically calculate TOS Topic statistics & item placement ranges
-  const tosTopicBreakdown = (() => {
-    const map: Record<string, { itemNumbers: number[]; totalPoints: number }> = {};
-    const totalExamPoints = questions.reduce((sum, q) => sum + (q.points || 1), 0);
-
-    questions.forEach((q, idx) => {
-      const topicName = (q.topic && q.topic.trim() !== "") ? q.topic.trim() : "Unassigned Topic";
-      if (!map[topicName]) {
-        map[topicName] = { itemNumbers: [], totalPoints: 0 };
-      }
-      map[topicName].itemNumbers.push(idx + 1);
-      map[topicName].totalPoints += (q.points || 1);
-    });
-
-    return Object.entries(map).map(([topic, data]) => {
-      const count = data.itemNumbers.length;
-      const weightPercentage = totalExamPoints > 0 ? Math.round((data.totalPoints / totalExamPoints) * 100) : 0;
-      return {
-        topic,
-        itemNumbers: data.itemNumbers,
-        rangeString: formatTopicPlacementString(data.itemNumbers),
-        count,
-        totalPoints: data.totalPoints,
-        weightPercentage,
-      };
-    });
-  })();
-
   // Native TOS Topic Alignment & Hours Allocation Calculator State
   const [tosTargetTotalItems, setTosTargetTotalItems] = useState<number>(
     exam.questionBank.length > 0 ? exam.questionBank.length : 50
@@ -611,6 +583,196 @@ export function ExamBuilderWizard({
       { id: "3", topic: "Module 3: Advanced Applications & Problem Solving", hours: 8 },
     ];
   });
+
+  // Dynamically calculate TOS Topic statistics, hours taught, percentage & item placement ranges
+  const tosTopicBreakdown = useMemo(() => {
+    const map: Record<string, { itemNumbers: number[]; totalPoints: number }> = {};
+    const totalExamPoints = questions.reduce((sum, q) => sum + (q.points || 1), 0);
+    const totalExamItems = questions.length;
+
+    // Build map of hours from tosTopicPlans
+    const planTopicsMap = new Map<string, number>();
+    tosTopicPlans.forEach(p => {
+      if (p.topic && p.topic.trim()) {
+        planTopicsMap.set(p.topic.trim(), p.hours || 0);
+      }
+    });
+
+    questions.forEach((q, idx) => {
+      const topicName = (q.topic && q.topic.trim() !== "") ? q.topic.trim() : "Unassigned Topic";
+      if (!map[topicName]) {
+        map[topicName] = { itemNumbers: [], totalPoints: 0 };
+      }
+      map[topicName].itemNumbers.push(idx + 1);
+      map[topicName].totalPoints += (q.points || 1);
+    });
+
+    const combinedTopics = Array.from(new Set([...Array.from(planTopicsMap.keys()), ...Object.keys(map)]));
+
+    const totalHoursTaught = Array.from(planTopicsMap.values()).reduce((sum, h) => sum + h, 0);
+
+    return combinedTopics.map(topic => {
+      const data = map[topic] || { itemNumbers: [], totalPoints: 0 };
+      const count = data.itemNumbers.length;
+      const hoursTaught = planTopicsMap.get(topic) ?? 0;
+
+      let weightPercentage = 0;
+      if (totalHoursTaught > 0 && hoursTaught > 0) {
+        weightPercentage = Number(((hoursTaught / totalHoursTaught) * 100).toFixed(1));
+      } else if (totalExamItems > 0 && count > 0) {
+        weightPercentage = Number(((count / totalExamItems) * 100).toFixed(1));
+      }
+
+      const rangeString = formatTopicPlacementString(data.itemNumbers);
+
+      return {
+        topic,
+        hoursTaught,
+        itemNumbers: data.itemNumbers,
+        rangeString,
+        count,
+        totalPoints: data.totalPoints,
+        weightPercentage,
+      };
+    });
+  }, [questions, tosTopicPlans, questionTestInfoMap]);
+
+  // Multi-page A4 Preview pagination calculator
+  const previewPages = useMemo(() => {
+    interface PreviewBlock {
+      id: string;
+      type: "type-header" | "chapter-header" | "question-item";
+      qType?: string;
+      testNum?: number;
+      count?: number;
+      points?: number;
+      topicName?: string;
+      rangeStr?: string;
+      q?: QuestionState;
+      idx?: number;
+      itemNumberLabel?: number;
+      testInfo?: { testNum: number; testItemNum: number; badge: string };
+      height: number;
+    }
+
+    function getItemEstimatedHeight(q: QuestionState): number {
+      let h = 50;
+      if (q.text && q.text.length > 100) h += 30;
+      if (q.image_url) h += 120;
+      if (q.question_type === "Multiple_Choice") h += 70;
+      else if (q.question_type === "True_False") h += 35;
+      else if (q.question_type === "Identification") h += 40;
+      else if (q.question_type === "Matching_Type") h += 170;
+      else if (q.question_type === "Essay") h += 90;
+      else if (q.question_type === "Fill_In_The_Blanks") h += 50;
+      return h;
+    }
+
+    const blocks: PreviewBlock[] = [];
+
+    if (previewViewMode === "paper") {
+      questionTypeTestMap.activeTypes.forEach((qType) => {
+        const testNum = questionTypeTestMap.typeToTestNum[qType];
+        const typeQuestions = questions
+          .map((q, idx) => ({ q, idx }))
+          .filter(
+            ({ q }) =>
+              q.question_type === qType &&
+              (previewTopicFilter === "ALL" || (q.topic?.trim() || "Unassigned Topic") === previewTopicFilter)
+          );
+
+        if (typeQuestions.length === 0) return;
+
+        const totalTypePoints = typeQuestions.reduce((sum, { q }) => sum + (q.points || 1), 0);
+
+        blocks.push({
+          id: `header-type-${qType}`,
+          type: "type-header",
+          qType,
+          testNum,
+          count: typeQuestions.length,
+          points: totalTypePoints,
+          height: 55,
+        });
+
+        typeQuestions.forEach(({ q, idx }, subIdx) => {
+          const testInfo = questionTestInfoMap[idx];
+          const itemNumberLabel = testInfo?.testItemNum || subIdx + 1;
+          blocks.push({
+            id: `q-${idx}`,
+            type: "question-item",
+            q,
+            idx,
+            itemNumberLabel,
+            testInfo,
+            height: getItemEstimatedHeight(q),
+          });
+        });
+      });
+    } else {
+      const grouped = questions.reduce<Record<string, { q: QuestionState; origIdx: number }[]>>((acc, q, idx) => {
+        const t = q.topic?.trim() || "Unassigned Topic";
+        if (!acc[t]) acc[t] = [];
+        acc[t].push({ q, origIdx: idx });
+        return acc;
+      }, {});
+
+      Object.entries(grouped)
+        .filter(([tName]) => previewTopicFilter === "ALL" || tName === previewTopicFilter)
+        .forEach(([topicName, groupItems], gIdx) => {
+          const itemNumbers = groupItems.map((gi) => gi.origIdx + 1);
+          const groupPoints = groupItems.reduce((sum, gi) => sum + (gi.q.points || 1), 0);
+          const rangeStr = formatTopicPlacementString(itemNumbers);
+
+          blocks.push({
+            id: `header-chapter-${gIdx}`,
+            type: "chapter-header",
+            topicName,
+            rangeStr,
+            count: groupItems.length,
+            points: groupPoints,
+            height: 55,
+          });
+
+          groupItems.forEach(({ q, origIdx }) => {
+            const testInfo = questionTestInfoMap[origIdx];
+            blocks.push({
+              id: `q-${origIdx}`,
+              type: "question-item",
+              q,
+              idx: origIdx,
+              itemNumberLabel: origIdx + 1,
+              testInfo,
+              height: getItemEstimatedHeight(q),
+            });
+          });
+        });
+    }
+
+    const pages: PreviewBlock[][] = [];
+    let currentPage: PreviewBlock[] = [];
+    let currentHeight = 0;
+    const PAGE_1_CAPACITY = 680;
+    const PAGE_N_CAPACITY = 850;
+
+    blocks.forEach((block) => {
+      const capacity = pages.length === 0 ? PAGE_1_CAPACITY : PAGE_N_CAPACITY;
+      if (currentHeight + block.height > capacity && currentPage.length > 0) {
+        pages.push(currentPage);
+        currentPage = [block];
+        currentHeight = block.height;
+      } else {
+        currentPage.push(block);
+        currentHeight += block.height;
+      }
+    });
+
+    if (currentPage.length > 0 || pages.length === 0) {
+      pages.push(currentPage);
+    }
+
+    return pages;
+  }, [questions, previewViewMode, previewTopicFilter, questionTypeTestMap, questionTestInfoMap, formatTopicPlacementString]);
 
   const [newTopicName, setNewTopicName] = useState<string>("");
   const [newTopicHours, setNewTopicHours] = useState<string>("4");
@@ -847,6 +1009,60 @@ export function ExamBuilderWizard({
 
   // Step 1 Validation
   const isConfigValid = title.trim() !== "" && courseId > 0 && timeLimit > 0 && examDate.trim() !== "";
+
+  // TOS PDF file state & validation
+  const [tosFilePath, setTosFilePath] = useState<string>(exam.tos_file_path || "");
+  const [uploadingTos, setUploadingTos] = useState<boolean>(false);
+  const [tosFileError, setTosFileError] = useState<string | null>(null);
+  const tosFileInputRef = useRef<HTMLInputElement>(null);
+
+  const isTosUploaded = Boolean(tosFilePath && tosFilePath.trim().length > 0);
+  const isSubmitAllowed = isConfigValid && questions.length > 0 && isTosUploaded && !isSubmitting;
+
+  const handleUploadTosFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setTosFileError(null);
+
+    // Strict validation: PDF file only!
+    const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+    if (!isPdf) {
+      const errorMsg = "Invalid file format. Table of Specifications (TOS) upload strictly accepts PDF files (.pdf) only.";
+      setTosFileError(errorMsg);
+      alert(errorMsg);
+      if (e.target) e.target.value = "";
+      return;
+    }
+
+    setUploadingTos(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await uploadTosFileAction(exam.exam_id, facultyId, formData);
+      if (res.success && res.tos_file_path) {
+        setTosFilePath(res.tos_file_path);
+        setSaveStatus({ type: "success", message: "TOS PDF uploaded successfully! Submit for Review is now activated." });
+        setTimeout(() => setSaveStatus(null), 4000);
+      } else {
+        setTosFileError(res.error || "Failed to upload TOS PDF file.");
+        alert(res.error || "Failed to upload TOS PDF file.");
+      }
+    } catch (err) {
+      console.error(err);
+      setTosFileError("An error occurred while uploading TOS PDF.");
+      alert("An error occurred while uploading TOS PDF.");
+    } finally {
+      setUploadingTos(false);
+      if (e.target) e.target.value = "";
+    }
+  };
+
+  const handleRemoveTosFile = () => {
+    setTosFilePath("");
+    setTosFileError(null);
+  };
 
   // Question Image Upload handlers
   const [uploadingImage, setUploadingImage] = useState<boolean>(false);
@@ -1261,6 +1477,14 @@ export function ExamBuilderWizard({
 
         {/* Wizard Action Buttons & Document Reference on Top Right */}
         <div className="flex flex-wrap items-center gap-3 sm:ml-auto">
+          <input
+            type="file"
+            accept="application/pdf,.pdf"
+            ref={tosFileInputRef}
+            onChange={handleUploadTosFile}
+            className="hidden"
+          />
+
           {/* Top Right Field for Exam Document / Reference Number (like BSC-ODLF-017) */}
           <div className="flex items-center gap-2 bg-slate-50 border border-slate-200/90 px-3.5 py-1.5 rounded-2xl shadow-inner">
             <FileText className="w-4 h-4 text-emerald-600 shrink-0" />
@@ -1276,6 +1500,29 @@ export function ExamBuilderWizard({
             </div>
           </div>
 
+          {/* Upload TOS PDF Button */}
+          {isTosUploaded ? (
+            <a
+              href={tosFilePath}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 text-indigo-800 text-xs font-bold px-3 py-2 rounded-xl transition-all"
+            >
+              <FileText className="w-4 h-4 text-indigo-600" />
+              <span>TOS PDF Uploaded</span>
+            </a>
+          ) : (
+            <button
+              type="button"
+              disabled={uploadingTos}
+              onClick={() => tosFileInputRef.current?.click()}
+              className="inline-flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold px-3.5 py-2 rounded-xl shadow-sm transition-all cursor-pointer disabled:opacity-50"
+            >
+              {uploadingTos ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+              <span>{uploadingTos ? "Uploading PDF..." : "Upload TOS (PDF)"}</span>
+            </button>
+          )}
+
           <button
             onClick={handleSaveDraft}
             className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 border border-slate-300/60 text-slate-700 text-xs font-bold px-4 py-2.5 rounded-xl transition-all shadow-sm"
@@ -1284,14 +1531,22 @@ export function ExamBuilderWizard({
             Save Draft
           </button>
 
-          <button
-            disabled={!isConfigValid || questions.length === 0 || isSubmitting}
-            onClick={handleSubmitForReview}
-            className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold px-4 py-2.5 rounded-xl transition-all shadow-md hover:shadow-emerald-600/20 disabled:opacity-50 disabled:pointer-events-none"
-          >
-            {isSubmitting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-            Submit for Review
-          </button>
+          <div className="flex items-center gap-2">
+            {!isTosUploaded && (
+              <span className="text-[10px] font-black text-amber-700 bg-amber-50 border border-amber-200 px-2 py-1 rounded-xl whitespace-nowrap hidden lg:inline-block">
+                ⚠️ Upload TOS PDF to Activate
+              </span>
+            )}
+            <button
+              disabled={!isSubmitAllowed}
+              onClick={handleSubmitForReview}
+              className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold px-4 py-2.5 rounded-xl transition-all shadow-md hover:shadow-emerald-600/20 disabled:opacity-50 disabled:pointer-events-none cursor-pointer"
+              title={!isTosUploaded ? "Upload Table of Specifications (TOS) PDF file to activate submission" : "Submit examination draft to Chair"}
+            >
+              {isSubmitting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+              Submit for Review
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1751,6 +2006,73 @@ export function ExamBuilderWizard({
                       <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-slate-400 font-semibold">points</span>
                     </div>
                   </div>
+                </div>
+              </div>
+
+              {/* Table of Specifications (TOS) PDF Document Attachment Card */}
+              <div className="border-t border-slate-100 pt-5 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <h3 className="text-sm font-black text-slate-800 flex items-center gap-1.5">
+                      <FileUp className="w-4 h-4 text-indigo-600" />
+                      Table of Specifications (TOS) PDF Upload
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Upload official Table of Specifications (TOS) document in <strong className="text-rose-600 font-extrabold">PDF format (.pdf) strictly required</strong> to activate submission to Department Chair.
+                    </p>
+                  </div>
+                  <span className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-full border self-start sm:self-auto ${
+                    isTosUploaded
+                      ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                      : "bg-amber-50 text-amber-800 border-amber-200"
+                  }`}>
+                    {isTosUploaded ? "✓ TOS PDF Uploaded" : "⚠️ PDF Required"}
+                  </span>
+                </div>
+
+                <div className="bg-slate-50/80 border border-slate-200/80 rounded-2xl p-4 sm:p-5 space-y-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <button
+                        type="button"
+                        disabled={uploadingTos}
+                        onClick={() => tosFileInputRef.current?.click()}
+                        className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold px-4 py-2.5 rounded-xl shadow-md transition-all cursor-pointer disabled:opacity-50"
+                      >
+                        {uploadingTos ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                        <span>{uploadingTos ? "Uploading PDF..." : isTosUploaded ? "Change TOS PDF" : "Upload TOS (PDF Only)"}</span>
+                      </button>
+
+                      {isTosUploaded && (
+                        <a
+                          href={tosFilePath}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-700 hover:text-indigo-900 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-3.5 py-2 rounded-xl transition-all"
+                        >
+                          <FileText className="w-4 h-4 text-indigo-600" />
+                          <span>View Uploaded TOS (PDF)</span>
+                        </a>
+                      )}
+                    </div>
+
+                    {isTosUploaded && (
+                      <button
+                        type="button"
+                        onClick={handleRemoveTosFile}
+                        className="text-xs font-bold text-rose-600 hover:text-rose-700 hover:underline cursor-pointer"
+                      >
+                        Remove TOS PDF
+                      </button>
+                    )}
+                  </div>
+
+                  {tosFileError && (
+                    <div className="bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold p-3 rounded-xl flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                      <span>{tosFileError}</span>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -2524,84 +2846,112 @@ export function ExamBuilderWizard({
             </div>
           </div>
 
-          {/* Chapter & Topic TOS Matrix Summary Card */}
-          <div className="bg-white border border-slate-200/90 rounded-3xl p-6 shadow-sm space-y-4 font-sans">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
-              <div className="flex items-center gap-2.5">
-                <div className="bg-indigo-100 text-indigo-700 p-2.5 rounded-2xl">
-                  <Layers className="w-5 h-5" />
+          {/* Official Table of Specifications (TOS) Matrix Summary Table */}
+          <div className="bg-white border-2 border-slate-200/90 rounded-3xl p-6 sm:p-8 shadow-sm space-y-5 font-sans">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="bg-gradient-to-br from-indigo-600 to-indigo-800 text-white p-3 rounded-2xl shadow-md">
+                  <Layers className="w-6 h-6" />
                 </div>
                 <div>
-                  <h3 className="text-base font-extrabold text-slate-900 tracking-tight">
-                    Chapter & Topic Item Breakdown (TOS Mapping)
+                  <h3 className="text-lg font-black text-slate-900 tracking-tight flex items-center gap-2">
+                    Table of Specifications (TOS)
+                    <span className="text-[10px] font-black uppercase text-indigo-700 bg-indigo-50 border border-indigo-200 px-2.5 py-0.5 rounded-full">
+                      Official Academic Matrix
+                    </span>
                   </h3>
                   <p className="text-xs text-slate-500 font-medium">
-                    Overview of corresponding items, point allocations, and coverage per chapter
+                    Detailed topic distribution, teaching hours, item weight percentages, and test question placements.
                   </p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 text-xs font-bold bg-slate-100 text-slate-700 px-3 py-1.5 rounded-xl self-start sm:self-auto">
+              <div className="flex items-center gap-2 text-xs font-extrabold bg-slate-100 text-slate-800 px-3.5 py-2 rounded-xl self-start sm:self-auto border border-slate-200">
                 <BookOpen className="w-4 h-4 text-indigo-600" />
-                <span>{tosTopicBreakdown.length} Chapter{tosTopicBreakdown.length !== 1 && "s"} / Topics</span>
+                <span>{tosTopicBreakdown.length} Topics / Coverage Modules</span>
               </div>
             </div>
 
-            {/* Grid of Chapters */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {tosTopicBreakdown.map((item, idx) => {
-                const isUnassigned = item.topic === "Unassigned Topic";
-                const isSelectedFilter = previewTopicFilter === item.topic;
-
-                return (
-                  <div
-                    key={idx}
-                    onClick={() => {
-                      if (previewTopicFilter === item.topic) {
-                        setPreviewTopicFilter("ALL");
-                      } else {
-                        setPreviewTopicFilter(item.topic);
-                      }
-                    }}
-                    className={`border rounded-2xl p-4 transition-all duration-200 cursor-pointer flex flex-col justify-between space-y-3 ${
-                      isUnassigned
-                        ? "bg-amber-50/40 border-amber-200 hover:border-amber-300"
-                        : isSelectedFilter
-                        ? "bg-emerald-50/60 border-emerald-500 ring-2 ring-emerald-500/20 shadow-sm"
-                        : "bg-slate-50/60 border-slate-200/80 hover:bg-white hover:border-slate-300 hover:shadow-sm"
-                    }`}
-                  >
-                    <div className="space-y-1.5">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full border ${
-                          isUnassigned
-                            ? "bg-amber-100 text-amber-800 border-amber-200"
-                            : "bg-indigo-50 text-indigo-700 border-indigo-100"
-                        }`}>
-                          {isUnassigned ? "⚠️ Unassigned" : `Chapter ${idx + 1}`}
-                        </span>
-                        <span className="text-[11px] font-black text-slate-700 bg-white border border-slate-200 px-2 py-0.5 rounded-lg shadow-2xs">
-                          {item.weightPercentage}% Weight
-                        </span>
-                      </div>
-
-                      <h4 className="text-xs font-black text-slate-800 line-clamp-2 leading-snug">
-                        {item.topic}
-                      </h4>
-                    </div>
-
-                    <div className="border-t border-slate-200/60 pt-2.5 flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-1.5 text-slate-600 font-bold">
-                        <Tag className="w-3.5 h-3.5 text-indigo-600" />
-                        <span className="font-extrabold text-indigo-900">{item.rangeString}</span>
-                      </div>
-                      <span className="text-[11px] font-semibold text-slate-500">
-                        {item.count} item{item.count !== 1 && "s"} ({item.totalPoints} pt{item.totalPoints !== 1 && "s"})
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
+            {/* Structured TOS Table displaying Topic, Hours Taught, Percentage, Items, Points, and Item Placement */}
+            <div className="overflow-x-auto rounded-2xl border border-slate-200/80 shadow-2xs">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-900 text-white text-[11px] font-black uppercase tracking-wider">
+                    <th className="py-3.5 px-4 rounded-tl-xl border-b border-slate-800">#</th>
+                    <th className="py-3.5 px-4 border-b border-slate-800">Topic / Coverage Area</th>
+                    <th className="py-3.5 px-4 text-center border-b border-slate-800">Hrs Taught</th>
+                    <th className="py-3.5 px-4 text-center border-b border-slate-800">Percentage (%)</th>
+                    <th className="py-3.5 px-4 text-center border-b border-slate-800">No. of Items</th>
+                    <th className="py-3.5 px-4 text-center border-b border-slate-800">Total Points</th>
+                    <th className="py-3.5 px-4 rounded-tr-xl border-b border-slate-800">Item Placement (Based on Test Questions)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200 text-xs font-semibold text-slate-800 bg-white">
+                  {tosTopicBreakdown.map((row, idx) => {
+                    const isUnassigned = row.topic === "Unassigned Topic";
+                    return (
+                      <tr
+                        key={idx}
+                        className={`hover:bg-indigo-50/40 transition-colors ${
+                          isUnassigned ? "bg-amber-50/50 text-amber-950 font-bold" : idx % 2 === 1 ? "bg-slate-50/60" : "bg-white"
+                        }`}
+                      >
+                        <td className="py-3.5 px-4 text-slate-400 font-bold">{idx + 1}</td>
+                        <td className="py-3.5 px-4">
+                          <span className="font-bold text-slate-900 block">{row.topic}</span>
+                          {isUnassigned && (
+                            <span className="text-[10px] text-amber-700 font-extrabold">⚠️ Needs topic classification in Step 2</span>
+                          )}
+                        </td>
+                        <td className="py-3.5 px-4 text-center font-extrabold text-slate-700">
+                          {row.hoursTaught > 0 ? `${row.hoursTaught} hr${row.hoursTaught !== 1 ? "s" : ""}` : "—"}
+                        </td>
+                        <td className="py-3.5 px-4 text-center">
+                          <span className="inline-block bg-indigo-50 text-indigo-800 border border-indigo-200 font-black px-2.5 py-1 rounded-lg">
+                            {row.weightPercentage}%
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-4 text-center font-extrabold text-slate-900">
+                          {row.count} item{row.count !== 1 ? "s" : ""}
+                        </td>
+                        <td className="py-3.5 px-4 text-center font-extrabold text-emerald-700">
+                          {row.totalPoints} pt{row.totalPoints !== 1 ? "s" : ""}
+                        </td>
+                        <td className="py-3.5 px-4">
+                          {row.count > 0 ? (
+                            <span className="inline-flex items-center gap-1.5 bg-slate-100 border border-slate-200 text-indigo-950 font-extrabold px-3 py-1.5 rounded-xl text-[11px]">
+                              <Tag className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                              {row.rangeString}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 italic text-[11px]">No items assigned</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr className="bg-slate-900 text-white text-xs font-black uppercase tracking-wider">
+                    <td colSpan={2} className="py-3.5 px-4 rounded-bl-xl">TOTALS</td>
+                    <td className="py-3.5 px-4 text-center text-amber-300 font-mono">
+                      {tosTopicBreakdown.reduce((sum, r) => sum + r.hoursTaught, 0)} hrs
+                    </td>
+                    <td className="py-3.5 px-4 text-center text-indigo-300 font-mono">
+                      {Math.round(tosTopicBreakdown.reduce((sum, r) => sum + r.weightPercentage, 0))}%
+                    </td>
+                    <td className="py-3.5 px-4 text-center text-emerald-300 font-mono">
+                      {tosTopicBreakdown.reduce((sum, r) => sum + r.count, 0)} items
+                    </td>
+                    <td className="py-3.5 px-4 text-center text-emerald-400 font-mono">
+                      {tosTopicBreakdown.reduce((sum, r) => sum + r.totalPoints, 0)} pts
+                    </td>
+                    <td className="py-3.5 px-4 rounded-br-xl text-slate-300 text-[10px]">
+                      {questionTypeTestMap.activeTypes.length} Test Part{questionTypeTestMap.activeTypes.length !== 1 ? "s" : ""} Configured
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
             </div>
 
             {/* Warning if unassigned questions exist */}
@@ -2610,7 +2960,7 @@ export function ExamBuilderWizard({
                 <div className="flex items-center gap-2.5 text-amber-900">
                   <AlertCircle className="w-5 h-5 text-amber-600 shrink-0" />
                   <div>
-                    <strong className="font-extrabold">Notice: Some questions do not have a chapter/topic assigned.</strong>
+                    <strong className="font-extrabold">Notice: Some questions do not have a topic assigned.</strong>
                     <p className="text-[11px] text-amber-700 mt-0.5">
                       Assign topics in Step 2 to organize questions according to your course outline and Table of Specifications (TOS).
                     </p>
@@ -2621,7 +2971,7 @@ export function ExamBuilderWizard({
           </div>
 
           {/* Toolbar Controls for Preview */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 max-w-4xl mx-auto bg-white border border-slate-200/90 rounded-2xl p-4 shadow-sm font-sans">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 w-full bg-white border border-slate-200/90 rounded-2xl p-4 shadow-sm font-sans print:hidden">
             {/* View Mode Toggle */}
             <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
               <button
@@ -2651,416 +3001,328 @@ export function ExamBuilderWizard({
               </button>
             </div>
 
-            {/* Filter by Chapter / Topic Dropdown */}
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-slate-500 whitespace-nowrap">Chapter Filter:</span>
-              <select
-                value={previewTopicFilter}
-                onChange={(e) => setPreviewTopicFilter(e.target.value)}
-                className="bg-slate-50 border border-slate-200 text-xs font-extrabold text-slate-800 px-3 py-2 rounded-xl focus:outline-emerald-500 cursor-pointer"
-              >
-                <option value="ALL">All Chapters ({questions.length} items)</option>
-                {tosTopicBreakdown.map((t, idx) => (
-                  <option key={idx} value={t.topic}>
-                    {t.topic} ({t.rangeString})
-                  </option>
-                ))}
-              </select>
-              {previewTopicFilter !== "ALL" && (
-                <button
-                  type="button"
-                  onClick={() => setPreviewTopicFilter("ALL")}
-                  className="text-xs text-rose-600 font-bold hover:underline px-1 cursor-pointer"
+            {/* Filter by Chapter / Topic Dropdown & Print Button */}
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-slate-500 whitespace-nowrap">Topic Filter:</span>
+                <select
+                  value={previewTopicFilter}
+                  onChange={(e) => setPreviewTopicFilter(e.target.value)}
+                  className="bg-slate-50 border border-slate-200 text-xs font-extrabold text-slate-800 px-3 py-2 rounded-xl focus:outline-emerald-500 cursor-pointer"
                 >
-                  Clear
-                </button>
-              )}
+                  <option value="ALL">All Topics ({questions.length} items)</option>
+                  {tosTopicBreakdown.map((t, idx) => (
+                    <option key={idx} value={t.topic}>
+                      {t.topic} ({t.rangeString})
+                    </option>
+                  ))}
+                </select>
+                {previewTopicFilter !== "ALL" && (
+                  <button
+                    type="button"
+                    onClick={() => setPreviewTopicFilter("ALL")}
+                    className="text-xs text-rose-600 font-bold hover:underline px-1 cursor-pointer"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-extrabold px-3.5 py-2 rounded-xl shadow-sm transition-all cursor-pointer"
+              >
+                <Printer className="w-4 h-4 text-emerald-400" />
+                <span>Print / Save PDF</span>
+              </button>
             </div>
           </div>
 
-          {/* Printable Exam Paper Style Preview */}
-          <div className="bg-white border-2 border-slate-200/80 rounded-3xl p-8 sm:p-12 shadow-sm space-y-8 max-w-4xl mx-auto font-serif">
-            
-            {/* Header branding */}
-            <div className="text-center space-y-1.5 border-b-2 border-double border-slate-900 pb-5">
-              <h2 className="text-lg font-black tracking-widest uppercase text-slate-900">BATANES STATE COLLEGE</h2>
-              <p className="text-xs font-bold text-slate-600 uppercase tracking-wider">Department of Computer Studies</p>
-              <h1 className="text-xl font-bold tracking-tight text-slate-950 mt-4">{title}</h1>
-              <div className="flex flex-wrap justify-center gap-x-6 gap-y-1 text-xs text-slate-700 font-semibold pt-1">
-                <span>Course: {courses.find(c => c.course_id === courseId)?.course_code} - {courses.find(c => c.course_id === courseId)?.course_title}</span>
-                <span>•</span>
-                <span>Duration: {timeLimit} minutes</span>
-                <span>•</span>
-                <span>Points: {questions.reduce((sum, q) => sum + q.points, 0)}</span>
-              </div>
-            </div>
+          {/* Printable A4 Exam Pages Container */}
+          <div className="space-y-10 w-full flex flex-col items-center">
+            {previewPages.map((pageBlocks, pageIdx) => (
+              <div
+                key={pageIdx}
+                className="a4-page-sheet w-full max-w-[210mm] min-h-[297mm] bg-white border border-slate-300 shadow-2xl rounded-sm p-6 sm:p-10 flex flex-col justify-between relative font-serif text-slate-900 print:shadow-none print:border-none print:m-0 print:p-8 print:w-full print:max-w-none print:min-h-[297mm] print:break-after-page"
+                style={{ breakAfter: "page", pageBreakAfter: "always" }}
+              >
+                {/* TOP BSC HEADER BANNER IMAGE */}
+                <div className="w-full border-b border-slate-200 pb-3 mb-4 text-center">
+                  <img
+                    src="/bsc-header.png"
+                    alt="Batanes State College Header"
+                    className="w-full h-auto max-h-[110px] object-contain mx-auto"
+                  />
+                </div>
 
-            {/* Exam metadata grid for student */}
-            <div className="grid grid-cols-2 gap-4 text-xs font-bold border-b border-slate-200 pb-4 text-slate-700">
-              <div className="flex gap-2">
-                <span>Student Name:</span>
-                <div className="flex-1 border-b border-dashed border-slate-400" />
-              </div>
-              <div className="flex gap-2">
-                <span>Score:</span>
-                <div className="w-16 border-b border-dashed border-slate-400" />
-              </div>
-              <div className="flex gap-2">
-                <span>Year Level:</span>
-                <div className="flex-1 border-b border-dashed border-slate-400" />
-              </div>
-              <div className="flex gap-2">
-                <span>Date:</span>
-                <div className="flex-1 border-b border-dashed border-slate-400" />
-              </div>
-            </div>
-
-            {/* Instruction note */}
-            <div className="bg-slate-50 border border-slate-100 rounded-xl p-4 text-xs leading-normal font-sans italic text-slate-600">
-              <strong>Instructions:</strong> Read each question prompt carefully. Provide your answers in the designated areas. Cheating lockout protocols will trigger automatically on unauthorized window defocus.
-            </div>
-
-            {/* Question Items Listing */}
-            <div className="space-y-8">
-              {previewViewMode === "paper" ? (
-                /* Grouped by Test Part Sequence (Test 1: MCQ, Test 2: Identification, etc.) */
-                questionTypeTestMap.activeTypes.map((qType) => {
-                  const testNum = questionTypeTestMap.typeToTestNum[qType];
-                  const typeQuestions = questions
-                    .map((q, idx) => ({ q, idx }))
-                    .filter(
-                      ({ q }) =>
-                        q.question_type === qType &&
-                        (previewTopicFilter === "ALL" || (q.topic?.trim() || "Unassigned Topic") === previewTopicFilter)
-                    );
-
-                  if (typeQuestions.length === 0) return null;
-
-                  const totalTypePoints = typeQuestions.reduce((sum, { q }) => sum + (q.points || 1), 0);
-
-                  return (
-                    <div key={qType} className="space-y-6 border-b-2 border-slate-200 pb-8 last:border-b-0 font-sans">
-                      {/* Test Part Banner */}
-                      <div className="bg-slate-900 text-white p-4 rounded-2xl border border-slate-800 space-y-1 shadow-sm">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <h3 className="text-xs sm:text-sm font-black tracking-wide uppercase flex items-center gap-2">
-                            <span className="bg-[#E2A123] text-slate-950 font-black px-2.5 py-0.5 rounded-lg text-xs">
-                              TEST {testNum}
-                            </span>
-                            {QUESTION_TYPE_HEADER_LABELS[qType] || qType}
-                          </h3>
-                          <span className="text-[10px] font-black uppercase text-emerald-400 bg-emerald-950/80 border border-emerald-800 px-2.5 py-0.5 rounded-full">
-                            {typeQuestions.length} Item{typeQuestions.length !== 1 ? "s" : ""} &bull; {totalTypePoints} Point{totalTypePoints !== 1 ? "s" : ""}
-                          </span>
+                {/* PAGE CONTENT AREA */}
+                <div className="flex-1 space-y-6">
+                  {pageIdx === 0 ? (
+                    <>
+                      {/* Page 1 Exam Header */}
+                      <div className="text-center space-y-1">
+                        <h1 className="text-lg sm:text-xl font-bold tracking-tight text-slate-950 uppercase">{title}</h1>
+                        <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 text-xs text-slate-700 font-semibold">
+                          <span>Course: {courses.find((c) => c.course_id === courseId)?.course_code} - {courses.find((c) => c.course_id === courseId)?.course_title}</span>
+                          <span>•</span>
+                          <span>Duration: {timeLimit} minutes</span>
+                          <span>•</span>
+                          <span>Total Points: {questions.reduce((sum, q) => sum + q.points, 0)}</span>
                         </div>
-                        <p className="text-xs text-slate-300 font-medium italic">
-                          {QUESTION_TYPE_INSTRUCTIONS[qType]}
-                        </p>
                       </div>
 
-                      {/* Items in this Test Part */}
-                      <div className="space-y-6">
-                        {typeQuestions.map(({ q, idx }, subIdx) => {
-                          const topicName = q.topic?.trim() || "Unassigned Topic";
-                          return (
-                            <div key={idx} className="space-y-3 border-b border-slate-100 pb-6 last:border-b-0">
-                              {/* Chapter Badge Header */}
-                              <div className="flex items-center justify-between gap-2 font-sans">
-                                <span className="text-[10px] font-extrabold uppercase text-indigo-700 bg-indigo-50 border border-indigo-200 px-2.5 py-0.5 rounded-full flex items-center gap-1">
-                                  <Tag className="w-3 h-3 text-indigo-500" />
-                                  Chapter: {topicName}
-                                </span>
-                              </div>
-
-                              <div className="flex justify-between items-start gap-4">
-                                <div className="text-sm font-bold text-slate-950 leading-relaxed font-sans">
-                                  {subIdx + 1}. <Latex text={q.text} />
-                                </div>
-                                <span className="text-xs font-bold text-slate-500 shrink-0 font-sans">
-                                  ({q.points} pt{q.points !== 1 && "s"})
-                                </span>
-                              </div>
-
-                              {/* Rendering choices for Multiple Choice */}
-                              {q.question_type === "Multiple_Choice" && (
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 pl-4 font-sans">
-                                  {q.options.map((option, opIdx) => {
-                                    const isCorrect = q.correctAnswer === option;
-                                    return (
-                                      <div key={opIdx} className={`text-xs font-medium flex items-center gap-2 ${isCorrect ? "text-emerald-700 bg-emerald-50/50 border border-emerald-200 px-2 py-1.5 rounded-lg font-bold" : "text-slate-800"}`}>
-                                        <span className="w-5 h-5 rounded-full border border-slate-400 flex items-center justify-center shrink-0 font-sans font-bold text-[10px]">
-                                          {String.fromCharCode(65 + opIdx)}
-                                        </span>
-                                        <span>{option}</span>
-                                        {isCorrect && <span className="text-[9px] font-black uppercase text-emerald-600 ml-auto border border-emerald-400 px-1 py-0.5 rounded">Correct Answer</span>}
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              )}
-
-                              {/* Rendering choices for True / False */}
-                              {q.question_type === "True_False" && (
-                                <div className="flex gap-6 pl-4 font-sans">
-                                  {["True", "False"].map((choice) => {
-                                    const isCorrect = q.correctAnswer === choice;
-                                    return (
-                                      <div key={choice} className={`text-xs font-medium flex items-center gap-2 ${isCorrect ? "text-emerald-700 bg-emerald-50/50 border border-emerald-200 px-2.5 py-1.5 rounded-lg font-bold" : "text-slate-800"}`}>
-                                        <span className="w-4 h-4 rounded-full border border-slate-400 flex items-center justify-center shrink-0" />
-                                        <span>{choice}</span>
-                                        {isCorrect && <span className="text-[9px] font-black uppercase text-emerald-600 border border-emerald-400 px-1 py-0.5 rounded ml-1">Correct Answer</span>}
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              )}
-
-                              {/* Rendering fill check for Identification */}
-                              {q.question_type === "Identification" && (
-                                <div className="pl-4 space-y-1 font-sans">
-                                  <div className="flex gap-2 items-center text-xs">
-                                    <span className="text-slate-500">Your Answer:</span>
-                                    <div className="w-48 border-b border-slate-400" />
-                                  </div>
-                                  <div className="text-[10px] text-emerald-700 font-bold bg-emerald-50/50 border border-emerald-200 px-2.5 py-1 rounded-lg inline-block">
-                                    Expected Answer: <strong className="underline">{q.correctAnswer}</strong>
-                                  </div>
-                                </div>
-                              )}
-
-                              {/* Rendering Columns for Matching Type */}
-                              {q.question_type === "Matching_Type" && (
-                                <div className="pl-4 space-y-4 font-sans">
-                                  <div className="grid grid-cols-2 gap-8 text-xs border border-slate-100 bg-slate-50/50 p-4 rounded-2xl">
-                                    <div className="space-y-2">
-                                      <p className="font-extrabold text-slate-800 border-b border-slate-200 pb-1.5">Column A (Premises)</p>
-                                      {q.matches.map((match, mIdx) => (
-                                        <p key={mIdx} className="font-medium text-slate-700">
-                                          {String.fromCharCode(97 + mIdx)}. {match.premise}
-                                        </p>
-                                      ))}
-                                    </div>
-                                    <div className="space-y-2">
-                                      <p className="font-extrabold text-slate-800 border-b border-slate-200 pb-1.5">Column B (Choices - Shuffled)</p>
-                                      {q.matches.map((match, mIdx) => (
-                                        <p key={mIdx} className="font-medium text-slate-700 flex justify-between gap-2">
-                                          <span>{String.fromCharCode(65 + mIdx)}. {match.choice}</span>
-                                          <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 px-1 py-0.5 rounded border border-emerald-100 shrink-0">Matches {String.fromCharCode(97 + mIdx)}</span>
-                                        </p>
-                                      ))}
-                                    </div>
-                                  </div>
-                                </div>
-                              )}
-
-                              {/* Rendering Essay */}
-                              {q.question_type === "Essay" && (
-                                <div className="pl-4 space-y-2 font-sans">
-                                  <div className="w-full h-24 border border-dashed border-slate-300 rounded-xl bg-slate-50/50 p-3 text-xs text-slate-400 italic">
-                                    [ Student essay response area ]
-                                  </div>
-                                  {q.min_words && q.min_words > 0 ? (
-                                    <div className="text-[10px] text-emerald-800 font-extrabold bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg inline-flex items-center gap-1">
-                                      📝 Minimum Limitation: {q.min_words} words required
-                                    </div>
-                                  ) : null}
-                                </div>
-                              )}
-
-                              {/* Rendering Fill in the Blanks */}
-                              {q.question_type === "Fill_In_The_Blanks" && (
-                                <div className="pl-4 space-y-3 font-sans">
-                                  <div className="text-xs font-semibold text-slate-900 bg-teal-50/40 border border-teal-100 p-3.5 rounded-xl space-y-2">
-                                    <p className="text-[10px] font-black uppercase text-teal-800 tracking-wider">Inline Blanks & Answer Key:</p>
-                                    <div className="flex flex-wrap gap-2">
-                                      {(q.blanks || []).map((blank, bIdx) => (
-                                        <span key={bIdx} className="text-xs bg-white border border-teal-300 text-teal-950 font-bold px-3 py-1 rounded-lg shadow-2xs">
-                                          Blank #{bIdx + 1}: <strong className="underline text-teal-700">{blank.answer || "(blank)"}</strong> ({blank.points || 1} pt{blank.points !== 1 && "s"})
-                                        </span>
-                                      ))}
-                                    </div>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
+                      {/* Student Details Grid */}
+                      <div className="grid grid-cols-2 gap-3 text-xs font-bold border-y border-slate-200 py-3 text-slate-800 font-sans">
+                        <div className="flex gap-2">
+                          <span>Student Name:</span>
+                          <div className="flex-1 border-b border-dashed border-slate-400" />
+                        </div>
+                        <div className="flex gap-2">
+                          <span>Score:</span>
+                          <div className="w-16 border-b border-dashed border-slate-400" />
+                        </div>
+                        <div className="flex gap-2">
+                          <span>Year Level / Sec:</span>
+                          <div className="flex-1 border-b border-dashed border-slate-400" />
+                        </div>
+                        <div className="flex gap-2">
+                          <span>Date:</span>
+                          <div className="flex-1 border-b border-dashed border-slate-400" />
+                        </div>
                       </div>
+
+                      {/* Instructions Note */}
+                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-[11px] leading-relaxed font-sans italic text-slate-700">
+                        <strong>Instructions:</strong> Read each question carefully. Provide your answers clearly in the designated response areas. Cheating lockout protocols trigger automatically on unauthorized window defocus.
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex items-center justify-between border-b border-slate-200 pb-2 mb-2 font-sans">
+                      <span className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                        {title} &mdash; Continued
+                      </span>
+                      <span className="text-[10px] font-semibold text-slate-500">
+                        Page {pageIdx + 1} of {previewPages.length}
+                      </span>
                     </div>
-                  );
-                })
-              ) : (
-                /* Grouped by Chapter View */
-                Object.entries(
-                  questions.reduce<Record<string, { q: QuestionState; origIdx: number }[]>>((acc, q, idx) => {
-                    const t = q.topic?.trim() || "Unassigned Topic";
-                    if (!acc[t]) acc[t] = [];
-                    acc[t].push({ q, origIdx: idx });
-                    return acc;
-                  }, {})
-                )
-                  .filter(([tName]) => previewTopicFilter === "ALL" || tName === previewTopicFilter)
-                  .map(([topicName, groupItems], gIdx) => {
-                    const itemNumbers = groupItems.map((gi) => gi.origIdx + 1);
-                    const groupPoints = groupItems.reduce((sum, gi) => sum + (gi.q.points || 1), 0);
-                    const rangeStr = formatTopicPlacementString(itemNumbers);
+                  )}
 
-                    return (
-                      <div key={gIdx} className="space-y-6 border-b border-slate-200 pb-8 last:border-b-0 font-sans">
-                        {/* Chapter Section Header Banner */}
-                        <div className="bg-slate-100/90 border border-slate-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                          <div className="flex items-center gap-2.5">
-                            <div className="bg-emerald-600 text-white p-2 rounded-xl">
-                              <BookOpen className="w-4 h-4" />
-                            </div>
-                            <div>
-                              <h3 className="font-extrabold text-slate-900 text-sm">
-                                Chapter: {topicName}
-                              </h3>
-                              <p className="text-[11px] text-slate-500 font-medium">
-                                Corresponding Items: <strong className="text-indigo-700">{rangeStr}</strong>
-                              </p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2 self-start sm:self-auto text-xs font-bold bg-white border border-slate-200 px-3 py-1.5 rounded-xl text-slate-700">
-                            <span>{groupItems.length} Item{groupItems.length !== 1 && "s"}</span>
-                            <span>•</span>
-                            <span className="text-emerald-700">{groupPoints} Points</span>
-                          </div>
-                        </div>
-
-                        {/* Questions in this Chapter */}
-                        <div className="space-y-6 pl-2">
-                          {groupItems.map(({ q, origIdx }) => (
-                            <div key={origIdx} className="space-y-3 border-b border-slate-100 pb-4 last:border-b-0">
-                              <div className="flex justify-between items-start gap-4">
-                                <div className="text-sm font-bold text-slate-950 leading-relaxed font-sans">
-                                  {origIdx + 1}. <Latex text={q.text} />
-                                </div>
-                                <span className="text-xs font-bold text-slate-500 shrink-0 font-sans">
-                                  ({q.points} pt{q.points !== 1 && "s"})
+                  {/* Render Blocks on this Page Sheet */}
+                  <div className="space-y-6">
+                    {pageBlocks.map((block) => {
+                      if (block.type === "type-header") {
+                        return (
+                          <div key={block.id} className="bg-slate-900 text-white p-3.5 rounded-2xl border border-slate-800 space-y-1 shadow-sm font-sans">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <h3 className="text-xs sm:text-sm font-black tracking-wide uppercase flex items-center gap-2">
+                                <span className="bg-[#E2A123] text-slate-950 font-black px-2.5 py-0.5 rounded-lg text-xs">
+                                  TEST {block.testNum}
                                 </span>
-                              </div>
-
-                              {/* Rendering choices for Multiple Choice */}
-                              {q.question_type === "Multiple_Choice" && (
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 pl-4">
-                                  {q.options.map((option, opIdx) => {
-                                    const isCorrect = q.correctAnswer === option;
-                                    return (
-                                      <div key={opIdx} className={`text-xs font-medium flex items-center gap-2 ${isCorrect ? "text-emerald-700 bg-emerald-50/50 border border-emerald-200 px-2 py-1.5 rounded-lg font-bold" : "text-slate-800"}`}>
-                                        <span className="w-5 h-5 rounded-full border border-slate-400 flex items-center justify-center shrink-0 font-sans font-bold text-[10px]">
-                                          {String.fromCharCode(65 + opIdx)}
-                                        </span>
-                                        <span>{option}</span>
-                                        {isCorrect && <span className="text-[9px] font-black uppercase text-emerald-600 ml-auto border border-emerald-400 px-1 py-0.5 rounded">Correct Answer</span>}
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              )}
-
-                              {/* Rendering choices for True / False */}
-                              {q.question_type === "True_False" && (
-                                <div className="flex gap-6 pl-4">
-                                  {["True", "False"].map((choice) => {
-                                    const isCorrect = q.correctAnswer === choice;
-                                    return (
-                                      <div key={choice} className={`text-xs font-medium flex items-center gap-2 ${isCorrect ? "text-emerald-700 bg-emerald-50/50 border border-emerald-200 px-2.5 py-1.5 rounded-lg font-bold" : "text-slate-800"}`}>
-                                        <span className="w-4 h-4 rounded-full border border-slate-400 flex items-center justify-center shrink-0" />
-                                        <span>{choice}</span>
-                                        {isCorrect && <span className="text-[9px] font-black uppercase text-emerald-600 border border-emerald-400 px-1 py-0.5 rounded ml-1">Correct Answer</span>}
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              )}
-
-                              {/* Rendering fill check for Identification */}
-                              {q.question_type === "Identification" && (
-                                <div className="pl-4 space-y-1">
-                                  <div className="flex gap-2 items-center text-xs">
-                                    <span className="text-slate-500">Your Answer:</span>
-                                    <div className="w-48 border-b border-slate-400" />
-                                  </div>
-                                  <div className="text-[10px] text-emerald-700 font-bold bg-emerald-50/50 border border-emerald-200 px-2.5 py-1 rounded-lg inline-block">
-                                    Expected Answer: <strong className="underline">{q.correctAnswer}</strong>
-                                  </div>
-                                </div>
-                              )}
-
-                              {/* Rendering Columns for Matching Type */}
-                              {q.question_type === "Matching_Type" && (
-                                <div className="pl-4 space-y-4">
-                                  <div className="grid grid-cols-2 gap-8 text-xs border border-slate-100 bg-slate-50/50 p-4 rounded-2xl">
-                                    <div className="space-y-2">
-                                      <p className="font-extrabold text-slate-800 border-b border-slate-200 pb-1.5">Column A (Premises)</p>
-                                      {q.matches.map((match, mIdx) => (
-                                        <p key={mIdx} className="font-medium text-slate-700">
-                                          {String.fromCharCode(97 + mIdx)}. {match.premise}
-                                        </p>
-                                      ))}
-                                    </div>
-                                    <div className="space-y-2">
-                                      <p className="font-extrabold text-slate-800 border-b border-slate-200 pb-1.5">Column B (Choices - Shuffled)</p>
-                                      {q.matches.map((match, mIdx) => (
-                                        <p key={mIdx} className="font-medium text-slate-700 flex justify-between gap-2">
-                                          <span>{String.fromCharCode(65 + mIdx)}. {match.choice}</span>
-                                          <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 px-1 py-0.5 rounded border border-emerald-100 shrink-0">Matches {String.fromCharCode(97 + mIdx)}</span>
-                                        </p>
-                                      ))}
-                                    </div>
-                                  </div>
-                                </div>
-                              )}
-
-                              {/* Rendering Essay */}
-                              {q.question_type === "Essay" && (
-                                <div className="pl-4 space-y-2 font-sans">
-                                  <div className="w-full h-24 border border-dashed border-slate-300 rounded-xl bg-slate-50/50 p-3 text-xs text-slate-400 italic">
-                                    [ Student essay response area ]
-                                  </div>
-                                  {q.min_words && q.min_words > 0 ? (
-                                    <div className="text-[10px] text-emerald-800 font-extrabold bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg inline-flex items-center gap-1">
-                                      📝 Minimum Limitation: {q.min_words} words required
-                                    </div>
-                                  ) : null}
-                                </div>
-                              )}
-
-                              {/* Rendering Fill in the Blanks */}
-                              {q.question_type === "Fill_In_The_Blanks" && (
-                                <div className="pl-4 space-y-3 font-sans">
-                                  <div className="text-xs font-semibold text-slate-900 bg-teal-50/40 border border-teal-100 p-3.5 rounded-xl space-y-2">
-                                    <p className="text-[10px] font-black uppercase text-teal-800 tracking-wider">Inline Blanks & Answer Key:</p>
-                                    <div className="flex flex-wrap gap-2">
-                                      {(q.blanks || []).map((blank, bIdx) => (
-                                        <span key={bIdx} className="text-xs bg-white border border-teal-300 text-teal-950 font-bold px-3 py-1 rounded-lg shadow-2xs">
-                                          Blank #{bIdx + 1}: <strong className="underline text-teal-700">{blank.answer || "(blank)"}</strong> ({blank.points || 1} pt{blank.points !== 1 && "s"})
-                                        </span>
-                                      ))}
-                                    </div>
-                                  </div>
-                                </div>
-                              )}
+                                {QUESTION_TYPE_HEADER_LABELS[block.qType!] || block.qType}
+                              </h3>
+                              <span className="text-[10px] font-black uppercase text-emerald-400 bg-emerald-950/80 border border-emerald-800 px-2.5 py-0.5 rounded-full">
+                                {block.count} Item{block.count !== 1 ? "s" : ""} &bull; {block.points} Point{block.points !== 1 ? "s" : ""}
+                              </span>
                             </div>
-                          ))}
+                            <p className="text-xs text-slate-300 font-medium italic">
+                              {QUESTION_TYPE_INSTRUCTIONS[block.qType!]}
+                            </p>
+                          </div>
+                        );
+                      }
+
+                      if (block.type === "chapter-header") {
+                        return (
+                          <div key={block.id} className="bg-slate-100/90 border border-slate-200 rounded-2xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 font-sans">
+                            <div className="flex items-center gap-2.5">
+                              <div className="bg-emerald-600 text-white p-2 rounded-xl">
+                                <BookOpen className="w-4 h-4" />
+                              </div>
+                              <div>
+                                <h3 className="font-extrabold text-slate-900 text-sm">
+                                  Chapter: {block.topicName}
+                                </h3>
+                                <p className="text-[11px] text-slate-500 font-medium">
+                                  Corresponding Items: <strong className="text-indigo-700">{block.rangeStr}</strong>
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 text-xs font-bold bg-white border border-slate-200 px-3 py-1.5 rounded-xl text-slate-700">
+                              <span>{block.count} Item{block.count !== 1 ? "s" : ""}</span>
+                              <span>•</span>
+                              <span className="text-emerald-700">{block.points} Points</span>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      // Render question item
+                      const { q, idx, itemNumberLabel, testInfo } = block;
+                      if (!q) return null;
+                      const topicName = q.topic?.trim() || "Unassigned Topic";
+
+                      return (
+                        <div key={block.id} className="space-y-3 border-b border-slate-100 pb-5 last:border-b-0">
+                          {previewViewMode === "paper" && (
+                            <div className="flex flex-wrap items-center justify-between gap-2 font-sans">
+                              <span className="text-[10px] font-extrabold uppercase text-indigo-700 bg-indigo-50 border border-indigo-200 px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                                <Tag className="w-3 h-3 text-indigo-500" />
+                                Chapter: {topicName}
+                              </span>
+                              <span className="text-[10px] font-black text-slate-800 bg-slate-100 border border-slate-200 px-2.5 py-0.5 rounded-md">
+                                {testInfo?.badge || `Item ${itemNumberLabel}`}
+                              </span>
+                            </div>
+                          )}
+
+                          <div className="flex justify-between items-start gap-4">
+                            <div className="text-sm font-bold text-slate-950 leading-relaxed font-sans">
+                              {itemNumberLabel}. <Latex text={q.text} />
+                            </div>
+                            <span className="text-xs font-bold text-slate-500 shrink-0 font-sans">
+                              ({q.points} pt{q.points !== 1 && "s"})
+                            </span>
+                          </div>
+
+                          {/* Image Attachment */}
+                          {q.image_url && (
+                            <div className="my-2 pl-4">
+                              <img src={q.image_url} alt="Question Diagram" className="max-w-xs h-auto max-h-44 object-contain rounded-xl border border-slate-200" />
+                            </div>
+                          )}
+
+                          {/* Multiple Choice Options */}
+                          {q.question_type === "Multiple_Choice" && (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 pl-4 font-sans">
+                              {q.options.map((option, opIdx) => {
+                                const isCorrect = q.correctAnswer === option;
+                                return (
+                                  <div key={opIdx} className={`text-xs font-medium flex items-center gap-2 ${isCorrect ? "text-emerald-700 bg-emerald-50/50 border border-emerald-200 px-2 py-1.5 rounded-lg font-bold" : "text-slate-800"}`}>
+                                    <span className="w-5 h-5 rounded-full border border-slate-400 flex items-center justify-center shrink-0 font-sans font-bold text-[10px]">
+                                      {String.fromCharCode(65 + opIdx)}
+                                    </span>
+                                    <span>{option}</span>
+                                    {isCorrect && <span className="text-[9px] font-black uppercase text-emerald-600 ml-auto border border-emerald-400 px-1 py-0.5 rounded">Correct Answer</span>}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+
+                          {/* True / False Options */}
+                          {q.question_type === "True_False" && (
+                            <div className="flex gap-6 pl-4 font-sans">
+                              {["True", "False"].map((choice) => {
+                                const isCorrect = q.correctAnswer === choice;
+                                return (
+                                  <div key={choice} className={`text-xs font-medium flex items-center gap-2 ${isCorrect ? "text-emerald-700 bg-emerald-50/50 border border-emerald-200 px-2.5 py-1.5 rounded-lg font-bold" : "text-slate-800"}`}>
+                                    <span className="w-4 h-4 rounded-full border border-slate-400 flex items-center justify-center shrink-0" />
+                                    <span>{choice}</span>
+                                    {isCorrect && <span className="text-[9px] font-black uppercase text-emerald-600 border border-emerald-400 px-1 py-0.5 rounded ml-1">Correct Answer</span>}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+
+                          {/* Identification */}
+                          {q.question_type === "Identification" && (
+                            <div className="pl-4 space-y-1 font-sans">
+                              <div className="flex gap-2 items-center text-xs">
+                                <span className="text-slate-500">Your Answer:</span>
+                                <div className="w-48 border-b border-slate-400" />
+                              </div>
+                              <div className="text-[10px] text-emerald-700 font-bold bg-emerald-50/50 border border-emerald-200 px-2.5 py-1 rounded-lg inline-block">
+                                Expected Answer: <strong className="underline">{q.correctAnswer}</strong>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Matching Type */}
+                          {q.question_type === "Matching_Type" && (
+                            <div className="pl-4 space-y-4 font-sans">
+                              <div className="grid grid-cols-2 gap-8 text-xs border border-slate-100 bg-slate-50/50 p-4 rounded-2xl">
+                                <div className="space-y-2">
+                                  <p className="font-extrabold text-slate-800 border-b border-slate-200 pb-1.5">Column A (Premises)</p>
+                                  {q.matches.map((match, mIdx) => (
+                                    <p key={mIdx} className="font-medium text-slate-700">
+                                      {String.fromCharCode(97 + mIdx)}. {match.premise}
+                                    </p>
+                                  ))}
+                                </div>
+                                <div className="space-y-2">
+                                  <p className="font-extrabold text-slate-800 border-b border-slate-200 pb-1.5">Column B (Choices)</p>
+                                  {q.matches.map((match, mIdx) => (
+                                    <p key={mIdx} className="font-medium text-slate-700 flex justify-between gap-2">
+                                      <span>{String.fromCharCode(65 + mIdx)}. {match.choice}</span>
+                                      <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 px-1 py-0.5 rounded border border-emerald-100 shrink-0">Matches {String.fromCharCode(97 + mIdx)}</span>
+                                    </p>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Essay */}
+                          {q.question_type === "Essay" && (
+                            <div className="pl-4 space-y-2 font-sans">
+                              <div className="w-full h-24 border border-dashed border-slate-300 rounded-xl bg-slate-50/50 p-3 text-xs text-slate-400 italic">
+                                [ Student essay response area ]
+                              </div>
+                              {q.min_words && q.min_words > 0 ? (
+                                <div className="text-[10px] text-emerald-800 font-extrabold bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg inline-flex items-center gap-1">
+                                  📝 Minimum Limitation: {q.min_words} words required
+                                </div>
+                              ) : null}
+                            </div>
+                          )}
+
+                          {/* Fill in the Blanks */}
+                          {q.question_type === "Fill_In_The_Blanks" && (
+                            <div className="pl-4 space-y-3 font-sans">
+                              <div className="text-xs font-semibold text-slate-900 bg-teal-50/40 border border-teal-100 p-3.5 rounded-xl space-y-2">
+                                <p className="text-[10px] font-black uppercase text-teal-800 tracking-wider">Inline Blanks & Answer Key:</p>
+                                <div className="flex flex-wrap gap-2">
+                                  {(q.blanks || []).map((blank, bIdx) => (
+                                    <span key={bIdx} className="text-xs bg-white border border-teal-300 text-teal-950 font-bold px-3 py-1 rounded-lg shadow-2xs">
+                                      Blank #{bIdx + 1}: <strong className="underline text-teal-700">{blank.answer || "(blank)"}</strong> ({blank.points || 1} pt{blank.points !== 1 && "s"})
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                          )}
                         </div>
-                      </div>
-                    );
-                  })
-              )}
-            </div>
+                      );
+                    })}
+                  </div>
 
-            {/* Exam End Marker */}
-            <div className="text-center text-xs font-bold text-slate-400 border-t border-slate-200 pt-6">
-              *** End of Examination ***
-            </div>
+                  {pageIdx === previewPages.length - 1 && (
+                    <div className="text-center text-xs font-bold text-slate-400 border-t border-slate-200 pt-4 mt-6 font-sans">
+                      *** End of Examination ***
+                    </div>
+                  )}
+                </div>
 
+                {/* BOTTOM BSC FOOTER BANNER IMAGE */}
+                <div className="w-full border-t border-slate-200 pt-3 mt-6">
+                  <img
+                    src="/bsc-footer.png"
+                    alt="Batanes State College Footer"
+                    className="w-full h-auto max-h-[100px] object-contain mx-auto"
+                  />
+                  <div className="text-[10px] text-slate-500 font-sans font-medium text-center mt-1.5 flex justify-between items-center px-1">
+                    <span>Batanes State College &bull; Academic Examination System</span>
+                    <span className="font-bold text-slate-700">Page {pageIdx + 1} of {previewPages.length}</span>
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
 
           {/* Wizard Navigation Footer */}
-          <div className="flex justify-between items-center bg-white border border-slate-200 rounded-3xl p-5 shadow-sm max-w-4xl mx-auto">
+          <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-4 bg-white border border-slate-200 rounded-3xl p-5 shadow-sm w-full">
             <button
               type="button"
               onClick={() => setStep(2)}
@@ -3070,7 +3332,23 @@ export function ExamBuilderWizard({
               Back to Questions
             </button>
 
-            <div className="flex gap-3">
+            <div className="flex flex-wrap items-center justify-end gap-3">
+              {!isTosUploaded && (
+                <span className="text-[11px] font-black text-amber-800 bg-amber-50 border border-amber-200 px-3 py-2 rounded-xl">
+                  ⚠️ Upload TOS (PDF) to activate Submit
+                </span>
+              )}
+
+              <button
+                type="button"
+                disabled={uploadingTos}
+                onClick={() => tosFileInputRef.current?.click()}
+                className="inline-flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold px-4 py-2.5 rounded-xl shadow-sm transition-all cursor-pointer disabled:opacity-50"
+              >
+                {uploadingTos ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                <span>{uploadingTos ? "Uploading..." : isTosUploaded ? "Change TOS (PDF)" : "Upload TOS (PDF)"}</span>
+              </button>
+
               <button
                 onClick={handleSaveDraft}
                 className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 border border-slate-300/60 text-slate-700 text-xs font-bold px-4 py-2.5 rounded-xl transition-all shadow-sm"
@@ -3080,9 +3358,10 @@ export function ExamBuilderWizard({
               </button>
 
               <button
-                disabled={isSubmitting}
+                disabled={!isSubmitAllowed}
                 onClick={handleSubmitForReview}
-                className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold px-5 py-2.5 rounded-xl transition-all shadow-md hover:shadow-emerald-600/20"
+                className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold px-5 py-2.5 rounded-xl transition-all shadow-md hover:shadow-emerald-600/20 disabled:opacity-50 disabled:pointer-events-none cursor-pointer"
+                title={!isTosUploaded ? "Upload Table of Specifications (TOS) PDF file to activate submission" : "Final Submit to Department Chair"}
               >
                 {isSubmitting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                 Final Submit to Chair

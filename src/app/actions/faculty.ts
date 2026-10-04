@@ -906,6 +906,55 @@ export async function uploadQuestionAttachment(facultyId: number, formData: Form
   }
 }
 
+export async function uploadTosFileAction(examId: number, facultyId: number, formData: FormData) {
+  try {
+    const { writeFile, mkdir } = await import("fs/promises");
+    const { join } = await import("path");
+
+    const file = formData.get("file") as File | null;
+    if (!file || file.size === 0) {
+      return { error: "No file uploaded." };
+    }
+
+    // Strictly validate PDF extension / mime type
+    const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+    if (!isPdf) {
+      return { error: "Strict Requirement: Only PDF files (.pdf) are allowed for Table of Specifications (TOS) upload." };
+    }
+
+    const bytes = await file.arrayBuffer();
+    const buffer = Buffer.from(bytes);
+    const uploadDir = join(process.cwd(), "public", "uploads", "tos");
+    await mkdir(uploadDir, { recursive: true });
+    const uniqueFilename = `TOS-Exam${examId}-${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, "_")}`;
+    const absolutePath = join(uploadDir, uniqueFilename);
+    await writeFile(absolutePath, buffer);
+
+    const tosFilePath = `/uploads/tos/${uniqueFilename}`;
+
+    await db.examination.update({
+      where: { exam_id: examId },
+      data: { tos_file_path: tosFilePath },
+    });
+
+    await db.auditLog.create({
+      data: {
+        user_id: facultyId,
+        action_performed: `Uploaded TOS PDF file (${file.name}) for Exam ID: ${examId}`,
+        ip_address: "127.0.0.1",
+      },
+    });
+
+    revalidatePath("/dashboard/faculty");
+    revalidatePath(`/dashboard/faculty/exams/${examId}/builder`);
+
+    return { success: true, tos_file_path: tosFilePath };
+  } catch (err: any) {
+    console.error("Error uploading TOS PDF:", err);
+    return { error: err.message || "Failed to upload TOS PDF file." };
+  }
+}
+
 export async function getStudentExamLogs(studentId: number, examId: number) {
   try {
     const logs = await db.auditLog.findMany({
