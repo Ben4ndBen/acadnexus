@@ -224,6 +224,11 @@ export async function saveExamConfig(formData: FormData) {
 
     let tosFilePath = exam.tos_file_path; // Default to existing path
 
+    const tosDataJson = formData.get("tosDataJson") as string | null;
+    if (tosDataJson && tosDataJson.trim() !== "") {
+      tosFilePath = tosDataJson;
+    }
+
     if (tosFile && tosFile.size > 0 && tosFile.name !== "undefined") {
       const bytes = await tosFile.arrayBuffer();
       const buffer = Buffer.from(bytes);

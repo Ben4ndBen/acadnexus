@@ -18,6 +18,7 @@ import {
   getProgramsForDepartment, 
   filterCoursesForDepartment 
 } from "@/lib/courseDepartmentMapping";
+import { BSCTableOfSpecificationsView } from "@/app/components/BSCTableOfSpecificationsView";
 
 interface ChairDashboardClientProps {
   chairUserId: number;
@@ -1039,27 +1040,101 @@ export function ChairDashboardClient({
                 </div>
 
                 {/* TOS Panel Body */}
-                <div className="flex-1 bg-slate-950 p-3 overflow-hidden flex flex-col relative">
-                  {activeSplitApproval.exam.tos_file_path && activeSplitApproval.exam.tos_file_path.trim() !== "" ? (
-                    <div className="w-full h-full flex flex-col">
-                      <iframe
-                        src={activeSplitApproval.exam.tos_file_path}
-                        className="w-full h-full rounded-xl border border-slate-800 bg-white"
-                        title="TOS Document Preview"
-                      />
-                      <p className="text-[10px] text-slate-400 mt-2 text-center shrink-0">
-                        Viewing document preview. If file format is not supported in browser frame (e.g. DOCX/XLSX), click "Open New Tab" or "Download".
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col items-center justify-center h-full py-16 text-center p-6 bg-slate-900/50 rounded-xl border border-dashed border-slate-800">
-                      <AlertCircle className="w-12 h-12 text-rose-500 mb-3" />
-                      <h4 className="font-extrabold text-white text-base">No TOS File Uploaded</h4>
-                      <p className="text-slate-400 text-xs max-w-md mt-1.5 leading-relaxed">
-                        The faculty member did not upload a Table of Specifications (TOS) file for this examination draft.
-                      </p>
-                    </div>
-                  )}
+                <div className="flex-1 bg-slate-950 p-3 overflow-y-auto flex flex-col relative">
+                  {(() => {
+                    const tosStr = activeSplitApproval.exam.tos_file_path || "";
+                    let parsedTos: any = null;
+
+                    if (tosStr.trim().startsWith("{")) {
+                      try {
+                        parsedTos = JSON.parse(tosStr);
+                      } catch {}
+                    }
+
+                    if (parsedTos && parsedTos.topics) {
+                      return (
+                        <div className="w-full h-full overflow-y-auto bg-white p-4 rounded-xl border border-slate-800">
+                          <BSCTableOfSpecificationsView
+                            examTitle={activeSplitApproval.exam.title}
+                            courseCode={activeSplitApproval.exam.course?.course_code || ""}
+                            courseTitle={activeSplitApproval.exam.course?.course_title || activeSplitApproval.exam.title}
+                            departmentName={departmentName}
+                            term={activeSplitApproval.exam.term || "Midterm"}
+                            semester={activeSplitApproval.exam.semester || "1st Semester"}
+                            academicYear={activeSplitApproval.exam.academic_year || "2026-2027"}
+                            examDate={activeSplitApproval.exam.exam_date ? String(activeSplitApproval.exam.exam_date).split("T")[0] : ""}
+                            documentReference={activeSplitApproval.exam.document_reference || "BSC-ODI-F-121"}
+                            facultyName={`${activeSplitApproval.exam.faculty?.first_name || ""} ${activeSplitApproval.exam.faculty?.last_name || ""}`}
+                            totalItems={parsedTos.targetTotalItems || activeSplitApproval.exam.questionBank?.length || 50}
+                            topics={parsedTos.topics || []}
+                          />
+                        </div>
+                      );
+                    }
+
+                    if (tosStr.trim() !== "" && (tosStr.startsWith("/") || tosStr.startsWith("http"))) {
+                      return (
+                        <div className="w-full h-full flex flex-col">
+                          <iframe
+                            src={tosStr}
+                            className="w-full h-full rounded-xl border border-slate-800 bg-white"
+                            title="TOS Document Preview"
+                          />
+                          <p className="text-[10px] text-slate-400 mt-2 text-center shrink-0">
+                            Viewing document preview. If file format is not supported in browser frame (e.g. DOCX/XLSX), click "Open New Tab" or "Download".
+                          </p>
+                        </div>
+                      );
+                    }
+
+                    // Fallback to auto-generated TOS from question bank
+                    const qBank = activeSplitApproval.exam.questionBank || [];
+                    const map: Record<string, number> = {};
+                    qBank.forEach((q: any) => {
+                      const t = (q as any).topic?.trim() || "General Course Concepts";
+                      map[t] = (map[t] || 0) + 1;
+                    });
+                    const fallbackTopics = Object.entries(map).map(([tName, qCount], idx) => ({
+                      id: `top-${idx}`,
+                      topic_name: tName,
+                      learning_outcomes: "Demonstrate mastery and application of syllabus competencies.",
+                      hours: Math.max(2, qCount * 2),
+                      weightPercentage: Math.round((qCount / (qBank.length || 1)) * 100),
+                      assignedItems: qCount,
+                      question_types: ["Multiple_Choice"],
+                      itemPlacement: `Items 1–${qBank.length}`,
+                    }));
+
+                    return (
+                      <div className="w-full h-full overflow-y-auto bg-white p-4 rounded-xl border border-slate-800">
+                        <BSCTableOfSpecificationsView
+                          examTitle={activeSplitApproval.exam.title}
+                          courseCode={activeSplitApproval.exam.course?.course_code || ""}
+                          courseTitle={activeSplitApproval.exam.course?.course_title || activeSplitApproval.exam.title}
+                          departmentName={departmentName}
+                          term={activeSplitApproval.exam.term || "Midterm"}
+                          semester={activeSplitApproval.exam.semester || "1st Semester"}
+                          academicYear={activeSplitApproval.exam.academic_year || "2026-2027"}
+                          examDate={activeSplitApproval.exam.exam_date ? String(activeSplitApproval.exam.exam_date).split("T")[0] : ""}
+                          documentReference={activeSplitApproval.exam.document_reference || "BSC-ODI-F-121"}
+                          facultyName={`${activeSplitApproval.exam.faculty?.first_name || ""} ${activeSplitApproval.exam.faculty?.last_name || ""}`}
+                          totalItems={qBank.length || 50}
+                          topics={fallbackTopics.length > 0 ? fallbackTopics : [
+                            {
+                              id: "top-1",
+                              topic_name: "Core Course Module",
+                              learning_outcomes: "Demonstrate comprehensive knowledge of course concepts.",
+                              hours: 10,
+                              weightPercentage: 100,
+                              assignedItems: qBank.length || 50,
+                              question_types: ["Multiple_Choice"],
+                              itemPlacement: `Items 1–${qBank.length || 50}`,
+                            }
+                          ]}
+                        />
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
             )}

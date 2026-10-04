@@ -7,11 +7,12 @@ import {
   Upload, Trash2, Plus, Check, Eye, Trash, ArrowUp, ArrowDown, FileText, 
   Shuffle, AlertCircle, RefreshCw, FileUp, Sparkles, CheckCircle, Search, X,
   Tag, Layers, Sliders, Hash, ListFilter, Calendar, GraduationCap, Users,
-  CheckSquare, Square
+  CheckSquare, Square, GripVertical, ChevronDown, ChevronUp, Layers3, HelpCircle, ListChecks
 } from "lucide-react";
 import { saveExamConfig, saveExamQuestions, updateExamStatus, uploadQuestionAttachment, getQuestionBankQuestions, importQuestionsToExam, getAssignedStudentsForCourse } from "@/app/actions/faculty";
 import { determineSemesterFromDate, formatStudentName } from "@/lib/academicUtils";
 import { Latex } from "@/app/components/Latex";
+import { BSCTableOfSpecificationsView, TosTopicItem } from "@/app/components/BSCTableOfSpecificationsView";
 
 interface Course {
   course_id: number;
@@ -54,6 +55,7 @@ interface Exam {
     question_type: "Multiple_Choice" | "True_False" | "Identification" | "Matching_Type" | "Essay" | "Fill_In_The_Blanks";
     correct_answer: string;
     points: number;
+    topic?: string | null;
   }>;
 }
 
@@ -74,8 +76,26 @@ interface ExamBuilderWizardProps {
   initialAssignedStudents?: StudentItem[];
 }
 
+export interface TosTopicConfig {
+  id: string;
+  topic_name: string;
+  learning_outcomes: string;
+  hours: number;
+  question_types: ("Multiple_Choice" | "True_False" | "Identification" | "Matching_Type" | "Essay" | "Fill_In_The_Blanks")[];
+  taxonomy?: {
+    remembering: number;
+    understanding: number;
+    applying: number;
+    analyzing: number;
+    evaluating: number;
+    creating: number;
+  };
+  is_collapsed?: boolean;
+}
+
 interface QuestionState {
   question_id?: number;
+  temp_id?: string;
   text: string;
   question_type: "Multiple_Choice" | "True_False" | "Identification" | "Matching_Type" | "Essay" | "Fill_In_The_Blanks";
   options: string[]; // Multiple Choice options
@@ -398,6 +418,226 @@ export function ExamBuilderWizard({
   const [activeQuestionIdx, setActiveQuestionIdx] = useState<number>(
     exam.questionBank.length > 0 ? 0 : -1
   );
+
+  // Interactive TOS Target Items State
+  const [targetTotalItems, setTargetTotalItems] = useState<number>(() => {
+    if (exam.tos_file_path && exam.tos_file_path.trim().startsWith("{")) {
+      try {
+        const parsed = JSON.parse(exam.tos_file_path);
+        if (parsed.targetTotalItems) return Math.max(1, Number(parsed.targetTotalItems));
+      } catch {}
+    }
+    return exam.questionBank?.length > 0 ? exam.questionBank.length : 50;
+  });
+
+  // Interactive TOS Topics List State (Starts completely empty for new exam drafts)
+  const [tosTopics, setTosTopics] = useState<TosTopicConfig[]>(() => {
+    if (exam.tos_file_path && exam.tos_file_path.trim().startsWith("{")) {
+      try {
+        const parsed = JSON.parse(exam.tos_file_path);
+        if (parsed.topics && Array.isArray(parsed.topics) && parsed.topics.length > 0) {
+          return parsed.topics.map((t: any, idx: number) => ({
+            id: t.id || `topic-${idx + 1}-${Date.now()}`,
+            topic_name: t.topic_name || `Topic ${idx + 1}`,
+            learning_outcomes: t.learning_outcomes || "Demonstrate mastery and comprehension of core competencies.",
+            hours: Number(t.hours) || 6,
+            question_types: t.question_types || ["Multiple_Choice", "True_False"],
+            taxonomy: t.taxonomy || { remembering: 30, understanding: 30, applying: 20, analyzing: 10, evaluating: 5, creating: 5 },
+            is_collapsed: false,
+          }));
+        }
+      } catch {}
+    }
+
+    return [];
+  });
+
+  // Calculate dynamic TOS Topic distributions, cognitive level breakdown, & item placement
+  const computedTosTopics = useMemo(() => {
+    const totalHours = tosTopics.reduce((sum, t) => sum + (Number(t.hours) || 0), 0);
+    const numTopics = tosTopics.length;
+    if (numTopics === 0) return [];
+
+    let rawAllocations = tosTopics.map(t => {
+      const h = Number(t.hours) || 0;
+      const weight = totalHours > 0 ? (h / totalHours) * 100 : (100 / numTopics);
+      const rawItems = totalHours > 0 ? (h / totalHours) * targetTotalItems : (targetTotalItems / numTopics);
+      const floorItems = Math.floor(rawItems);
+      const remainder = rawItems - floorItems;
+      return {
+        ...t,
+        hours: h,
+        weightPercentage: Math.round(weight),
+        floorItems,
+        remainder,
+        assignedItems: floorItems,
+      };
+    });
+
+    const currentSum = rawAllocations.reduce((sum, a) => sum + a.assignedItems, 0);
+    let diff = targetTotalItems - currentSum;
+
+    if (diff > 0) {
+      const sortedIndices = rawAllocations
+        .map((a, idx) => ({ idx, remainder: a.remainder }))
+        .sort((a, b) => b.remainder - a.remainder);
+
+      for (let i = 0; i < diff; i++) {
+        const targetIdx = sortedIndices[i % sortedIndices.length].idx;
+        rawAllocations[targetIdx].assignedItems += 1;
+      }
+    } else if (diff < 0) {
+      const sortedIndices = rawAllocations
+        .map((a, idx) => ({ idx, remainder: a.remainder }))
+        .sort((a, b) => a.remainder - b.remainder);
+
+      for (let i = 0; i < Math.abs(diff); i++) {
+        const targetIdx = sortedIndices[i % sortedIndices.length].idx;
+        if (rawAllocations[targetIdx].assignedItems > 0) {
+          rawAllocations[targetIdx].assignedItems -= 1;
+        }
+      }
+    }
+
+    let start = 1;
+    return rawAllocations.map(t => {
+      const count = t.assignedItems;
+      let placement = "—";
+      if (count === 1) {
+        placement = `Item ${start}`;
+      } else if (count > 1) {
+        placement = `Items ${start}–${start + count - 1}`;
+      }
+      const itemRangeStart = start;
+      const itemRangeEnd = start + Math.max(0, count - 1);
+      start += count;
+
+      // Cognitive Domain / Taxonomy of Learning item counts formula
+      const rem = Math.round(count * 0.3);
+      const und = Math.round(count * 0.3);
+      const app = Math.round(count * 0.2);
+      const ana = Math.round(count * 0.1);
+      const eva = Math.round(count * 0.05);
+      const cre = Math.max(0, count - (rem + und + app + ana + eva));
+
+      return {
+        ...t,
+        itemPlacement: placement,
+        itemRangeStart,
+        itemRangeEnd,
+        taxonomy: {
+          remembering: rem,
+          understanding: und,
+          applying: app,
+          analyzing: ana,
+          evaluating: eva,
+          creating: cre,
+        },
+      };
+    });
+  }, [tosTopics, targetTotalItems]);
+
+  // Topic form handlers
+  const handleAddTosTopic = () => {
+    const newTopic: TosTopicConfig = {
+      id: `topic-${Date.now()}`,
+      topic_name: `Lesson ${tosTopics.length + 1}: New Topic / Lesson Title`,
+      learning_outcomes: "Demonstrate comprehension and practical application of core topic concepts.",
+      hours: 5,
+      question_types: ["Multiple_Choice"],
+      is_collapsed: false,
+    };
+    setTosTopics(prev => [...prev, newTopic]);
+  };
+
+  const handleDeleteTosTopic = (id: string) => {
+    setTosTopics(prev => prev.filter(t => t.id !== id));
+  };
+
+  const handleMoveTosTopic = (index: number, direction: "up" | "down") => {
+    if (direction === "up" && index === 0) return;
+    if (direction === "down" && index === tosTopics.length - 1) return;
+
+    const targetIdx = direction === "up" ? index - 1 : index + 1;
+    const updated = [...tosTopics];
+    const temp = updated[index];
+    updated[index] = updated[targetIdx];
+    updated[targetIdx] = temp;
+    setTosTopics(updated);
+  };
+
+  const handleToggleCollapseTosTopic = (id: string) => {
+    setTosTopics(prev =>
+      prev.map(t => (t.id === id ? { ...t, is_collapsed: !t.is_collapsed } : t))
+    );
+  };
+
+  const handleUpdateTosTopicField = (id: string, field: keyof TosTopicConfig, value: any) => {
+    setTosTopics(prev =>
+      prev.map(t => (t.id === id ? { ...t, [field]: value } : t))
+    );
+  };
+
+  const handleToggleQuestionTypeForTopic = (id: string, qType: any) => {
+    setTosTopics(prev =>
+      prev.map(t => {
+        if (t.id !== id) return t;
+        const currentTypes = t.question_types || [];
+        const updatedTypes = currentTypes.includes(qType)
+          ? currentTypes.filter(type => type !== qType)
+          : [...currentTypes, qType];
+        return { ...t, question_types: updatedTypes };
+      })
+    );
+  };
+
+  // Sync TOS topic placement with questions and proceed to Question Creation (Step 3)
+  const handleProceedToQuestions = () => {
+    let updatedQuestions = [...questions];
+
+    // Ensure total questions count matches targetTotalItems
+    if (updatedQuestions.length < targetTotalItems) {
+      const existingCount = updatedQuestions.length;
+      for (let i = existingCount; i < targetTotalItems; i++) {
+        const itemNum = i + 1;
+        const matchingTopic = computedTosTopics.find(t => itemNum >= t.itemRangeStart && itemNum <= t.itemRangeEnd) || computedTosTopics[0];
+
+        let newQ: QuestionState = {
+          temp_id: `q-${itemNum}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+          text: `Question ${itemNum}`,
+          question_type: "Multiple_Choice", // Default to Multiple Choice
+          options: ["Option A", "Option B", "Option C", "Option D"],
+          premises: [],
+          matches: [],
+          blanks: [],
+          correctAnswer: "Option A",
+          points: 1,
+          topic: matchingTopic?.topic_name || "General Topic",
+        };
+        updatedQuestions.push(newQ);
+      }
+    } else if (updatedQuestions.length > targetTotalItems) {
+      updatedQuestions = updatedQuestions.slice(0, targetTotalItems);
+    }
+
+    // Automatically sync topics and unique temporary IDs for all items based on computed TOS ranges
+    updatedQuestions = updatedQuestions.map((q, idx) => {
+      const itemNum = idx + 1;
+      const matchingTopic = computedTosTopics.find(t => itemNum >= t.itemRangeStart && itemNum <= t.itemRangeEnd);
+      return {
+        ...q,
+        temp_id: q.temp_id || `q-${itemNum}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+        topic: matchingTopic?.topic_name || q.topic || "General Topic",
+        question_type: q.question_type || "Multiple_Choice",
+      };
+    });
+
+    setQuestions(updatedQuestions);
+    if (activeQuestionIdx === -1 && updatedQuestions.length > 0) {
+      setActiveQuestionIdx(0);
+    }
+    setStep(3);
+  };
 
   // Import Question Bank Modal State
   const [isImportModalOpen, setIsImportModalOpen] = useState<boolean>(false);
@@ -828,6 +1068,11 @@ export function ExamBuilderWizard({
   const handleSaveDraft = async () => {
     setSaveStatus({ type: "saving", message: "Saving examination details..." });
 
+    const tosDataJson = JSON.stringify({
+      targetTotalItems,
+      topics: computedTosTopics,
+    });
+
     // Step 1: Save Configuration Settings
     const configData = new FormData();
     configData.append("examId", String(exam.exam_id));
@@ -844,6 +1089,7 @@ export function ExamBuilderWizard({
     configData.append("academicYear", applicableAcademicYear);
     configData.append("documentReference", documentReference);
     configData.append("selectedStudentIds", JSON.stringify(selectedStudentIds));
+    configData.append("tosDataJson", tosDataJson);
 
     const configRes = await saveExamConfig(configData);
     if (configRes.error) {
@@ -886,6 +1132,7 @@ export function ExamBuilderWizard({
     configData.append("academicYear", applicableAcademicYear);
     configData.append("documentReference", documentReference);
     configData.append("selectedStudentIds", JSON.stringify(selectedStudentIds));
+    configData.append("tosDataJson", JSON.stringify({ targetTotalItems, topics: computedTosTopics }));
 
     const configRes = await saveExamConfig(configData);
     if (configRes.error) {
@@ -996,25 +1243,25 @@ export function ExamBuilderWizard({
 
       {/* Step Progress Indicators */}
       <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 relative">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 relative">
           
           {/* Step 1 Indicator */}
           <button 
             onClick={() => setStep(1)}
-            className={`flex items-center gap-4 text-left p-3 rounded-2xl transition-all duration-300 ${
+            className={`flex items-center gap-3.5 text-left p-3 rounded-2xl transition-all duration-300 ${
               step === 1 
-                ? "bg-emerald-50/70 border border-emerald-100 text-emerald-900 shadow-sm" 
-                : "text-slate-400 hover:bg-slate-50/50 hover:text-slate-700"
+                ? "bg-emerald-50/70 border border-emerald-200 text-emerald-900 shadow-sm" 
+                : "text-slate-400 hover:bg-slate-50 hover:text-slate-700"
             }`}
           >
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-extrabold text-sm transition-all ${
+            <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-extrabold text-sm shrink-0 transition-all ${
               step === 1 ? "bg-emerald-600 text-white shadow-md" : "bg-slate-100 text-slate-400"
             }`}>
-              <Settings className="w-5 h-5" />
+              <Settings className="w-4 h-4" />
             </div>
-            <div>
+            <div className="min-w-0">
               <p className="text-[10px] font-extrabold uppercase tracking-widest text-emerald-600/70">Step 1</p>
-              <p className="text-sm font-bold">Exam Configuration</p>
+              <p className="text-xs sm:text-sm font-bold truncate">Exam Configuration</p>
             </div>
           </button>
 
@@ -1022,41 +1269,62 @@ export function ExamBuilderWizard({
           <button 
             disabled={!isConfigValid}
             onClick={() => setStep(2)}
-            className={`flex items-center gap-4 text-left p-3 rounded-2xl transition-all duration-300 disabled:opacity-50 disabled:pointer-events-none ${
+            className={`flex items-center gap-3.5 text-left p-3 rounded-2xl transition-all duration-300 disabled:opacity-50 disabled:pointer-events-none ${
               step === 2 
-                ? "bg-emerald-50/70 border border-emerald-100 text-emerald-900 shadow-sm" 
-                : "text-slate-400 hover:bg-slate-50/50 hover:text-slate-700"
+                ? "bg-emerald-50/70 border border-emerald-200 text-emerald-900 shadow-sm" 
+                : "text-slate-400 hover:bg-slate-50 hover:text-slate-700"
             }`}
           >
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-extrabold text-sm transition-all ${
+            <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-extrabold text-sm shrink-0 transition-all ${
               step === 2 ? "bg-emerald-600 text-white shadow-md" : "bg-slate-100 text-slate-400"
             }`}>
-              <BookOpen className="w-5 h-5" />
+              <Layers className="w-4 h-4" />
             </div>
-            <div>
+            <div className="min-w-0">
               <p className="text-[10px] font-extrabold uppercase tracking-widest text-emerald-600/70">Step 2</p>
-              <p className="text-sm font-bold">Question Bank</p>
+              <p className="text-xs sm:text-sm font-bold truncate">Interactive TOS Setup</p>
             </div>
           </button>
 
           {/* Step 3 Indicator */}
           <button 
-            disabled={!isConfigValid || questions.length === 0}
+            disabled={!isConfigValid}
             onClick={() => setStep(3)}
-            className={`flex items-center gap-4 text-left p-3 rounded-2xl transition-all duration-300 disabled:opacity-50 disabled:pointer-events-none ${
+            className={`flex items-center gap-3.5 text-left p-3 rounded-2xl transition-all duration-300 disabled:opacity-50 disabled:pointer-events-none ${
               step === 3 
-                ? "bg-emerald-50/70 border border-emerald-100 text-emerald-900 shadow-sm" 
-                : "text-slate-400 hover:bg-slate-50/50 hover:text-slate-700"
+                ? "bg-emerald-50/70 border border-emerald-200 text-emerald-900 shadow-sm" 
+                : "text-slate-400 hover:bg-slate-50 hover:text-slate-700"
             }`}
           >
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-extrabold text-sm transition-all ${
+            <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-extrabold text-sm shrink-0 transition-all ${
               step === 3 ? "bg-emerald-600 text-white shadow-md" : "bg-slate-100 text-slate-400"
             }`}>
-              <ClipboardCheck className="w-5 h-5" />
+              <BookOpen className="w-4 h-4" />
             </div>
-            <div>
+            <div className="min-w-0">
               <p className="text-[10px] font-extrabold uppercase tracking-widest text-emerald-600/70">Step 3</p>
-              <p className="text-sm font-bold">Review & Preview</p>
+              <p className="text-xs sm:text-sm font-bold truncate">Question Bank</p>
+            </div>
+          </button>
+
+          {/* Step 4 Indicator */}
+          <button 
+            disabled={!isConfigValid || questions.length === 0}
+            onClick={() => setStep(4)}
+            className={`flex items-center gap-3.5 text-left p-3 rounded-2xl transition-all duration-300 disabled:opacity-50 disabled:pointer-events-none ${
+              step === 4 
+                ? "bg-emerald-50/70 border border-emerald-200 text-emerald-900 shadow-sm" 
+                : "text-slate-400 hover:bg-slate-50 hover:text-slate-700"
+            }`}
+          >
+            <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-extrabold text-sm shrink-0 transition-all ${
+              step === 4 ? "bg-emerald-600 text-white shadow-md" : "bg-slate-100 text-slate-400"
+            }`}>
+              <ClipboardCheck className="w-4 h-4" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-[10px] font-extrabold uppercase tracking-widest text-emerald-600/70">Step 4</p>
+              <p className="text-xs sm:text-sm font-bold truncate">Review & Preview</p>
             </div>
           </button>
         </div>
@@ -1064,293 +1332,288 @@ export function ExamBuilderWizard({
 
       {/* STEP 1: EXAM CONFIGURATION */}
       {step === 1 && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          
-          {/* Settings Fields */}
-          <div className="lg:col-span-2 bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6">
-            <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
-              <span className="w-1.5 h-6 bg-emerald-600 rounded-full" />
-              Examination Setup & Roster
-            </h2>
+        <div className="w-full bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6">
+          <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
+            <span className="w-1.5 h-6 bg-emerald-600 rounded-full" />
+            Examination Setup & Roster
+          </h2>
 
-            <div className="space-y-6">
-              {/* 1. Examination Term & Exam Date (First Asked!) */}
-              <div className="bg-gradient-to-r from-emerald-950 via-slate-900 to-emerald-900 text-white rounded-2xl p-5 sm:p-6 space-y-4 shadow-md border border-emerald-800/40">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-white/10 pb-3">
-                  <div className="flex items-center gap-2.5">
-                    <div className="p-2 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
-                      <Calendar className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <h2 className="text-base font-extrabold text-white tracking-tight">1. Examination Term & Scheduled Date</h2>
-                      <p className="text-xs text-emerald-200/80">Select examination term and planned test administration date first.</p>
-                    </div>
+          <div className="space-y-6">
+            {/* 1. Examination Term & Exam Date */}
+            <div className="bg-gradient-to-r from-emerald-950 via-slate-900 to-emerald-900 text-white rounded-2xl p-5 sm:p-6 space-y-4 shadow-md border border-emerald-800/40">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-white/10 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
+                    <Calendar className="w-5 h-5" />
                   </div>
-                  <span className="self-start sm:self-auto bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-[10px] font-black uppercase px-2.5 py-1 rounded-full">
-                    Required Step
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {/* Examination Term (Configured by Directorate - Non-editable) */}
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-emerald-200 block">
-                      Examination Term <span className="text-emerald-300/80 font-normal">(Directorate Standard)</span>
-                    </label>
-                    <div className="w-full bg-slate-900/90 border border-emerald-500/40 text-emerald-300 text-sm font-extrabold px-3.5 py-2.5 rounded-xl flex items-center justify-between">
-                      <span>{term} Examination</span>
-                      <span className="text-[10px] font-black uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 px-2 py-0.5 rounded-md">
-                        Directorate Standard
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Exam Date */}
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-emerald-200 block">Exam Administration Date <span className="text-rose-400">*</span></label>
-                    <input
-                      type="date"
-                      required
-                      value={examDate}
-                      onChange={(e) => setExamDate(e.target.value)}
-                      className="w-full bg-slate-900/90 border border-emerald-500/40 text-white text-sm font-bold px-3.5 py-2.5 rounded-xl focus:ring-2 focus:ring-emerald-400 focus:outline-none [color-scheme:dark]"
-                    />
-                  </div>
-                </div>
-
-                {/* Automatically Determined Applicable Semester Banner */}
-                <div className="bg-white/10 backdrop-blur-md border border-white/15 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div className="space-y-0.5">
-                    <div className="flex items-center gap-1.5 text-xs font-extrabold text-emerald-300">
-                      <CheckCircle className="w-4 h-4 text-emerald-400" />
-                      <span>Applicable Academic Semester:</span>
-                    </div>
-                    <p className="text-[11px] text-slate-300">
-                      Automatically determined based on exam date (<span className="text-white font-mono font-bold">{examDate}</span>) and active academic period set by the Academic Directorate.
-                    </p>
-                  </div>
-                  <div className="bg-emerald-500 text-slate-950 text-xs font-black px-3.5 py-1.5 rounded-xl shadow-sm shrink-0 flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5" />
-                    <span>{applicableSemesterLabel}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* 2. Assigned Subject Selection (Official Course Details) */}
-              <div className="space-y-4 border-t border-slate-100 pt-5">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
-                    <GraduationCap className="w-4 h-4 text-emerald-600" />
-                    2. Assigned Subject
-                  </h3>
-                  <span className="text-[10px] font-black uppercase text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
-                    Official Course Parameters
-                  </span>
-                </div>
-                <p className="text-xs text-slate-400">
-                  Select from your official teaching load. Course code and title will load automatically.
-                </p>
-
-                <div className="space-y-2">
-                  <label className="text-xs font-extrabold text-slate-700 block">Select Assigned Subject <span className="text-rose-500">*</span></label>
-                  <select
-                    value={courseId}
-                    onChange={(e) => handleCourseChange(Number(e.target.value))}
-                    className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 text-sm font-bold text-slate-800 px-4 py-2.5 rounded-xl transition-all duration-300"
-                  >
-                    {effectiveAssignedSubjects.map((c) => (
-                      <option key={c.course_id} value={c.course_id}>
-                        {c.course_code} — {c.course_title}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Course Code & Title Syllabus Badges */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="bg-slate-50/80 border border-slate-200/80 rounded-2xl p-3.5 space-y-1">
-                    <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Course Code (Syllabus)</span>
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-base font-black text-slate-900 bg-white border border-slate-200 px-2.5 py-1 rounded-lg shadow-sm">
-                        {selectedCourse.course_code || "N/A"}
-                      </span>
-                      <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">✓ Verified</span>
-                    </div>
-                  </div>
-
-                  <div className="bg-slate-50/80 border border-slate-200/80 rounded-2xl p-3.5 space-y-1">
-                    <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Course Title (Syllabus)</span>
-                    <p className="text-sm font-bold text-slate-800 line-clamp-1">
-                      {selectedCourse.course_title || "N/A"}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* 3. Assigned Students Selection (Who will take the exam) */}
-              <div className="space-y-4 border-t border-slate-100 pt-5">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <div>
-                    <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
-                      <Users className="w-4 h-4 text-emerald-600" />
-                      3. Assigned Students for Selected Subject
-                    </h3>
-                    <p className="text-xs text-slate-400">
-                      Designate class students eligible to take this examination.
-                    </p>
+                    <h2 className="text-base font-extrabold text-white tracking-tight">1. Examination Term & Scheduled Date</h2>
+                    <p className="text-xs text-emerald-200/80">Select examination term and planned test administration date first.</p>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={handleSelectAllStudents}
-                      className="text-[11px] font-bold text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
-                    >
-                      Select All
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleDeselectAllStudents}
-                      className="text-[11px] font-bold text-slate-600 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
-                    >
-                      Deselect All
-                    </button>
-                    <span className="text-xs font-black text-emerald-800 bg-emerald-100 px-2.5 py-1 rounded-full border border-emerald-300/60">
-                      {selectedStudentIds.length} / {assignedStudents.length} Selected
+                </div>
+                <span className="self-start sm:self-auto bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-[10px] font-black uppercase px-2.5 py-1 rounded-full">
+                  Required Step
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Examination Term */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-emerald-200 block">
+                    Examination Term <span className="text-emerald-300/80 font-normal">(Directorate Standard)</span>
+                  </label>
+                  <div className="w-full bg-slate-900/90 border border-emerald-500/40 text-emerald-300 text-sm font-extrabold px-3.5 py-2.5 rounded-xl flex items-center justify-between">
+                    <span>{term} Examination</span>
+                    <span className="text-[10px] font-black uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 px-2 py-0.5 rounded-md">
+                      Directorate Standard
                     </span>
                   </div>
                 </div>
 
-                {/* Sort & Filter Controls Toolbar for Assigned Students */}
-                {assignedStudents.length > 0 && (
-                  <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-3.5 space-y-3">
-                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
-                      {/* Search */}
-                      <div className="relative sm:col-span-1">
-                        <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
-                        <input
-                          type="text"
-                          placeholder="Search student..."
-                          value={studentSearch}
-                          onChange={(e) => setStudentSearch(e.target.value)}
-                          className="w-full bg-white border border-slate-200 rounded-xl pl-8 pr-3 py-1.5 text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                        />
-                      </div>
-
-                      {/* Sort By (Name, Year Level, Program) */}
-                      <div className="sm:col-span-1">
-                        <select
-                          value={studentSortBy}
-                          onChange={(e) => setStudentSortBy(e.target.value as any)}
-                          className="w-full bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                        >
-                          <option value="lastNameAsc">Sort by Last Name (A-Z)</option>
-                          <option value="lastNameDesc">Sort by Last Name (Z-A)</option>
-                          <option value="firstNameAsc">Sort by First Name (A-Z)</option>
-                          <option value="firstNameDesc">Sort by First Name (Z-A)</option>
-                          <option value="yearAsc">Sort by Year Level (1 to 4)</option>
-                          <option value="yearDesc">Sort by Year Level (4 to 1)</option>
-                          <option value="programAsc">Sort by Program Code</option>
-                        </select>
-                      </div>
-
-                      {/* Filter by Program */}
-                      <div className="sm:col-span-1">
-                        <select
-                          value={studentProgramFilter}
-                          onChange={(e) => setStudentProgramFilter(e.target.value)}
-                          className="w-full bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                        >
-                          <option value="ALL">Program: All Programs</option>
-                          {availableStudentPrograms.map(prog => (
-                            <option key={prog} value={prog}>{prog}</option>
-                          ))}
-                        </select>
-                      </div>
-
-                      {/* Filter by Year Level */}
-                      <div className="sm:col-span-1">
-                        <select
-                          value={studentYearFilter}
-                          onChange={(e) => setStudentYearFilter(e.target.value)}
-                          className="w-full bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                        >
-                          <option value="ALL">Year: All Years</option>
-                          {availableStudentYears.map(yr => (
-                            <option key={yr} value={String(yr)}>Year Level {yr}</option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {loadingStudents ? (
-                  <div className="p-8 text-center bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
-                    <RefreshCw className="w-6 h-6 animate-spin text-emerald-600 mx-auto" />
-                    <p className="text-xs font-bold text-slate-500">Loading class students for this subject...</p>
-                  </div>
-                ) : assignedStudents.length === 0 ? (
-                  <div className="p-6 text-center bg-amber-50/60 border border-amber-200/80 rounded-2xl space-y-1">
-                    <p className="text-xs font-bold text-amber-800">No class students currently registered for this subject.</p>
-                    <p className="text-[11px] text-amber-600">Students who register or enroll in this course code will automatically become eligible.</p>
-                  </div>
-                ) : filteredAndSortedStudents.length === 0 ? (
-                  <div className="p-6 text-center bg-slate-50 border border-slate-200 rounded-2xl">
-                    <p className="text-xs font-bold text-slate-500">No students match the selected filter criteria.</p>
-                  </div>
-                ) : (
-                  <div className="border border-slate-200/80 rounded-2xl overflow-hidden divide-y divide-slate-100 max-h-64 overflow-y-auto bg-slate-50/40">
-                    {filteredAndSortedStudents.map((student) => {
-                      const isSelected = selectedStudentIds.includes(student.student_id);
-                      return (
-                        <div
-                          key={student.student_id}
-                          onClick={() => handleToggleStudent(student.student_id)}
-                          className={`p-3.5 flex items-center justify-between gap-3 transition-colors cursor-pointer ${
-                            isSelected ? "bg-emerald-50/60 hover:bg-emerald-50" : "bg-white hover:bg-slate-50"
-                          }`}
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className={`w-5 h-5 rounded flex items-center justify-center border transition-all ${
-                              isSelected ? "bg-emerald-600 border-emerald-600 text-white" : "border-slate-300 bg-white"
-                            }`}>
-                              {isSelected && <Check className="w-3.5 h-3.5" />}
-                            </div>
-                            <div className="w-8 h-8 rounded-full bg-slate-200 text-slate-700 flex items-center justify-center text-xs font-black uppercase">
-                              {student.first_name[0]}{student.last_name[0]}
-                            </div>
-                            <div>
-                              <p className="text-xs font-bold text-slate-900">
-                                {formatStudentName(student)}
-                              </p>
-                              <p className="text-[10px] text-slate-400 font-mono">
-                                ID: {student.institutional_id}
-                              </p>
-                            </div>
-                          </div>
-
-                          <div className="text-right">
-                            <span className="text-[11px] font-bold text-slate-700 block">
-                              {student.program_code} — Year {student.year_level}
-                            </span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
+                {/* Exam Date */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-emerald-200 block">Exam Administration Date <span className="text-rose-400">*</span></label>
+                  <input
+                    type="date"
+                    required
+                    value={examDate}
+                    onChange={(e) => setExamDate(e.target.value)}
+                    className="w-full bg-slate-900/90 border border-emerald-500/40 text-white text-sm font-bold px-3.5 py-2.5 rounded-xl focus:ring-2 focus:ring-emerald-400 focus:outline-none [color-scheme:dark]"
+                  />
+                </div>
               </div>
 
-              {/* 4. Strict Time Limit */}
-              <div className="border-t border-slate-100 pt-5 space-y-4">
+              {/* Automatically Determined Applicable Semester Banner */}
+              <div className="bg-white/10 backdrop-blur-md border border-white/15 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-1.5 text-xs font-extrabold text-emerald-300">
+                    <CheckCircle className="w-4 h-4 text-emerald-400" />
+                    <span>Applicable Academic Semester:</span>
+                  </div>
+                  <p className="text-[11px] text-slate-300">
+                    Automatically determined based on exam date (<span className="text-white font-mono font-bold">{examDate}</span>) and active academic period set by the Academic Directorate.
+                  </p>
+                </div>
+                <div className="bg-emerald-500 text-slate-950 text-xs font-black px-3.5 py-1.5 rounded-xl shadow-sm shrink-0 flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>{applicableSemesterLabel}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* 2. Assigned Subject Selection */}
+            <div className="space-y-4 border-t border-slate-100 pt-5">
+              <div className="flex items-center justify-between">
                 <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
-                  <Sliders className="w-4 h-4 text-emerald-600" />
-                  4. Time Limit & Item Shuffling
+                  <GraduationCap className="w-4 h-4 text-emerald-600" />
+                  2. Assigned Subject
                 </h3>
+                <span className="text-[10px] font-black uppercase text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
+                  Official Course Parameters
+                </span>
+              </div>
+              <p className="text-xs text-slate-400">
+                Select from your official teaching load. Course code and title will load automatically.
+              </p>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-xs font-extrabold text-slate-700 block">Select Assigned Subject <span className="text-rose-500">*</span></label>
+                <select
+                  value={courseId}
+                  onChange={(e) => handleCourseChange(Number(e.target.value))}
+                  className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 text-sm font-bold text-slate-800 px-4 py-2.5 rounded-xl transition-all duration-300"
+                >
+                  {effectiveAssignedSubjects.map((c) => (
+                    <option key={c.course_id} value={c.course_id}>
+                      {c.course_code} — {c.course_title}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-                {/* Strict Time Limit */}
+              {/* Course Code & Title Syllabus Badges */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="bg-slate-50/80 border border-slate-200/80 rounded-2xl p-3.5 space-y-1">
+                  <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Course Code (Syllabus)</span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-base font-black text-slate-900 bg-white border border-slate-200 px-2.5 py-1 rounded-lg shadow-sm">
+                      {selectedCourse.course_code || "N/A"}
+                    </span>
+                    <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">✓ Verified</span>
+                  </div>
+                </div>
+
+                <div className="bg-slate-50/80 border border-slate-200/80 rounded-2xl p-3.5 space-y-1">
+                  <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Course Title (Syllabus)</span>
+                  <p className="text-sm font-bold text-slate-800 line-clamp-1">
+                    {selectedCourse.course_title || "N/A"}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* 3. Assigned Students Selection */}
+            <div className="space-y-4 border-t border-slate-100 pt-5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
+                    <Users className="w-4 h-4 text-emerald-600" />
+                    3. Assigned Students for Selected Subject
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Designate class students eligible to take this examination.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleSelectAllStudents}
+                    className="text-[11px] font-bold text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                  >
+                    Select All
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDeselectAllStudents}
+                    className="text-[11px] font-bold text-slate-600 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                  >
+                    Deselect All
+                  </button>
+                  <span className="text-xs font-black text-emerald-800 bg-emerald-100 px-2.5 py-1 rounded-full border border-emerald-300/60">
+                    {selectedStudentIds.length} / {assignedStudents.length} Selected
+                  </span>
+                </div>
+              </div>
+
+              {/* Sort & Filter Controls Toolbar for Assigned Students */}
+              {assignedStudents.length > 0 && (
+                <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-3.5 space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
+                    {/* Search */}
+                    <div className="relative sm:col-span-1">
+                      <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+                      <input
+                        type="text"
+                        placeholder="Search student..."
+                        value={studentSearch}
+                        onChange={(e) => setStudentSearch(e.target.value)}
+                        className="w-full bg-white border border-slate-200 rounded-xl pl-8 pr-3 py-1.5 text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                      />
+                    </div>
+
+                    {/* Sort By */}
+                    <div className="sm:col-span-1">
+                      <select
+                        value={studentSortBy}
+                        onChange={(e) => setStudentSortBy(e.target.value as any)}
+                        className="w-full bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                      >
+                        <option value="lastNameAsc">Sort by Last Name (A-Z)</option>
+                        <option value="lastNameDesc">Sort by Last Name (Z-A)</option>
+                        <option value="firstNameAsc">Sort by First Name (A-Z)</option>
+                        <option value="firstNameDesc">Sort by First Name (Z-A)</option>
+                        <option value="yearAsc">Sort by Year Level (1 to 4)</option>
+                        <option value="yearDesc">Sort by Year Level (4 to 1)</option>
+                        <option value="programAsc">Sort by Program Code</option>
+                      </select>
+                    </div>
+
+                    {/* Filter by Program */}
+                    <div className="sm:col-span-1">
+                      <select
+                        value={studentProgramFilter}
+                        onChange={(e) => setStudentProgramFilter(e.target.value)}
+                        className="w-full bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                      >
+                        <option value="ALL">Program: All Programs</option>
+                        {availableStudentPrograms.map(prog => (
+                          <option key={prog} value={prog}>{prog}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Filter by Year Level */}
+                    <div className="sm:col-span-1">
+                      <select
+                        value={studentYearFilter}
+                        onChange={(e) => setStudentYearFilter(e.target.value)}
+                        className="w-full bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                      >
+                        <option value="ALL">Year: All Years</option>
+                        {availableStudentYears.map(yr => (
+                          <option key={yr} value={String(yr)}>Year Level {yr}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {loadingStudents ? (
+                <div className="p-8 text-center bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
+                  <RefreshCw className="w-6 h-6 animate-spin text-emerald-600 mx-auto" />
+                  <p className="text-xs font-bold text-slate-500">Loading class students for this subject...</p>
+                </div>
+              ) : assignedStudents.length === 0 ? (
+                <div className="p-6 text-center bg-amber-50/60 border border-amber-200/80 rounded-2xl space-y-1">
+                  <p className="text-xs font-bold text-amber-800">No class students currently registered for this subject.</p>
+                  <p className="text-[11px] text-amber-600">Students who register or enroll in this course code will automatically become eligible.</p>
+                </div>
+              ) : filteredAndSortedStudents.length === 0 ? (
+                <div className="p-6 text-center bg-slate-50 border border-slate-200 rounded-2xl">
+                  <p className="text-xs font-bold text-slate-500">No students match the selected filter criteria.</p>
+                </div>
+              ) : (
+                <div className="border border-slate-200/80 rounded-2xl overflow-hidden divide-y divide-slate-100 max-h-64 overflow-y-auto bg-slate-50/40">
+                  {filteredAndSortedStudents.map((student) => {
+                    const isSelected = selectedStudentIds.includes(student.student_id);
+                    return (
+                      <div
+                        key={student.student_id}
+                        onClick={() => handleToggleStudent(student.student_id)}
+                        className={`p-3.5 flex items-center justify-between gap-3 transition-colors cursor-pointer ${
+                          isSelected ? "bg-emerald-50/60 hover:bg-emerald-50" : "bg-white hover:bg-slate-50"
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className={`w-5 h-5 rounded flex items-center justify-center border transition-all ${
+                            isSelected ? "bg-emerald-600 border-emerald-600 text-white" : "border-slate-300 bg-white"
+                          }`}>
+                            {isSelected && <Check className="w-3.5 h-3.5" />}
+                          </div>
+                          <div className="w-8 h-8 rounded-full bg-slate-200 text-slate-700 flex items-center justify-center text-xs font-black uppercase">
+                            {student.first_name[0]}{student.last_name[0]}
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold text-slate-900">
+                              {formatStudentName(student)}
+                            </p>
+                            <p className="text-[10px] text-slate-400 font-mono">
+                              ID: {student.institutional_id}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="text-right">
+                          <span className="text-[11px] font-bold text-slate-700 block">
+                            {student.program_code} — Year {student.year_level}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* 4. Time Limit & Item Shuffling */}
+            <div className="border-t border-slate-100 pt-5 space-y-4">
+              <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
+                <Sliders className="w-4 h-4 text-emerald-600" />
+                4. Time Limit & Item Shuffling
+              </h3>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <label className="text-xs font-extrabold text-slate-600 block">Strict Time Limit (Minutes)</label>
                   <div className="relative">
@@ -1399,7 +1662,6 @@ export function ExamBuilderWizard({
                 </p>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {/* Time Penalty */}
                   <div className="space-y-1.5">
                     <label className="text-xs font-extrabold text-slate-600 block">Time Penalty per Violation</label>
                     <div className="relative">
@@ -1415,7 +1677,6 @@ export function ExamBuilderWizard({
                     </div>
                   </div>
 
-                  {/* Score Penalty */}
                   <div className="space-y-1.5">
                     <label className="text-xs font-extrabold text-slate-600 block">Score Penalty per Violation</label>
                     <div className="relative">
@@ -1433,38 +1694,16 @@ export function ExamBuilderWizard({
                 </div>
               </div>
             </div>
-          </div>
-        </div>
 
-          {/* Table of Specifications (TOS) Native System Card */}
-          <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm flex flex-col justify-between space-y-6">
-            <div>
-              <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
-                <span className="w-1.5 h-6 bg-emerald-600 rounded-full" />
-                Native TOS Topic Alignment
-              </h2>
-              <p className="text-xs text-slate-400 mt-2 leading-relaxed">
-                The Table of Specifications (TOS) matrix is natively integrated into the Question Bank Builder. Exam item ranges (e.g. Items 1–20), topic weighting, and objective distributions are automatically tracked dynamically.
-              </p>
-            </div>
-
-            <div className="bg-emerald-50/80 border border-emerald-200/80 rounded-2xl p-4 flex gap-3 items-start">
-              <Layers className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
-              <div className="min-w-0 flex-1">
-                <p className="text-xs font-bold text-emerald-900">Dynamic TOS Matrix Active</p>
-                <p className="text-[11px] text-emerald-700 leading-normal mt-0.5">
-                  No manual TOS file upload required. In Step 2, you can map topics directly to item numbers and ranges.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex justify-end pt-4 border-t border-slate-100">
+            {/* Step 1 Footer Action */}
+            <div className="flex justify-end pt-6 border-t border-slate-100">
               <button
+                type="button"
                 disabled={!isConfigValid}
                 onClick={() => setStep(2)}
-                className="w-full sm:w-auto inline-flex justify-center items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold px-5 py-2.5 rounded-xl shadow-md hover:shadow-emerald-600/20 transition-all disabled:opacity-50"
+                className="w-full sm:w-auto inline-flex justify-center items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold px-6 py-3 rounded-xl shadow-md hover:shadow-emerald-600/20 transition-all disabled:opacity-50 cursor-pointer"
               >
-                Proceed to Questions & TOS Setup
+                Proceed to Interactive TOS Setup
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>
@@ -1472,8 +1711,245 @@ export function ExamBuilderWizard({
         </div>
       )}
 
-      {/* STEP 2: QUESTION BANK BUILDER */}
+      {/* STEP 2: INTERACTIVE TOS SETUP (MINIMALIST & PROFESSIONAL) */}
       {step === 2 && (
+        <div className="space-y-6 font-sans">
+          
+          {/* TOS Header & Control Card */}
+          <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="w-1.5 h-5 bg-emerald-600 rounded-full" />
+                  <h2 className="text-base font-extrabold text-slate-900">
+                    Table of Specifications (TOS) Setup
+                  </h2>
+                </div>
+                <p className="text-xs text-slate-500 font-medium mt-1">
+                  Enter examination topics and instructional hours. Item weighting and item counts are automatically calculated.
+                </p>
+              </div>
+
+              {/* Target Items & Totals Counter */}
+              <div className="flex items-center gap-3 bg-slate-50 border border-slate-200 px-4 py-2 rounded-xl text-xs shrink-0">
+                <div className="flex items-center gap-2">
+                  <span className="font-extrabold text-slate-700">Total Test Items:</span>
+                  <input
+                    type="number"
+                    min="1"
+                    max="200"
+                    value={targetTotalItems}
+                    onChange={(e) => setTargetTotalItems(Math.max(1, Number(e.target.value)))}
+                    className="w-16 bg-white border border-slate-300 font-mono font-bold text-slate-900 text-xs px-2 py-1 rounded-lg text-center focus:outline-emerald-600"
+                  />
+                </div>
+                <span className="text-slate-300">|</span>
+                <div>
+                  <span className="text-slate-500 font-medium">Total Hours: </span>
+                  <span className="font-bold font-mono text-slate-900">
+                    {tosTopics.reduce((sum, t) => sum + (Number(t.hours) || 0), 0)} hrs
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Guidance Strip */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs text-slate-600 pt-1">
+              <div className="flex items-center gap-2">
+                <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 font-extrabold text-[11px] flex items-center justify-center shrink-0">1</span>
+                <span>Enter lesson topics & teaching hours</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 font-extrabold text-[11px] flex items-center justify-center shrink-0">2</span>
+                <span>Auto-calculates item weights & count</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 font-extrabold text-[11px] flex items-center justify-center shrink-0">3</span>
+                <span>Topics auto-sync with Question Builder</span>
+              </div>
+            </div>
+          </div>
+
+          {/* TOPIC LIST MANAGER */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-slate-900">Lessons & Topics Covered</h3>
+              <button
+                type="button"
+                onClick={handleAddTosTopic}
+                className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3.5 py-2 rounded-xl transition-all cursor-pointer shadow-xs"
+              >
+                <Plus className="w-4 h-4" />
+                Add Topic
+              </button>
+            </div>
+
+            {/* Empty State */}
+            {computedTosTopics.length === 0 ? (
+              <div className="bg-white border border-dashed border-slate-300 rounded-2xl p-8 text-center space-y-3">
+                <p className="text-xs text-slate-500 font-medium">No lesson topics configured yet. Click below to add your first topic.</p>
+                <button
+                  type="button"
+                  onClick={handleAddTosTopic}
+                  className="inline-flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold px-4 py-2 rounded-xl transition-all cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add First Topic
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {computedTosTopics.map((topic, index) => (
+                  <div
+                    key={topic.id}
+                    className="bg-white border border-slate-200 hover:border-slate-300 rounded-2xl p-4 shadow-2xs transition-all space-y-3"
+                  >
+                    {/* Header Row */}
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                        <span className="w-6 h-6 rounded-lg bg-slate-100 text-slate-700 font-mono font-bold text-xs flex items-center justify-center shrink-0">
+                          {index + 1}
+                        </span>
+                        <input
+                          type="text"
+                          value={topic.topic_name}
+                          onChange={(e) => handleUpdateTosTopicField(topic.id, "topic_name", e.target.value)}
+                          placeholder="Lesson or Topic Title (e.g. Chapter 1: Introduction)"
+                          className="w-full bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 focus:border-emerald-500 text-xs font-bold text-slate-900 px-3 py-1.5 rounded-lg outline-none transition-all"
+                        />
+                      </div>
+
+                      {/* Computed Summary Badges & Reorder Controls */}
+                      <div className="flex items-center gap-2 shrink-0">
+                        <div className="flex items-center gap-1.5 text-xs font-mono">
+                          <span className="bg-slate-100 text-slate-700 font-semibold px-2 py-0.5 rounded-md text-[11px]">
+                            {topic.hours} hrs
+                          </span>
+                          <span className="text-slate-500 font-semibold text-[11px]">
+                            {topic.weightPercentage}%
+                          </span>
+                          <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 font-bold px-2 py-0.5 rounded-md text-[11px]">
+                            {topic.assignedItems} items
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-0.5 border-l border-slate-200 pl-2">
+                          <button
+                            type="button"
+                            disabled={index === 0}
+                            onClick={() => handleMoveTosTopic(index, "up")}
+                            className="p-1 text-slate-400 hover:text-slate-700 disabled:opacity-20 transition-colors cursor-pointer"
+                            title="Move Up"
+                          >
+                            <ArrowUp className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            disabled={index === tosTopics.length - 1}
+                            onClick={() => handleMoveTosTopic(index, "down")}
+                            className="p-1 text-slate-400 hover:text-slate-700 disabled:opacity-20 transition-colors cursor-pointer"
+                            title="Move Down"
+                          >
+                            <ArrowDown className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteTosTopic(topic.id)}
+                            className="p-1 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer ml-1"
+                            title="Delete Topic"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Form Fields: Hours & Learning Outcomes */}
+                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 pt-2 border-t border-slate-100 text-xs">
+                      <div className="sm:col-span-1 space-y-1">
+                        <label className="text-[11px] font-semibold text-slate-500 block">Hours Spent</label>
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            type="number"
+                            min="1"
+                            max="100"
+                            value={topic.hours}
+                            onChange={(e) => handleUpdateTosTopicField(topic.id, "hours", Math.max(1, Number(e.target.value)))}
+                            className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:border-emerald-500 text-xs font-bold font-mono text-slate-900 px-3 py-1.5 rounded-lg outline-none"
+                          />
+                          <span className="text-[11px] text-slate-400 font-medium">hrs</span>
+                        </div>
+                      </div>
+
+                      <div className="sm:col-span-3 space-y-1">
+                        <label className="text-[11px] font-semibold text-slate-500 block">Learning Outcomes / Objectives <span className="text-slate-400 font-normal">(Optional)</span></label>
+                        <input
+                          type="text"
+                          value={topic.learning_outcomes}
+                          onChange={(e) => handleUpdateTosTopicField(topic.id, "learning_outcomes", e.target.value)}
+                          placeholder="Key competencies or syllabus outcomes..."
+                          className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:border-emerald-500 text-xs font-medium text-slate-800 px-3 py-1.5 rounded-lg outline-none"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* LIVE BSC TABLE OF SPECIFICATIONS PREVIEW */}
+          <div className="space-y-3 border-t border-slate-200 pt-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">Live TOS Document Matrix</h3>
+                <p className="text-xs text-slate-500">Official Batanes State College Table of Specifications (Form Ref: BSC-ODI-F-121)</p>
+              </div>
+              <span className="text-[11px] font-mono font-bold bg-slate-100 text-slate-700 border border-slate-200 px-2.5 py-0.5 rounded-lg self-start sm:self-auto">
+                BSC-ODI-F-121
+              </span>
+            </div>
+
+            <BSCTableOfSpecificationsView
+              examTitle={title}
+              courseCode={selectedCourse.course_code || "COURSE"}
+              courseTitle={selectedCourse.course_title || title}
+              departmentName="Academic Affairs"
+              term={term}
+              semester={applicableSemester}
+              academicYear={applicableAcademicYear}
+              examDate={examDate}
+              documentReference={documentReference}
+              totalItems={targetTotalItems}
+              topics={computedTosTopics}
+            />
+          </div>
+
+          {/* Step 2 Wizard Navigation Footer */}
+          <div className="flex justify-between items-center pt-5 border-t border-slate-200">
+            <button
+              type="button"
+              onClick={() => setStep(1)}
+              className="inline-flex justify-center items-center gap-2 border border-slate-200 bg-white text-slate-700 text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-slate-50 transition-all cursor-pointer"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Back to Exam Setup
+            </button>
+
+            <button
+              type="button"
+              onClick={handleProceedToQuestions}
+              className="inline-flex justify-center items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-5 py-2.5 rounded-xl shadow-xs transition-all cursor-pointer"
+            >
+              Proceed to Question Bank Builder
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* STEP 3: QUESTION BANK BUILDER */}
+      {step === 3 && (
         <div className="space-y-6">
           
           {/* TOS Syllabus Alignment & Topic Distribution Overview Bar */}
@@ -1747,19 +2223,79 @@ export function ExamBuilderWizard({
               {activeQuestionIdx !== -1 && questions[activeQuestionIdx] ? (
                 <div className="space-y-6">
                   
-                  {/* Editor Header */}
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-4 gap-4">
-                    <div className="space-y-1">
-                      <h3 className="text-base font-extrabold text-slate-800">
-                        Editing Question #{activeQuestionIdx + 1}
-                      </h3>
-                      <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">
-                        Type: {questions[activeQuestionIdx].question_type.replace("_", " ")}
-                      </p>
+                  {/* Real-Time Status Bar: Item Number, Topic, Item Placement Range, and Question Type Switcher */}
+                  <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-emerald-950 text-white rounded-2xl p-4 border border-emerald-800/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-emerald-500 text-slate-950 font-black text-sm flex items-center justify-center shrink-0 shadow-sm">
+                        #{activeQuestionIdx + 1}
+                      </div>
+                      <div className="space-y-0.5">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h3 className="text-sm font-black text-white">Item #{activeQuestionIdx + 1}</h3>
+                          <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-[10px] font-black uppercase px-2 py-0.5 rounded-md">
+                            {questions[activeQuestionIdx].question_type.replace("_", " ")}
+                          </span>
+                          <span className="bg-white/10 text-slate-200 border border-white/15 text-[10px] font-mono font-bold px-2 py-0.5 rounded-md">
+                            {(() => {
+                              const itemNum = activeQuestionIdx + 1;
+                              const matchingTopic = computedTosTopics.find(t => itemNum >= t.itemRangeStart && itemNum <= t.itemRangeEnd);
+                              return matchingTopic ? matchingTopic.itemPlacement : `Item ${itemNum}`;
+                            })()}
+                          </span>
+                        </div>
+                        <p className="text-xs font-semibold text-emerald-200/90 truncate">
+                          TOS Topic: <strong className="text-white font-bold">{questions[activeQuestionIdx].topic || "Unassigned Topic"}</strong>
+                        </p>
+                      </div>
                     </div>
-                    
-                    {/* Metadata: Points, Year Level */}
-                    <div className="flex flex-wrap items-center gap-3">
+
+                    {/* Question Type Switcher (Default: Multiple Choice) */}
+                    <div className="flex items-center gap-2 shrink-0">
+                      <label className="text-xs font-bold text-emerald-200">Question Type:</label>
+                      <select
+                        value={questions[activeQuestionIdx].question_type}
+                        onChange={(e) => {
+                          const newType = e.target.value as any;
+                          setQuestions(prev => prev.map((q, i) => {
+                            if (i !== activeQuestionIdx) return q;
+                            let newOptions = q.options;
+                            let newCorrect = q.correctAnswer;
+                            if (newType === "Multiple_Choice" && (!newOptions || newOptions.length < 2)) {
+                              newOptions = ["Option A", "Option B", "Option C", "Option D"];
+                              newCorrect = "Option A";
+                            } else if (newType === "True_False") {
+                              newCorrect = "True";
+                            }
+                            return {
+                              ...q,
+                              question_type: newType,
+                              options: newOptions,
+                              correctAnswer: newCorrect,
+                            };
+                          }));
+                        }}
+                        className="bg-slate-900 border border-emerald-500/50 text-emerald-300 text-xs font-bold px-3 py-1.5 rounded-xl focus:outline-none cursor-pointer"
+                      >
+                        <option value="Multiple_Choice">Multiple Choice (Default)</option>
+                        <option value="True_False">True / False</option>
+                        <option value="Identification">Identification</option>
+                        <option value="Matching_Type">Matching Type</option>
+                        <option value="Fill_In_The_Blanks">Fill In The Blanks</option>
+                        <option value="Essay">Essay</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Metadata: Points, Year Level */}
+                  <div className="flex items-center justify-between bg-slate-50 border border-slate-200 p-3 rounded-xl text-xs font-bold text-slate-700">
+                    <div className="flex items-center gap-2">
+                      <span className="text-slate-500">Auto-Assigned Topic:</span>
+                      <span className="text-emerald-800 font-extrabold bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-lg">
+                        {questions[activeQuestionIdx].topic}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-4">
                       <div className="flex items-center gap-1.5">
                         <label className="text-[11px] font-bold text-slate-500">Points:</label>
                         <input
@@ -1768,7 +2304,7 @@ export function ExamBuilderWizard({
                           max="100"
                           value={questions[activeQuestionIdx].points}
                           onChange={(e) => updateQuestionPoints(Number(e.target.value))}
-                          className="w-12 bg-slate-50 border border-slate-200 rounded-lg text-center text-xs font-bold text-slate-800 py-1.5 focus:outline-emerald-500"
+                          className="w-12 bg-white border border-slate-200 rounded-lg text-center text-xs font-bold text-slate-800 py-1 focus:outline-emerald-500"
                         />
                       </div>
 
@@ -1777,7 +2313,7 @@ export function ExamBuilderWizard({
                         <select
                           value={questions[activeQuestionIdx].year_level || ""}
                           onChange={(e) => updateQuestionYearLevel(e.target.value ? Number(e.target.value) : undefined)}
-                          className="bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-800 px-1 py-1.5 focus:outline-emerald-500"
+                          className="bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-800 px-1 py-1 focus:outline-emerald-500"
                         >
                           <option value="">N/A</option>
                           <option value="1">1st Yr</option>
@@ -1787,84 +2323,6 @@ export function ExamBuilderWizard({
                         </select>
                       </div>
                     </div>
-                  </div>
-
-                  {/* Interactive TOS Topic Alignment Section for active item */}
-                  <div className="bg-slate-50/90 border border-slate-200/90 p-4 rounded-2xl space-y-3">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      <div className="flex items-center gap-2 flex-1">
-                        <Tag className="w-4 h-4 text-emerald-600 shrink-0" />
-                        <span className="text-xs font-black text-slate-700 shrink-0">TOS Topic Alignment:</span>
-                        
-                        {/* Existing Topics Dropdown + Custom Input */}
-                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 flex-1 min-w-[200px]">
-                          {existingUniqueTopics.length > 0 && (
-                            <select
-                              value={existingUniqueTopics.includes(questions[activeQuestionIdx].topic?.trim() || "") ? questions[activeQuestionIdx].topic?.trim() : "__CUSTOM__"}
-                              onChange={(e) => {
-                                if (e.target.value !== "__CUSTOM__") {
-                                  updateQuestionTopic(e.target.value);
-                                }
-                              }}
-                              className="bg-white border border-slate-300 rounded-xl text-xs font-extrabold text-slate-800 px-3 py-2 focus:outline-emerald-500 shadow-sm"
-                            >
-                              <option value="__CUSTOM__">✍️ Custom Topic Name...</option>
-                              {existingUniqueTopics.map((top, tIdx) => {
-                                const topStats = tosTopicBreakdown.find(t => t.topic === top);
-                                return (
-                                  <option key={tIdx} value={top}>
-                                    📌 {top} ({topStats?.rangeString || "0 items"})
-                                  </option>
-                                );
-                              })}
-                            </select>
-                          )}
-
-                          <input
-                            type="text"
-                            placeholder="Type topic name (e.g. Arrays & Collections)..."
-                            value={questions[activeQuestionIdx].topic || ""}
-                            onChange={(e) => updateQuestionTopic(e.target.value)}
-                            className="flex-1 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-800 px-3 py-2 focus:outline-emerald-500 shadow-sm"
-                          />
-                        </div>
-                      </div>
-
-                      {/* Batch Range Button */}
-                      <button
-                        type="button"
-                        onClick={() => openBatchTopicModal(questions[activeQuestionIdx].topic || "")}
-                        className="inline-flex items-center justify-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 px-3 py-2 rounded-xl transition-all shadow-sm shrink-0 cursor-pointer"
-                        title="Apply this topic across a custom item range (e.g. Items 1 to 20)"
-                      >
-                        <Sliders className="w-3.5 h-3.5 text-emerald-600" />
-                        Set Range (e.g. Items 1-20)...
-                      </button>
-                    </div>
-
-                    {/* Live TOS Alignment Indicator */}
-                    {questions[activeQuestionIdx].topic?.trim() ? (
-                      <div className="flex flex-wrap items-center justify-between text-[11px] text-emerald-900 font-bold bg-emerald-50 border border-emerald-200/80 px-3 py-1.5 rounded-xl gap-2">
-                        <span className="inline-flex items-center gap-1.5">
-                          <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
-                          Aligned with Topic: <strong className="text-emerald-950">"{questions[activeQuestionIdx].topic}"</strong>
-                        </span>
-                        <span className="text-emerald-700 font-extrabold">
-                          {(() => {
-                            const stats = tosTopicBreakdown.find(t => t.topic === questions[activeQuestionIdx].topic?.trim());
-                            return stats ? `${stats.rangeString} (${stats.count} item${stats.count !== 1 ? "s" : ""} • ${stats.weightPercentage}% weight)` : "";
-                          })()}
-                        </span>
-                      </div>
-                    ) : (
-                      <div className="flex flex-wrap items-center justify-between text-[11px] text-rose-900 font-bold bg-rose-50 border border-rose-200/80 px-3 py-1.5 rounded-xl gap-2">
-                        <span className="inline-flex items-center gap-1.5">
-                          <AlertCircle className="w-3.5 h-3.5 text-rose-600" />
-                          No Topic Assigned to Question #{activeQuestionIdx + 1}
-                        </span>
-                        <span className="text-rose-700 font-normal">Select or type a topic above to map to TOS specifications</span>
-                      </div>
-                    )}
                   </div>
 
                 {/* Prompt Text Input */}
@@ -2184,6 +2642,50 @@ export function ExamBuilderWizard({
                   </div>
                 )}
 
+                {/* ANSWER KEY SECTION PLACED DIRECTLY BELOW QUESTION */}
+                <div className="bg-emerald-50/90 border border-emerald-200 rounded-2xl p-4 space-y-2 shadow-2xs mt-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span className="text-xs font-black uppercase tracking-wider text-emerald-950">
+                        Answer Key (Solution):
+                      </span>
+                    </div>
+                    <span className="text-[10px] font-extrabold uppercase text-emerald-700 bg-white border border-emerald-300 px-2 py-0.5 rounded-md">
+                      Auto-Grading Reference
+                    </span>
+                  </div>
+
+                  <div className="text-xs font-bold text-emerald-950 bg-white border border-emerald-200/80 rounded-xl p-3 leading-relaxed font-mono">
+                    {(() => {
+                      const q = questions[activeQuestionIdx];
+                      if (q.question_type === "Multiple_Choice") {
+                        const opIdx = q.options.indexOf(q.correctAnswer);
+                        const letter = opIdx >= 0 ? String.fromCharCode(65 + opIdx) : "A";
+                        return `✓ Correct Option: ${letter}. ${q.correctAnswer || "Option A"}`;
+                      }
+                      if (q.question_type === "True_False") {
+                        return `✓ Correct Option: ${q.correctAnswer || "True"}`;
+                      }
+                      if (q.question_type === "Identification") {
+                        return `✓ Target Answer: "${q.correctAnswer || "No answer entered"}"`;
+                      }
+                      if (q.question_type === "Matching_Type") {
+                        if (!q.matches || q.matches.length === 0) return "No matching pairs configured";
+                        return q.matches.map((m, idx) => `Pair ${idx + 1}: [${m.premise || "Premise"}] → [${m.choice || "Match"}]`).join("; ");
+                      }
+                      if (q.question_type === "Fill_In_The_Blanks") {
+                        if (!q.blanks || q.blanks.length === 0) return "No blanks configured";
+                        return q.blanks.map((b, idx) => `Blank #${idx + 1}: "${b.answer || ""}" (${b.points || 1}pt)`).join("; ");
+                      }
+                      if (q.question_type === "Essay") {
+                        return `Manual Faculty Evaluation Required (Min word count: ${q.min_words ?? 0} words)`;
+                      }
+                      return q.correctAnswer || "N/A";
+                    })()}
+                  </div>
+                </div>
+
               </div>
             ) : (
               <div className="text-center py-24 bg-slate-50/20 border-2 border-dashed border-slate-100 rounded-3xl flex flex-col justify-center items-center">
@@ -2199,20 +2701,20 @@ export function ExamBuilderWizard({
             <div className="flex justify-between items-center pt-6 border-t border-slate-100 mt-8">
               <button
                 type="button"
-                onClick={() => setStep(1)}
+                onClick={() => setStep(2)}
                 className="inline-flex justify-center items-center gap-2 border border-slate-200 bg-white text-slate-700 text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-slate-50 transition-all"
               >
                 <ArrowLeft className="w-4 h-4" />
-                Config Settings
+                Back to TOS Setup
               </button>
 
               <button
                 type="button"
                 disabled={questions.length === 0}
-                onClick={() => setStep(3)}
+                onClick={() => setStep(4)}
                 className="inline-flex justify-center items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold px-5 py-2.5 rounded-xl shadow-md hover:shadow-emerald-600/20 transition-all disabled:opacity-50 disabled:pointer-events-none"
               >
-                Proceed to Preview
+                Proceed to Review & Preview
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>
@@ -2221,8 +2723,8 @@ export function ExamBuilderWizard({
       </div>
     )}
 
-      {/* STEP 3: REVIEW & LIVE PREVIEW */}
-      {step === 3 && (
+      {/* STEP 4: REVIEW & LIVE PREVIEW */}
+      {step === 4 && (
         <div className="space-y-8">
           
           {/* Info Card Summary */}
@@ -2762,7 +3264,7 @@ export function ExamBuilderWizard({
           <div className="flex justify-between items-center bg-white border border-slate-200 rounded-3xl p-5 shadow-sm max-w-4xl mx-auto">
             <button
               type="button"
-              onClick={() => setStep(2)}
+              onClick={() => setStep(3)}
               className="inline-flex justify-center items-center gap-2 border border-slate-200 bg-white text-slate-700 text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-slate-50 transition-all shadow-sm"
             >
               <ArrowLeft className="w-4 h-4" />
