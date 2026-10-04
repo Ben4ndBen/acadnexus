@@ -1687,7 +1687,6 @@ export function ExamBuilderWizard({
           </button>
           <div>
             <h1 className="text-xl font-extrabold text-slate-900 tracking-tight">Exam Creator Wizard</h1>
-            <p className="text-xs text-slate-400 font-medium">Draft Exam ID: #{exam.exam_id} • Status: {exam.current_status}</p>
           </div>
         </div>
 
@@ -1794,63 +1793,54 @@ export function ExamBuilderWizard({
 
             <div className="space-y-6">
               {/* 1. Examination Term & Exam Date (First Asked!) */}
-              <div className="bg-gradient-to-r from-emerald-950 via-slate-900 to-emerald-900 text-white rounded-2xl p-5 sm:p-6 space-y-4 shadow-md border border-emerald-800/40">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-white/10 pb-3">
+              <div className="bg-white border border-slate-200 rounded-3xl p-5 sm:p-6 space-y-4 shadow-sm">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
                   <div className="flex items-center gap-2.5">
-                    <div className="p-2 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
+                    <div className="p-2 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-100">
                       <Calendar className="w-5 h-5" />
                     </div>
                     <div>
-                      <h2 className="text-base font-extrabold text-white tracking-tight">1. Examination Term & Scheduled Date</h2>
-                      <p className="text-xs text-emerald-200/80">Select examination term and planned test administration date first.</p>
+                      <h2 className="text-base font-extrabold text-slate-900 tracking-tight">1. Examination Term & Scheduled Date</h2>
                     </div>
                   </div>
-                  <span className="self-start sm:self-auto bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-[10px] font-black uppercase px-2.5 py-1 rounded-full">
+                  <span className="self-start sm:self-auto bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-black uppercase px-2.5 py-1 rounded-full">
                     Required Step
                   </span>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {/* Examination Term (Configured by Directorate - Non-editable) */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* 1. Academic Year & Semester (Auto / Non-editable) */}
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-emerald-200 block">
-                      Examination Term <span className="text-emerald-300/80 font-normal">(Directorate Standard)</span>
+                    <label className="text-xs font-extrabold text-slate-700 block">
+                      Academic Year & Semester
                     </label>
-                    <div className="w-full bg-slate-900/90 border border-emerald-500/40 text-emerald-300 text-sm font-extrabold px-3.5 py-2.5 rounded-xl flex items-center justify-between">
-                      <span>{term} Examination</span>
-                      <span className="text-[10px] font-black uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 px-2 py-0.5 rounded-md">
-                        Directorate Standard
-                      </span>
+                    <div className="w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm font-extrabold px-3.5 py-2.5 rounded-xl flex items-center justify-between">
+                      <span className="truncate">{applicableSemesterLabel}</span>
                     </div>
                   </div>
 
-                  {/* Exam Date */}
+                  {/* 2. Examination Term (Configured / Non-editable) */}
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-emerald-200 block">Exam Administration Date <span className="text-rose-400">*</span></label>
+                    <label className="text-xs font-extrabold text-slate-700 block">
+                      Examination Term
+                    </label>
+                    <div className="w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm font-extrabold px-3.5 py-2.5 rounded-xl flex items-center justify-between">
+                      <span>{term} Examination</span>
+                    </div>
+                  </div>
+
+                  {/* 3. Exam Administration Date (Editable) */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-extrabold text-slate-700 block">
+                      Exam Administration Date <span className="text-rose-500">*</span>
+                    </label>
                     <input
                       type="date"
                       required
                       value={examDate}
                       onChange={(e) => setExamDate(e.target.value)}
-                      className="w-full bg-slate-900/90 border border-emerald-500/40 text-white text-sm font-bold px-3.5 py-2.5 rounded-xl focus:ring-2 focus:ring-emerald-400 focus:outline-none [color-scheme:dark]"
+                      className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 text-slate-900 text-sm font-bold px-3.5 py-2.5 rounded-xl transition-all"
                     />
-                  </div>
-                </div>
-
-                {/* Automatically Determined Applicable Semester Banner */}
-                <div className="bg-white/10 backdrop-blur-md border border-white/15 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div className="space-y-0.5">
-                    <div className="flex items-center gap-1.5 text-xs font-extrabold text-emerald-300">
-                      <CheckCircle className="w-4 h-4 text-emerald-400" />
-                      <span>Applicable Academic Semester:</span>
-                    </div>
-                    <p className="text-[11px] text-slate-300">
-                      Automatically determined based on exam date (<span className="text-white font-mono font-bold">{examDate}</span>) and active academic period set by the Academic Directorate.
-                    </p>
-                  </div>
-                  <div className="bg-emerald-500 text-slate-950 text-xs font-black px-3.5 py-1.5 rounded-xl shadow-sm shrink-0 flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5" />
-                    <span>{applicableSemesterLabel}</span>
                   </div>
                 </div>
               </div>
@@ -1866,9 +1856,7 @@ export function ExamBuilderWizard({
                     Official Course Parameters
                   </span>
                 </div>
-                <p className="text-xs text-slate-400">
-                  Select from your official teaching load. Course code and title will load automatically.
-                </p>
+
 
                 <div className="space-y-2">
                   <label className="text-xs font-extrabold text-slate-700 block">Select Assigned Subject <span className="text-rose-500">*</span></label>
@@ -1914,9 +1902,7 @@ export function ExamBuilderWizard({
                       <Users className="w-4 h-4 text-emerald-600" />
                       3. Assigned Students for Selected Subject
                     </h3>
-                    <p className="text-xs text-slate-400">
-                      Designate class students eligible to take this examination.
-                    </p>
+
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <button
@@ -2095,44 +2081,43 @@ export function ExamBuilderWizard({
                 </h3>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* Strict Time Limit */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-extrabold text-slate-600 block">Strict Time Limit (Minutes)</label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min="10"
+                        max="300"
+                        required
+                        value={timeLimit}
+                        onChange={(e) => setTimeLimit(Number(e.target.value))}
+                        className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 text-sm font-bold text-slate-800 px-4 py-2.5 rounded-xl transition-all duration-300"
+                      />
+                      <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-slate-400 font-semibold">minutes</span>
+                    </div>
+                  </div>
 
-                {/* Strict Time Limit */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-extrabold text-slate-600 block">Strict Time Limit (Minutes)</label>
-                  <div className="relative">
-                    <input
-                      type="number"
-                      min="10"
-                      max="300"
-                      required
-                      value={timeLimit}
-                      onChange={(e) => setTimeLimit(Number(e.target.value))}
-                      className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 text-sm font-bold text-slate-800 px-4 py-2.5 rounded-xl transition-all duration-300"
-                    />
-                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-slate-400 font-semibold">minutes</span>
+                  {/* Item Randomization Toggle */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-extrabold text-slate-600 block">Question Shuffling</label>
+                    <div className="bg-slate-50/80 border border-slate-200 rounded-xl px-4 py-2 flex items-center justify-between">
+                      <p className="text-xs font-bold text-slate-800 flex items-center gap-2">
+                        <Shuffle className="w-4 h-4 text-emerald-600" />
+                        Randomize Question Order
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setRandomizeItems(!randomizeItems)}
+                        className={`w-11 h-6 flex items-center rounded-full p-0.5 transition-all duration-300 focus:outline-none cursor-pointer ${
+                          randomizeItems ? "bg-emerald-600 justify-end" : "bg-slate-300 justify-start"
+                        }`}
+                      >
+                        <span className="bg-white w-5 h-5 rounded-full shadow-md" />
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-
-              {/* Item Randomization Toggle */}
-              <div className="bg-slate-50/60 border border-slate-100 rounded-2xl p-4 flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <p className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
-                    <Shuffle className="w-4 h-4 text-emerald-600" />
-                    Randomize Question Order
-                  </p>
-                  <p className="text-xs text-slate-400">Shuffles questions randomly for each student session to mitigate collusion.</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setRandomizeItems(!randomizeItems)}
-                  className={`w-12 h-6.5 flex items-center rounded-full p-1 transition-all duration-300 focus:outline-none ${
-                    randomizeItems ? "bg-emerald-600 justify-end" : "bg-slate-200 justify-start"
-                  }`}
-                >
-                  <span className="bg-white w-4.5 h-4.5 rounded-full shadow-sm" />
-                </button>
-              </div>
 
               {/* Security Violations Penalties Configuration */}
               <div className="border-t border-slate-100 pt-4 space-y-4">
@@ -2140,9 +2125,6 @@ export function ExamBuilderWizard({
                   <AlertCircle className="w-4 h-4 text-rose-600" />
                   Security Violation Penalties
                 </h3>
-                <p className="text-xs text-slate-400 mt-1">
-                  Configure automatic time or score reductions executed when a student exits fullscreen, switches browser tabs, or loses window focus.
-                </p>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {/* Time Penalty */}
@@ -2192,9 +2174,7 @@ export function ExamBuilderWizard({
                   <span className="w-1.5 h-6 bg-emerald-600 rounded-full" />
                   Native TOS Topic Alignment & Hours Calculator
                 </h2>
-                <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                  Enter course topics, discussion hours taught, and total planned exam items. The TOS engine automatically calculates topic percentage weightings and target item allocations based on faculty teaching hours.
-                </p>
+
               </div>
 
               {/* Target Exam Items Input Box */}
