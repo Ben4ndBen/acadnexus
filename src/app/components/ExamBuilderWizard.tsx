@@ -478,6 +478,19 @@ export function ExamBuilderWizard({
   const [previewTab, setPreviewTab] = useState<"exam" | "tos">("exam");
   const [previewViewMode, setPreviewViewMode] = useState<"paper" | "grouped">("paper");
   const [previewTopicFilter, setPreviewTopicFilter] = useState<string>("ALL");
+  const [showAnswerKey, setShowAnswerKey] = useState<boolean>(true);
+
+  // Helper to format Multiple Choice Answer Key representation
+  const formatMcCorrectAnswer = (options: string[] | undefined, correctAnswer: string | undefined): string => {
+    if (!correctAnswer) return "Not specified";
+    if (!options || options.length === 0) return correctAnswer;
+    const matchIdx = options.findIndex(opt => opt === correctAnswer || opt.trim().toLowerCase() === correctAnswer.trim().toLowerCase());
+    if (matchIdx !== -1) {
+      const letter = String.fromCharCode(65 + matchIdx);
+      return `Option ${letter} (${options[matchIdx]})`;
+    }
+    return correctAnswer;
+  };
 
   // Dynamic Map of active question types to sequential 1-indexed Test Part numbers (Test 1, Test 2, etc.)
   const questionTypeTestMap = useMemo(() => {
@@ -2962,19 +2975,35 @@ export function ExamBuilderWizard({
                   Step 3: Verification & Official Academic Documents
                 </h3>
                 <p className="text-xs text-slate-500 font-medium">
-                  Review the Official TOS Matrix (BSC-ODI-F-121) followed by the A4 Paginated Examination Paper.
+                  Review the Official TOS Matrix (BSC-ODI-F-121) followed by the Examination Paper & Answer Key.
                 </p>
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={() => window.print()}
-              className="inline-flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold px-5 py-2.5 rounded-xl transition-all shadow-sm cursor-pointer shrink-0"
-            >
-              <Printer className="w-4 h-4 text-emerald-400" />
-              <span>Print All Documents</span>
-            </button>
+            <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+              <button
+                type="button"
+                onClick={() => setShowAnswerKey(!showAnswerKey)}
+                className={`inline-flex items-center justify-center gap-2 text-xs font-extrabold px-4 py-2.5 rounded-xl transition-all shadow-2xs border cursor-pointer ${
+                  showAnswerKey
+                    ? "bg-emerald-50 border-emerald-300 text-emerald-900 hover:bg-emerald-100"
+                    : "bg-slate-100 border-slate-300 text-slate-600 hover:bg-slate-200"
+                }`}
+                title="Toggle Answer Key visibility on Test Questionnaire preview"
+              >
+                <CheckCircle className={`w-4 h-4 ${showAnswerKey ? "text-emerald-600" : "text-slate-400"}`} />
+                <span>{showAnswerKey ? "Answer Key Active" : "Show Answer Key"}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="inline-flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold px-5 py-2.5 rounded-xl transition-all shadow-sm cursor-pointer shrink-0"
+              >
+                <Printer className="w-4 h-4 text-emerald-400" />
+                <span>Print All Documents</span>
+              </button>
+            </div>
           </div>
 
           {/* STEP 3 VERTICALLY STACKED PREVIEW CONTAINER */}
@@ -3393,56 +3422,138 @@ export function ExamBuilderWizard({
 
                                 {/* Multiple Choice Options */}
                                 {q.question_type === "Multiple_Choice" && q.options && (
-                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pl-6 pt-1">
-                                    {q.options.map((opt: string, optIdx: number) => {
-                                      const label = String.fromCharCode(65 + optIdx);
-                                      return (
-                                        <div key={optIdx} className="flex items-center gap-2 font-medium text-slate-800 text-xs bg-slate-50 border border-slate-200/80 px-2.5 py-1.5 rounded-lg">
-                                          <span className="font-bold text-slate-900 bg-slate-200 px-1.5 py-0.5 rounded text-[10px]">{label}.</span>
-                                          <span>{opt || `Option ${label}`}</span>
-                                        </div>
-                                      );
-                                    })}
+                                  <div className="pl-6 pt-1 space-y-2">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                                      {q.options.map((opt: string, optIdx: number) => {
+                                        const label = String.fromCharCode(65 + optIdx);
+                                        const isCorrect = (q.correctAnswer === opt) || (q.correctAnswer?.trim().toUpperCase() === label);
+                                        return (
+                                          <div
+                                            key={optIdx}
+                                            className={`flex items-center gap-2 font-medium text-xs px-2.5 py-1.5 rounded-lg border transition-all ${
+                                              showAnswerKey && isCorrect
+                                                ? "bg-emerald-50 border-emerald-400 text-emerald-950 font-extrabold shadow-2xs"
+                                                : "bg-slate-50 border-slate-200/80 text-slate-800"
+                                            }`}
+                                          >
+                                            <span
+                                              className={`font-bold px-1.5 py-0.5 rounded text-[10px] ${
+                                                showAnswerKey && isCorrect
+                                                  ? "bg-emerald-600 text-white"
+                                                  : "bg-slate-200 text-slate-900"
+                                              }`}
+                                            >
+                                              {label}.
+                                            </span>
+                                            <span>{opt || `Option ${label}`}</span>
+                                            {showAnswerKey && isCorrect && (
+                                              <span className="ml-auto text-[10px] font-extrabold text-emerald-800 bg-emerald-100 border border-emerald-300 px-1.5 py-0.5 rounded shrink-0 flex items-center gap-1">
+                                                <Check className="w-3 h-3 text-emerald-600 font-black" /> Key
+                                              </span>
+                                            )}
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                    {showAnswerKey && (
+                                      <div className="inline-flex items-center gap-1.5 bg-emerald-50/90 border border-emerald-300/80 px-2.5 py-1 rounded-lg text-[11px] font-bold text-emerald-950">
+                                        <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                        <span>Answer Key:</span>
+                                        <span className="font-extrabold text-emerald-950 bg-white border border-emerald-200 px-2 py-0.5 rounded font-mono">
+                                          {formatMcCorrectAnswer(q.options, q.correctAnswer)}
+                                        </span>
+                                      </div>
+                                    )}
                                   </div>
                                 )}
 
                                 {/* True / False Options */}
                                 {q.question_type === "True_False" && (
-                                  <div className="flex items-center gap-4 pl-6 pt-1 font-semibold text-slate-700">
-                                    <div className="flex items-center gap-1.5 border border-slate-300 px-3 py-1 rounded-lg bg-slate-50">
-                                      <div className="w-3.5 h-3.5 border-2 border-slate-400 rounded-sm" />
-                                      <span>True</span>
+                                  <div className="pl-6 pt-1 space-y-2">
+                                    <div className="flex items-center gap-4 font-semibold text-slate-700">
+                                      {["True", "False"].map((choice) => {
+                                        const isSelected = q.correctAnswer === choice;
+                                        return (
+                                          <div
+                                            key={choice}
+                                            className={`flex items-center gap-1.5 border px-3 py-1 rounded-lg text-xs transition-all ${
+                                              showAnswerKey && isSelected
+                                                ? "bg-emerald-50 border-emerald-400 text-emerald-950 font-extrabold shadow-2xs"
+                                                : "bg-slate-50 border-slate-300 text-slate-700"
+                                            }`}
+                                          >
+                                            <div
+                                              className={`w-3.5 h-3.5 border-2 rounded-sm flex items-center justify-center ${
+                                                showAnswerKey && isSelected
+                                                  ? "border-emerald-600 bg-emerald-600 text-white"
+                                                  : "border-slate-400"
+                                              }`}
+                                            >
+                                              {showAnswerKey && isSelected && <Check className="w-3 h-3 text-white font-black" />}
+                                            </div>
+                                            <span>{choice}</span>
+                                          </div>
+                                        );
+                                      })}
                                     </div>
-                                    <div className="flex items-center gap-1.5 border border-slate-300 px-3 py-1 rounded-lg bg-slate-50">
-                                      <div className="w-3.5 h-3.5 border-2 border-slate-400 rounded-sm" />
-                                      <span>False</span>
-                                    </div>
+                                    {showAnswerKey && (
+                                      <div className="inline-flex items-center gap-1.5 bg-emerald-50/90 border border-emerald-300/80 px-2.5 py-1 rounded-lg text-[11px] font-bold text-emerald-950">
+                                        <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                        <span>Answer Key:</span>
+                                        <span className="font-extrabold text-emerald-950 bg-white border border-emerald-200 px-2 py-0.5 rounded font-mono">
+                                          {q.correctAnswer || "Not specified"}
+                                        </span>
+                                      </div>
+                                    )}
                                   </div>
                                 )}
 
                                 {/* Identification Line */}
                                 {q.question_type === "Identification" && (
-                                  <div className="pl-6 pt-1">
+                                  <div className="pl-6 pt-1 space-y-2">
                                     <div className="border-b-2 border-dashed border-slate-400 w-full max-w-xs h-6 text-slate-400 font-mono text-[10px] flex items-end">
                                       Answer: _______________________
                                     </div>
+                                    {showAnswerKey && (
+                                      <div className="inline-flex items-center gap-1.5 bg-emerald-50/90 border border-emerald-300/80 px-2.5 py-1 rounded-lg text-[11px] font-bold text-emerald-950">
+                                        <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                        <span>Answer Key:</span>
+                                        <span className="font-extrabold text-emerald-950 bg-white border border-emerald-200 px-2 py-0.5 rounded font-mono">
+                                          {q.correctAnswer || "(Not specified)"}
+                                        </span>
+                                      </div>
+                                    )}
                                   </div>
                                 )}
 
                                 {/* Fill In The Blanks */}
                                 {q.question_type === "Fill_In_The_Blanks" && (
-                                  <div className="pl-6 pt-1 text-slate-600 font-medium">
-                                    {(q.blanks || [{ id: 1 }]).map((b: any, bIdx: number) => (
-                                      <div key={bIdx} className="inline-block mr-3 mt-1 text-[11px] font-mono text-slate-700 bg-slate-100 border border-slate-300 px-2 py-0.5 rounded">
-                                        Blank #{bIdx + 1}: ____________
+                                  <div className="pl-6 pt-1 space-y-2">
+                                    <div className="text-slate-600 font-medium">
+                                      {(q.blanks || [{ id: 1 }]).map((b: any, bIdx: number) => (
+                                        <div key={bIdx} className="inline-block mr-3 mt-1 text-[11px] font-mono text-slate-700 bg-slate-100 border border-slate-300 px-2 py-0.5 rounded">
+                                          Blank #{bIdx + 1}: ____________
+                                        </div>
+                                      ))}
+                                    </div>
+                                    {showAnswerKey && (
+                                      <div className="flex flex-wrap items-center gap-2 bg-emerald-50/90 border border-emerald-300/80 p-2.5 rounded-xl text-[11px] font-bold text-emerald-950">
+                                        <span className="flex items-center gap-1 font-extrabold uppercase text-emerald-950 text-[10px]">
+                                          <Check className="w-3.5 h-3.5 text-emerald-600" /> Answer Keys:
+                                        </span>
+                                        {(q.blanks || []).map((b: any, bIdx: number) => (
+                                          <span key={bIdx} className="bg-white border border-emerald-300 px-2 py-0.5 rounded font-mono text-emerald-950">
+                                            Blank #{bIdx + 1}: <strong className="text-emerald-800">{b.answer || "___"}</strong> ({b.points || 1} pt)
+                                          </span>
+                                        ))}
                                       </div>
-                                    ))}
+                                    )}
                                   </div>
                                 )}
 
                                 {/* Matching Type Table */}
                                 {q.question_type === "Matching_Type" && q.matches && (
-                                  <div className="pl-6 pt-1">
+                                  <div className="pl-6 pt-1 space-y-2">
                                     <div className="grid grid-cols-2 gap-4 text-xs border border-slate-200 rounded-lg p-2.5 bg-slate-50">
                                       <div className="space-y-1">
                                         <p className="font-bold text-[10px] text-slate-500 uppercase border-b pb-1">Column A (Premises)</p>
@@ -3457,15 +3568,36 @@ export function ExamBuilderWizard({
                                         ))}
                                       </div>
                                     </div>
+                                    {showAnswerKey && (
+                                      <div className="flex flex-wrap items-center gap-2 bg-emerald-50/90 border border-emerald-300/80 p-2.5 rounded-xl text-[11px] font-bold text-emerald-950">
+                                        <span className="flex items-center gap-1 font-extrabold uppercase text-emerald-950 text-[10px]">
+                                          <Check className="w-3.5 h-3.5 text-emerald-600" /> Answer Key Mapping:
+                                        </span>
+                                        {q.matches.map((m: any, mIdx: number) => (
+                                          <span key={mIdx} className="bg-white border border-emerald-300 px-2 py-0.5 rounded font-mono text-emerald-950 text-[10px]">
+                                            {mIdx + 1} → Choice {String.fromCharCode(65 + mIdx)} ({m.choice})
+                                          </span>
+                                        ))}
+                                      </div>
+                                    )}
                                   </div>
                                 )}
 
                                 {/* Essay Response Area */}
                                 {q.question_type === "Essay" && (
-                                  <div className="pl-6 pt-1">
+                                  <div className="pl-6 pt-1 space-y-2">
                                     <div className="border border-slate-300 rounded-lg p-2.5 h-16 bg-slate-50/50 text-slate-400 text-[10px] italic">
                                       [ Space for student response - Min {q.min_words || 50} words ]
                                     </div>
+                                    {showAnswerKey && (
+                                      <div className="inline-flex items-center gap-1.5 bg-emerald-50/90 border border-emerald-300/80 px-2.5 py-1 rounded-lg text-[11px] font-bold text-emerald-950">
+                                        <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                        <span>Answer Guide / Key Rubric:</span>
+                                        <span className="font-extrabold text-emerald-950 bg-white border border-emerald-200 px-2 py-0.5 rounded font-sans">
+                                          {q.correctAnswer || `Evaluated by faculty. Min ${q.min_words || 50} words required.`}
+                                        </span>
+                                      </div>
+                                    )}
                                   </div>
                                 )}
 
@@ -3496,6 +3628,9 @@ export function ExamBuilderWizard({
                   </div>
                 ))}
             </div>
+
+
+
 
           </div>
 
