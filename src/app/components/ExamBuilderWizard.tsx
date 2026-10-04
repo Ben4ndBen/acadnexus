@@ -506,6 +506,28 @@ export function ExamBuilderWizard({
   const [previewViewMode, setPreviewViewMode] = useState<"paper" | "grouped">("paper");
   const [previewTopicFilter, setPreviewTopicFilter] = useState<string>("ALL");
   const [showAnswerKey, setShowAnswerKey] = useState<boolean>(true);
+  const [printMode, setPrintMode] = useState<"all" | "tos" | "exam">("all");
+
+  const handlePrintTos = () => {
+    setPrintMode("tos");
+    setTimeout(() => {
+      window.print();
+    }, 150);
+  };
+
+  const handlePrintExam = () => {
+    setPrintMode("exam");
+    setTimeout(() => {
+      window.print();
+    }, 150);
+  };
+
+  const handlePrintAll = () => {
+    setPrintMode("all");
+    setTimeout(() => {
+      window.print();
+    }, 150);
+  };
 
   // Helper to format Multiple Choice Answer Key representation
   const formatMcCorrectAnswer = (options: string[] | undefined, correctAnswer: string | undefined): string => {
@@ -1669,48 +1691,6 @@ export function ExamBuilderWizard({
           </div>
         </div>
 
-        {/* Wizard Action Buttons & Document Reference on Top Right */}
-        <div className="flex flex-wrap items-center gap-3 sm:ml-auto">
-
-          {/* Top Right Field for Exam Document / Reference Number (like BSC-ODLF-017) */}
-          <div className="flex items-center gap-2 bg-slate-50 border border-slate-200/90 px-3.5 py-1.5 rounded-2xl shadow-inner">
-            <FileText className="w-4 h-4 text-emerald-600 shrink-0" />
-            <div className="flex flex-col">
-              <span className="text-[9px] font-extrabold text-slate-500 uppercase tracking-wider">Doc / Ref No.</span>
-              <input
-                type="text"
-                value={documentReference}
-                onChange={(e) => setDocumentReference(e.target.value)}
-                placeholder="e.g. BSC-ODLF-017"
-                className="bg-transparent text-xs font-mono font-black text-slate-800 placeholder:text-slate-400 focus:outline-none w-32 uppercase"
-              />
-            </div>
-          </div>
-
-          <button
-            onClick={handleSaveDraft}
-            className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 border border-slate-300/60 text-slate-700 text-xs font-bold px-4 py-2.5 rounded-xl transition-all shadow-sm"
-          >
-            <Save className="w-4 h-4" />
-            Save Draft
-          </button>
-
-          <div className="flex items-center gap-2">
-            <button
-              disabled={!isSubmitAllowed}
-              onClick={handleSubmitForReview}
-              className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold px-4 py-2.5 rounded-xl transition-all shadow-md hover:shadow-emerald-600/20 disabled:opacity-50 disabled:pointer-events-none cursor-pointer"
-              title={
-                !hasTosUploaded
-                  ? "Please go to Step 3 (Review & Preview) and upload a TOS PDF file (Max 10MB) to activate submission"
-                  : "Submit examination draft to Chair"
-              }
-            >
-              {isSubmitting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-              Submit for Review
-            </button>
-          </div>
-        </div>
       </div>
 
       {/* Save Notification Banner */}
@@ -2976,101 +2956,11 @@ export function ExamBuilderWizard({
             </div>
           </div>
 
-          {/* ASSIGNED CLASS ROSTER VERIFICATION CARD */}
-          <div className="bg-white border border-slate-200/90 rounded-3xl p-5 shadow-sm space-y-3 font-sans print:hidden">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-3">
-                <div className="bg-emerald-600 text-white p-2.5 rounded-2xl shadow-sm">
-                  <Users className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-black text-slate-900 uppercase tracking-wide">
-                    Assigned Class Roster ({selectedStudentIds.length} Eligible Students)
-                  </h3>
-                  <p className="text-xs text-slate-500 font-medium">
-                    Verified roster of students authorized to take this examination.
-                  </p>
-                </div>
-              </div>
-              <span className="text-xs font-black text-emerald-800 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-xl self-start sm:self-auto">
-                {selectedStudentIds.length} / {assignedStudents.length} Selected
-              </span>
-            </div>
-
-            {selectedStudentIds.length === 0 ? (
-              <div className="p-4 text-center bg-amber-50 border border-amber-200 rounded-2xl text-xs font-bold text-amber-800">
-                No students selected. Go back to Step 1 to select assigned class students.
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 max-h-48 overflow-y-auto p-1">
-                {assignedStudents
-                  .filter(s => selectedStudentIds.includes(s.student_id))
-                  .map((s) => (
-                    <div key={s.student_id} className="flex items-center gap-2.5 bg-slate-50 border border-slate-200 p-2.5 rounded-xl text-xs">
-                      <div className="w-7 h-7 rounded-full bg-emerald-600 text-white flex items-center justify-center font-black text-[10px] uppercase shrink-0">
-                        {s.first_name[0]}{s.last_name[0]}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="font-extrabold text-slate-900 truncate">
-                          {formatStudentName(s)}
-                        </p>
-                        <p className="text-[10px] text-slate-500 font-mono">
-                          {s.institutional_id || "N/A"} • {s.program_code} {s.section && s.section !== "General" ? `(${s.section}) ` : ""}Y{s.year_level}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-              </div>
-            )}
-          </div>
-
-          {/* STEP 3 PREVIEW TOP ACTION BAR */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 bg-white border border-slate-200/90 rounded-3xl p-4 shadow-sm font-sans print:hidden">
-            <div className="flex items-center gap-3">
-              <div className="bg-indigo-600 text-white p-2.5 rounded-2xl shadow-sm">
-                <Layers className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-sm font-black text-slate-900 uppercase tracking-wide">
-                  Step 3: Verification & Official Academic Documents
-                </h3>
-                <p className="text-xs text-slate-500 font-medium">
-                  Review the Official TOS Matrix (BSC-ODI-F-121) followed by the Examination Paper & Answer Key.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-              <button
-                type="button"
-                onClick={() => setShowAnswerKey(!showAnswerKey)}
-                className={`inline-flex items-center justify-center gap-2 text-xs font-extrabold px-4 py-2.5 rounded-xl transition-all shadow-2xs border cursor-pointer ${
-                  showAnswerKey
-                    ? "bg-emerald-50 border-emerald-300 text-emerald-900 hover:bg-emerald-100"
-                    : "bg-slate-100 border-slate-300 text-slate-600 hover:bg-slate-200"
-                }`}
-                title="Toggle Answer Key visibility on Test Questionnaire preview"
-              >
-                <CheckCircle className={`w-4 h-4 ${showAnswerKey ? "text-emerald-600" : "text-slate-400"}`} />
-                <span>{showAnswerKey ? "Answer Key Active" : "Show Answer Key"}</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => window.print()}
-                className="inline-flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold px-5 py-2.5 rounded-xl transition-all shadow-sm cursor-pointer shrink-0"
-              >
-                <Printer className="w-4 h-4 text-emerald-400" />
-                <span>Print All Documents</span>
-              </button>
-            </div>
-          </div>
-
           {/* STEP 3 VERTICALLY STACKED PREVIEW CONTAINER */}
           <div className="space-y-8 font-sans">
 
             {/* DOCUMENT 1: OFFICIAL BATANES STATE COLLEGE TOS MATRIX (BSC-ODI-F-121 - A4 LANDSCAPE PAGINATED) */}
-            <div className="space-y-6">
+            <div className={`space-y-6 ${printMode === "exam" ? "print:hidden" : ""}`}>
               {tosPages.map((pageRows, pageIdx) => (
                 <div key={pageIdx} className="space-y-3">
                   <div className="flex items-center justify-between bg-slate-900 text-white px-6 py-3 rounded-2xl print:hidden max-w-[1123px] mx-auto">
@@ -3080,9 +2970,19 @@ export function ExamBuilderWizard({
                         Official Table of Specifications (TOS) Matrix — Page {pageIdx + 1} of {tosPages.length} — A4 Landscape (BSC-ODI-F-121)
                       </span>
                     </div>
-                    <span className="text-[11px] font-bold text-slate-300 bg-slate-800 px-3 py-1 rounded-xl">
-                      Page {pageIdx + 1} of {tosPages.length}
-                    </span>
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={handlePrintTos}
+                        className="inline-flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-bold px-3 py-1 rounded-xl transition-all shadow-2xs cursor-pointer"
+                      >
+                        <Printer className="w-3.5 h-3.5 text-indigo-200" />
+                        <span>Print TOS</span>
+                      </button>
+                      <span className="text-[11px] font-bold text-slate-300 bg-slate-800 px-3 py-1 rounded-xl">
+                        Page {pageIdx + 1} of {tosPages.length}
+                      </span>
+                    </div>
                   </div>
 
                   <div
@@ -3094,21 +2994,32 @@ export function ExamBuilderWizard({
                         font-family: Arial, Helvetica, sans-serif !important;
                       }
                       @media print {
-                        @page {
-                          size: landscape;
-                          margin: 8mm;
-                        }
+                        ${printMode === "tos" ? `
+                          @page {
+                            size: landscape;
+                            margin: 8mm;
+                          }
+                        ` : printMode === "exam" ? `
+                          @page {
+                            size: portrait;
+                            margin: 10mm;
+                          }
+                        ` : `
+                          @page {
+                            margin: 8mm;
+                          }
+                        `}
                         body {
                           background: white !important;
                         }
                       }
                     `}</style>
 
-                    <div className="space-y-4">
+                    <div className="space-y-3 font-sans">
                       {/* BSC OFFICIAL HEADER IMAGE */}
-                      <div className="w-full border-b border-slate-200 pb-3 relative">
+                      <div className="w-full border-b border-black pb-2 relative">
                         <div className="absolute top-1 right-2 sm:top-2 sm:right-4 z-10 print:top-0 print:right-0">
-                          <span className="font-mono font-black text-[11px] sm:text-xs text-slate-900 bg-white/95 border-2 border-slate-400 px-2.5 py-0.5 rounded shadow-2xs uppercase tracking-wider">
+                          <span className="font-sans font-black text-[11px] sm:text-xs text-black bg-white border border-black px-2 py-0.5 rounded shadow-2xs uppercase tracking-wider">
                             BSC-ODI-F-121
                           </span>
                         </div>
@@ -3119,106 +3030,121 @@ export function ExamBuilderWizard({
                         />
                       </div>
 
+                      {/* NAME OF DEPARTMENT */}
+                      <div className="text-center pt-0.5">
+                        <h3 className="font-sans font-bold text-sm sm:text-base text-black uppercase tracking-wider">
+                          NAME OF DEPARTMENT
+                        </h3>
+                      </div>
+
                       {/* PAGE 1 ONLY: TOS TITLE & METADATA GRID */}
                       {pageIdx === 0 ? (
                         <>
                           {/* TOS TITLE & TERM */}
-                          <div className="text-center space-y-1 py-1 border-b border-slate-200">
-                            <h2 className="text-lg sm:text-xl font-black font-serif text-slate-900 tracking-wide uppercase">
+                          <div className="text-center space-y-0.5 py-1">
+                            <h2 className="text-base sm:text-lg font-black font-sans text-black tracking-wide uppercase">
                               TABLE OF SPECIFICATIONS
                             </h2>
-                            <p className="text-xs font-bold text-slate-800 uppercase">
-                              <span className="underline font-black">[{term.toUpperCase()}] EXAMINATION</span>
+                            <p className="text-xs sm:text-sm font-bold text-black uppercase">
+                              <span className="font-black">[{term.toUpperCase()}] EXAMINATION</span>
                             </p>
-                            <p className="text-xs font-semibold text-slate-700">
-                              <span className="underline font-bold">{applicableSemesterLabel}</span>
+                            <p className="text-xs font-bold text-black">
+                              <span className="underline">{applicableSemesterLabel}</span>
                             </p>
                           </div>
 
-                          {/* COURSE & EXAMINATION METADATA GRID */}
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-2 text-xs font-bold border-b border-slate-200 pb-3">
-                            <div className="flex items-center gap-2">
-                              <span className="text-slate-500 font-bold uppercase min-w-[120px]">COURSE CODE:</span>
-                              <span className="font-mono font-black text-slate-900 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded">{selectedCourse.course_code || "N/A"}</span>
+                          {/* COURSE & EXAMINATION METADATA GRID MATCHING PDF */}
+                          <div className="space-y-2 text-xs font-bold text-black uppercase pt-1 pb-2">
+                            <div className="flex flex-col sm:flex-row items-baseline justify-between gap-4">
+                              <div className="flex items-baseline gap-2 flex-1 w-full">
+                                <span className="shrink-0 font-extrabold text-[11px]">COURSE CODE:</span>
+                                <span className="border-b-2 border-black flex-1 font-mono font-black text-black px-1 text-[11px]">
+                                  {selectedCourse.course_code || ""}
+                                </span>
+                              </div>
+                              <div className="flex items-baseline gap-2 flex-1 w-full">
+                                <span className="shrink-0 font-extrabold text-[11px]">DATE OF EXAMINATION:</span>
+                                <span className="border-b-2 border-black flex-1 font-mono font-black text-black px-1 text-[11px]">
+                                  {examDate}
+                                </span>
+                              </div>
                             </div>
-                            <div className="flex items-center gap-2">
-                              <span className="text-slate-500 font-bold uppercase min-w-[140px]">DATE OF EXAMINATION:</span>
-                              <span className="font-mono font-black text-slate-900 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded">{examDate}</span>
-                            </div>
-                            <div className="flex items-center gap-2 sm:col-span-2">
-                              <span className="text-slate-500 font-bold uppercase min-w-[120px]">COURSE TITLE:</span>
-                              <span className="font-extrabold text-slate-900">{selectedCourse.course_title || "N/A"}</span>
+                            <div className="flex items-baseline gap-2 w-full">
+                              <span className="shrink-0 font-extrabold text-[11px]">COURSE TITLE:</span>
+                              <span className="border-b-2 border-black flex-1 font-extrabold text-black px-1 text-[11px]">
+                                {selectedCourse.course_title || ""}
+                              </span>
                             </div>
                           </div>
                         </>
                       ) : null}
 
-                      {/* BSC-ODI-F-121 OFFICIAL TABLE FORMAT */}
-                      <div className="w-full max-w-full overflow-hidden rounded-xl border border-slate-300 shadow-2xs print:overflow-visible">
-                        <table className="w-full text-left border-collapse text-[10px] print:text-[9px] table-fixed">
+                      {/* BSC-ODI-F-121 OFFICIAL TABLE FORMAT MATCHING PDF */}
+                      <div className="w-full max-w-full overflow-hidden rounded-none border border-black shadow-2xs print:overflow-visible">
+                        <table className="w-full text-left border-collapse text-[9.5px] print:text-[9px] table-fixed border-black font-sans">
                           <thead>
-                            <tr className="bg-white text-black font-black uppercase text-center border-b border-slate-400">
-                              <th rowSpan={3} className="py-2.5 px-1.5 border-r border-slate-300 w-[14%] text-left font-black align-middle text-[9.5px] leading-tight">LESSON / TOPIC</th>
-                              <th rowSpan={3} className="py-2.5 px-1.5 border-r border-slate-300 w-[21%] text-left font-black align-middle text-[9.5px] leading-tight">LEARNING OUTCOMES</th>
-                              <th rowSpan={3} className="py-2.5 px-1 border-r border-slate-300 w-[5.5%] font-black align-middle text-[8.5px] leading-tight">NO. OF TEACHING HOURS</th>
-                              <th rowSpan={3} className="py-2.5 px-1 border-r border-slate-300 w-[5.5%] font-black align-middle text-[8.5px] leading-tight">% OF ALLOCATION</th>
-                              <th rowSpan={3} className="py-2.5 px-1 border-r border-slate-300 w-[5.5%] font-black align-middle text-[8.5px] leading-tight">NO. OF ITEMS</th>
-                              <th colSpan={7} className="py-1.5 px-1 border-r border-b border-slate-300 bg-white text-black font-black text-[9.5px] tracking-tight">
+                            <tr className="bg-white text-black font-black uppercase text-center border-b border-black">
+                              <th rowSpan={3} className="py-2 px-1.5 border-r border-black w-[14%] text-left font-black align-middle text-[9px] leading-tight">LESSON / TOPIC</th>
+                              <th rowSpan={3} className="py-2 px-1.5 border-r border-black w-[21%] text-left font-black align-middle text-[9px] leading-tight">LEARNING OUTCOMES</th>
+                              <th rowSpan={3} className="py-2 px-1 border-r border-black w-[5.5%] font-black align-middle text-[8px] leading-tight">NO. OF TEACH ING HOURS</th>
+                              <th rowSpan={3} className="py-2 px-1 border-r border-black w-[5.5%] font-black align-middle text-[8px] leading-tight">% OF ALLO CATION</th>
+                              <th rowSpan={3} className="py-2 px-1 border-r border-black w-[5.5%] font-black align-middle text-[8px] leading-tight">NO. OF ITEMS</th>
+                              <th colSpan={7} className="py-1.5 px-1 border-r border-b border-black bg-white text-black font-black text-[9px] tracking-tight">
                                 ITEM SPECIFICATION PER TAXONOMY OF LEARNING
                               </th>
-                              <th rowSpan={3} className="py-2.5 px-1 w-[9.5%] font-black align-middle text-[8.5px] leading-tight">ITEM PLACEMENT</th>
+                              <th rowSpan={3} className="py-2 px-1 w-[9.5%] font-black align-middle text-[8px] leading-tight">ITEM PLACEMENT</th>
                             </tr>
-                            <tr className="bg-white text-black font-black text-[8px] uppercase text-center border-b border-slate-300">
-                              <th className="py-1.5 px-0.5 border-r border-b border-slate-300 font-black leading-snug break-words">
-                                KNOWLEDGE /<br />REMEMBERING
+                            <tr className="bg-white text-black font-black text-[7.5px] uppercase text-center border-b border-black">
+                              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-snug break-words">
+                                KNOW LEDGE /<br />REMEMBERING
                               </th>
-                              <th className="py-1.5 px-0.5 border-r border-b border-slate-300 font-black leading-snug break-words">
-                                COMPREHENSION /<br />UNDERSTANDING
+                              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-snug break-words">
+                                COMPRE HENSION /<br />UNDERSTANDING
                               </th>
-                              <th className="py-1.5 px-0.5 border-r border-b border-slate-300 font-black leading-snug break-words">
+                              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-snug break-words">
                                 APPLICATION /<br />APPLYING
                               </th>
-                              <th className="py-1.5 px-0.5 border-r border-b border-slate-300 font-black leading-snug break-words">
+                              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-snug break-words">
                                 ANALYSIS /<br />ANALYZING
                               </th>
-                              <th className="py-1.5 px-0.5 border-r border-b border-slate-300 font-black leading-snug break-words">
+                              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-snug break-words">
                                 SYNTHESIS /<br />EVALUATING
                               </th>
-                              <th className="py-1.5 px-0.5 border-r border-b border-slate-300 font-black leading-snug break-words">
-                                EVALUATION /<br />CREATING
+                              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-snug break-words">
+                                EVALUATION /<br />CREA TING
                               </th>
-                              <th rowSpan={2} className="py-2 px-1 border-r border-slate-300 bg-white font-black text-black text-[9.5px] align-middle">TOTAL</th>
+                              <th rowSpan={2} className="py-2 px-0.5 border-r border-black bg-white font-black text-black text-[9px] align-middle">TOTAL</th>
                             </tr>
-                            <tr className="bg-white text-black font-black text-[11px] uppercase text-center border-b-2 border-slate-400">
-                              <th className="py-1 px-1 border-r border-slate-300 font-black">
-                                {overallTaxonomyPercents.remembering > 0 ? `${overallTaxonomyPercents.remembering}%` : "—"}
+                            <tr className="bg-white text-black font-black text-[9px] uppercase text-center border-b border-black">
+                              <th className="py-1 px-0.5 border-r border-black font-black underline">
+                                {overallTaxonomyPercents.remembering > 0 ? `${overallTaxonomyPercents.remembering}%` : "%"}
                               </th>
-                              <th className="py-1 px-1 border-r border-slate-300 font-black">
-                                {overallTaxonomyPercents.understanding > 0 ? `${overallTaxonomyPercents.understanding}%` : "—"}
+                              <th className="py-1 px-0.5 border-r border-black font-black underline">
+                                {overallTaxonomyPercents.understanding > 0 ? `${overallTaxonomyPercents.understanding}%` : "%"}
                               </th>
-                              <th className="py-1 px-1 border-r border-slate-300 font-black">
-                                {overallTaxonomyPercents.applying > 0 ? `${overallTaxonomyPercents.applying}%` : "—"}
+                              <th className="py-1 px-0.5 border-r border-black font-black underline">
+                                {overallTaxonomyPercents.applying > 0 ? `${overallTaxonomyPercents.applying}%` : "%"}
                               </th>
-                              <th className="py-1 px-1 border-r border-slate-300 font-black">
-                                {overallTaxonomyPercents.analyzing > 0 ? `${overallTaxonomyPercents.analyzing}%` : "—"}
+                              <th className="py-1 px-0.5 border-r border-black font-black underline">
+                                {overallTaxonomyPercents.analyzing > 0 ? `${overallTaxonomyPercents.analyzing}%` : "%"}
                               </th>
-                              <th className="py-1 px-1 border-r border-slate-300 font-black">
-                                {overallTaxonomyPercents.evaluating > 0 ? `${overallTaxonomyPercents.evaluating}%` : "—"}
+                              <th className="py-1 px-0.5 border-r border-black font-black underline">
+                                {overallTaxonomyPercents.evaluating > 0 ? `${overallTaxonomyPercents.evaluating}%` : "%"}
                               </th>
-                              <th className="py-1 px-1 border-r border-slate-300 font-black">
-                                {overallTaxonomyPercents.creating > 0 ? `${overallTaxonomyPercents.creating}%` : "—"}
+                              <th className="py-1 px-0.5 border-r border-black font-black underline">
+                                {overallTaxonomyPercents.creating > 0 ? `${overallTaxonomyPercents.creating}%` : "%"}
                               </th>
                             </tr>
                           </thead>
-                          <tbody className="divide-y divide-slate-300 font-medium text-black bg-white">
+                          <tbody className="divide-y divide-black font-medium text-black bg-white">
                             {pageRows.map((row, idx) => {
                               const t = row.taxonomy;
                               return (
-                                <tr key={idx} className="bg-white">
-                                  <td className="py-3 px-3 font-bold text-black border-r border-slate-300 align-top">
+                                <tr key={idx} className="bg-white border-b border-black">
+                                  <td className="py-2 px-2 font-bold text-black border-r border-black align-top">
                                     {row.topic}
                                   </td>
-                                  <td className="py-2 px-2 text-black border-r border-slate-300 text-[10px] align-top">
+                                  <td className="py-1 px-1.5 text-black border-r border-black text-[9.5px] align-top">
                                     <textarea
                                       rows={2}
                                       value={learningOutcomes[row.topic] ?? `Demonstrates competency and learning outcomes for ${row.topic.toLowerCase()}.`}
@@ -3232,42 +3158,41 @@ export function ExamBuilderWizard({
                                         e.target.style.height = `${e.target.scrollHeight}px`;
                                       }}
                                       placeholder="Enter learning outcomes for this topic..."
-                                      className="w-full bg-slate-50/50 hover:bg-white focus:bg-white border border-slate-200/80 hover:border-slate-300 focus:border-emerald-500 rounded-lg p-1.5 font-sans text-[10px] text-black font-medium focus:outline-none transition-all print:border-none print:bg-transparent print:p-0 print:m-0 resize-y whitespace-pre-wrap break-words overflow-hidden"
+                                      className="w-full bg-transparent border-none p-0.5 font-sans text-[9.5px] text-black font-medium focus:outline-none transition-all print:p-0 print:m-0 resize-y whitespace-pre-wrap break-words overflow-hidden"
                                       title="Faculty: Click to edit learning outcomes for this topic"
                                     />
                                   </td>
-                                  <td className="py-3 px-2 text-center font-bold text-black border-r border-slate-300 align-top">
+                                  <td className="py-2 px-1 text-center font-bold text-black border-r border-black align-top">
                                     {row.hoursTaught > 0 ? row.hoursTaught : "—"}
                                   </td>
-                                  <td className="py-3 px-2 text-center font-extrabold text-black border-r border-slate-300 align-top">
+                                  <td className="py-2 px-1 text-center font-extrabold text-black border-r border-black align-top">
                                     {row.weightPercentage}%
                                   </td>
-                                  <td className="py-3 px-2 text-center font-extrabold text-black border-r border-slate-300 align-top">
+                                  <td className="py-2 px-1 text-center font-extrabold text-black border-r border-black align-top">
                                     {row.count}
                                   </td>
-                                  {/* Taxonomy 6 Columns - Whole Numbers Only */}
-                                  <td className="py-3 px-1 text-center border-r border-slate-300 font-bold text-black align-top">
+                                  <td className="py-2 px-0.5 text-center border-r border-black font-bold text-black align-top">
                                     {t.remembering.count > 0 ? t.remembering.count : "—"}
                                   </td>
-                                  <td className="py-3 px-1 text-center border-r border-slate-300 font-bold text-black align-top">
+                                  <td className="py-2 px-0.5 text-center border-r border-black font-bold text-black align-top">
                                     {t.understanding.count > 0 ? t.understanding.count : "—"}
                                   </td>
-                                  <td className="py-3 px-1 text-center border-r border-slate-300 font-bold text-black align-top">
+                                  <td className="py-2 px-0.5 text-center border-r border-black font-bold text-black align-top">
                                     {t.applying.count > 0 ? t.applying.count : "—"}
                                   </td>
-                                  <td className="py-3 px-1 text-center border-r border-slate-300 font-bold text-black align-top">
+                                  <td className="py-2 px-0.5 text-center border-r border-black font-bold text-black align-top">
                                     {t.analyzing.count > 0 ? t.analyzing.count : "—"}
                                   </td>
-                                  <td className="py-3 px-1 text-center border-r border-slate-300 font-bold text-black align-top">
+                                  <td className="py-2 px-0.5 text-center border-r border-black font-bold text-black align-top">
                                     {t.evaluating.count > 0 ? t.evaluating.count : "—"}
                                   </td>
-                                  <td className="py-3 px-1 text-center border-r border-slate-300 font-bold text-black align-top">
+                                  <td className="py-2 px-0.5 text-center border-r border-black font-bold text-black align-top">
                                     {t.creating.count > 0 ? t.creating.count : "—"}
                                   </td>
-                                  <td className="py-3 px-1 text-center border-r border-slate-300 font-black text-black bg-white align-top">
+                                  <td className="py-2 px-0.5 text-center border-r border-black font-black text-black bg-white align-top">
                                     {row.count}
                                   </td>
-                                  <td className="py-3 px-3 font-mono font-bold text-black text-[10px] align-top">
+                                  <td className="py-2 px-1.5 font-mono font-bold text-black text-[9px] align-top">
                                     {row.rangeString}
                                   </td>
                                 </tr>
@@ -3276,40 +3201,39 @@ export function ExamBuilderWizard({
                           </tbody>
                           {pageIdx === tosPages.length - 1 && (
                             <tfoot>
-                              <tr className="bg-amber-400 text-slate-950 font-black text-xs uppercase border-t-2 border-slate-900">
-                                <td colSpan={2} className="py-3 px-3">TOTAL</td>
-                                <td className="py-3 px-2 text-center">
+                              <tr className="bg-[#f4a100] text-black font-black text-xs uppercase border-t-2 border-black">
+                                <td colSpan={2} className="py-2 px-3 border-r border-black text-center font-black bg-[#f4a100]">TOTAL</td>
+                                <td className="py-2 px-1 text-center border-r border-black font-black bg-[#f4a100]">
                                   {tosTopicBreakdown.reduce((sum, r) => sum + r.hoursTaught, 0)}
                                 </td>
-                                <td className="py-3 px-2 text-center">
-                                  {questions.length > 0 ? 100 : 0}%
+                                <td className="py-2 px-1 text-center border-r border-black font-black bg-[#f4a100]">
+                                  {questions.length > 0 ? "100%" : "0%"}
                                 </td>
-                                <td className="py-3 px-2 text-center">
+                                <td className="py-2 px-1 text-center border-r border-black font-black bg-[#f4a100]">
                                   {questions.length}
                                 </td>
-                                {/* Total per Taxonomy level - Whole Numbers Only */}
-                                <td className="py-3 px-1 text-center font-extrabold">
+                                <td className="py-2 px-0.5 text-center border-r border-black font-black bg-[#f4a100]">
                                   {tosTopicBreakdown.reduce((sum, r) => sum + r.taxonomy.remembering.count, 0) || "—"}
                                 </td>
-                                <td className="py-3 px-1 text-center font-extrabold">
+                                <td className="py-2 px-0.5 text-center border-r border-black font-black bg-[#f4a100]">
                                   {tosTopicBreakdown.reduce((sum, r) => sum + r.taxonomy.understanding.count, 0) || "—"}
                                 </td>
-                                <td className="py-3 px-1 text-center font-extrabold">
+                                <td className="py-2 px-0.5 text-center border-r border-black font-black bg-[#f4a100]">
                                   {tosTopicBreakdown.reduce((sum, r) => sum + r.taxonomy.applying.count, 0) || "—"}
                                 </td>
-                                <td className="py-3 px-1 text-center font-extrabold">
+                                <td className="py-2 px-0.5 text-center border-r border-black font-black bg-[#f4a100]">
                                   {tosTopicBreakdown.reduce((sum, r) => sum + r.taxonomy.analyzing.count, 0) || "—"}
                                 </td>
-                                <td className="py-3 px-1 text-center font-extrabold">
+                                <td className="py-2 px-0.5 text-center border-r border-black font-black bg-[#f4a100]">
                                   {tosTopicBreakdown.reduce((sum, r) => sum + r.taxonomy.evaluating.count, 0) || "—"}
                                 </td>
-                                <td className="py-3 px-1 text-center font-extrabold">
+                                <td className="py-2 px-0.5 text-center border-r border-black font-black bg-[#f4a100]">
                                   {tosTopicBreakdown.reduce((sum, r) => sum + r.taxonomy.creating.count, 0) || "—"}
                                 </td>
-                                <td className="py-3 px-1 text-center font-black bg-amber-500 text-slate-950">
+                                <td className="py-2 px-0.5 text-center border-r border-black font-black bg-[#f4a100]">
                                   {questions.length}
                                 </td>
-                                <td className="py-3 px-3 text-[10px] lowercase font-semibold">
+                                <td className="py-2 px-1.5 text-[9px] font-black bg-[#f4a100]">
                                 </td>
                               </tr>
                             </tfoot>
@@ -3333,7 +3257,7 @@ export function ExamBuilderWizard({
 
 
             {/* DOCUMENT 2: OFFICIAL EXAMINATION PAPER (A4 SIZE PAGINATED PAGES) */}
-            <div className="space-y-6 pt-4 font-sans print:pt-0">
+            <div className={`space-y-6 pt-4 font-sans print:pt-0 ${printMode === "tos" ? "print:hidden" : ""}`}>
                 <div className="flex items-center justify-between bg-slate-900 text-white px-6 py-3 rounded-2xl print:hidden">
                   <div className="flex items-center gap-2">
                     <FileText className="w-4 h-4 text-emerald-400" />
@@ -3341,9 +3265,33 @@ export function ExamBuilderWizard({
                       Official Examination Paper — A4 Print Format ({previewPages.length} {previewPages.length === 1 ? "Page" : "Pages"})
                     </span>
                   </div>
-                  <span className="text-[11px] font-bold text-slate-300 bg-slate-800 px-3 py-1 rounded-xl">
-                    Standard A4 Sheet Layout
-                  </span>
+                  <div className="flex items-center gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => setShowAnswerKey(!showAnswerKey)}
+                      className={`inline-flex items-center gap-1.5 text-[11px] font-extrabold px-3 py-1 rounded-xl transition-all shadow-2xs border cursor-pointer ${
+                        showAnswerKey
+                          ? "bg-emerald-950 border-emerald-500 text-emerald-300 hover:bg-emerald-900"
+                          : "bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700"
+                      }`}
+                      title="Toggle Answer Key visibility on Test Questionnaire preview"
+                    >
+                      <CheckCircle className={`w-3.5 h-3.5 ${showAnswerKey ? "text-emerald-400" : "text-slate-400"}`} />
+                      <span>{showAnswerKey ? "Answer Key Active" : "Show Answer Key"}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handlePrintExam}
+                      className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold px-3 py-1 rounded-xl transition-all shadow-2xs cursor-pointer"
+                    >
+                      <Printer className="w-3.5 h-3.5 text-emerald-200" />
+                      <span>Print Test Questions</span>
+                    </button>
+                    <span className="text-[11px] font-bold text-slate-300 bg-slate-800 px-3 py-1 rounded-xl">
+                      Standard A4 Sheet Layout
+                    </span>
+                  </div>
                 </div>
 
                 {/* A4 PAGINATED PAGES rendering */}
