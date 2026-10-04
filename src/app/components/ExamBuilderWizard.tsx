@@ -347,11 +347,11 @@ export function ExamBuilderWizard({
   );
   const [loadingStudents, setLoadingStudents] = useState<boolean>(false);
 
-  // Filter & Sort State for Assigned Students (Sorted strictly by Name options)
+  // Filter & Sort State for Assigned Students
   const [studentSearch, setStudentSearch] = useState<string>("");
   const [studentProgramFilter, setStudentProgramFilter] = useState<string>("ALL");
   const [studentYearFilter, setStudentYearFilter] = useState<string>("ALL");
-  const [studentSortBy, setStudentSortBy] = useState<"lastNameAsc" | "lastNameDesc" | "firstNameAsc" | "firstNameDesc">("lastNameAsc");
+  const [studentSortBy, setStudentSortBy] = useState<"lastNameAsc" | "lastNameDesc" | "firstNameAsc" | "firstNameDesc" | "yearAsc" | "yearDesc" | "programAsc">("lastNameAsc");
 
   const availableStudentPrograms = useMemo(() => {
     return Array.from(new Set(assignedStudents.map(s => s.program_code).filter(Boolean)));
@@ -384,6 +384,12 @@ export function ExamBuilderWizard({
           return a.first_name.localeCompare(b.first_name) || a.last_name.localeCompare(b.last_name);
         } else if (studentSortBy === "firstNameDesc") {
           return b.first_name.localeCompare(a.first_name) || b.last_name.localeCompare(a.last_name);
+        } else if (studentSortBy === "yearAsc") {
+          return (a.year_level - b.year_level) || a.last_name.localeCompare(b.last_name);
+        } else if (studentSortBy === "yearDesc") {
+          return (b.year_level - a.year_level) || a.last_name.localeCompare(b.last_name);
+        } else if (studentSortBy === "programAsc") {
+          return a.program_code.localeCompare(b.program_code) || a.last_name.localeCompare(b.last_name);
         }
         return 0;
       });
@@ -432,12 +438,16 @@ export function ExamBuilderWizard({
     );
   };
 
+  // Select all students currently matching active search, filters, or sorting
   const handleSelectAllStudents = () => {
-    setSelectedStudentIds(assignedStudents.map(s => s.student_id));
+    const filteredIds = filteredAndSortedStudents.map(s => s.student_id);
+    setSelectedStudentIds(prev => Array.from(new Set([...prev, ...filteredIds])));
   };
 
+  // Deselect all students currently matching active search, filters, or sorting
   const handleDeselectAllStudents = () => {
-    setSelectedStudentIds([]);
+    const filteredIdsSet = new Set(filteredAndSortedStudents.map(s => s.student_id));
+    setSelectedStudentIds(prev => prev.filter(id => !filteredIdsSet.has(id)));
   };
 
   // Question Bank State - Automatically sorted by Question Type order
@@ -1775,23 +1785,34 @@ export function ExamBuilderWizard({
                       Designate class students eligible to take this examination.
                     </p>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <button
                       type="button"
                       onClick={handleSelectAllStudents}
                       className="text-[11px] font-bold text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                      title={filteredAndSortedStudents.length !== assignedStudents.length ? `Select all ${filteredAndSortedStudents.length} filtered students` : "Select all students"}
                     >
-                      Select All
+                      {filteredAndSortedStudents.length !== assignedStudents.length
+                        ? `Select Filtered (${filteredAndSortedStudents.length})`
+                        : "Select All"}
                     </button>
                     <button
                       type="button"
                       onClick={handleDeselectAllStudents}
                       className="text-[11px] font-bold text-slate-600 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                      title={filteredAndSortedStudents.length !== assignedStudents.length ? `Deselect all ${filteredAndSortedStudents.length} filtered students` : "Deselect all students"}
                     >
-                      Deselect All
+                      {filteredAndSortedStudents.length !== assignedStudents.length
+                        ? "Deselect Filtered"
+                        : "Deselect All"}
                     </button>
-                    <span className="text-xs font-black text-emerald-800 bg-emerald-100 px-2.5 py-1 rounded-full border border-emerald-300/60">
-                      {selectedStudentIds.length} / {assignedStudents.length} Selected
+                    <span className="text-xs font-black text-emerald-800 bg-emerald-100 px-2.5 py-1 rounded-full border border-emerald-300/60 flex items-center gap-1">
+                      <span>{selectedStudentIds.length} / {assignedStudents.length} Selected</span>
+                      {filteredAndSortedStudents.length !== assignedStudents.length && (
+                        <span className="text-[10px] text-indigo-700 bg-indigo-50 border border-indigo-200 font-extrabold px-1.5 py-0.5 rounded">
+                          ({filteredAndSortedStudents.length} filtered)
+                        </span>
+                      )}
                     </span>
                   </div>
                 </div>
