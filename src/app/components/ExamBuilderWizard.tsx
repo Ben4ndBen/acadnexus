@@ -1017,11 +1017,81 @@ export function ExamBuilderWizard({
   const [saveStatus, setSaveStatus] = useState<{ type: "success" | "error" | "saving"; message: string } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
+  // TOS PDF Upload State & Input Refs
+  const [tosFilePath, setTosFilePath] = useState<string>(exam.tos_file_path || "");
+  const [uploadingTos, setUploadingTos] = useState<boolean>(false);
+  const tosHeaderInputRef = useRef<HTMLInputElement | null>(null);
+  const tosFooterInputRef = useRef<HTMLInputElement | null>(null);
+  const tosStep1InputRef = useRef<HTMLInputElement | null>(null);
+
   // Step 1 Validation
   const isConfigValid = title.trim() !== "" && courseId > 0 && timeLimit > 0 && examDate.trim() !== "";
 
-  // Submission validation
-  const isSubmitAllowed = isConfigValid && questions.length > 0 && !isSubmitting;
+  // Submission validation: requires valid config, questions > 0, not submitting, AND TOS PDF uploaded
+  const hasTosUploaded = Boolean(tosFilePath && tosFilePath.trim() !== "");
+  const isSubmitAllowed = isConfigValid && questions.length > 0 && !isSubmitting && hasTosUploaded;
+
+  // TOS File Upload Handler (Enforces PDF format & 10MB maximum file size limit)
+  const handleTosFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Reset input so choosing the same file triggers onChange again if needed
+    e.target.value = "";
+
+    // 1. Strict PDF file validation
+    const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+    if (!isPdf) {
+      setSaveStatus({
+        type: "error",
+        message: "Strict Requirement: Only PDF files (.pdf) are allowed for Table of Specifications (TOS).",
+      });
+      return;
+    }
+
+    // 2. Max 10MB size limit validation (10 * 1024 * 1024 bytes)
+    const MAX_SIZE = 10 * 1024 * 1024;
+    if (file.size > MAX_SIZE) {
+      setSaveStatus({
+        type: "error",
+        message: `File Size Limit Exceeded: TOS PDF file size (${(file.size / (1024 * 1024)).toFixed(2)} MB) exceeds the maximum allowed limit of 10MB.`,
+      });
+      return;
+    }
+
+    setUploadingTos(true);
+    setSaveStatus({
+      type: "saving",
+      message: `Uploading TOS PDF file "${file.name}" (${(file.size / (1024 * 1024)).toFixed(2)} MB)...`,
+    });
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await uploadTosFileAction(exam.exam_id, facultyId, formData);
+      if (res.success && res.tos_file_path) {
+        setTosFilePath(res.tos_file_path);
+        setSaveStatus({
+          type: "success",
+          message: `TOS PDF file "${file.name}" uploaded successfully! Final Submit to Chair is now activated.`,
+        });
+      } else {
+        setSaveStatus({
+          type: "error",
+          message: res.error || "Failed to upload TOS PDF file.",
+        });
+      }
+    } catch (err: any) {
+      console.error("Error uploading TOS PDF:", err);
+      setSaveStatus({
+        type: "error",
+        message: err.message || "An error occurred while uploading the TOS PDF file.",
+      });
+    } finally {
+      setUploadingTos(false);
+    }
+  };
 
   // Question Image Upload handlers
   const [uploadingImage, setUploadingImage] = useState<boolean>(false);
@@ -1465,7 +1535,11 @@ export function ExamBuilderWizard({
               disabled={!isSubmitAllowed}
               onClick={handleSubmitForReview}
               className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold px-4 py-2.5 rounded-xl transition-all shadow-md hover:shadow-emerald-600/20 disabled:opacity-50 disabled:pointer-events-none cursor-pointer"
-              title="Submit examination draft to Chair"
+              title={
+                !hasTosUploaded
+                  ? "Please go to Step 3 (Review & Preview) and upload a TOS PDF file (Max 10MB) to activate submission"
+                  : "Submit examination draft to Chair"
+              }
             >
               {isSubmitting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
               Submit for Review
@@ -3202,6 +3276,57 @@ export function ExamBuilderWizard({
             </button>
 
             <div className="flex flex-wrap items-center justify-end gap-3">
+              {/* TOS PDF Upload Input & Button */}
+              <input
+                type="file"
+                ref={tosFooterInputRef}
+                accept=".pdf,application/pdf"
+                onChange={handleTosFileSelect}
+                className="hidden"
+              />
+
+              {hasTosUploaded ? (
+                <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl shadow-2xs">
+                  <FileText className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span className="font-bold">TOS PDF Attached</span>
+                  <a
+                    href={tosFilePath}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[11px] underline font-bold text-emerald-700 hover:text-emerald-900 ml-1"
+                  >
+                    View
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => tosFooterInputRef.current?.click()}
+                    disabled={uploadingTos}
+                    className="text-[10px] bg-white border border-emerald-300 text-emerald-800 hover:bg-emerald-100 font-bold px-2 py-1 rounded-lg ml-1 cursor-pointer"
+                    title="Replace TOS PDF file (Max 10MB)"
+                  >
+                    {uploadingTos ? "Uploading..." : "Change PDF"}
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => tosFooterInputRef.current?.click()}
+                  disabled={uploadingTos}
+                  className="flex items-center gap-2 bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900 text-xs font-bold px-4 py-2.5 rounded-xl transition-all shadow-2xs cursor-pointer disabled:opacity-50"
+                  title="Upload TOS PDF file (Required before submitting to Chair, Max 10MB)"
+                >
+                  {uploadingTos ? (
+                    <RefreshCw className="w-4 h-4 animate-spin text-amber-700" />
+                  ) : (
+                    <FileUp className="w-4 h-4 text-amber-700" />
+                  )}
+                  <span>{uploadingTos ? "Uploading TOS..." : "Upload TOS (PDF)"}</span>
+                  <span className="text-[10px] bg-amber-200/80 text-amber-950 font-black px-1.5 py-0.5 rounded-md">
+                    Max 10MB
+                  </span>
+                </button>
+              )}
+
               <button
                 onClick={handleSaveDraft}
                 className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 border border-slate-300/60 text-slate-700 text-xs font-bold px-4 py-2.5 rounded-xl transition-all shadow-sm"
@@ -3214,7 +3339,11 @@ export function ExamBuilderWizard({
                 disabled={!isSubmitAllowed}
                 onClick={handleSubmitForReview}
                 className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold px-5 py-2.5 rounded-xl transition-all shadow-md hover:shadow-emerald-600/20 disabled:opacity-50 disabled:pointer-events-none cursor-pointer"
-                title="Final Submit to Department Chair"
+                title={
+                  !hasTosUploaded
+                    ? "Please upload a TOS PDF file (Max 10MB) to activate submission"
+                    : "Final Submit to Department Chair"
+                }
               >
                 {isSubmitting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                 Final Submit to Chair

@@ -57,6 +57,10 @@ export async function updateExamStatus(examId: number, status: ExamStatus, userI
       // Allow submission for Chair review with integrated TOS matrix
       // Add or update ApprovalWorkflow record if needed
       if (status === "Pending_Chair") {
+        if (!exam.tos_file_path || exam.tos_file_path.trim() === "") {
+          return { error: "Submission Failed: Uploading a TOS PDF file (max 10MB) is required before submitting to the Department Chair." };
+        }
+
         // Find a Chair to assign (e.g. for the faculty's department)
         const faculty = await tx.faculty.findUnique({
           where: { faculty_id: userId },
@@ -920,6 +924,12 @@ export async function uploadTosFileAction(examId: number, facultyId: number, for
     const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
     if (!isPdf) {
       return { error: "Strict Requirement: Only PDF files (.pdf) are allowed for Table of Specifications (TOS) upload." };
+    }
+
+    // Validate maximum file size (10MB limit)
+    const MAX_SIZE = 10 * 1024 * 1024;
+    if (file.size > MAX_SIZE) {
+      return { error: "File Size Limit Exceeded: TOS PDF file must not exceed 10MB." };
     }
 
     const bytes = await file.arrayBuffer();
