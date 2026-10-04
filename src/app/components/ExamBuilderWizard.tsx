@@ -458,13 +458,13 @@ export function ExamBuilderWizard({
     exam.questionBank.length > 0 ? 0 : -1
   );
 
-  // Topic Accordion Dropdown Open/Closed State
+  // Topic Accordion Dropdown Open/Closed State (Minimized by default)
   const [openTopics, setOpenTopics] = useState<Record<string, boolean>>({});
 
   const toggleTopicOpen = (topicName: string) => {
     setOpenTopics(prev => ({
       ...prev,
-      [topicName]: prev[topicName] === false ? true : false
+      [topicName]: !prev[topicName]
     }));
   };
 
@@ -2293,7 +2293,7 @@ export function ExamBuilderWizard({
               tosTopicBreakdown.map((tItem, topicIdx) => {
                 const topicName = tItem.topic;
                 const isUnassigned = topicName === "Unassigned Topic";
-                const isOpen = openTopics[topicName] !== false; // open by default
+                const isOpen = Boolean(openTopics[topicName]); // minimized (closed) by default
 
                 // Hours taught matching from TOS plans
                 const matchingPlan = tosDistribution.find(d => d.topic.trim().toLowerCase() === topicName.trim().toLowerCase());
