@@ -42,7 +42,7 @@ async function main() {
   // 2. Seed 5 Departments
   console.log("Seeding departments...");
   const itDept = await prisma.department.create({
-    data: { department_name: "IT Department" },
+    data: { department_name: "ICT Department" },
   });
   const agriDept = await prisma.department.create({
     data: { department_name: "Agriculture Department" },
@@ -51,7 +51,7 @@ async function main() {
     data: { department_name: "Hospitality and Tourism Management Department" },
   });
   const industrialDept = await prisma.department.create({
-    data: { department_name: "Industrial Technology Department" },
+    data: { department_name: "IT Department" },
   });
   const teacherEduDept = await prisma.department.create({
     data: { department_name: "Teacher Education Department" },
@@ -61,7 +61,7 @@ async function main() {
   console.log("Seeding programs...");
   const bsitProg = await prisma.academicProgram.create({
     data: {
-      program_code: "BS Info Tech",
+      program_code: "BSInfoTech",
       program_name: "Bachelor of Science in Information Technology",
       department_id: itDept.department_id,
     },
@@ -97,14 +97,14 @@ async function main() {
   const beedProg = await prisma.academicProgram.create({
     data: {
       program_code: "BEED",
-      program_name: "Bachelor of science in elementary education",
+      program_name: "Bachelor of Elementary Education",
       department_id: teacherEduDept.department_id,
     },
   });
   const bsedProg = await prisma.academicProgram.create({
     data: {
       program_code: "BSED",
-      program_name: "Bachelor of Science in Secondary education",
+      program_name: "Bachelor of Secondary Education",
       department_id: teacherEduDept.department_id,
     },
   });

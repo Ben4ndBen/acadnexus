@@ -82,8 +82,8 @@ export const DEPARTMENT_THEMES: Record<DepartmentKey, DepartmentTheme> = {
   },
   indtech: {
     key: "indtech",
-    shortName: "IndTech",
-    fullName: "Industrial Technology Department",
+    shortName: "IT",
+    fullName: "IT Department",
     themeLabel: "Pink and White",
     colors: {
       primary: "#DB2777",
@@ -134,8 +134,8 @@ export const DEPARTMENT_THEMES: Record<DepartmentKey, DepartmentTheme> = {
   },
   it: {
     key: "it",
-    shortName: "IT",
-    fullName: "IT Department",
+    shortName: "ICT",
+    fullName: "ICT Department",
     themeLabel: "Black and White",
     colors: {
       primary: "#18181B",
@@ -192,6 +192,7 @@ export function getDepartmentKey(identifier?: string | null): DepartmentKey {
     str.includes("bsindtech") ||
     str.includes("industrial") ||
     str === "bsit" ||
+    str === "it department" ||
     str === "chair_indtech" ||
     str === "faculty-indtech"
   ) {
@@ -209,12 +210,12 @@ export function getDepartmentKey(identifier?: string | null): DepartmentKey {
   }
 
   if (
+    str.includes("ict") ||
     str.includes("info tech") ||
     str.includes("information technology") ||
     str.includes("bs info tech") ||
     str.includes("bsinfotech") ||
-    str.includes("it department") ||
-    str === "it" ||
+    str.includes("ict department") ||
     str === "chair_it" ||
     str === "faculty-001"
   ) {

@@ -40,18 +40,18 @@ export async function ensureChairsAndDepartmentsExist(force = false) {
         ],
       },
       {
-        name: "IT Department",
+        name: "ICT Department",
         chairId: "CHAIR-001",
         chairUsername: "chair_it",
         facultyId: "FACULTY-001",
         facultyFirstName: "Mark",
         facultyLastName: "Abad",
         programs: [
-          { code: "BS Info Tech", name: "Bachelor of Science in Information Technology" },
+          { code: "BSInfoTech", name: "Bachelor of Science in Information Technology" },
         ],
       },
       {
-        name: "Industrial Technology Department",
+        name: "IT Department",
         chairId: "CHAIR-INDTECH",
         chairUsername: "chair_indtech",
         facultyId: "FACULTY-INDTECH",
@@ -69,29 +69,29 @@ export async function ensureChairsAndDepartmentsExist(force = false) {
         facultyFirstName: "Joseph",
         facultyLastName: "Garcia",
         programs: [
-          { code: "BEED", name: "Bachelor of science in elementary education" },
-          { code: "BSED", name: "Bachelor of Science in Secondary education" },
+          { code: "BEED", name: "Bachelor of Elementary Education" },
+          { code: "BSED", name: "Bachelor of Secondary Education" },
         ],
       },
     ];
 
     // Migrate program codes if needed:
-    // 1. Old BSIT (Information Technology) -> "BS Info Tech"
+    // 1. Information Technology -> "BSInfoTech"
     await db.academicProgram.updateMany({
       where: {
-        program_code: "BSIT",
         OR: [
+          { program_code: "BS Info Tech" },
+          { program_code: "BSInfo Tech" },
           { program_name: { contains: "Information", mode: "insensitive" } },
-          { department: { department_name: { contains: "IT", mode: "insensitive" } } },
         ],
       },
       data: {
-        program_code: "BS Info Tech",
+        program_code: "BSInfoTech",
         program_name: "Bachelor of Science in Information Technology",
       },
     });
 
-    // 2. Old BSINDTECH (Industrial Technology) -> "BSIT"
+    // 2. Industrial Technology -> "BSIT"
     await db.academicProgram.updateMany({
       where: {
         OR: [
@@ -119,7 +119,7 @@ export async function ensureChairsAndDepartmentsExist(force = false) {
         ],
       },
       data: {
-        program_name: "Bachelor of Science in Secondary education",
+        program_name: "Bachelor of Secondary Education",
       },
     });
 
@@ -131,7 +131,7 @@ export async function ensureChairsAndDepartmentsExist(force = false) {
         ],
       },
       data: {
-        program_name: "Bachelor of science in elementary education",
+        program_name: "Bachelor of Elementary Education",
       },
     });
 

@@ -59,13 +59,6 @@ export default async function StudentDashboard() {
       where: {
         program_id: student.program_id,
         year_level: student.year_level,
-        OR: [
-          { section: student.section },
-          { section: { in: ["All", "ALL", "all", "All Sections", "all sections", "Any", "any", ""] } },
-          { section: { equals: student.section, mode: "insensitive" } },
-          { section: "General" },
-          { section: "A" },
-        ],
         exam: {
           current_status: "Approved",
         },
@@ -212,25 +205,37 @@ export default async function StudentDashboard() {
       end_time: t.end_time.toISOString(),
     };
 
+    const officialSchedule = {
+      scheduled_date: t.scheduled_date.toISOString(),
+      start_time: t.start_time.toISOString(),
+      end_time: t.end_time.toISOString(),
+    };
+
     if (now >= examStart && now <= examEnd) {
       activeExams.push({
         ...t.exam,
-        target: sanitizedTarget
+        target: sanitizedTarget,
+        official_schedule: officialSchedule,
+        is_reopened: false
       });
     } else if (now < examStart) {
       upcomingExams.push({
         ...t.exam,
-        target: sanitizedTarget
+        target: sanitizedTarget,
+        official_schedule: officialSchedule,
+        is_reopened: false
       });
     } else {
       missedExams.push({
         ...t.exam,
-        target: sanitizedTarget
+        target: sanitizedTarget,
+        official_schedule: officialSchedule,
+        is_reopened: false
       });
     }
   });
 
-  // Handle active student overrides
+  // Handle active student overrides (individual reopened exam attempts)
   studentOverrides.forEach(o => {
     if (completedExamIds.has(o.exam_id)) {
       return;
@@ -239,9 +244,26 @@ export default async function StudentDashboard() {
     const examStart = o.new_start_time;
     const examEnd = o.new_end_time;
 
+    // Find original target schedule to preserve official examination date
+    const origTarget = eligibleTargets.find(t => t.exam_id === o.exam_id);
+    const officialSchedule = origTarget ? {
+      scheduled_date: origTarget.scheduled_date.toISOString(),
+      start_time: origTarget.start_time.toISOString(),
+      end_time: origTarget.end_time.toISOString(),
+    } : (o.exam.exam_date ? {
+      scheduled_date: o.exam.exam_date.toISOString(),
+      start_time: null,
+      end_time: null,
+    } : null);
+
     const sanitizedTarget = {
       target_id: -o.override_id, // negative ID to distinguish from real targets
-      scheduled_date: o.new_start_time.toISOString(),
+      scheduled_date: (origTarget ? origTarget.scheduled_date : o.new_start_time).toISOString(),
+      start_time: o.new_start_time.toISOString(),
+      end_time: o.new_end_time.toISOString(),
+    };
+
+    const reopenedWindow = {
       start_time: o.new_start_time.toISOString(),
       end_time: o.new_end_time.toISOString(),
     };
@@ -249,17 +271,26 @@ export default async function StudentDashboard() {
     if (now >= examStart && now <= examEnd) {
       activeExams.push({
         ...o.exam,
-        target: sanitizedTarget
+        target: sanitizedTarget,
+        official_schedule: officialSchedule,
+        reopened_window: reopenedWindow,
+        is_reopened: true
       });
     } else if (now < examStart) {
       upcomingExams.push({
         ...o.exam,
-        target: sanitizedTarget
+        target: sanitizedTarget,
+        official_schedule: officialSchedule,
+        reopened_window: reopenedWindow,
+        is_reopened: true
       });
     } else {
       missedExams.push({
         ...o.exam,
-        target: sanitizedTarget
+        target: sanitizedTarget,
+        official_schedule: officialSchedule,
+        reopened_window: reopenedWindow,
+        is_reopened: true
       });
     }
   });

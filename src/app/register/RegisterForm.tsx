@@ -77,63 +77,46 @@ export function RegisterForm({
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   // Map program names / codes -> available majors/tracks
-  // Note: BS Info Tech, BS Agri, BS Tourism, BS Hospitality Management, and BS Elementary Education do not have majors/tracks.
-  const PROGRAM_MAJORS: Record<string, string[]> = {
-    "industrial technology": ["Automotive Technology", "Architecture Technology", "Electronics Technology"],
-    "industrial tech": ["Automotive Technology", "Architecture Technology", "Electronics Technology"],
-    "bsindtech": ["Automotive Technology", "Architecture Technology", "Electronics Technology"],
-    "secondary education": ["English", "Science", "Mathematics"],
-    "bsed": ["English", "Science", "Mathematics"],
-  };
-
-  /** Returns the major options for the currently selected program */
+  /** Returns the major or track options for the currently selected program */
   const availableMajors = useMemo(() => {
     if (!selectedProgramId) return [];
     const prog = programs.find((p) => String(p.program_id) === selectedProgramId);
     if (!prog) return [];
     const nameLower = prog.program_name.toLowerCase();
-    const codeLower = prog.program_code.toLowerCase();
+    const codeUpper = prog.program_code.toUpperCase();
 
-    // Explicitly exclude programs that do not have major/track choices:
-    // BS Info Tech, BS Agri, BS Tourism, BS Hospitality Management, BS Elementary Education
+    // 1. Information Technology (BSInfoTech) has tracks (NO General Track)
     if (
-      codeLower.includes("info") ||
-      nameLower.includes("information") ||
-      codeLower.includes("agri") ||
-      nameLower.includes("agriculture") ||
-      codeLower === "bsa" ||
-      codeLower.includes("tourism") ||
-      nameLower.includes("tourism") ||
-      codeLower === "bstm" ||
-      codeLower.includes("hospitality") ||
-      nameLower.includes("hospitality") ||
-      codeLower === "bshm" ||
-      codeLower.includes("elementary") ||
-      nameLower.includes("elementary") ||
-      codeLower === "beed"
+      codeUpper === "BSINFOTECH" ||
+      codeUpper === "BS INFO TECH" ||
+      nameLower.includes("information technology")
     ) {
-      return [];
+      return [
+        "Cyber Security Track",
+        "Web and Mobile Application Development Track",
+        "Multimedia Track",
+      ];
     }
 
-    // Industrial Technology has majors (BSIT / BSINDTECH with industrial)
+    // 2. Industrial Technology (BSIT) has majors
     if (
-      codeLower === "bsindtech" ||
-      nameLower.includes("industrial") ||
-      (codeLower === "bsit" && !nameLower.includes("information"))
+      codeUpper === "BSIT" ||
+      codeUpper === "BSINDTECH" ||
+      nameLower.includes("industrial technology")
     ) {
-      return ["Automotive Technology", "Architecture Technology", "Electronics Technology"];
+      return [
+        "ARCHITECTURE TECHNOLOGY",
+        "AUTOMOTIVE TECHNOLOGY",
+        "ELECTRONICS TECHNOLOGY",
+      ];
     }
 
-    // Secondary Education has majors
-    if (codeLower === "bsed" || nameLower.includes("secondary education")) {
+    // 3. Secondary Education (BSED) has majors
+    if (codeUpper === "BSED" || nameLower.includes("secondary education")) {
       return ["English", "Science", "Mathematics"];
     }
 
-    for (const [keyword, majors] of Object.entries(PROGRAM_MAJORS)) {
-      if (codeLower === keyword || nameLower.includes(keyword) || codeLower.includes(keyword)) {
-        return majors;
-      }
-    }
+    // All other programs (BSA, BEED, BSHM, BSTM) have NO majors or tracks
     return [];
   }, [selectedProgramId, programs]);
 
@@ -145,13 +128,10 @@ export function RegisterForm({
     const codeUpper = selectedProg.program_code.toUpperCase();
     const nameLower = selectedProg.program_name.toLowerCase();
 
-    // Information Technology is now "BS Info Tech"
     if (
-      codeUpper === "BS INFO TECH" ||
       codeUpper === "BSINFOTECH" ||
-      codeUpper === "BS-IT" ||
-      nameLower.includes("information technology") ||
-      nameLower.includes("info tech")
+      codeUpper === "BS INFO TECH" ||
+      nameLower.includes("information technology")
     ) {
       return "BS_INFO_TECH";
     }

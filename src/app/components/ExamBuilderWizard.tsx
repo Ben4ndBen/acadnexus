@@ -10,7 +10,7 @@ import {
   CheckSquare, Square
 } from "lucide-react";
 import { saveExamConfig, saveExamQuestions, updateExamStatus, uploadQuestionAttachment, getQuestionBankQuestions, importQuestionsToExam, getAssignedStudentsForCourse } from "@/app/actions/faculty";
-import { determineSemesterFromDate } from "@/lib/academicUtils";
+import { determineSemesterFromDate, formatStudentName } from "@/lib/academicUtils";
 import { Latex } from "@/app/components/Latex";
 
 interface Course {
@@ -23,6 +23,7 @@ interface StudentItem {
   student_id: number;
   institutional_id: string;
   first_name: string;
+  middle_name?: string | null;
   last_name: string;
   program_code: string;
   program_name: string;
@@ -1320,7 +1321,7 @@ export function ExamBuilderWizard({
                             </div>
                             <div>
                               <p className="text-xs font-bold text-slate-900">
-                                {student.last_name}, {student.first_name}
+                                {formatStudentName(student)}
                               </p>
                               <p className="text-[10px] text-slate-400 font-mono">
                                 ID: {student.institutional_id}
@@ -1331,9 +1332,6 @@ export function ExamBuilderWizard({
                           <div className="text-right">
                             <span className="text-[11px] font-bold text-slate-700 block">
                               {student.program_code} — Year {student.year_level}
-                            </span>
-                            <span className="text-[10px] text-slate-400 block">
-                              {student.section}
                             </span>
                           </div>
                         </div>
@@ -2444,7 +2442,7 @@ export function ExamBuilderWizard({
                 <div className="w-16 border-b border-dashed border-slate-400" />
               </div>
               <div className="flex gap-2">
-                <span>Year & Section:</span>
+                <span>Year Level:</span>
                 <div className="flex-1 border-b border-dashed border-slate-400" />
               </div>
               <div className="flex gap-2">

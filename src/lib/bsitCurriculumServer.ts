@@ -23,7 +23,7 @@ export async function ensureBsitCoursesExist(force = false) {
         ],
       },
       data: {
-        program_code: "BS Info Tech",
+        program_code: "BSInfoTech",
         program_name: "Bachelor of Science in Information Technology",
       },
     });

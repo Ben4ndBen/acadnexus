@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import db from "@/lib/db";
 import { startStudentExam } from "@/app/actions/student";
+import { formatStudentName } from "@/lib/academicUtils";
 import { TakeExamClient } from "@/app/components/TakeExamClient";
 import Link from "next/link";
 import { ShieldAlert, CheckCircle2, ArrowLeft, GraduationCap, Clock } from "lucide-react";
@@ -167,12 +168,11 @@ export default async function ExamPage({ params }: PageProps) {
       </div>
     );
   }
-
   // 4. Render interactive client interface for the active exam attempt
   return (
     <TakeExamClient
       studentId={student.student_id}
-      studentName={`${student.first_name} ${student.last_name}`}
+      studentName={formatStudentName(student, "firstLast")}
       institutionalId={dbUser.institutional_id}
       examId={examId}
       initialData={{

@@ -9,12 +9,18 @@ export interface CurriculumItem {
   electiveNumber?: number; // 1, 2, 3, 4
 }
 
-export const BSIT_TRACKS = [] as const;
+export const BSINFOTECH_TRACKS = [
+  "Cyber Security Track",
+  "Web and Mobile Application Development Track",
+  "Multimedia Track",
+] as const;
+
+export const BSIT_TRACKS = BSINFOTECH_TRACKS;
+export const BSED_MAJORS = ["English", "Science", "Mathematics"] as const;
+export const BSIT_INDUSTRIAL_MAJORS = ["ARCHITECTURE TECHNOLOGY", "AUTOMOTIVE TECHNOLOGY", "ELECTRONICS TECHNOLOGY"] as const;
 
 export const BSHM_MAJORS = [] as const;
-
 export const BSA_MAJORS = [] as const;
-
 export const BSTM_MAJORS = [] as const;
 
 // --- BSIT CURRICULUM ---
@@ -305,10 +311,10 @@ export function getCurriculumForProgram(programCode: string, yearLevel: number):
   let targetProgram: "BSIT" | "BSHM" | "BSA" | "BSTM" | null = null;
 
   if (
-    codeUpper === "BS INFO TECH" ||
     codeUpper === "BSINFOTECH" ||
+    codeUpper === "BS INFO TECH" ||
     codeUpper.includes("INFORMATION TECHNOLOGY") ||
-    codeUpper.includes("INFO TECH")
+    codeUpper.includes("INFOTECH")
   ) {
     targetProgram = "BSIT";
   } else if (codeUpper === "BSHM" || (codeUpper.includes("HOSPITALITY") && !codeUpper.includes("TOURISM"))) {
