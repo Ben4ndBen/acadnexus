@@ -68,12 +68,12 @@ export function resolveDepartmentKey(departmentIdOrName?: number | string | null
   }
 
   const str = String(departmentIdOrName).trim().toLowerCase();
-  if (str.includes("industrial") || str.includes("itd")) return 31;
+  if (str.includes("industrial") || str.includes("itd") || str === "bsit") return 31;
   if (str.includes("hospitality") || str.includes("tourism") || str.includes("htm")) return 30;
   if (str.includes("agriculture") || str.includes("agri")) return 29;
   if (str.includes("teacher") || str.includes("education") || str.includes("ted")) return 32;
   if (str.includes("ict") || str.includes("information technology") || str.includes("bsinfotech")) return 28;
-  if (str === "it" || str.includes("it department")) return 31;
+  if (str === "it" || str.includes("it department") || str.includes("itd department")) return 31;
 
   return null;
 }

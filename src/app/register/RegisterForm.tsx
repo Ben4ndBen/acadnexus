@@ -88,7 +88,6 @@ export function RegisterForm({
     // 1. Information Technology (BSInfoTech) has tracks (NO General Track)
     if (
       codeUpper === "BSINFOTECH" ||
-      codeUpper === "BS INFO TECH" ||
       nameLower.includes("information technology")
     ) {
       return [
@@ -101,7 +100,6 @@ export function RegisterForm({
     // 2. Industrial Technology (BSIT) has majors
     if (
       codeUpper === "BSIT" ||
-      codeUpper === "BSINDTECH" ||
       nameLower.includes("industrial technology")
     ) {
       return [
@@ -130,7 +128,6 @@ export function RegisterForm({
 
     if (
       codeUpper === "BSINFOTECH" ||
-      codeUpper === "BS INFO TECH" ||
       nameLower.includes("information technology")
     ) {
       return "BS_INFO_TECH";

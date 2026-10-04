@@ -312,7 +312,6 @@ export function getCurriculumForProgram(programCode: string, yearLevel: number):
 
   if (
     codeUpper === "BSINFOTECH" ||
-    codeUpper === "BS INFO TECH" ||
     codeUpper.includes("INFORMATION TECHNOLOGY") ||
     codeUpper.includes("INFOTECH")
   ) {
