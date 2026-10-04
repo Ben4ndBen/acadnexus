@@ -356,21 +356,40 @@ export function ExamBuilderWizard({
   // Filter & Sort State for Assigned Students
   const [studentSearch, setStudentSearch] = useState<string>("");
   const [studentProgramFilter, setStudentProgramFilter] = useState<string>("ALL");
+  const [studentMajorFilter, setStudentMajorFilter] = useState<string>("ALL");
   const [studentYearFilter, setStudentYearFilter] = useState<string>("ALL");
-  const [studentSortBy, setStudentSortBy] = useState<"lastNameAsc" | "lastNameDesc" | "firstNameAsc" | "firstNameDesc" | "yearAsc" | "yearDesc" | "programAsc">("lastNameAsc");
+  const [studentSortBy, setStudentSortBy] = useState<"lastNameAsc" | "lastNameDesc" | "firstNameAsc" | "firstNameDesc" | "yearAsc" | "yearDesc" | "programAsc" | "majorAsc" | "majorDesc">("lastNameAsc");
 
   const availableStudentPrograms = useMemo(() => {
     return Array.from(new Set(assignedStudents.map(s => s.program_code).filter(Boolean)));
   }, [assignedStudents]);
 
+  const availableStudentMajors = useMemo(() => {
+    const defaultMajors = [
+      "AUTOMOTIVE TECHNOLOGY",
+      "ELECTRONICS TECHNOLOGY",
+      "ARCHITECTURE TECHNOLOGY",
+      "SCIENCE",
+      "ENGLISH",
+      "MATH"
+    ];
+    const presentMajors = assignedStudents.map(s => s.section).filter(Boolean);
+    const set = new Set([...defaultMajors, ...presentMajors]);
+    return Array.from(set).sort();
+  }, [assignedStudents]);
+
   const availableStudentYears = useMemo(() => {
-    return Array.from(new Set(assignedStudents.map(s => s.year_level).filter(Boolean))).sort((a, b) => a - b);
+    const defaultYears = [1, 2, 3, 4];
+    const presentYears = assignedStudents.map(s => s.year_level).filter(Boolean);
+    const set = new Set([...defaultYears, ...presentYears]);
+    return Array.from(set).sort((a, b) => a - b);
   }, [assignedStudents]);
 
   const filteredAndSortedStudents = useMemo(() => {
     return assignedStudents
       .filter(s => {
         if (studentProgramFilter !== "ALL" && s.program_code !== studentProgramFilter) return false;
+        if (studentMajorFilter !== "ALL" && (s.section || "General") !== studentMajorFilter) return false;
         if (studentYearFilter !== "ALL" && String(s.year_level) !== studentYearFilter) return false;
         if (studentSearch.trim()) {
           const q = studentSearch.toLowerCase();
@@ -396,10 +415,18 @@ export function ExamBuilderWizard({
           return (b.year_level - a.year_level) || a.last_name.localeCompare(b.last_name);
         } else if (studentSortBy === "programAsc") {
           return a.program_code.localeCompare(b.program_code) || a.last_name.localeCompare(b.last_name);
+        } else if (studentSortBy === "majorAsc") {
+          const mA = a.section || "";
+          const mB = b.section || "";
+          return mA.localeCompare(mB) || a.last_name.localeCompare(b.last_name);
+        } else if (studentSortBy === "majorDesc") {
+          const mA = a.section || "";
+          const mB = b.section || "";
+          return mB.localeCompare(mA) || a.last_name.localeCompare(b.last_name);
         }
         return 0;
       });
-  }, [assignedStudents, studentSearch, studentProgramFilter, studentYearFilter, studentSortBy]);
+  }, [assignedStudents, studentSearch, studentProgramFilter, studentMajorFilter, studentYearFilter, studentSortBy]);
 
   // Automatically determine applicable semester based on exam date and active academic period configured by DI
   const defaultPeriodSettings = {
@@ -1946,7 +1973,7 @@ export function ExamBuilderWizard({
                 {/* Sort & Filter Controls Toolbar for Assigned Students */}
                 {assignedStudents.length > 0 && (
                   <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-3.5 space-y-3">
-                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
                       {/* Search */}
                       <div className="relative sm:col-span-1">
                         <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
@@ -1959,7 +1986,7 @@ export function ExamBuilderWizard({
                         />
                       </div>
 
-                      {/* Sort By (Name, Year Level, Program) */}
+                      {/* Sort By (Name, Year Level, Program, Major) */}
                       <div className="sm:col-span-1">
                         <select
                           value={studentSortBy}
@@ -1973,6 +2000,8 @@ export function ExamBuilderWizard({
                           <option value="yearAsc">Sort by Year Level (1 to 4)</option>
                           <option value="yearDesc">Sort by Year Level (4 to 1)</option>
                           <option value="programAsc">Sort by Program Code</option>
+                          <option value="majorAsc">Sort by Major (A-Z)</option>
+                          <option value="majorDesc">Sort by Major (Z-A)</option>
                         </select>
                       </div>
 
@@ -1986,6 +2015,20 @@ export function ExamBuilderWizard({
                           <option value="ALL">Program: All Programs</option>
                           {availableStudentPrograms.map(prog => (
                             <option key={prog} value={prog}>{prog}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Filter by Major / Specialization */}
+                      <div className="sm:col-span-1">
+                        <select
+                          value={studentMajorFilter}
+                          onChange={(e) => setStudentMajorFilter(e.target.value)}
+                          className="w-full bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                        >
+                          <option value="ALL">Major: All Majors</option>
+                          {availableStudentMajors.map(maj => (
+                            <option key={maj} value={maj}>{maj}</option>
                           ))}
                         </select>
                       </div>
@@ -2054,7 +2097,7 @@ export function ExamBuilderWizard({
 
                           <div className="text-right">
                             <span className="text-[11px] font-bold text-slate-700 block">
-                              {student.program_code} — Year {student.year_level}
+                              {student.program_code} {student.section && student.section !== "General" ? `(${student.section}) ` : ""}— Year {student.year_level}
                             </span>
                           </div>
                         </div>
@@ -3010,7 +3053,7 @@ export function ExamBuilderWizard({
                           {formatStudentName(s)}
                         </p>
                         <p className="text-[10px] text-slate-500 font-mono">
-                          {s.institutional_id || "N/A"} • {s.program_code} Y{s.year_level}
+                          {s.institutional_id || "N/A"} • {s.program_code} {s.section && s.section !== "General" ? `(${s.section}) ` : ""}Y{s.year_level}
                         </p>
                       </div>
                     </div>

@@ -337,31 +337,28 @@ async function syncAndGetYearLevelEnrolledStudents(courseId: number) {
 
   const targetYearLevel = getExpectedYearLevelForCourse(course.course_code, course.course_title);
 
-  if (targetYearLevel) {
-    // Auto-sync missing students matching this subject's expected year level
-    const eligibleStudents = await db.student.findMany({
-      where: { year_level: targetYearLevel },
+  // Auto-sync ALL students in database into studentCourse so faculty can assign any student across all year levels & programs
+  const eligibleStudents = await db.student.findMany({
+    select: { student_id: true },
+  });
+
+  if (eligibleStudents.length > 0) {
+    const existingEnrollments = await db.studentCourse.findMany({
+      where: { course_id: courseId },
       select: { student_id: true },
     });
 
-    if (eligibleStudents.length > 0) {
-      const existingEnrollments = await db.studentCourse.findMany({
-        where: { course_id: courseId },
-        select: { student_id: true },
+    const existingSet = new Set(existingEnrollments.map((e) => e.student_id));
+    const missingIds = eligibleStudents.map((s) => s.student_id).filter((id) => !existingSet.has(id));
+
+    if (missingIds.length > 0) {
+      await db.studentCourse.createMany({
+        data: missingIds.map((studentId) => ({
+          student_id: studentId,
+          course_id: courseId,
+        })),
+        skipDuplicates: true,
       });
-
-      const existingSet = new Set(existingEnrollments.map((e) => e.student_id));
-      const missingIds = eligibleStudents.map((s) => s.student_id).filter((id) => !existingSet.has(id));
-
-      if (missingIds.length > 0) {
-        await db.studentCourse.createMany({
-          data: missingIds.map((studentId) => ({
-            student_id: studentId,
-            course_id: courseId,
-          })),
-          skipDuplicates: true,
-        });
-      }
     }
   }
 
