@@ -1,14 +1,13 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import db from "@/lib/db";
-import { getSystemSettingCached } from "@/lib/cache";
+import { getSystemSettingCached, getCoursesCached } from "@/lib/cache";
 import { LogoutButton } from "@/app/components/LogoutButton";
 import { NotificationBell } from "@/app/components/NotificationBell";
 import { ShieldCheck } from "lucide-react";
 import { DirectorDashboardClient } from "@/app/components/DirectorDashboardClient";
 
 export const dynamic = "force-dynamic";
-export const revalidate = 0;
 
 export default async function DirectorDashboard() {
   const supabase = await createClient();
@@ -137,10 +136,8 @@ export default async function DirectorDashboard() {
   const { getActiveAcademicPeriod } = await import("@/app/actions/director");
   const academicPeriod = await getActiveAcademicPeriod();
 
-  // Fetch all courses for assignment by DI
-  const courses = await db.course.findMany({
-    orderBy: { course_code: "asc" },
-  });
+  // Fetch all courses for assignment by DI using cached query
+  const courses = await getCoursesCached();
 
   // Fetch all faculty members with assigned courses and compliance
   const facultyMembers = await db.faculty.findMany({

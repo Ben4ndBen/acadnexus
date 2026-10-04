@@ -3,7 +3,7 @@ import bcrypt from "bcryptjs";
 
 let seededChairsFlag = false;
 let lastSeededTime = 0;
-const CACHE_TTL_MS = 1000 * 60 * 60; // Cache for 1 hour
+const CACHE_TTL_MS = 1000 * 60 * 60 * 24; // Cache for 24 hours
 
 export async function ensureChairsAndDepartmentsExist(force = false) {
   const now = Date.now();
@@ -12,8 +12,14 @@ export async function ensureChairsAndDepartmentsExist(force = false) {
   }
 
   try {
-    const salt = await bcrypt.genSalt(10);
-    const passwordHash = await bcrypt.hash("password123", salt);
+    let cachedHash: string | null = null;
+    const getPasswordHash = async () => {
+      if (!cachedHash) {
+        const salt = await bcrypt.genSalt(10);
+        cachedHash = await bcrypt.hash("password123", salt);
+      }
+      return cachedHash;
+    };
 
     const deptsData = [
       {
@@ -178,7 +184,7 @@ export async function ensureChairsAndDepartmentsExist(force = false) {
           data: {
             institutional_id: d.chairId,
             username: d.chairUsername,
-            password_hash: passwordHash,
+            password_hash: await getPasswordHash(),
             role: "Chair",
             require_password_update: false,
           },
@@ -214,7 +220,7 @@ export async function ensureChairsAndDepartmentsExist(force = false) {
           data: {
             institutional_id: d.facultyId,
             username: `faculty_${d.facultyId.toLowerCase().replace(/[^a-z0-9]/g, "")}`,
-            password_hash: passwordHash,
+            password_hash: await getPasswordHash(),
             role: "Faculty",
             require_password_update: false,
           },
