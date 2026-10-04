@@ -6,8 +6,9 @@ import { BookOpen } from "lucide-react";
 import { LogoutButton } from "@/app/components/LogoutButton";
 import { NotificationBell } from "@/app/components/NotificationBell";
 
+import { getCoursesCached } from "@/lib/cache";
+
 export const dynamic = "force-dynamic";
-export const revalidate = 0;
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -79,10 +80,8 @@ export default async function ExamBuilderPage({ params }: PageProps) {
     redirect("/dashboard/faculty");
   }
 
-  // Fetch all courses for fallback
-  const courses = await db.course.findMany({
-    orderBy: { course_code: "asc" },
-  });
+  // Fetch all courses for fallback using cached query
+  const courses = await getCoursesCached();
 
   // 1. Fetch official assigned courses for this faculty
   const facultyAssignedCourseRecords = await db.facultyCourse.findMany({

@@ -7,8 +7,9 @@ import { NotificationBell } from "@/app/components/NotificationBell";
 import { GraduationCap, BookOpen, Calendar, Award, ShieldAlert, Clock, CheckCircle, Hourglass, ArrowRight } from "lucide-react";
 import { StudentDashboardClient } from "@/app/components/StudentDashboardClient";
 
+import { getCachedStudentUser } from "@/lib/cache";
+
 export const dynamic = "force-dynamic";
-export const revalidate = 0;
 
 export default async function StudentDashboard() {
   const supabase = await createClient();
@@ -27,26 +28,8 @@ export default async function StudentDashboard() {
     redirect("/");
   }
 
-  // Fetch student details from the database
-  const dbUser = await db.user.findUnique({
-    where: { institutional_id: institutionalId },
-    include: {
-      student: {
-        include: {
-          program: {
-            include: {
-              department: true,
-            },
-          },
-          studentCourses: {
-            include: {
-              course: true,
-            },
-          },
-        },
-      },
-    },
-  });
+  // Fetch student details from the database using cached query
+  const dbUser = await getCachedStudentUser(institutionalId);
 
   const student = dbUser?.student;
   if (!student) {
