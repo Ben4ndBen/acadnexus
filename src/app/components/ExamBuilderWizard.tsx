@@ -75,6 +75,14 @@ interface ExamBuilderWizardProps {
   initialAssignedStudents?: StudentItem[];
 }
 
+export type TaxonomyLevel = 
+  | "KNOWLEDGE / REMEMBERING"
+  | "COMPREHENSION / UNDERSTANDING"
+  | "APPLICATION / APPLYING"
+  | "ANALYSIS / ANALYZING"
+  | "SYNTHESIS / EVALUATING"
+  | "EVALUATION / CREATING";
+
 interface QuestionState {
   question_id?: number;
   text: string;
@@ -89,6 +97,7 @@ interface QuestionState {
   image_url?: string;
   topic?: string;
   year_level?: number;
+  taxonomy_level?: TaxonomyLevel;
 }
 
 // Question Type priority mapping for automatic test arrangement
@@ -148,6 +157,7 @@ function deserializeQuestions(dbQuestions: any[]): QuestionState[] {
     let min_words: number | undefined = undefined;
     let correctAnswer = q.correct_answer;
     let image_url = "";
+    let taxonomy_level: TaxonomyLevel = "KNOWLEDGE / REMEMBERING";
 
     // Check if the question text is a serialized JSON object
     if (q.question_text.trim().startsWith("{")) {
@@ -159,6 +169,7 @@ function deserializeQuestions(dbQuestions: any[]): QuestionState[] {
         blanks = parsed.blanks || [];
         min_words = parsed.min_words;
         image_url = parsed.image_url || "";
+        if (parsed.taxonomy_level) taxonomy_level = parsed.taxonomy_level;
       } catch {
         text = q.question_text;
       }
@@ -167,6 +178,7 @@ function deserializeQuestions(dbQuestions: any[]): QuestionState[] {
         const parsed = JSON.parse(q.question_text);
         text = parsed.text || q.question_text;
         options = parsed.options || [];
+        if (parsed.taxonomy_level) taxonomy_level = parsed.taxonomy_level;
       } catch {
         text = q.question_text;
         options = ["", "", "", ""];
@@ -177,6 +189,7 @@ function deserializeQuestions(dbQuestions: any[]): QuestionState[] {
         text = parsedText.text || q.question_text;
         premises = parsedText.premises || [];
         options = parsedText.options || [];
+        if (parsedText.taxonomy_level) taxonomy_level = parsedText.taxonomy_level;
       } catch {
         text = q.question_text;
         premises = [];
@@ -214,6 +227,7 @@ function deserializeQuestions(dbQuestions: any[]): QuestionState[] {
       image_url,
       topic: q.topic || "",
       year_level: q.year_level || undefined,
+      taxonomy_level,
     };
   });
 }
@@ -224,9 +238,10 @@ function serializeQuestions(questions: QuestionState[]) {
     let question_text = q.text;
     let correct_answer = q.correctAnswer;
 
-    // Build standard JSON wrapper to hold metadata like images
+    // Build standard JSON wrapper to hold metadata like images and taxonomy level
     const serializedData: Record<string, any> = {
       text: q.text,
+      taxonomy_level: q.taxonomy_level || "KNOWLEDGE / REMEMBERING",
     };
     if (q.image_url) {
       serializedData.image_url = q.image_url;
@@ -262,19 +277,10 @@ function serializeQuestions(questions: QuestionState[]) {
       if (q.min_words && q.min_words > 0) {
         serializedData.min_words = q.min_words;
       }
-      if (q.image_url || (q.min_words && q.min_words > 0)) {
-        question_text = JSON.stringify(serializedData);
-      } else {
-        question_text = q.text;
-      }
+      question_text = JSON.stringify(serializedData);
       correct_answer = q.correctAnswer || "";
     } else {
-      // For identification, T/F serialize to JSON if there's an image
-      if (q.image_url) {
-        question_text = JSON.stringify(serializedData);
-      } else {
-        question_text = q.text;
-      }
+      question_text = JSON.stringify(serializedData);
     }
 
     return {
@@ -468,7 +474,8 @@ export function ExamBuilderWizard({
     }));
   };
 
-  // Step 3 TQ Preview State
+  // Step 3 TQ & TOS Preview State
+  const [previewTab, setPreviewTab] = useState<"exam" | "tos">("exam");
   const [previewViewMode, setPreviewViewMode] = useState<"paper" | "grouped">("paper");
   const [previewTopicFilter, setPreviewTopicFilter] = useState<string>("ALL");
 
@@ -594,6 +601,16 @@ export function ExamBuilderWizard({
     ];
   });
 
+  // Editable Learning Outcomes map per topic
+  const [learningOutcomes, setLearningOutcomes] = useState<Record<string, string>>({});
+
+  const handleUpdateLearningOutcome = (topicName: string, text: string) => {
+    setLearningOutcomes(prev => ({
+      ...prev,
+      [topicName]: text
+    }));
+  };
+
   // Dynamically calculate TOS Topic statistics, hours taught, percentage & item placement ranges
   const tosTopicBreakdown = useMemo(() => {
     const map: Record<string, { itemNumbers: number[]; totalPoints: number }> = {};
@@ -635,6 +652,46 @@ export function ExamBuilderWizard({
 
       const rangeString = formatTopicPlacementString(data.itemNumbers);
 
+      // Questions belonging to this topic for Taxonomy calculation
+      const topicQs = questions.filter(q => (q.topic?.trim() || "Unassigned Topic") === topic);
+      
+      const rememberingCount = topicQs.filter(q => {
+        const tax = (q.taxonomy_level || "KNOWLEDGE / REMEMBERING").toUpperCase();
+        return tax.includes("REMEMBERING") || tax.includes("KNOWLEDGE");
+      }).length;
+
+      const understandingCount = topicQs.filter(q => {
+        const tax = (q.taxonomy_level || "").toUpperCase();
+        return tax.includes("UNDERSTANDING") || tax.includes("COMPREHENSION");
+      }).length;
+
+      const applyingCount = topicQs.filter(q => {
+        const tax = (q.taxonomy_level || "").toUpperCase();
+        return tax.includes("APPLYING") || tax.includes("APPLICATION");
+      }).length;
+
+      const analyzingCount = topicQs.filter(q => {
+        const tax = (q.taxonomy_level || "").toUpperCase();
+        return tax.includes("ANALYZING") || tax.includes("ANALYSIS");
+      }).length;
+
+      const evaluatingCount = topicQs.filter(q => {
+        const tax = (q.taxonomy_level || "").toUpperCase();
+        return tax.includes("EVALUATING") || tax.includes("SYNTHESIS");
+      }).length;
+
+      const creatingCount = topicQs.filter(q => {
+        const tax = (q.taxonomy_level || "").toUpperCase();
+        return tax.includes("CREATING") || tax.includes("EVALUATION");
+      }).length;
+
+      const rememberingPercent = totalExamItems > 0 ? Number(((rememberingCount / totalExamItems) * 100).toFixed(1)) : 0;
+      const understandingPercent = totalExamItems > 0 ? Number(((understandingCount / totalExamItems) * 100).toFixed(1)) : 0;
+      const applyingPercent = totalExamItems > 0 ? Number(((applyingCount / totalExamItems) * 100).toFixed(1)) : 0;
+      const analyzingPercent = totalExamItems > 0 ? Number(((analyzingCount / totalExamItems) * 100).toFixed(1)) : 0;
+      const evaluatingPercent = totalExamItems > 0 ? Number(((evaluatingCount / totalExamItems) * 100).toFixed(1)) : 0;
+      const creatingPercent = totalExamItems > 0 ? Number(((creatingCount / totalExamItems) * 100).toFixed(1)) : 0;
+
       return {
         topic,
         hoursTaught,
@@ -643,9 +700,69 @@ export function ExamBuilderWizard({
         count,
         totalPoints: data.totalPoints,
         weightPercentage,
+        taxonomy: {
+          remembering: { count: rememberingCount, percent: rememberingPercent },
+          understanding: { count: understandingCount, percent: understandingPercent },
+          applying: { count: applyingCount, percent: applyingPercent },
+          analyzing: { count: analyzingCount, percent: analyzingPercent },
+          evaluating: { count: evaluatingCount, percent: evaluatingPercent },
+          creating: { count: creatingCount, percent: creatingPercent },
+        }
       };
     });
-  }, [questions, tosTopicPlans, questionTestInfoMap]);
+  }, [questions, tosTopicPlans]);
+  // Multi-page A4 Landscape TOS document pagination calculator
+  const tosPages = useMemo(() => {
+    const pages: Array<typeof tosTopicBreakdown> = [];
+    let currentPage: typeof tosTopicBreakdown = [];
+    let currentLines = 0;
+    const MAX_PAGE_1_LINES = 7;
+    const MAX_PAGE_N_LINES = 10;
+
+    tosTopicBreakdown.forEach((row) => {
+      const outcomeText = learningOutcomes[row.topic] ?? `Demonstrates competency and learning outcomes for ${row.topic.toLowerCase()}.`;
+      const estimatedLines = Math.max(1, Math.ceil(outcomeText.length / 38));
+      const capacity = pages.length === 0 ? MAX_PAGE_1_LINES : MAX_PAGE_N_LINES;
+
+      if (currentLines + estimatedLines > capacity && currentPage.length > 0) {
+        pages.push(currentPage);
+        currentPage = [row];
+        currentLines = estimatedLines;
+      } else {
+        currentPage.push(row);
+        currentLines += estimatedLines;
+      }
+    });
+
+    if (currentPage.length > 0 || pages.length === 0) {
+      pages.push(currentPage);
+    }
+
+    return pages;
+  }, [tosTopicBreakdown, learningOutcomes]);
+
+  // Calculated overall percentage breakdown per taxonomy level for TOS header sub-row
+  const overallTaxonomyPercents = useMemo(() => {
+    const totalExamItems = questions.length;
+    if (totalExamItems === 0) {
+      return { remembering: 0, understanding: 0, applying: 0, analyzing: 0, evaluating: 0, creating: 0 };
+    }
+    const remCount = tosTopicBreakdown.reduce((sum, r) => sum + r.taxonomy.remembering.count, 0);
+    const undCount = tosTopicBreakdown.reduce((sum, r) => sum + r.taxonomy.understanding.count, 0);
+    const appCount = tosTopicBreakdown.reduce((sum, r) => sum + r.taxonomy.applying.count, 0);
+    const anaCount = tosTopicBreakdown.reduce((sum, r) => sum + r.taxonomy.analyzing.count, 0);
+    const evaCount = tosTopicBreakdown.reduce((sum, r) => sum + r.taxonomy.evaluating.count, 0);
+    const creCount = tosTopicBreakdown.reduce((sum, r) => sum + r.taxonomy.creating.count, 0);
+
+    return {
+      remembering: Number(((remCount / totalExamItems) * 100).toFixed(1)),
+      understanding: Number(((undCount / totalExamItems) * 100).toFixed(1)),
+      applying: Number(((appCount / totalExamItems) * 100).toFixed(1)),
+      analyzing: Number(((anaCount / totalExamItems) * 100).toFixed(1)),
+      evaluating: Number(((evaCount / totalExamItems) * 100).toFixed(1)),
+      creating: Number(((creCount / totalExamItems) * 100).toFixed(1)),
+    };
+  }, [questions, tosTopicBreakdown]);
 
   // Multi-page A4 Preview pagination calculator
   const previewPages = useMemo(() => {
@@ -1255,6 +1372,14 @@ export function ExamBuilderWizard({
     if (targetIdx === -1 || !questions[targetIdx]) return;
     const updated = [...questions];
     updated[targetIdx].topic = topic;
+    setQuestions(updated);
+  };
+
+  // Updates taxonomy level (Bloom's Taxonomy)
+  const updateQuestionTaxonomy = (taxonomy: TaxonomyLevel, targetIdx: number = activeQuestionIdx) => {
+    if (targetIdx === -1 || !questions[targetIdx]) return;
+    const updated = [...questions];
+    updated[targetIdx].taxonomy_level = taxonomy;
     setQuestions(updated);
   };
 
@@ -2405,6 +2530,43 @@ export function ExamBuilderWizard({
                                       <option value="Essay">Test Part: Essay</option>
                                     </select>
                                   </div>
+
+                                  {/* Taxonomy of Learning Level Selector (Bloom's Taxonomy) */}
+                                  <div className="flex items-center gap-1.5">
+                                    <label className="text-[11px] font-extrabold text-indigo-700 uppercase tracking-wider flex items-center gap-1">
+                                      <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                                      Taxonomy Level:
+                                    </label>
+                                    <select
+                                      value={q.taxonomy_level || "KNOWLEDGE / REMEMBERING"}
+                                      onChange={(e) => updateQuestionTaxonomy(e.target.value as TaxonomyLevel, globalIdx)}
+                                      className="bg-indigo-50 border border-indigo-300 text-indigo-950 font-extrabold text-xs px-2.5 py-1 rounded-xl shadow-2xs focus:ring-2 focus:ring-indigo-500 focus:outline-none cursor-pointer"
+                                    >
+                                      <option value="KNOWLEDGE / REMEMBERING">1. Knowledge / Remembering</option>
+                                      <option value="COMPREHENSION / UNDERSTANDING">2. Comprehension / Understanding</option>
+                                      <option value="APPLICATION / APPLYING">3. Application / Applying</option>
+                                      <option value="ANALYSIS / ANALYZING">4. Analysis / Analyzing</option>
+                                      <option value="SYNTHESIS / EVALUATING">5. Synthesis / Evaluating</option>
+                                      <option value="EVALUATION / CREATING">6. Evaluation / Creating</option>
+                                    </select>
+                                  </div>
+
+                                  {/* Topic Assignment Dropdown Selector */}
+                                  <div className="flex items-center gap-1.5">
+                                    <label className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">Topic:</label>
+                                    <select
+                                      value={q.topic || ""}
+                                      onChange={(e) => updateQuestionTopic(e.target.value, globalIdx)}
+                                      className="bg-slate-100 border border-slate-300 text-slate-900 font-bold text-xs px-2.5 py-1 rounded-xl shadow-2xs focus:ring-2 focus:ring-emerald-500 focus:outline-none cursor-pointer max-w-[200px] truncate"
+                                    >
+                                      <option value="">-- Select Topic --</option>
+                                      {existingUniqueTopics.map((tName, tIdx) => (
+                                        <option key={tIdx} value={tName}>
+                                          {tName}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </div>
                                 </div>
 
                                     {/* Right: Points & Reorder/Delete Buttons */}
@@ -2789,479 +2951,552 @@ export function ExamBuilderWizard({
             </div>
           </div>
 
-          {/* Official Table of Specifications (TOS) Matrix Summary Table */}
-          <div className="bg-white border-2 border-slate-200/90 rounded-3xl p-6 sm:p-8 shadow-sm space-y-5 font-sans">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-4">
-              <div className="flex items-center gap-3">
-                <div className="bg-gradient-to-br from-indigo-600 to-indigo-800 text-white p-3 rounded-2xl shadow-md">
-                  <Layers className="w-6 h-6" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-black text-slate-900 tracking-tight flex items-center gap-2">
-                    Table of Specifications (TOS)
-                    <span className="text-[10px] font-black uppercase text-indigo-700 bg-indigo-50 border border-indigo-200 px-2.5 py-0.5 rounded-full">
-                      Official Academic Matrix
-                    </span>
-                  </h3>
-                  <p className="text-xs text-slate-500 font-medium">
-                    Detailed topic distribution, teaching hours, item weight percentages, and test question placements.
-                  </p>
-                </div>
+          {/* STEP 3 PREVIEW TOP ACTION BAR */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 bg-white border border-slate-200/90 rounded-3xl p-4 shadow-sm font-sans print:hidden">
+            <div className="flex items-center gap-3">
+              <div className="bg-indigo-600 text-white p-2.5 rounded-2xl shadow-sm">
+                <Layers className="w-5 h-5" />
               </div>
-
-              <div className="flex items-center gap-2 text-xs font-extrabold bg-slate-100 text-slate-800 px-3.5 py-2 rounded-xl self-start sm:self-auto border border-slate-200">
-                <BookOpen className="w-4 h-4 text-indigo-600" />
-                <span>{tosTopicBreakdown.length} Topics / Coverage Modules</span>
+              <div>
+                <h3 className="text-sm font-black text-slate-900 uppercase tracking-wide">
+                  Step 3: Verification & Official Academic Documents
+                </h3>
+                <p className="text-xs text-slate-500 font-medium">
+                  Review the Official TOS Matrix (BSC-ODI-F-121) followed by the A4 Paginated Examination Paper.
+                </p>
               </div>
             </div>
 
-            {/* Structured TOS Table displaying Topic, Hours Taught, Percentage, Items, Points, and Item Placement */}
-            <div className="overflow-x-auto rounded-2xl border border-slate-200/80 shadow-2xs">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-slate-900 text-white text-[11px] font-black uppercase tracking-wider">
-                    <th className="py-3.5 px-4 rounded-tl-xl border-b border-slate-800">#</th>
-                    <th className="py-3.5 px-4 border-b border-slate-800">Topic / Coverage Area</th>
-                    <th className="py-3.5 px-4 text-center border-b border-slate-800">Hrs Taught</th>
-                    <th className="py-3.5 px-4 text-center border-b border-slate-800">Percentage (%)</th>
-                    <th className="py-3.5 px-4 text-center border-b border-slate-800">No. of Items</th>
-                    <th className="py-3.5 px-4 text-center border-b border-slate-800">Total Points</th>
-                    <th className="py-3.5 px-4 rounded-tr-xl border-b border-slate-800">Item Placement (Based on Test Questions)</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200 text-xs font-semibold text-slate-800 bg-white">
-                  {tosTopicBreakdown.map((row, idx) => {
-                    const isUnassigned = row.topic === "Unassigned Topic";
-                    return (
-                      <tr
-                        key={idx}
-                        className={`hover:bg-indigo-50/40 transition-colors ${
-                          isUnassigned ? "bg-amber-50/50 text-amber-950 font-bold" : idx % 2 === 1 ? "bg-slate-50/60" : "bg-white"
-                        }`}
-                      >
-                        <td className="py-3.5 px-4 text-slate-400 font-bold">{idx + 1}</td>
-                        <td className="py-3.5 px-4">
-                          <span className="font-bold text-slate-900 block">{row.topic}</span>
-                          {isUnassigned && (
-                            <span className="text-[10px] text-amber-700 font-extrabold">⚠️ Needs topic classification in Step 2</span>
-                          )}
-                        </td>
-                        <td className="py-3.5 px-4 text-center font-extrabold text-slate-700">
-                          {row.hoursTaught > 0 ? `${row.hoursTaught} hr${row.hoursTaught !== 1 ? "s" : ""}` : "—"}
-                        </td>
-                        <td className="py-3.5 px-4 text-center">
-                          <span className="inline-block bg-indigo-50 text-indigo-800 border border-indigo-200 font-black px-2.5 py-1 rounded-lg">
-                            {row.weightPercentage}%
-                          </span>
-                        </td>
-                        <td className="py-3.5 px-4 text-center font-extrabold text-slate-900">
-                          {row.count} item{row.count !== 1 ? "s" : ""}
-                        </td>
-                        <td className="py-3.5 px-4 text-center font-extrabold text-emerald-700">
-                          {row.totalPoints} pt{row.totalPoints !== 1 ? "s" : ""}
-                        </td>
-                        <td className="py-3.5 px-4">
-                          {row.count > 0 ? (
-                            <span className="inline-flex items-center gap-1.5 bg-slate-100 border border-slate-200 text-indigo-950 font-extrabold px-3 py-1.5 rounded-xl text-[11px]">
-                              <Tag className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                              {row.rangeString}
-                            </span>
-                          ) : (
-                            <span className="text-slate-400 italic text-[11px]">No items assigned</span>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-                <tfoot>
-                  <tr className="bg-slate-900 text-white text-xs font-black uppercase tracking-wider">
-                    <td colSpan={2} className="py-3.5 px-4 rounded-bl-xl">TOTALS</td>
-                    <td className="py-3.5 px-4 text-center text-amber-300 font-mono">
-                      {tosTopicBreakdown.reduce((sum, r) => sum + r.hoursTaught, 0)} hrs
-                    </td>
-                    <td className="py-3.5 px-4 text-center text-indigo-300 font-mono">
-                      {Math.round(tosTopicBreakdown.reduce((sum, r) => sum + r.weightPercentage, 0))}%
-                    </td>
-                    <td className="py-3.5 px-4 text-center text-emerald-300 font-mono">
-                      {tosTopicBreakdown.reduce((sum, r) => sum + r.count, 0)} items
-                    </td>
-                    <td className="py-3.5 px-4 text-center text-emerald-400 font-mono">
-                      {tosTopicBreakdown.reduce((sum, r) => sum + r.totalPoints, 0)} pts
-                    </td>
-                    <td className="py-3.5 px-4 rounded-br-xl text-slate-300 text-[10px]">
-                      {questionTypeTestMap.activeTypes.length} Test Part{questionTypeTestMap.activeTypes.length !== 1 ? "s" : ""} Configured
-                    </td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-
-            {/* Warning if unassigned questions exist */}
-            {tosTopicBreakdown.some((t) => t.topic === "Unassigned Topic") && (
-              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
-                <div className="flex items-center gap-2.5 text-amber-900">
-                  <AlertCircle className="w-5 h-5 text-amber-600 shrink-0" />
-                  <div>
-                    <strong className="font-extrabold">Notice: Some questions do not have a topic assigned.</strong>
-                    <p className="text-[11px] text-amber-700 mt-0.5">
-                      Assign topics in Step 2 to organize questions according to your course outline and Table of Specifications (TOS).
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
+            <button
+              type="button"
+              onClick={() => window.print()}
+              className="inline-flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold px-5 py-2.5 rounded-xl transition-all shadow-sm cursor-pointer shrink-0"
+            >
+              <Printer className="w-4 h-4 text-emerald-400" />
+              <span>Print All Documents</span>
+            </button>
           </div>
 
-          {/* Toolbar Controls for Preview */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 w-full bg-white border border-slate-200/90 rounded-2xl p-4 shadow-sm font-sans print:hidden">
-            {/* View Mode Toggle */}
-            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
-              <button
-                type="button"
-                onClick={() => setPreviewViewMode("paper")}
-                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-extrabold transition-all cursor-pointer ${
-                  previewViewMode === "paper"
-                    ? "bg-white text-slate-900 shadow-sm"
-                    : "text-slate-600 hover:text-slate-900"
-                }`}
-              >
-                <FileText className="w-4 h-4 text-emerald-600" />
-                Standard Exam Paper
-              </button>
+          {/* STEP 3 VERTICALLY STACKED PREVIEW CONTAINER */}
+          <div className="space-y-8 font-sans">
 
-              <button
-                type="button"
-                onClick={() => setPreviewViewMode("grouped")}
-                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-extrabold transition-all cursor-pointer ${
-                  previewViewMode === "grouped"
-                    ? "bg-white text-slate-900 shadow-sm"
-                    : "text-slate-600 hover:text-slate-900"
-                }`}
-              >
-                <Layers className="w-4 h-4 text-indigo-600" />
-                Grouped by Chapter
-              </button>
-            </div>
-
-            {/* Filter by Chapter / Topic Dropdown & Print Button */}
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-slate-500 whitespace-nowrap">Topic Filter:</span>
-                <select
-                  value={previewTopicFilter}
-                  onChange={(e) => setPreviewTopicFilter(e.target.value)}
-                  className="bg-slate-50 border border-slate-200 text-xs font-extrabold text-slate-800 px-3 py-2 rounded-xl focus:outline-emerald-500 cursor-pointer"
-                >
-                  <option value="ALL">All Topics ({questions.length} items)</option>
-                  {tosTopicBreakdown.map((t, idx) => (
-                    <option key={idx} value={t.topic}>
-                      {t.topic} ({t.rangeString})
-                    </option>
-                  ))}
-                </select>
-                {previewTopicFilter !== "ALL" && (
-                  <button
-                    type="button"
-                    onClick={() => setPreviewTopicFilter("ALL")}
-                    className="text-xs text-rose-600 font-bold hover:underline px-1 cursor-pointer"
-                  >
-                    Clear
-                  </button>
-                )}
-              </div>
-
-              <button
-                type="button"
-                onClick={() => window.print()}
-                className="flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-extrabold px-3.5 py-2 rounded-xl shadow-sm transition-all cursor-pointer"
-              >
-                <Printer className="w-4 h-4 text-emerald-400" />
-                <span>Print / Save PDF</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Printable A4 Exam Pages Container */}
-          <div className="space-y-10 w-full flex flex-col items-center">
-            {previewPages.map((pageBlocks, pageIdx) => (
-              <div
-                key={pageIdx}
-                className="a4-page-sheet w-full max-w-[210mm] min-h-[297mm] bg-white border border-slate-300 shadow-2xl rounded-sm p-6 sm:p-10 flex flex-col justify-between relative font-serif text-slate-900 print:shadow-none print:border-none print:m-0 print:p-8 print:w-full print:max-w-none print:min-h-[297mm] print:break-after-page"
-                style={{ breakAfter: "page", pageBreakAfter: "always" }}
-              >
-                {/* TOP BSC HEADER BANNER IMAGE */}
-                <div className="w-full border-b border-slate-200 pb-3 mb-4 text-center">
-                  <img
-                    src="/bsc-header.png"
-                    alt="Batanes State College Header"
-                    className="w-full h-auto max-h-[110px] object-contain mx-auto"
-                  />
-                </div>
-
-                {/* PAGE CONTENT AREA */}
-                <div className="flex-1 space-y-6">
-                  {pageIdx === 0 ? (
-                    <>
-                      {/* Page 1 Exam Header */}
-                      <div className="text-center space-y-1">
-                        <h1 className="text-lg sm:text-xl font-bold tracking-tight text-slate-950 uppercase">{title}</h1>
-                        <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 text-xs text-slate-700 font-semibold">
-                          <span>Course: {courses.find((c) => c.course_id === courseId)?.course_code} - {courses.find((c) => c.course_id === courseId)?.course_title}</span>
-                          <span>•</span>
-                          <span>Duration: {timeLimit} minutes</span>
-                          <span>•</span>
-                          <span>Total Points: {questions.reduce((sum, q) => sum + q.points, 0)}</span>
-                        </div>
-                      </div>
-
-                      {/* Student Details Grid */}
-                      <div className="grid grid-cols-2 gap-3 text-xs font-bold border-y border-slate-200 py-3 text-slate-800 font-sans">
-                        <div className="flex gap-2">
-                          <span>Student Name:</span>
-                          <div className="flex-1 border-b border-dashed border-slate-400" />
-                        </div>
-                        <div className="flex gap-2">
-                          <span>Score:</span>
-                          <div className="w-16 border-b border-dashed border-slate-400" />
-                        </div>
-                        <div className="flex gap-2">
-                          <span>Year Level / Sec:</span>
-                          <div className="flex-1 border-b border-dashed border-slate-400" />
-                        </div>
-                        <div className="flex gap-2">
-                          <span>Date:</span>
-                          <div className="flex-1 border-b border-dashed border-slate-400" />
-                        </div>
-                      </div>
-
-                      {/* Instructions Note */}
-                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-[11px] leading-relaxed font-sans italic text-slate-700">
-                        <strong>Instructions:</strong> Read each question carefully. Provide your answers clearly in the designated response areas. Cheating lockout protocols trigger automatically on unauthorized window defocus.
-                      </div>
-                    </>
-                  ) : (
-                    <div className="flex items-center justify-between border-b border-slate-200 pb-2 mb-2 font-sans">
-                      <span className="text-xs font-bold uppercase tracking-wider text-slate-700">
-                        {title} &mdash; Continued
-                      </span>
-                      <span className="text-[10px] font-semibold text-slate-500">
-                        Page {pageIdx + 1} of {previewPages.length}
+            {/* DOCUMENT 1: OFFICIAL BATANES STATE COLLEGE TOS MATRIX (BSC-ODI-F-121 - A4 LANDSCAPE PAGINATED) */}
+            <div className="space-y-6">
+              {tosPages.map((pageRows, pageIdx) => (
+                <div key={pageIdx} className="space-y-3">
+                  <div className="flex items-center justify-between bg-slate-900 text-white px-6 py-3 rounded-2xl print:hidden max-w-[1123px] mx-auto">
+                    <div className="flex items-center gap-2">
+                      <Layers className="w-4 h-4 text-emerald-400" />
+                      <span className="font-extrabold text-xs uppercase tracking-wider">
+                        Official Table of Specifications (TOS) Matrix — Page {pageIdx + 1} of {tosPages.length} — A4 Landscape (BSC-ODI-F-121)
                       </span>
                     </div>
-                  )}
+                    <span className="text-[11px] font-bold text-slate-300 bg-slate-800 px-3 py-1 rounded-xl">
+                      Page {pageIdx + 1} of {tosPages.length}
+                    </span>
+                  </div>
 
-                  {/* Render Blocks on this Page Sheet */}
-                  <div className="space-y-6">
-                    {pageBlocks.map((block) => {
-                      if (block.type === "type-header") {
-                        return (
-                          <div key={block.id} className="bg-slate-900 text-white p-3.5 rounded-2xl border border-slate-800 space-y-1 shadow-sm font-sans">
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                              <h3 className="text-xs sm:text-sm font-black tracking-wide uppercase flex items-center gap-2">
-                                <span className="bg-[#E2A123] text-slate-950 font-black px-2.5 py-0.5 rounded-lg text-xs">
-                                  TEST {block.testNum}
-                                </span>
-                                {QUESTION_TYPE_HEADER_LABELS[block.qType!] || block.qType}
-                              </h3>
-                              <span className="text-[10px] font-black uppercase text-emerald-400 bg-emerald-950/80 border border-emerald-800 px-2.5 py-0.5 rounded-full">
-                                {block.count} Item{block.count !== 1 ? "s" : ""} &bull; {block.points} Point{block.points !== 1 ? "s" : ""}
-                              </span>
-                            </div>
-                            <p className="text-xs text-slate-300 font-medium italic">
-                              {QUESTION_TYPE_INSTRUCTIONS[block.qType!]}
+                  <div
+                    style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}
+                    className="w-full max-w-[1123px] mx-auto bg-white border-2 border-slate-300 rounded-3xl p-6 sm:p-10 shadow-xl space-y-4 select-text relative min-h-[790px] flex flex-col justify-between overflow-hidden print:max-w-none print:min-h-0 print:shadow-none print:border-none print:p-0 print:m-0 print:rounded-none print:break-after-page"
+                  >
+                    <style>{`
+                      .tos-container, .tos-container * {
+                        font-family: Arial, Helvetica, sans-serif !important;
+                      }
+                      @media print {
+                        @page {
+                          size: landscape;
+                          margin: 8mm;
+                        }
+                        body {
+                          background: white !important;
+                        }
+                      }
+                    `}</style>
+
+                    <div className="space-y-4">
+                      {/* BSC OFFICIAL HEADER IMAGE */}
+                      <div className="w-full border-b border-slate-200 pb-3 relative">
+                        <div className="absolute top-1 right-2 sm:top-2 sm:right-4 z-10 print:top-0 print:right-0">
+                          <span className="font-mono font-black text-[11px] sm:text-xs text-slate-900 bg-white/95 border-2 border-slate-400 px-2.5 py-0.5 rounded shadow-2xs uppercase tracking-wider">
+                            BSC-ODI-F-121
+                          </span>
+                        </div>
+                        <img
+                          src="/bsc-header.png"
+                          alt="Batanes State College Header"
+                          className="w-full h-auto object-contain mx-auto max-h-[160px] print:max-h-none"
+                        />
+                      </div>
+
+                      {/* PAGE 1 ONLY: TOS TITLE & METADATA GRID */}
+                      {pageIdx === 0 ? (
+                        <>
+                          {/* TOS TITLE & TERM */}
+                          <div className="text-center space-y-1 py-1 border-b border-slate-200">
+                            <h2 className="text-lg sm:text-xl font-black font-serif text-slate-900 tracking-wide uppercase">
+                              TABLE OF SPECIFICATIONS
+                            </h2>
+                            <p className="text-xs font-bold text-slate-800 uppercase">
+                              <span className="underline font-black">[{term.toUpperCase()}] EXAMINATION</span>
+                            </p>
+                            <p className="text-xs font-semibold text-slate-700">
+                              <span className="underline font-bold">{applicableSemesterLabel}</span>
                             </p>
                           </div>
-                        );
-                      }
 
-                      if (block.type === "chapter-header") {
-                        return (
-                          <div key={block.id} className="bg-slate-100/90 border border-slate-200 rounded-2xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 font-sans">
-                            <div className="flex items-center gap-2.5">
-                              <div className="bg-emerald-600 text-white p-2 rounded-xl">
-                                <BookOpen className="w-4 h-4" />
-                              </div>
-                              <div>
-                                <h3 className="font-extrabold text-slate-900 text-sm">
-                                  Chapter: {block.topicName}
-                                </h3>
-                                <p className="text-[11px] text-slate-500 font-medium">
-                                  Corresponding Items: <strong className="text-indigo-700">{block.rangeStr}</strong>
-                                </p>
-                              </div>
+                          {/* COURSE & EXAMINATION METADATA GRID */}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-2 text-xs font-bold border-b border-slate-200 pb-3">
+                            <div className="flex items-center gap-2">
+                              <span className="text-slate-500 font-bold uppercase min-w-[120px]">COURSE CODE:</span>
+                              <span className="font-mono font-black text-slate-900 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded">{selectedCourse.course_code || "N/A"}</span>
                             </div>
-                            <div className="flex items-center gap-2 text-xs font-bold bg-white border border-slate-200 px-3 py-1.5 rounded-xl text-slate-700">
-                              <span>{block.count} Item{block.count !== 1 ? "s" : ""}</span>
-                              <span>•</span>
-                              <span className="text-emerald-700">{block.points} Points</span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-slate-500 font-bold uppercase min-w-[140px]">DATE OF EXAMINATION:</span>
+                              <span className="font-mono font-black text-slate-900 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded">{examDate}</span>
+                            </div>
+                            <div className="flex items-center gap-2 sm:col-span-2">
+                              <span className="text-slate-500 font-bold uppercase min-w-[120px]">COURSE TITLE:</span>
+                              <span className="font-extrabold text-slate-900">{selectedCourse.course_title || "N/A"}</span>
                             </div>
                           </div>
-                        );
-                      }
+                        </>
+                      ) : null}
 
-                      // Render question item
-                      const { q, idx, itemNumberLabel, testInfo } = block;
-                      if (!q) return null;
-                      const topicName = q.topic?.trim() || "Unassigned Topic";
-
-                      return (
-                        <div key={block.id} className="space-y-3 border-b border-slate-100 pb-5 last:border-b-0">
-                          {previewViewMode === "paper" && (
-                            <div className="flex flex-wrap items-center justify-between gap-2 font-sans">
-                              <span className="text-[10px] font-extrabold uppercase text-indigo-700 bg-indigo-50 border border-indigo-200 px-2.5 py-0.5 rounded-full flex items-center gap-1">
-                                <Tag className="w-3 h-3 text-indigo-500" />
-                                Chapter: {topicName}
-                              </span>
-                              <span className="text-[10px] font-black text-slate-800 bg-slate-100 border border-slate-200 px-2.5 py-0.5 rounded-md">
-                                {testInfo?.badge || `Item ${itemNumberLabel}`}
-                              </span>
-                            </div>
+                      {/* BSC-ODI-F-121 OFFICIAL TABLE FORMAT */}
+                      <div className="w-full max-w-full overflow-hidden rounded-xl border border-slate-300 shadow-2xs print:overflow-visible">
+                        <table className="w-full text-left border-collapse text-[10px] print:text-[9px] table-fixed">
+                          <thead>
+                            <tr className="bg-white text-black font-black uppercase text-center border-b border-slate-400">
+                              <th rowSpan={3} className="py-2.5 px-1.5 border-r border-slate-300 w-[14%] text-left font-black align-middle text-[9.5px] leading-tight">LESSON / TOPIC</th>
+                              <th rowSpan={3} className="py-2.5 px-1.5 border-r border-slate-300 w-[21%] text-left font-black align-middle text-[9.5px] leading-tight">LEARNING OUTCOMES</th>
+                              <th rowSpan={3} className="py-2.5 px-1 border-r border-slate-300 w-[5.5%] font-black align-middle text-[8.5px] leading-tight">NO. OF TEACHING HOURS</th>
+                              <th rowSpan={3} className="py-2.5 px-1 border-r border-slate-300 w-[5.5%] font-black align-middle text-[8.5px] leading-tight">% OF ALLOCATION</th>
+                              <th rowSpan={3} className="py-2.5 px-1 border-r border-slate-300 w-[5.5%] font-black align-middle text-[8.5px] leading-tight">NO. OF ITEMS</th>
+                              <th colSpan={7} className="py-1.5 px-1 border-r border-b border-slate-300 bg-white text-black font-black text-[9.5px] tracking-tight">
+                                ITEM SPECIFICATION PER TAXONOMY OF LEARNING
+                              </th>
+                              <th rowSpan={3} className="py-2.5 px-1 w-[9.5%] font-black align-middle text-[8.5px] leading-tight">ITEM PLACEMENT</th>
+                            </tr>
+                            <tr className="bg-white text-black font-black text-[8px] uppercase text-center border-b border-slate-300">
+                              <th className="py-1.5 px-0.5 border-r border-b border-slate-300 font-black leading-snug break-words">
+                                KNOWLEDGE /<br />REMEMBERING
+                              </th>
+                              <th className="py-1.5 px-0.5 border-r border-b border-slate-300 font-black leading-snug break-words">
+                                COMPREHENSION /<br />UNDERSTANDING
+                              </th>
+                              <th className="py-1.5 px-0.5 border-r border-b border-slate-300 font-black leading-snug break-words">
+                                APPLICATION /<br />APPLYING
+                              </th>
+                              <th className="py-1.5 px-0.5 border-r border-b border-slate-300 font-black leading-snug break-words">
+                                ANALYSIS /<br />ANALYZING
+                              </th>
+                              <th className="py-1.5 px-0.5 border-r border-b border-slate-300 font-black leading-snug break-words">
+                                SYNTHESIS /<br />EVALUATING
+                              </th>
+                              <th className="py-1.5 px-0.5 border-r border-b border-slate-300 font-black leading-snug break-words">
+                                EVALUATION /<br />CREATING
+                              </th>
+                              <th rowSpan={2} className="py-2 px-1 border-r border-slate-300 bg-white font-black text-black text-[9.5px] align-middle">TOTAL</th>
+                            </tr>
+                            <tr className="bg-white text-black font-black text-[11px] uppercase text-center border-b-2 border-slate-400">
+                              <th className="py-1 px-1 border-r border-slate-300 font-black">
+                                {overallTaxonomyPercents.remembering > 0 ? `${overallTaxonomyPercents.remembering}%` : "—"}
+                              </th>
+                              <th className="py-1 px-1 border-r border-slate-300 font-black">
+                                {overallTaxonomyPercents.understanding > 0 ? `${overallTaxonomyPercents.understanding}%` : "—"}
+                              </th>
+                              <th className="py-1 px-1 border-r border-slate-300 font-black">
+                                {overallTaxonomyPercents.applying > 0 ? `${overallTaxonomyPercents.applying}%` : "—"}
+                              </th>
+                              <th className="py-1 px-1 border-r border-slate-300 font-black">
+                                {overallTaxonomyPercents.analyzing > 0 ? `${overallTaxonomyPercents.analyzing}%` : "—"}
+                              </th>
+                              <th className="py-1 px-1 border-r border-slate-300 font-black">
+                                {overallTaxonomyPercents.evaluating > 0 ? `${overallTaxonomyPercents.evaluating}%` : "—"}
+                              </th>
+                              <th className="py-1 px-1 border-r border-slate-300 font-black">
+                                {overallTaxonomyPercents.creating > 0 ? `${overallTaxonomyPercents.creating}%` : "—"}
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-300 font-medium text-black bg-white">
+                            {pageRows.map((row, idx) => {
+                              const t = row.taxonomy;
+                              return (
+                                <tr key={idx} className="bg-white">
+                                  <td className="py-3 px-3 font-bold text-black border-r border-slate-300 align-top">
+                                    {row.topic}
+                                  </td>
+                                  <td className="py-2 px-2 text-black border-r border-slate-300 text-[10px] align-top">
+                                    <textarea
+                                      rows={2}
+                                      value={learningOutcomes[row.topic] ?? `Demonstrates competency and learning outcomes for ${row.topic.toLowerCase()}.`}
+                                      onChange={(e) => {
+                                        handleUpdateLearningOutcome(row.topic, e.target.value);
+                                        e.target.style.height = "auto";
+                                        e.target.style.height = `${e.target.scrollHeight}px`;
+                                      }}
+                                      onFocus={(e) => {
+                                        e.target.style.height = "auto";
+                                        e.target.style.height = `${e.target.scrollHeight}px`;
+                                      }}
+                                      placeholder="Enter learning outcomes for this topic..."
+                                      className="w-full bg-slate-50/50 hover:bg-white focus:bg-white border border-slate-200/80 hover:border-slate-300 focus:border-emerald-500 rounded-lg p-1.5 font-sans text-[10px] text-black font-medium focus:outline-none transition-all print:border-none print:bg-transparent print:p-0 print:m-0 resize-y whitespace-pre-wrap break-words overflow-hidden"
+                                      title="Faculty: Click to edit learning outcomes for this topic"
+                                    />
+                                  </td>
+                                  <td className="py-3 px-2 text-center font-bold text-black border-r border-slate-300 align-top">
+                                    {row.hoursTaught > 0 ? row.hoursTaught : "—"}
+                                  </td>
+                                  <td className="py-3 px-2 text-center font-extrabold text-black border-r border-slate-300 align-top">
+                                    {row.weightPercentage}%
+                                  </td>
+                                  <td className="py-3 px-2 text-center font-extrabold text-black border-r border-slate-300 align-top">
+                                    {row.count}
+                                  </td>
+                                  {/* Taxonomy 6 Columns - Whole Numbers Only */}
+                                  <td className="py-3 px-1 text-center border-r border-slate-300 font-bold text-black align-top">
+                                    {t.remembering.count > 0 ? t.remembering.count : "—"}
+                                  </td>
+                                  <td className="py-3 px-1 text-center border-r border-slate-300 font-bold text-black align-top">
+                                    {t.understanding.count > 0 ? t.understanding.count : "—"}
+                                  </td>
+                                  <td className="py-3 px-1 text-center border-r border-slate-300 font-bold text-black align-top">
+                                    {t.applying.count > 0 ? t.applying.count : "—"}
+                                  </td>
+                                  <td className="py-3 px-1 text-center border-r border-slate-300 font-bold text-black align-top">
+                                    {t.analyzing.count > 0 ? t.analyzing.count : "—"}
+                                  </td>
+                                  <td className="py-3 px-1 text-center border-r border-slate-300 font-bold text-black align-top">
+                                    {t.evaluating.count > 0 ? t.evaluating.count : "—"}
+                                  </td>
+                                  <td className="py-3 px-1 text-center border-r border-slate-300 font-bold text-black align-top">
+                                    {t.creating.count > 0 ? t.creating.count : "—"}
+                                  </td>
+                                  <td className="py-3 px-1 text-center border-r border-slate-300 font-black text-black bg-white align-top">
+                                    {row.count}
+                                  </td>
+                                  <td className="py-3 px-3 font-mono font-bold text-black text-[10px] align-top">
+                                    {row.rangeString}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                          {pageIdx === tosPages.length - 1 && (
+                            <tfoot>
+                              <tr className="bg-amber-400 text-slate-950 font-black text-xs uppercase border-t-2 border-slate-900">
+                                <td colSpan={2} className="py-3 px-3">TOTAL</td>
+                                <td className="py-3 px-2 text-center">
+                                  {tosTopicBreakdown.reduce((sum, r) => sum + r.hoursTaught, 0)}
+                                </td>
+                                <td className="py-3 px-2 text-center">
+                                  {questions.length > 0 ? 100 : 0}%
+                                </td>
+                                <td className="py-3 px-2 text-center">
+                                  {questions.length}
+                                </td>
+                                {/* Total per Taxonomy level - Whole Numbers Only */}
+                                <td className="py-3 px-1 text-center font-extrabold">
+                                  {tosTopicBreakdown.reduce((sum, r) => sum + r.taxonomy.remembering.count, 0) || "—"}
+                                </td>
+                                <td className="py-3 px-1 text-center font-extrabold">
+                                  {tosTopicBreakdown.reduce((sum, r) => sum + r.taxonomy.understanding.count, 0) || "—"}
+                                </td>
+                                <td className="py-3 px-1 text-center font-extrabold">
+                                  {tosTopicBreakdown.reduce((sum, r) => sum + r.taxonomy.applying.count, 0) || "—"}
+                                </td>
+                                <td className="py-3 px-1 text-center font-extrabold">
+                                  {tosTopicBreakdown.reduce((sum, r) => sum + r.taxonomy.analyzing.count, 0) || "—"}
+                                </td>
+                                <td className="py-3 px-1 text-center font-extrabold">
+                                  {tosTopicBreakdown.reduce((sum, r) => sum + r.taxonomy.evaluating.count, 0) || "—"}
+                                </td>
+                                <td className="py-3 px-1 text-center font-extrabold">
+                                  {tosTopicBreakdown.reduce((sum, r) => sum + r.taxonomy.creating.count, 0) || "—"}
+                                </td>
+                                <td className="py-3 px-1 text-center font-black bg-amber-500 text-slate-950">
+                                  {questions.length}
+                                </td>
+                                <td className="py-3 px-3 text-[10px] lowercase font-semibold">
+                                </td>
+                              </tr>
+                            </tfoot>
                           )}
-
-                          <div className="flex justify-between items-start gap-4">
-                            <div className="text-sm font-bold text-slate-950 leading-relaxed font-sans">
-                              {itemNumberLabel}. <Latex text={q.text} />
-                            </div>
-                            <span className="text-xs font-bold text-slate-500 shrink-0 font-sans">
-                              ({q.points} pt{q.points !== 1 && "s"})
-                            </span>
-                          </div>
-
-                          {/* Image Attachment */}
-                          {q.image_url && (
-                            <div className="my-2 pl-4">
-                              <img src={q.image_url} alt="Question Diagram" className="max-w-xs h-auto max-h-44 object-contain rounded-xl border border-slate-200" />
-                            </div>
-                          )}
-
-                          {/* Multiple Choice Options */}
-                          {q.question_type === "Multiple_Choice" && (
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 pl-4 font-sans">
-                              {q.options.map((option, opIdx) => {
-                                const isCorrect = q.correctAnswer === option;
-                                return (
-                                  <div key={opIdx} className={`text-xs font-medium flex items-center gap-2 ${isCorrect ? "text-emerald-700 bg-emerald-50/50 border border-emerald-200 px-2 py-1.5 rounded-lg font-bold" : "text-slate-800"}`}>
-                                    <span className="w-5 h-5 rounded-full border border-slate-400 flex items-center justify-center shrink-0 font-sans font-bold text-[10px]">
-                                      {String.fromCharCode(65 + opIdx)}
-                                    </span>
-                                    <span>{option}</span>
-                                    {isCorrect && <span className="text-[9px] font-black uppercase text-emerald-600 ml-auto border border-emerald-400 px-1 py-0.5 rounded">Correct Answer</span>}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          )}
-
-                          {/* True / False Options */}
-                          {q.question_type === "True_False" && (
-                            <div className="flex gap-6 pl-4 font-sans">
-                              {["True", "False"].map((choice) => {
-                                const isCorrect = q.correctAnswer === choice;
-                                return (
-                                  <div key={choice} className={`text-xs font-medium flex items-center gap-2 ${isCorrect ? "text-emerald-700 bg-emerald-50/50 border border-emerald-200 px-2.5 py-1.5 rounded-lg font-bold" : "text-slate-800"}`}>
-                                    <span className="w-4 h-4 rounded-full border border-slate-400 flex items-center justify-center shrink-0" />
-                                    <span>{choice}</span>
-                                    {isCorrect && <span className="text-[9px] font-black uppercase text-emerald-600 border border-emerald-400 px-1 py-0.5 rounded ml-1">Correct Answer</span>}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          )}
-
-                          {/* Identification */}
-                          {q.question_type === "Identification" && (
-                            <div className="pl-4 space-y-1 font-sans">
-                              <div className="flex gap-2 items-center text-xs">
-                                <span className="text-slate-500">Your Answer:</span>
-                                <div className="w-48 border-b border-slate-400" />
-                              </div>
-                              <div className="text-[10px] text-emerald-700 font-bold bg-emerald-50/50 border border-emerald-200 px-2.5 py-1 rounded-lg inline-block">
-                                Expected Answer: <strong className="underline">{q.correctAnswer}</strong>
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Matching Type */}
-                          {q.question_type === "Matching_Type" && (
-                            <div className="pl-4 space-y-4 font-sans">
-                              <div className="grid grid-cols-2 gap-8 text-xs border border-slate-100 bg-slate-50/50 p-4 rounded-2xl">
-                                <div className="space-y-2">
-                                  <p className="font-extrabold text-slate-800 border-b border-slate-200 pb-1.5">Column A (Premises)</p>
-                                  {q.matches.map((match, mIdx) => (
-                                    <p key={mIdx} className="font-medium text-slate-700">
-                                      {String.fromCharCode(97 + mIdx)}. {match.premise}
-                                    </p>
-                                  ))}
-                                </div>
-                                <div className="space-y-2">
-                                  <p className="font-extrabold text-slate-800 border-b border-slate-200 pb-1.5">Column B (Choices)</p>
-                                  {q.matches.map((match, mIdx) => (
-                                    <p key={mIdx} className="font-medium text-slate-700 flex justify-between gap-2">
-                                      <span>{String.fromCharCode(65 + mIdx)}. {match.choice}</span>
-                                      <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 px-1 py-0.5 rounded border border-emerald-100 shrink-0">Matches {String.fromCharCode(97 + mIdx)}</span>
-                                    </p>
-                                  ))}
-                                </div>
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Essay */}
-                          {q.question_type === "Essay" && (
-                            <div className="pl-4 space-y-2 font-sans">
-                              <div className="w-full h-24 border border-dashed border-slate-300 rounded-xl bg-slate-50/50 p-3 text-xs text-slate-400 italic">
-                                [ Student essay response area ]
-                              </div>
-                              {q.min_words && q.min_words > 0 ? (
-                                <div className="text-[10px] text-emerald-800 font-extrabold bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg inline-flex items-center gap-1">
-                                  📝 Minimum Limitation: {q.min_words} words required
-                                </div>
-                              ) : null}
-                            </div>
-                          )}
-
-                          {/* Fill in the Blanks */}
-                          {q.question_type === "Fill_In_The_Blanks" && (
-                            <div className="pl-4 space-y-3 font-sans">
-                              <div className="text-xs font-semibold text-slate-900 bg-teal-50/40 border border-teal-100 p-3.5 rounded-xl space-y-2">
-                                <p className="text-[10px] font-black uppercase text-teal-800 tracking-wider">Inline Blanks & Answer Key:</p>
-                                <div className="flex flex-wrap gap-2">
-                                  {(q.blanks || []).map((blank, bIdx) => (
-                                    <span key={bIdx} className="text-xs bg-white border border-teal-300 text-teal-950 font-bold px-3 py-1 rounded-lg shadow-2xs">
-                                      Blank #{bIdx + 1}: <strong className="underline text-teal-700">{blank.answer || "(blank)"}</strong> ({blank.points || 1} pt{blank.points !== 1 && "s"})
-                                    </span>
-                                  ))}
-                                </div>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {pageIdx === previewPages.length - 1 && (
-                    <div className="text-center text-xs font-bold text-slate-400 border-t border-slate-200 pt-4 mt-6 font-sans">
-                      *** End of Examination ***
+                        </table>
+                      </div>
                     </div>
-                  )}
-                </div>
 
-                {/* BOTTOM BSC FOOTER BANNER IMAGE */}
-                <div className="w-full border-t border-slate-200 pt-3 mt-6">
-                  <img
-                    src="/bsc-footer.png"
-                    alt="Batanes State College Footer"
-                    className="w-full h-auto max-h-[100px] object-contain mx-auto"
-                  />
-                  <div className="text-[10px] text-slate-500 font-sans font-medium text-center mt-1.5 flex justify-between items-center px-1">
-                    <span>Batanes State College &bull; Academic Examination System</span>
-                    <span className="font-bold text-slate-700">Page {pageIdx + 1} of {previewPages.length}</span>
+                    {/* BSC FOOTER GRAPHIC */}
+                    <div className="w-full border-t border-slate-300 pt-3 mt-4 flex items-center justify-between">
+                      <img
+                        src="/bsc-footer.png"
+                        alt="Batanes State College Footer"
+                        className="w-full h-auto object-contain mx-auto max-h-[140px] print:max-h-none"
+                      />
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
+
+
+            {/* DOCUMENT 2: OFFICIAL EXAMINATION PAPER (A4 SIZE PAGINATED PAGES) */}
+            <div className="space-y-6 pt-4 font-sans print:pt-0">
+                <div className="flex items-center justify-between bg-slate-900 text-white px-6 py-3 rounded-2xl print:hidden">
+                  <div className="flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-emerald-400" />
+                    <span className="font-extrabold text-xs uppercase tracking-wider">
+                      Official Examination Paper — A4 Print Format ({previewPages.length} {previewPages.length === 1 ? "Page" : "Pages"})
+                    </span>
+                  </div>
+                  <span className="text-[11px] font-bold text-slate-300 bg-slate-800 px-3 py-1 rounded-xl">
+                    Standard A4 Sheet Layout
+                  </span>
+                </div>
+
+                {/* A4 PAGINATED PAGES rendering */}
+                {previewPages.map((pageBlocks, pageIdx) => (
+                  <div
+                    key={pageIdx}
+                    className="w-full max-w-[850px] mx-auto bg-white border-2 border-slate-300 rounded-3xl p-6 sm:p-10 shadow-xl space-y-4 font-sans select-text relative min-h-[1050px] flex flex-col justify-between print:min-h-0 print:shadow-none print:border-none print:p-0 print:m-0 print:rounded-none"
+                  >
+                    <div className="space-y-4">
+                      {/* BSC OFFICIAL HEADER IMAGE FOR EVERY A4 PAGE */}
+                      <div className="w-full border-b border-slate-200 pb-3">
+                        <img
+                          src="/bsc-header.png"
+                          alt="Batanes State College Header"
+                          className="w-full h-auto object-contain mx-auto max-h-[140px] print:max-h-none"
+                        />
+                      </div>
+
+                      {/* PAGE 1: FULL EXAMINATION METADATA HEADER */}
+                      {pageIdx === 0 ? (
+                        <>
+                          <div className="text-center space-y-1 py-1 border-b border-slate-200">
+                            <h2 className="text-base sm:text-lg font-black font-serif text-slate-900 tracking-wide uppercase">
+                              OFFICIAL EXAMINATION PAPER
+                            </h2>
+                            <p className="text-xs font-bold text-slate-800 uppercase">
+                              <span className="underline font-black">[{term.toUpperCase()}] EXAMINATION</span>
+                            </p>
+                            <p className="text-xs font-semibold text-slate-700">
+                              <span className="underline font-bold">{applicableSemesterLabel}</span>
+                            </p>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-xs font-bold border-b border-slate-200 pb-3">
+                            <div className="flex items-center gap-2">
+                              <span className="text-slate-500 font-bold uppercase min-w-[100px]">COURSE:</span>
+                              <span className="font-mono font-black text-slate-900 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded">{selectedCourse.course_code}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-slate-500 font-bold uppercase min-w-[110px]">DATE:</span>
+                              <span className="font-mono font-black text-slate-900 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded">{examDate}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-slate-500 font-bold uppercase min-w-[100px]">TIME LIMIT:</span>
+                              <span className="font-black text-slate-900">{timeLimit} Minutes</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-slate-500 font-bold uppercase min-w-[110px]">TOTAL ITEMS:</span>
+                              <span className="font-black text-slate-900">{questions.length} Items ({questions.reduce((sum, q) => sum + (q.points || 1), 0)} Pts)</span>
+                            </div>
+                          </div>
+
+                          <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs space-y-1">
+                            <p className="font-black text-slate-900 uppercase tracking-wider text-[10px]">General Instructions:</p>
+                            <p className="text-slate-700 font-medium text-[11px] leading-relaxed">
+                              Read each item carefully before answering. Ensure your responses are clear and legibly written. Manage your time wisely across all test parts ({timeLimit} minutes).
+                            </p>
+                          </div>
+                        </>
+                      ) : (
+                        /* PAGE 2+: COMPACT PAGE HEADER */
+                        <div className="flex items-center justify-between border-b border-slate-200 pb-2 text-xs font-bold text-slate-600">
+                          <span className="uppercase tracking-wide font-black text-slate-900">
+                            [{term.toUpperCase()}] EXAMINATION PAPER — {selectedCourse.course_code}
+                          </span>
+                          <span className="bg-slate-100 border border-slate-200 px-2.5 py-0.5 rounded text-[10px] text-slate-700 font-extrabold">
+                            Page {pageIdx + 1} of {previewPages.length}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* BLOCKS ON THIS A4 PAGE */}
+                      <div className="space-y-4 pt-1">
+                        {pageBlocks.map((block) => {
+                          if (block.type === "type-header") {
+                            const typeTitles: Record<string, string> = {
+                              Multiple_Choice: "MULTIPLE CHOICE",
+                              Identification: "IDENTIFICATION",
+                              True_False: "TRUE OR FALSE",
+                              Fill_In_The_Blanks: "FILL IN THE BLANKS",
+                              Matching_Type: "MATCHING TYPE",
+                              Essay: "ESSAY / COMPREHENSION",
+                            };
+                            const typeDirections: Record<string, string> = {
+                              Multiple_Choice: "Read each question carefully and select the letter corresponding to the correct answer.",
+                              Identification: "Identify the concept, term, or statement described in each item. Write your answer clearly.",
+                              True_False: "Read each statement carefully. Write True if the statement is correct; otherwise write False.",
+                              Fill_In_The_Blanks: "Fill in the blank space(s) with the correct word or phrase to complete the statement.",
+                              Matching_Type: "Match the premises in Column A with the corresponding correct options in Column B.",
+                              Essay: "Answer each question concisely and thoroughly in the space provided.",
+                            };
+                            const qType = block.qType || "";
+                            return (
+                              <div key={block.id} className="bg-slate-900 text-white p-3 rounded-xl flex items-center justify-between shadow-2xs mt-3">
+                                <div>
+                                  <h4 className="font-black text-xs uppercase tracking-wider">
+                                    TEST {block.testNum}. {typeTitles[qType] || qType.toUpperCase()}
+                                  </h4>
+                                  <p className="text-[10px] text-slate-300 font-medium mt-0.5">
+                                    {typeDirections[qType]}
+                                  </p>
+                                </div>
+                                <span className="text-[10px] font-black bg-emerald-500 text-slate-950 px-2 py-0.5 rounded-md shrink-0">
+                                  {block.points} Pts Total
+                                </span>
+                              </div>
+                            );
+                          }
+
+                          if (block.type === "question-item" && block.q) {
+                            const q = block.q;
+                            const itemNumLabel = block.itemNumberLabel || (block.idx! + 1);
+
+                            return (
+                              <div key={block.id} className="bg-white border border-slate-200 rounded-xl p-3.5 space-y-2 text-xs shadow-2xs">
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="flex items-start gap-2">
+                                    <span className="font-extrabold text-slate-900 bg-slate-100 border border-slate-300 px-2 py-0.5 rounded text-[11px] shrink-0">
+                                      Item {itemNumLabel}.
+                                    </span>
+                                    <p className="font-extrabold text-slate-900 leading-relaxed text-xs">
+                                      {q.text || "(Question prompt empty)"}
+                                    </p>
+                                  </div>
+                                  <span className="text-[9px] font-bold bg-indigo-50 border border-indigo-200 text-indigo-800 px-1.5 py-0.5 rounded shrink-0">
+                                    {q.taxonomy_level || "KNOWLEDGE / REMEMBERING"} • {q.points || 1} pt(s)
+                                  </span>
+                                </div>
+
+                                {/* Prompt Image if any */}
+                                {q.image_url && (
+                                  <div className="pl-6 pt-1">
+                                    <img src={q.image_url} alt={`Question ${itemNumLabel}`} className="max-h-36 rounded-lg border border-slate-300 object-contain" />
+                                  </div>
+                                )}
+
+                                {/* Multiple Choice Options */}
+                                {q.question_type === "Multiple_Choice" && q.options && (
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pl-6 pt-1">
+                                    {q.options.map((opt: string, optIdx: number) => {
+                                      const label = String.fromCharCode(65 + optIdx);
+                                      return (
+                                        <div key={optIdx} className="flex items-center gap-2 font-medium text-slate-800 text-xs bg-slate-50 border border-slate-200/80 px-2.5 py-1.5 rounded-lg">
+                                          <span className="font-bold text-slate-900 bg-slate-200 px-1.5 py-0.5 rounded text-[10px]">{label}.</span>
+                                          <span>{opt || `Option ${label}`}</span>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+
+                                {/* True / False Options */}
+                                {q.question_type === "True_False" && (
+                                  <div className="flex items-center gap-4 pl-6 pt-1 font-semibold text-slate-700">
+                                    <div className="flex items-center gap-1.5 border border-slate-300 px-3 py-1 rounded-lg bg-slate-50">
+                                      <div className="w-3.5 h-3.5 border-2 border-slate-400 rounded-sm" />
+                                      <span>True</span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5 border border-slate-300 px-3 py-1 rounded-lg bg-slate-50">
+                                      <div className="w-3.5 h-3.5 border-2 border-slate-400 rounded-sm" />
+                                      <span>False</span>
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Identification Line */}
+                                {q.question_type === "Identification" && (
+                                  <div className="pl-6 pt-1">
+                                    <div className="border-b-2 border-dashed border-slate-400 w-full max-w-xs h-6 text-slate-400 font-mono text-[10px] flex items-end">
+                                      Answer: _______________________
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Fill In The Blanks */}
+                                {q.question_type === "Fill_In_The_Blanks" && (
+                                  <div className="pl-6 pt-1 text-slate-600 font-medium">
+                                    {(q.blanks || [{ id: 1 }]).map((b: any, bIdx: number) => (
+                                      <div key={bIdx} className="inline-block mr-3 mt-1 text-[11px] font-mono text-slate-700 bg-slate-100 border border-slate-300 px-2 py-0.5 rounded">
+                                        Blank #{bIdx + 1}: ____________
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+
+                                {/* Matching Type Table */}
+                                {q.question_type === "Matching_Type" && q.matches && (
+                                  <div className="pl-6 pt-1">
+                                    <div className="grid grid-cols-2 gap-4 text-xs border border-slate-200 rounded-lg p-2.5 bg-slate-50">
+                                      <div className="space-y-1">
+                                        <p className="font-bold text-[10px] text-slate-500 uppercase border-b pb-1">Column A (Premises)</p>
+                                        {q.matches.map((m: any, mIdx: number) => (
+                                          <p key={mIdx} className="font-semibold text-slate-800">{mIdx + 1}. {m.premise || `Premise ${mIdx + 1}`}</p>
+                                        ))}
+                                      </div>
+                                      <div className="space-y-1">
+                                        <p className="font-bold text-[10px] text-slate-500 uppercase border-b pb-1">Column B (Choices)</p>
+                                        {q.matches.map((m: any, mIdx: number) => (
+                                          <p key={mIdx} className="font-semibold text-slate-800">{String.fromCharCode(65 + mIdx)}. {m.choice || `Choice ${String.fromCharCode(65 + mIdx)}`}</p>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Essay Response Area */}
+                                {q.question_type === "Essay" && (
+                                  <div className="pl-6 pt-1">
+                                    <div className="border border-slate-300 rounded-lg p-2.5 h-16 bg-slate-50/50 text-slate-400 text-[10px] italic">
+                                      [ Space for student response - Min {q.min_words || 50} words ]
+                                    </div>
+                                  </div>
+                                )}
+
+                              </div>
+                            );
+                          }
+
+                          return null;
+                        })}
+                      </div>
+                    </div>
+
+                    {/* BSC OFFICIAL FOOTER IMAGE & PAGE BADGE */}
+                    <div className="space-y-2 pt-4">
+                      <div className="w-full border-t border-slate-300 pt-2">
+                        <img
+                          src="/bsc-footer.png"
+                          alt="Batanes State College Footer"
+                          className="w-full h-auto object-contain mx-auto max-h-[120px] print:max-h-none"
+                        />
+                      </div>
+                      <div className="text-center print:hidden">
+                        <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                          Examination Paper Sheet • Page {pageIdx + 1} of {previewPages.length}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+            </div>
+
           </div>
 
           {/* Wizard Navigation Footer */}
@@ -3276,74 +3511,19 @@ export function ExamBuilderWizard({
             </button>
 
             <div className="flex flex-wrap items-center justify-end gap-3">
-              {/* TOS PDF Upload Input & Button */}
-              <input
-                type="file"
-                ref={tosFooterInputRef}
-                accept=".pdf,application/pdf"
-                onChange={handleTosFileSelect}
-                className="hidden"
-              />
-
-              {hasTosUploaded ? (
-                <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl shadow-2xs">
-                  <FileText className="w-4 h-4 text-emerald-600 shrink-0" />
-                  <span className="font-bold">TOS PDF Attached</span>
-                  <a
-                    href={tosFilePath}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-[11px] underline font-bold text-emerald-700 hover:text-emerald-900 ml-1"
-                  >
-                    View
-                  </a>
-                  <button
-                    type="button"
-                    onClick={() => tosFooterInputRef.current?.click()}
-                    disabled={uploadingTos}
-                    className="text-[10px] bg-white border border-emerald-300 text-emerald-800 hover:bg-emerald-100 font-bold px-2 py-1 rounded-lg ml-1 cursor-pointer"
-                    title="Replace TOS PDF file (Max 10MB)"
-                  >
-                    {uploadingTos ? "Uploading..." : "Change PDF"}
-                  </button>
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => tosFooterInputRef.current?.click()}
-                  disabled={uploadingTos}
-                  className="flex items-center gap-2 bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900 text-xs font-bold px-4 py-2.5 rounded-xl transition-all shadow-2xs cursor-pointer disabled:opacity-50"
-                  title="Upload TOS PDF file (Required before submitting to Chair, Max 10MB)"
-                >
-                  {uploadingTos ? (
-                    <RefreshCw className="w-4 h-4 animate-spin text-amber-700" />
-                  ) : (
-                    <FileUp className="w-4 h-4 text-amber-700" />
-                  )}
-                  <span>{uploadingTos ? "Uploading TOS..." : "Upload TOS (PDF)"}</span>
-                  <span className="text-[10px] bg-amber-200/80 text-amber-950 font-black px-1.5 py-0.5 rounded-md">
-                    Max 10MB
-                  </span>
-                </button>
-              )}
-
               <button
                 onClick={handleSaveDraft}
-                className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 border border-slate-300/60 text-slate-700 text-xs font-bold px-4 py-2.5 rounded-xl transition-all shadow-sm"
+                className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 border border-slate-300/60 text-slate-700 text-xs font-bold px-4 py-2.5 rounded-xl transition-all shadow-sm cursor-pointer"
               >
                 <Save className="w-4 h-4" />
                 Save Draft
               </button>
 
               <button
-                disabled={!isSubmitAllowed}
+                disabled={isSubmitting || questions.length === 0}
                 onClick={handleSubmitForReview}
                 className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold px-5 py-2.5 rounded-xl transition-all shadow-md hover:shadow-emerald-600/20 disabled:opacity-50 disabled:pointer-events-none cursor-pointer"
-                title={
-                  !hasTosUploaded
-                    ? "Please upload a TOS PDF file (Max 10MB) to activate submission"
-                    : "Final Submit to Department Chair"
-                }
+                title="Final Submit to Department Chair"
               >
                 {isSubmitting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                 Final Submit to Chair
