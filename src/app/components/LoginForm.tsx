@@ -109,7 +109,7 @@ export function LoginForm() {
           Students: Accounts are enrolled directly by your course instructor.
         </p>
         <p className="text-[11px] text-stone-400">
-          Initial default password is your Student ID number. Please consult your faculty if you are not yet enrolled.
+          Initial default password for students is <strong className="font-bold text-stone-600">dukay</strong>. Please update your password upon first login.
         </p>
       </div>
     </form>

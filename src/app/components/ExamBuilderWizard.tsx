@@ -1196,7 +1196,7 @@ export function ExamBuilderWizard({
                       3. Assigned Students for Selected Subject
                     </h3>
                     <p className="text-xs text-slate-400">
-                      Designate which enrolled students will take this examination.
+                      Designate class students eligible to take this examination.
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
@@ -1287,11 +1287,11 @@ export function ExamBuilderWizard({
                 {loadingStudents ? (
                   <div className="p-8 text-center bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
                     <RefreshCw className="w-6 h-6 animate-spin text-emerald-600 mx-auto" />
-                    <p className="text-xs font-bold text-slate-500">Loading enrolled students for this subject...</p>
+                    <p className="text-xs font-bold text-slate-500">Loading class students for this subject...</p>
                   </div>
                 ) : assignedStudents.length === 0 ? (
                   <div className="p-6 text-center bg-amber-50/60 border border-amber-200/80 rounded-2xl space-y-1">
-                    <p className="text-xs font-bold text-amber-800">No students currently enrolled in this subject record.</p>
+                    <p className="text-xs font-bold text-amber-800">No class students currently registered for this subject.</p>
                     <p className="text-[11px] text-amber-600">Students who register or enroll in this course code will automatically become eligible.</p>
                   </div>
                 ) : filteredAndSortedStudents.length === 0 ? (

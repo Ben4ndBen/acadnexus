@@ -3,6 +3,7 @@
 import db from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { ExamStatus } from "@prisma/client";
+import { getExpectedYearLevelForCourse } from "@/lib/bsitCurriculum";
 
 export async function updateFacultyProfile(facultyId: number, firstName: string, lastName: string, middleName?: string) {
   if (!firstName || !lastName) {
@@ -323,11 +324,55 @@ export async function saveExamConfig(formData: FormData) {
   }
 }
 
+async function syncAndGetYearLevelEnrolledStudents(courseId: number) {
+  const course = await db.course.findUnique({
+    where: { course_id: courseId },
+  });
+
+  if (!course) return { course: null, targetYearLevel: null };
+
+  const targetYearLevel = getExpectedYearLevelForCourse(course.course_code, course.course_title);
+
+  if (targetYearLevel) {
+    // Auto-sync missing students matching this subject's expected year level
+    const eligibleStudents = await db.student.findMany({
+      where: { year_level: targetYearLevel },
+      select: { student_id: true },
+    });
+
+    if (eligibleStudents.length > 0) {
+      const existingEnrollments = await db.studentCourse.findMany({
+        where: { course_id: courseId },
+        select: { student_id: true },
+      });
+
+      const existingSet = new Set(existingEnrollments.map((e) => e.student_id));
+      const missingIds = eligibleStudents.map((s) => s.student_id).filter((id) => !existingSet.has(id));
+
+      if (missingIds.length > 0) {
+        await db.studentCourse.createMany({
+          data: missingIds.map((studentId) => ({
+            student_id: studentId,
+            course_id: courseId,
+          })),
+          skipDuplicates: true,
+        });
+      }
+    }
+  }
+
+  return { course, targetYearLevel };
+}
+
 export async function getAssignedStudentsForCourse(courseId: number) {
   try {
-    // 1. Fetch students directly enrolled in this course via StudentCourse
+    const { targetYearLevel } = await syncAndGetYearLevelEnrolledStudents(courseId);
+
     const enrolled = await db.studentCourse.findMany({
-      where: { course_id: courseId },
+      where: {
+        course_id: courseId,
+        ...(targetYearLevel ? { student: { year_level: targetYearLevel } } : {}),
+      },
       include: {
         student: {
           include: {
@@ -343,52 +388,23 @@ export async function getAssignedStudentsForCourse(courseId: number) {
       },
     });
 
-    if (enrolled.length > 0) {
-      return {
-        success: true,
-        students: enrolled.map((e) => ({
-          student_id: e.student.student_id,
-          institutional_id: e.student.user.institutional_id,
-          first_name: e.student.first_name,
-          middle_name: e.student.middle_name,
-          last_name: e.student.last_name,
-          program_code: e.student.program.program_code,
-          program_name: e.student.program.program_name,
-          year_level: e.student.year_level,
-          section: e.student.section,
-        })),
-      };
-    }
-
-    // 2. Fallback: If no student courses specifically match this course yet, fetch enrolled students
-    const allStudents = await db.student.findMany({
-      include: {
-        user: true,
-        program: true,
-      },
-      orderBy: {
-        last_name: "asc",
-      },
-      take: 50,
-    });
-
     return {
       success: true,
-      students: allStudents.map((s) => ({
-        student_id: s.student_id,
-        institutional_id: s.user.institutional_id,
-        first_name: s.first_name,
-        middle_name: s.middle_name,
-        last_name: s.last_name,
-        program_code: s.program.program_code,
-        program_name: s.program.program_name,
-        year_level: s.year_level,
-        section: s.section,
+      students: enrolled.map((e) => ({
+        student_id: e.student.student_id,
+        institutional_id: e.student.user.institutional_id,
+        first_name: e.student.first_name,
+        middle_name: e.student.middle_name,
+        last_name: e.student.last_name,
+        program_code: e.student.program.program_code,
+        program_name: e.student.program.program_name,
+        year_level: e.student.year_level,
+        section: e.student.section,
       })),
     };
   } catch (err: any) {
     console.error("Error getting assigned students for course:", err);
-    return { error: err.message || "Failed to fetch enrolled students." };
+    return { error: err.message || "Failed to fetch class students." };
   }
 }
 
@@ -1637,8 +1653,13 @@ export async function getFacultyEnrolledStudentsAndGrades(facultyId: number) {
 
 export async function getCourseRoster(courseId: number) {
   try {
+    const { targetYearLevel } = await syncAndGetYearLevelEnrolledStudents(courseId);
+
     const enrollments = await db.studentCourse.findMany({
-      where: { course_id: courseId },
+      where: {
+        course_id: courseId,
+        ...(targetYearLevel ? { student: { year_level: targetYearLevel } } : {}),
+      },
       include: {
         student: {
           include: {
@@ -1760,9 +1781,9 @@ export async function enrollStudentInCourse(
       }
     } else {
       // 3. User does not exist: Provision new Student user account
-      // Initial default password is set to their Student ID number
+      // Initial default password is set to 'dukay'
       const salt = await bcrypt.genSalt(10);
-      const defaultPasswordHash = await bcrypt.hash(formattedId, salt);
+      const defaultPasswordHash = await bcrypt.hash("dukay", salt);
 
       // Determine default program if not specified
       let programId = data.programId ? Number(data.programId) : undefined;

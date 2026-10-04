@@ -999,7 +999,7 @@ export function FacultyDashboardClient({
           }`}
         >
           <GraduationCap className="w-4 h-4" />
-          Class Students & Enrollment
+          Class Students
         </button>
         <button
           onClick={() => setActiveTab("submissions")}
@@ -2385,10 +2385,10 @@ export function FacultyDashboardClient({
                   Subject Enrollment & Exam Status
                 </div>
                 <h3 className="text-xl font-extrabold text-white tracking-tight">
-                  Enrolled Students & Grade Reports
+                  Class Students & Grade Reports
                 </h3>
                 <p className="text-xs text-slate-300 max-w-xl leading-relaxed">
-                  View students enrolled in your assigned subjects, inspect their exam scores & calculated grades, and track whether they took or missed scheduled examinations.
+                  View class students in your assigned subjects, inspect their exam scores & calculated grades, and track whether they took or missed scheduled examinations.
                 </p>
               </div>
               <button
@@ -2397,7 +2397,7 @@ export function FacultyDashboardClient({
                 className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-black px-6 py-3.5 rounded-2xl shadow-lg hover:shadow-emerald-500/25 transition-all duration-300 flex items-center gap-2 shrink-0 cursor-pointer active:scale-95 border border-emerald-400"
               >
                 <GraduationCap className="w-4.5 h-4.5" />
-                View Enrolled Students & Grades
+                View Class Students & Grades
               </button>
             </div>
           </div>
@@ -2880,10 +2880,10 @@ export function FacultyDashboardClient({
               <div>
                 <h2 className="text-xl font-extrabold text-slate-900 flex items-center gap-2">
                   <span className="w-1.5 h-6 bg-emerald-600 rounded-full" />
-                  Class Roster & Student Enrollment
+                  Class Students Roster
                 </h2>
                 <p className="text-slate-500 text-xs mt-1">
-                  Insert and manage student ID numbers enrolled in your classes. Students can only log in once their ID is enrolled here.
+                  Official student roster assigned to this subject. Only students enrolled in this specific course section are listed here.
                 </p>
               </div>
 
@@ -2899,7 +2899,7 @@ export function FacultyDashboardClient({
                   className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-xl text-xs font-bold shadow-sm transition-all"
                 >
                   <Plus className="w-4 h-4" />
-                  <span>Enroll Student</span>
+                  <span>Add Student to Class</span>
                 </button>
                 <button
                   type="button"
@@ -2910,7 +2910,7 @@ export function FacultyDashboardClient({
                   className="flex items-center gap-2 bg-slate-800 hover:bg-slate-900 text-white px-4 py-2.5 rounded-xl text-xs font-bold shadow-sm transition-all"
                 >
                   <Users className="w-4 h-4" />
-                  <span>Batch Insert IDs</span>
+                  <span>Batch Add Student IDs</span>
                 </button>
                 <button
                   type="button"
@@ -2969,13 +2969,13 @@ export function FacultyDashboardClient({
                       {selectedCourse.course_code} - {selectedCourse.course_title}
                     </h4>
                     <p className="text-[11px] text-slate-500 mt-0.5">
-                      Enrolled student roster for this class
+                      Active Class Roster for this Subject
                     </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-[11px] font-bold text-emerald-800 bg-emerald-100/70 border border-emerald-200 px-3 py-1 rounded-full">
-                    {classRosterStudents.length} Students Enrolled
+                    {classRosterStudents.length} Class Students
                   </span>
                 </div>
               </div>
@@ -2985,7 +2985,7 @@ export function FacultyDashboardClient({
             {loadingClassRoster ? (
               <div className="flex flex-col items-center justify-center py-20 text-slate-400 space-y-3">
                 <Loader2 className="w-8 h-8 animate-spin text-emerald-600" />
-                <p className="text-xs font-bold text-slate-500">Loading enrolled class roster...</p>
+                <p className="text-xs font-bold text-slate-500">Loading class section roster...</p>
               </div>
             ) : filteredRosterStudents.length > 0 ? (
               <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
@@ -3035,7 +3035,7 @@ export function FacultyDashboardClient({
                               ) : (
                                 <Trash2 className="w-3.5 h-3.5" />
                               )}
-                              <span>Unenroll</span>
+                              <span>Remove from Class</span>
                             </button>
                           </td>
                         </tr>
@@ -3050,12 +3050,12 @@ export function FacultyDashboardClient({
                   <Users className="w-6 h-6" />
                 </div>
                 <h3 className="text-sm font-bold text-slate-800">
-                  {rosterSearch.trim() ? "No students match your search" : "No students currently enrolled in this class"}
+                  {rosterSearch.trim() ? "No class students match your search" : "No class students registered for this subject"}
                 </h3>
                 <p className="text-xs text-slate-400 max-w-md mx-auto">
                   {rosterSearch.trim()
                     ? "Try adjusting your search criteria or clear the filter."
-                    : "Insert student ID numbers to enroll students in this course. Once enrolled, students can log in to take examinations."}
+                    : "Add student ID numbers to register them in this class roster. Once listed, students can access scheduled examinations for this course."}
                 </p>
                 {!rosterSearch.trim() && (
                   <div className="pt-2 flex justify-center gap-3">
@@ -3069,7 +3069,7 @@ export function FacultyDashboardClient({
                       className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-sm transition-all"
                     >
                       <Plus className="w-4 h-4" />
-                      <span>Enroll Student</span>
+                      <span>Add Student to Class</span>
                     </button>
                     <button
                       type="button"
@@ -3080,7 +3080,7 @@ export function FacultyDashboardClient({
                       className="flex items-center gap-2 bg-slate-800 hover:bg-slate-900 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-sm transition-all"
                     >
                       <Users className="w-4 h-4" />
-                      <span>Batch Insert IDs</span>
+                      <span>Batch Add Student IDs</span>
                     </button>
                   </div>
                 )}
@@ -3101,10 +3101,10 @@ export function FacultyDashboardClient({
               <div>
                 <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
                   <GraduationCap className="w-5 h-5 text-emerald-600" />
-                  Enroll Student in Class
+                  Add Student to Class Roster
                 </h3>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  Insert student ID number to grant course & login access
+                  Insert student ID number to assign student to this course section
                 </p>
               </div>
               <button
@@ -3118,8 +3118,8 @@ export function FacultyDashboardClient({
 
             {/* Info notice */}
             <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-xl text-xs text-emerald-900 leading-relaxed">
-              <span className="font-bold">Automatic Account Provisioning: </span>
-              If the student is not yet in the system, an account is created with their Student ID as the initial password. They will be required to set a personal password upon first login.
+              <span className="font-bold">Class Section Assignment: </span>
+              Assigning student account to this course. Academic Program is locked to the department's connected program.
             </div>
 
             {/* Error & Success */}
@@ -3181,13 +3181,16 @@ export function FacultyDashboardClient({
               </div>
 
               <div>
-                <label className="text-xs font-extrabold text-slate-700 block mb-1">
-                  Academic Program
+                <label className="text-xs font-extrabold text-slate-700 flex items-center justify-between mb-1">
+                  <span>Academic Program</span>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                    Locked to Department
+                  </span>
                 </label>
                 <select
+                  disabled
                   value={enrollForm.programId}
-                  onChange={(e) => setEnrollForm({ ...enrollForm, programId: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 focus:bg-white text-xs font-bold text-slate-900 px-3.5 py-2.5 rounded-xl transition-all"
+                  className="w-full bg-slate-100 border border-slate-200 text-xs font-bold text-slate-500 px-3.5 py-2.5 rounded-xl cursor-not-allowed opacity-80"
                 >
                   {programs.map((p) => (
                     <option key={p.program_id} value={p.program_id}>
@@ -3230,10 +3233,10 @@ export function FacultyDashboardClient({
                 {isSubmittingEnroll ? (
                   <>
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    <span>Enrolling...</span>
+                    <span>Adding Student...</span>
                   </>
                 ) : (
-                  <span>Enroll Student</span>
+                  <span>Add Student to Class</span>
                 )}
               </button>
             </div>
@@ -3252,10 +3255,10 @@ export function FacultyDashboardClient({
               <div>
                 <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
                   <Users className="w-5 h-5 text-emerald-600" />
-                  Batch Insert Student IDs
+                  Batch Add Student IDs to Class
                 </h3>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  Paste multiple student IDs to enroll them in this class simultaneously
+                  Paste multiple student IDs to assign them to this course section simultaneously
                 </p>
               </div>
               <button
@@ -3297,13 +3300,17 @@ export function FacultyDashboardClient({
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-[11px] font-extrabold text-slate-700 block mb-1">
-                    Default Program
+                  <label className="text-[11px] font-extrabold text-slate-700 flex items-center justify-between mb-1">
+                    <span>Default Program</span>
+                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                      Locked
+                    </span>
                   </label>
                   <select
+                    disabled
                     value={bulkProgramId}
                     onChange={(e) => setBulkProgramId(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 text-xs font-bold text-slate-900 p-2 rounded-xl"
+                    className="w-full bg-slate-100 border border-slate-200 text-xs font-bold text-slate-500 p-2 rounded-xl cursor-not-allowed opacity-80"
                   >
                     {programs.map((p) => (
                       <option key={p.program_id} value={p.program_id}>
@@ -3349,7 +3356,7 @@ export function FacultyDashboardClient({
                     <span>Processing Batch...</span>
                   </>
                 ) : (
-                  <span>Batch Enroll Students</span>
+                  <span>Batch Add Students</span>
                 )}
               </button>
             </div>
@@ -3666,10 +3673,10 @@ export function FacultyDashboardClient({
                 </div>
                 <div>
                   <h3 className="text-lg sm:text-xl font-black text-slate-900">
-                    Enrolled Students & Exam Performance Roster
+                    Class Students & Exam Performance Roster
                   </h3>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Students enrolled in your subjects, their exam completion status, and calculated grade percentages.
+                    Class students taking your subjects, their exam completion status, and calculated grade percentages.
                   </p>
                 </div>
               </div>
@@ -3809,7 +3816,7 @@ export function FacultyDashboardClient({
                 if (filtered.length === 0) {
                   return (
                     <div className="text-center py-20 text-slate-400 text-xs">
-                      No enrolled students found matching the selected filters.
+                      No class students found matching the selected filters.
                     </div>
                   );
                 }

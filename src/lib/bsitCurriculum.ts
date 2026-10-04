@@ -331,3 +331,44 @@ export function getCurriculumForProgram(programCode: string, yearLevel: number):
     (item) => item.programCode === targetProgram && item.yearLevel === yearLevel
   );
 }
+
+/**
+ * Automatically determines the expected year level (1, 2, 3, or 4) for a course/subject
+ * based on official curriculum data or course code conventions.
+ */
+export function getExpectedYearLevelForCourse(courseCode: string, courseTitle?: string): number | null {
+  if (!courseCode) return null;
+  const cleanCode = courseCode.trim().toUpperCase();
+  const cleanNoSpaces = cleanCode.replace(/\s+/g, "");
+
+  // 1. Check exact or normalized course code match in official curriculum database
+  const found = ALL_CURRICULUMS.find(
+    (item) => item.code.replace(/\s+/g, "").toUpperCase() === cleanNoSpaces
+  );
+  if (found) return found.yearLevel;
+
+  // 2. Check title match if code match wasn't found
+  if (courseTitle) {
+    const cleanTitle = courseTitle.trim().toLowerCase();
+    const foundTitle = ALL_CURRICULUMS.find(
+      (item) => item.title.trim().toLowerCase() === cleanTitle
+    );
+    if (foundTitle) return foundTitle.yearLevel;
+  }
+
+  // 3. Fallback: Parse 3-4 digit course code convention (e.g. ITM 402 -> Year 4, ITM 203 -> Year 2)
+  const numbersMatch = cleanCode.match(/\d{3,4}/);
+  if (numbersMatch) {
+    const num = parseInt(numbersMatch[0], 10);
+    if (num >= 400 && num < 500) return 4;
+    if (num >= 300 && num < 400) return 3;
+    if (num >= 200 && num < 300) return 2;
+    if (num >= 100 && num < 200) return 1;
+
+    const firstDigit = parseInt(numbersMatch[0][0], 10);
+    if (firstDigit >= 1 && firstDigit <= 4) return firstDigit;
+  }
+
+  return null;
+}
+
