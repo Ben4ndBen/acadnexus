@@ -1020,59 +1020,8 @@ export function ExamBuilderWizard({
   // Step 1 Validation
   const isConfigValid = title.trim() !== "" && courseId > 0 && timeLimit > 0 && examDate.trim() !== "";
 
-  // TOS PDF file state & validation
-  const [tosFilePath, setTosFilePath] = useState<string>(exam.tos_file_path || "");
-  const [uploadingTos, setUploadingTos] = useState<boolean>(false);
-  const [tosFileError, setTosFileError] = useState<string | null>(null);
-  const tosFileInputRef = useRef<HTMLInputElement>(null);
-
-  const isTosUploaded = Boolean(tosFilePath && tosFilePath.trim().length > 0);
-  const isSubmitAllowed = isConfigValid && questions.length > 0 && isTosUploaded && !isSubmitting;
-
-  const handleUploadTosFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setTosFileError(null);
-
-    // Strict validation: PDF file only!
-    const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
-    if (!isPdf) {
-      const errorMsg = "Invalid file format. Table of Specifications (TOS) upload strictly accepts PDF files (.pdf) only.";
-      setTosFileError(errorMsg);
-      alert(errorMsg);
-      if (e.target) e.target.value = "";
-      return;
-    }
-
-    setUploadingTos(true);
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
-
-      const res = await uploadTosFileAction(exam.exam_id, facultyId, formData);
-      if (res.success && res.tos_file_path) {
-        setTosFilePath(res.tos_file_path);
-        setSaveStatus({ type: "success", message: "TOS PDF uploaded successfully! Submit for Review is now activated." });
-        setTimeout(() => setSaveStatus(null), 4000);
-      } else {
-        setTosFileError(res.error || "Failed to upload TOS PDF file.");
-        alert(res.error || "Failed to upload TOS PDF file.");
-      }
-    } catch (err) {
-      console.error(err);
-      setTosFileError("An error occurred while uploading TOS PDF.");
-      alert("An error occurred while uploading TOS PDF.");
-    } finally {
-      setUploadingTos(false);
-      if (e.target) e.target.value = "";
-    }
-  };
-
-  const handleRemoveTosFile = () => {
-    setTosFilePath("");
-    setTosFileError(null);
-  };
+  // Submission validation
+  const isSubmitAllowed = isConfigValid && questions.length > 0 && !isSubmitting;
 
   // Question Image Upload handlers
   const [uploadingImage, setUploadingImage] = useState<boolean>(false);
@@ -1487,13 +1436,6 @@ export function ExamBuilderWizard({
 
         {/* Wizard Action Buttons & Document Reference on Top Right */}
         <div className="flex flex-wrap items-center gap-3 sm:ml-auto">
-          <input
-            type="file"
-            accept="application/pdf,.pdf"
-            ref={tosFileInputRef}
-            onChange={handleUploadTosFile}
-            className="hidden"
-          />
 
           {/* Top Right Field for Exam Document / Reference Number (like BSC-ODLF-017) */}
           <div className="flex items-center gap-2 bg-slate-50 border border-slate-200/90 px-3.5 py-1.5 rounded-2xl shadow-inner">
@@ -1510,29 +1452,6 @@ export function ExamBuilderWizard({
             </div>
           </div>
 
-          {/* Upload TOS PDF Button */}
-          {isTosUploaded ? (
-            <a
-              href={tosFilePath}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 text-indigo-800 text-xs font-bold px-3 py-2 rounded-xl transition-all"
-            >
-              <FileText className="w-4 h-4 text-indigo-600" />
-              <span>TOS PDF Uploaded</span>
-            </a>
-          ) : (
-            <button
-              type="button"
-              disabled={uploadingTos}
-              onClick={() => tosFileInputRef.current?.click()}
-              className="inline-flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold px-3.5 py-2 rounded-xl shadow-sm transition-all cursor-pointer disabled:opacity-50"
-            >
-              {uploadingTos ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-              <span>{uploadingTos ? "Uploading PDF..." : "Upload TOS (PDF)"}</span>
-            </button>
-          )}
-
           <button
             onClick={handleSaveDraft}
             className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 border border-slate-300/60 text-slate-700 text-xs font-bold px-4 py-2.5 rounded-xl transition-all shadow-sm"
@@ -1542,16 +1461,11 @@ export function ExamBuilderWizard({
           </button>
 
           <div className="flex items-center gap-2">
-            {!isTosUploaded && (
-              <span className="text-[10px] font-black text-amber-700 bg-amber-50 border border-amber-200 px-2 py-1 rounded-xl whitespace-nowrap hidden lg:inline-block">
-                ⚠️ Upload TOS PDF to Activate
-              </span>
-            )}
             <button
               disabled={!isSubmitAllowed}
               onClick={handleSubmitForReview}
               className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold px-4 py-2.5 rounded-xl transition-all shadow-md hover:shadow-emerald-600/20 disabled:opacity-50 disabled:pointer-events-none cursor-pointer"
-              title={!isTosUploaded ? "Upload Table of Specifications (TOS) PDF file to activate submission" : "Submit examination draft to Chair"}
+              title="Submit examination draft to Chair"
             >
               {isSubmitting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
               Submit for Review
@@ -2030,72 +1944,6 @@ export function ExamBuilderWizard({
                 </div>
               </div>
 
-              {/* Table of Specifications (TOS) PDF Document Attachment Card */}
-              <div className="border-t border-slate-100 pt-5 space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <div>
-                    <h3 className="text-sm font-black text-slate-800 flex items-center gap-1.5">
-                      <FileUp className="w-4 h-4 text-indigo-600" />
-                      Table of Specifications (TOS) PDF Upload
-                    </h3>
-                    <p className="text-xs text-slate-400 mt-1">
-                      Upload official Table of Specifications (TOS) document in <strong className="text-rose-600 font-extrabold">PDF format (.pdf) strictly required</strong> to activate submission to Department Chair.
-                    </p>
-                  </div>
-                  <span className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-full border self-start sm:self-auto ${
-                    isTosUploaded
-                      ? "bg-emerald-50 text-emerald-800 border-emerald-200"
-                      : "bg-amber-50 text-amber-800 border-amber-200"
-                  }`}>
-                    {isTosUploaded ? "✓ TOS PDF Uploaded" : "⚠️ PDF Required"}
-                  </span>
-                </div>
-
-                <div className="bg-slate-50/80 border border-slate-200/80 rounded-2xl p-4 sm:p-5 space-y-4">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="flex flex-wrap items-center gap-3">
-                      <button
-                        type="button"
-                        disabled={uploadingTos}
-                        onClick={() => tosFileInputRef.current?.click()}
-                        className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold px-4 py-2.5 rounded-xl shadow-md transition-all cursor-pointer disabled:opacity-50"
-                      >
-                        {uploadingTos ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-                        <span>{uploadingTos ? "Uploading PDF..." : isTosUploaded ? "Change TOS PDF" : "Upload TOS (PDF Only)"}</span>
-                      </button>
-
-                      {isTosUploaded && (
-                        <a
-                          href={tosFilePath}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-700 hover:text-indigo-900 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-3.5 py-2 rounded-xl transition-all"
-                        >
-                          <FileText className="w-4 h-4 text-indigo-600" />
-                          <span>View Uploaded TOS (PDF)</span>
-                        </a>
-                      )}
-                    </div>
-
-                    {isTosUploaded && (
-                      <button
-                        type="button"
-                        onClick={handleRemoveTosFile}
-                        className="text-xs font-bold text-rose-600 hover:text-rose-700 hover:underline cursor-pointer"
-                      >
-                        Remove TOS PDF
-                      </button>
-                    )}
-                  </div>
-
-                  {tosFileError && (
-                    <div className="bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold p-3 rounded-xl flex items-center gap-2">
-                      <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-                      <span>{tosFileError}</span>
-                    </div>
-                  )}
-                </div>
-              </div>
             </div>
           </div>
         </div>
@@ -3354,22 +3202,6 @@ export function ExamBuilderWizard({
             </button>
 
             <div className="flex flex-wrap items-center justify-end gap-3">
-              {!isTosUploaded && (
-                <span className="text-[11px] font-black text-amber-800 bg-amber-50 border border-amber-200 px-3 py-2 rounded-xl">
-                  ⚠️ Upload TOS (PDF) to activate Submit
-                </span>
-              )}
-
-              <button
-                type="button"
-                disabled={uploadingTos}
-                onClick={() => tosFileInputRef.current?.click()}
-                className="inline-flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold px-4 py-2.5 rounded-xl shadow-sm transition-all cursor-pointer disabled:opacity-50"
-              >
-                {uploadingTos ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-                <span>{uploadingTos ? "Uploading..." : isTosUploaded ? "Change TOS (PDF)" : "Upload TOS (PDF)"}</span>
-              </button>
-
               <button
                 onClick={handleSaveDraft}
                 className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 border border-slate-300/60 text-slate-700 text-xs font-bold px-4 py-2.5 rounded-xl transition-all shadow-sm"
@@ -3382,7 +3214,7 @@ export function ExamBuilderWizard({
                 disabled={!isSubmitAllowed}
                 onClick={handleSubmitForReview}
                 className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold px-5 py-2.5 rounded-xl transition-all shadow-md hover:shadow-emerald-600/20 disabled:opacity-50 disabled:pointer-events-none cursor-pointer"
-                title={!isTosUploaded ? "Upload Table of Specifications (TOS) PDF file to activate submission" : "Final Submit to Department Chair"}
+                title="Final Submit to Department Chair"
               >
                 {isSubmitting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                 Final Submit to Chair
