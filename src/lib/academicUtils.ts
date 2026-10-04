@@ -76,15 +76,26 @@ export function getStudentMiddleInitial(middleName?: string | null): string {
   return `${trimmed.charAt(0).toUpperCase()}.`;
 }
 
+export const getMiddleInitial = getStudentMiddleInitial;
+
 export function formatStudentName(
-  student: { first_name: string; last_name: string; middle_name?: string | null },
-  format: "lastFirst" | "firstLast" = "lastFirst"
+  studentOrFirstName: { first_name: string; last_name: string; middle_name?: string | null } | string,
+  middleNameOrFormat?: string | null | "lastFirst" | "firstLast",
+  lastName?: string
 ): string {
-  const mi = getStudentMiddleInitial(student.middle_name);
-  if (format === "lastFirst") {
-    return mi ? `${student.last_name}, ${student.first_name} ${mi}` : `${student.last_name}, ${student.first_name}`;
-  } else {
-    return mi ? `${student.first_name} ${mi} ${student.last_name}` : `${student.first_name} ${student.last_name}`;
+  if (typeof studentOrFirstName === "object" && studentOrFirstName !== null) {
+    const student = studentOrFirstName;
+    const format = middleNameOrFormat === "firstLast" ? "firstLast" : "lastFirst";
+    const mi = getStudentMiddleInitial(student.middle_name);
+    if (format === "lastFirst") {
+      return mi ? `${student.last_name}, ${student.first_name} ${mi}` : `${student.last_name}, ${student.first_name}`;
+    } else {
+      return mi ? `${student.first_name} ${mi} ${student.last_name}` : `${student.first_name} ${student.last_name}`;
+    }
   }
+
+  const mi = getStudentMiddleInitial(middleNameOrFormat as string | null);
+  const midStr = mi ? `${mi} ` : "";
+  return `${studentOrFirstName} ${midStr}${lastName || ""}`.trim();
 }
 

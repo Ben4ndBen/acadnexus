@@ -1,16 +1,29 @@
-const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
+require('dotenv').config();
+const { Pool } = require('pg');
 
-async function main() {
-  const programs = await prisma.academicProgram.findMany();
-  console.log('Programs:', JSON.stringify(programs, null, 2));
-
-  const sampleStudent = await prisma.student.findFirst({
-    include: { user: true }
+async function inspect() {
+  const pool = new Pool({
+    connectionString: process.env.DIRECT_URL || process.env.DATABASE_URL,
+    ssl: { rejectUnauthorized: false }
   });
-  console.log('Sample student:', JSON.stringify(sampleStudent, null, 2));
+
+  console.log("--- ACADEMIC PROGRAMS ---");
+  const progs = await pool.query('SELECT * FROM "ACADEMIC_PROGRAMS" ORDER BY program_id');
+  console.log(progs.rows);
+
+  console.log("\n--- COURSES ---");
+  const courses = await pool.query('SELECT * FROM "COURSES" ORDER BY course_id');
+  console.log(courses.rows);
+
+  console.log("\n--- STUDENT COURSES (Enrolled Subjects Count) ---");
+  const sc = await pool.query('SELECT count(*) FROM "STUDENT_COURSES"');
+  console.log("Total enrolled student courses:", sc.rows[0].count);
+
+  console.log("\n--- FACULTY COURSES ---");
+  const fc = await pool.query('SELECT * FROM "FACULTY_COURSES"');
+  console.log(fc.rows);
+
+  await pool.end();
 }
 
-main()
-  .catch(console.error)
-  .finally(() => prisma.$disconnect());
+inspect().catch(console.error);
