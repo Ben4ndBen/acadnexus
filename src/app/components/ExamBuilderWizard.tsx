@@ -1707,7 +1707,7 @@ export function ExamBuilderWizard({
       )}
 
       {/* Step Progress Indicators */}
-      <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm print:hidden">
+      <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 relative">
           
           {/* Step 1 Indicator */}
@@ -2938,7 +2938,7 @@ export function ExamBuilderWizard({
         <div className="space-y-8">
           
           {/* Info Card Summary */}
-          <div className="bg-gradient-to-tr from-slate-900 to-slate-800 border border-slate-950 text-white rounded-3xl p-6 shadow-md relative overflow-hidden print:hidden">
+          <div className="bg-gradient-to-tr from-slate-900 to-slate-800 border border-slate-950 text-white rounded-3xl p-6 shadow-md relative overflow-hidden">
             <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff03_1px,transparent_1px),linear-gradient(to_bottom,#ffffff03_1px,transparent_1px)] bg-[size:24px_24px]" />
             <div className="relative z-10 grid grid-cols-2 md:grid-cols-4 gap-6 text-sm">
               <div>
@@ -3007,92 +3007,12 @@ export function ExamBuilderWizard({
           </div>
 
           {/* STEP 3 VERTICALLY STACKED PREVIEW CONTAINER */}
-          <div id="printable-documents-container" className="space-y-8 font-sans">
-            <style>{`
-              @media print {
-                @page tos-landscape {
-                  size: A4 landscape;
-                  margin: 6mm;
-                }
-                @page tq-portrait {
-                  size: A4 portrait;
-                  margin: 6mm;
-                }
-                @page {
-                  size: auto;
-                  margin: 6mm;
-                }
-
-                html, body {
-                  background: white !important;
-                  color: black !important;
-                  margin: 0 !important;
-                  padding: 0 !important;
-                  -webkit-print-color-adjust: exact !important;
-                  print-color-adjust: exact !important;
-                }
-
-                .print\\:hidden,
-                header,
-                nav,
-                footer,
-                aside,
-                [role="navigation"] {
-                  display: none !important;
-                }
-
-                #printable-documents-container {
-                  width: 100% !important;
-                  max-width: none !important;
-                  margin: 0 !important;
-                  padding: 0 !important;
-                  display: block !important;
-                }
-
-                .tos-print-page {
-                  page: tos-landscape !important;
-                  break-after: page !important;
-                  page-break-after: always !important;
-                  max-width: 100% !important;
-                  width: 100% !important;
-                  margin: 0 !important;
-                  padding: 0 !important;
-                  border: none !important;
-                  box-shadow: none !important;
-                  border-radius: 0 !important;
-                  background: white !important;
-                }
-
-                .tq-print-container {
-                  break-before: page !important;
-                  page-break-before: always !important;
-                }
-
-                .tq-print-page {
-                  page: tq-portrait !important;
-                  break-after: page !important;
-                  page-break-after: always !important;
-                  max-width: 100% !important;
-                  width: 100% !important;
-                  margin: 0 !important;
-                  padding: 0 !important;
-                  border: none !important;
-                  box-shadow: none !important;
-                  border-radius: 0 !important;
-                  background: white !important;
-                }
-
-                .tq-print-page:last-child {
-                  break-after: auto !important;
-                  page-break-after: auto !important;
-                }
-              }
-            `}</style>
+          <div className="space-y-8 font-sans">
 
             {/* DOCUMENT 1: OFFICIAL BATANES STATE COLLEGE TOS MATRIX (BSC-ODI-F-121 - A4 LANDSCAPE PAGINATED) */}
             <div className="space-y-6">
               {tosPages.map((pageRows, pageIdx) => (
-                <div key={pageIdx} className="space-y-3 tos-print-page">
+                <div key={pageIdx} className="space-y-3">
                   <div className="flex items-center justify-between bg-slate-900 text-white px-6 py-3 rounded-2xl print:hidden max-w-[1123px] mx-auto">
                     <div className="flex items-center gap-2">
                       <Layers className="w-4 h-4 text-emerald-400" />
@@ -3353,7 +3273,7 @@ export function ExamBuilderWizard({
 
 
             {/* DOCUMENT 2: OFFICIAL EXAMINATION PAPER (A4 SIZE PAGINATED PAGES) */}
-            <div className="space-y-6 pt-4 font-sans print:pt-0 tq-print-container">
+            <div className="space-y-6 pt-4 font-sans print:pt-0">
                 <div className="flex items-center justify-between bg-slate-900 text-white px-6 py-3 rounded-2xl print:hidden">
                   <div className="flex items-center gap-2">
                     <FileText className="w-4 h-4 text-emerald-400" />
@@ -3370,7 +3290,7 @@ export function ExamBuilderWizard({
                 {previewPages.map((pageBlocks, pageIdx) => (
                   <div
                     key={pageIdx}
-                    className="w-full max-w-[850px] mx-auto bg-white border-2 border-slate-300 rounded-3xl p-6 sm:p-10 shadow-xl space-y-4 font-sans select-text relative min-h-[1050px] flex flex-col justify-between print:min-h-0 print:shadow-none print:border-none print:p-0 print:m-0 print:rounded-none tq-print-page"
+                    className="w-full max-w-[850px] mx-auto bg-white border-2 border-slate-300 rounded-3xl p-6 sm:p-10 shadow-xl space-y-4 font-sans select-text relative min-h-[1050px] flex flex-col justify-between print:min-h-0 print:shadow-none print:border-none print:p-0 print:m-0 print:rounded-none"
                   >
                     <div className="space-y-4">
                       {/* BSC OFFICIAL HEADER IMAGE FOR EVERY A4 PAGE */}
@@ -3715,7 +3635,7 @@ export function ExamBuilderWizard({
           </div>
 
           {/* Wizard Navigation Footer */}
-          <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-4 bg-white border border-slate-200 rounded-3xl p-5 shadow-sm w-full print:hidden">
+          <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-4 bg-white border border-slate-200 rounded-3xl p-5 shadow-sm w-full">
             <button
               type="button"
               onClick={() => setStep(2)}
