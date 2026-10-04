@@ -366,12 +366,12 @@ async function syncAndGetYearLevelEnrolledStudents(courseId: number) {
 
 export async function getAssignedStudentsForCourse(courseId: number) {
   try {
-    const { targetYearLevel } = await syncAndGetYearLevelEnrolledStudents(courseId);
+    // Auto-sync missing expected year level students, but fetch all enrolled students across all year levels
+    await syncAndGetYearLevelEnrolledStudents(courseId);
 
     const enrolled = await db.studentCourse.findMany({
       where: {
         course_id: courseId,
-        ...(targetYearLevel ? { student: { year_level: targetYearLevel } } : {}),
       },
       include: {
         student: {
@@ -1702,12 +1702,11 @@ export async function getFacultyEnrolledStudentsAndGrades(facultyId: number) {
 
 export async function getCourseRoster(courseId: number) {
   try {
-    const { targetYearLevel } = await syncAndGetYearLevelEnrolledStudents(courseId);
+    await syncAndGetYearLevelEnrolledStudents(courseId);
 
     const enrollments = await db.studentCourse.findMany({
       where: {
         course_id: courseId,
-        ...(targetYearLevel ? { student: { year_level: targetYearLevel } } : {}),
       },
       include: {
         student: {
