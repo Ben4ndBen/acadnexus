@@ -2940,11 +2940,18 @@ export function ExamBuilderWizard({
           {/* Info Card Summary */}
           <div className="bg-gradient-to-tr from-slate-900 to-slate-800 border border-slate-950 text-white rounded-3xl p-6 shadow-md relative overflow-hidden">
             <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff03_1px,transparent_1px),linear-gradient(to_bottom,#ffffff03_1px,transparent_1px)] bg-[size:24px_24px]" />
-            <div className="relative z-10 grid grid-cols-2 md:grid-cols-4 gap-6 text-sm">
+            <div className="relative z-10 grid grid-cols-2 md:grid-cols-5 gap-4 sm:gap-6 text-sm">
               <div>
                 <p className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest">Selected Course</p>
                 <p className="font-extrabold text-slate-200 mt-1">
                   {courses.find(c => c.course_id === courseId)?.course_code} - {courses.find(c => c.course_id === courseId)?.course_title}
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest">Assigned Students</p>
+                <p className="font-extrabold text-emerald-400 mt-1 flex items-center gap-1.5">
+                  <Users className="w-4 h-4 text-emerald-400" />
+                  <span>{selectedStudentIds.length} / {assignedStudents.length} Students</span>
                 </p>
               </div>
               <div>
@@ -2962,6 +2969,54 @@ export function ExamBuilderWizard({
                 </p>
               </div>
             </div>
+          </div>
+
+          {/* ASSIGNED CLASS ROSTER VERIFICATION CARD */}
+          <div className="bg-white border border-slate-200/90 rounded-3xl p-5 shadow-sm space-y-3 font-sans print:hidden">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-3">
+                <div className="bg-emerald-600 text-white p-2.5 rounded-2xl shadow-sm">
+                  <Users className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-slate-900 uppercase tracking-wide">
+                    Assigned Class Roster ({selectedStudentIds.length} Eligible Students)
+                  </h3>
+                  <p className="text-xs text-slate-500 font-medium">
+                    Verified roster of students authorized to take this examination.
+                  </p>
+                </div>
+              </div>
+              <span className="text-xs font-black text-emerald-800 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-xl self-start sm:self-auto">
+                {selectedStudentIds.length} / {assignedStudents.length} Selected
+              </span>
+            </div>
+
+            {selectedStudentIds.length === 0 ? (
+              <div className="p-4 text-center bg-amber-50 border border-amber-200 rounded-2xl text-xs font-bold text-amber-800">
+                No students selected. Go back to Step 1 to select assigned class students.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 max-h-48 overflow-y-auto p-1">
+                {assignedStudents
+                  .filter(s => selectedStudentIds.includes(s.student_id))
+                  .map((s) => (
+                    <div key={s.student_id} className="flex items-center gap-2.5 bg-slate-50 border border-slate-200 p-2.5 rounded-xl text-xs">
+                      <div className="w-7 h-7 rounded-full bg-emerald-600 text-white flex items-center justify-center font-black text-[10px] uppercase shrink-0">
+                        {s.first_name[0]}{s.last_name[0]}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="font-extrabold text-slate-900 truncate">
+                          {formatStudentName(s)}
+                        </p>
+                        <p className="text-[10px] text-slate-500 font-mono">
+                          {s.institutional_id || "N/A"} • {s.program_code} Y{s.year_level}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            )}
           </div>
 
           {/* STEP 3 PREVIEW TOP ACTION BAR */}
