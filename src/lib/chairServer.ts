@@ -28,7 +28,7 @@ export async function ensureChairsAndDepartmentsExist(force = false) {
         ],
       },
       {
-        name: "Hospitality and Tourism Management Department",
+        name: "HTM Department",
         chairId: "CHAIR-HTM",
         chairUsername: "chair_htm",
         facultyId: "FACULTY-HTM",
@@ -42,7 +42,7 @@ export async function ensureChairsAndDepartmentsExist(force = false) {
       {
         name: "ICT Department",
         chairId: "CHAIR-001",
-        chairUsername: "chair_it",
+        chairUsername: "chair_ict",
         facultyId: "FACULTY-001",
         facultyFirstName: "Mark",
         facultyLastName: "Abad",
@@ -51,10 +51,10 @@ export async function ensureChairsAndDepartmentsExist(force = false) {
         ],
       },
       {
-        name: "IT Department",
-        chairId: "CHAIR-INDTECH",
-        chairUsername: "chair_indtech",
-        facultyId: "FACULTY-INDTECH",
+        name: "ITD Department",
+        chairId: "CHAIR-ITD",
+        chairUsername: "chair_itd",
+        facultyId: "FACULTY-ITD",
         facultyFirstName: "Elena",
         facultyLastName: "Cruz",
         programs: [
@@ -62,7 +62,7 @@ export async function ensureChairsAndDepartmentsExist(force = false) {
         ],
       },
       {
-        name: "Teacher Education Department",
+        name: "Teacher Education Department (TED)",
         chairId: "CHAIR-TED",
         chairUsername: "chair_ted",
         facultyId: "FACULTY-TED",
@@ -75,40 +75,73 @@ export async function ensureChairsAndDepartmentsExist(force = false) {
       },
     ];
 
-    // Migrate program codes if needed:
-    // 1. Information Technology -> "BSInfoTech"
-    await db.academicProgram.updateMany({
-      where: {
-        OR: [
-          { program_code: "BS Info Tech" },
-          { program_code: "BSInfo Tech" },
-          { program_name: { contains: "Information", mode: "insensitive" } },
-        ],
-      },
-      data: {
-        program_code: "BSInfoTech",
-        program_name: "Bachelor of Science in Information Technology",
-      },
-    });
+    // Migrate program codes safely if needed:
+    try {
+      // 1. Information Technology -> "BSInfoTech"
+      const targetBsInfoTech = await db.academicProgram.findUnique({
+        where: { program_code: "BSInfoTech" },
+      });
 
-    // 2. Industrial Technology -> "BSIT"
-    await db.academicProgram.updateMany({
-      where: {
-        OR: [
-          { program_code: "BSINDTECH" },
-          {
-            AND: [
-              { program_name: { contains: "Industrial", mode: "insensitive" } },
-              { program_code: { not: "BSIT" } },
+      if (!targetBsInfoTech) {
+        const legacyIT = await db.academicProgram.findFirst({
+          where: {
+            program_code: { not: "BSInfoTech" },
+            OR: [
+              { program_code: "BS Info Tech" },
+              { program_code: "BSInfo Tech" },
+              { program_name: { contains: "Information", mode: "insensitive" } },
             ],
           },
-        ],
-      },
-      data: {
-        program_code: "BSIT",
-        program_name: "Bachelor of Science in Industrial Technology",
-      },
-    });
+        });
+        if (legacyIT) {
+          await db.academicProgram.update({
+            where: { program_id: legacyIT.program_id },
+            data: {
+              program_code: "BSInfoTech",
+              program_name: "Bachelor of Science in Information Technology",
+            },
+          });
+        }
+      } else {
+        await db.academicProgram.update({
+          where: { program_id: targetBsInfoTech.program_id },
+          data: { program_name: "Bachelor of Science in Information Technology" },
+        });
+      }
+
+      // 2. Industrial Technology -> "BSIT"
+      const targetBsit = await db.academicProgram.findUnique({
+        where: { program_code: "BSIT" },
+      });
+
+      if (!targetBsit) {
+        const legacyIndTech = await db.academicProgram.findFirst({
+          where: {
+            program_code: { not: "BSIT" },
+            OR: [
+              { program_code: "BSINDTECH" },
+              { program_name: { contains: "Industrial", mode: "insensitive" } },
+            ],
+          },
+        });
+        if (legacyIndTech) {
+          await db.academicProgram.update({
+            where: { program_id: legacyIndTech.program_id },
+            data: {
+              program_code: "BSIT",
+              program_name: "Bachelor of Science in Industrial Technology",
+            },
+          });
+        }
+      } else {
+        await db.academicProgram.update({
+          where: { program_id: targetBsit.program_id },
+          data: { program_name: "Bachelor of Science in Industrial Technology" },
+        });
+      }
+    } catch (migErr) {
+      console.warn("Program code migration notice:", migErr);
+    }
 
     // 3. Teacher Education Department names
     await db.academicProgram.updateMany({
