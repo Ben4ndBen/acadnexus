@@ -15,22 +15,22 @@ export interface DepartmentInfo {
 }
 
 export const DEPARTMENT_PROGRAMS_MAP: Record<number, DepartmentProgramInfo[]> = {
-  // IT Department
+  // ICT Department
   28: [
-    { code: "BS Info Tech", name: "BS Information Technology" },
+    { code: "BSInfoTech", name: "Bachelor of Science in Information Technology" },
   ],
   // Agriculture Department
   29: [
-    { code: "BSA", name: "BS Agriculture" },
+    { code: "BSA", name: "Bachelor of Science in Agriculture" },
   ],
   // Hospitality and Tourism Management Department
   30: [
-    { code: "BSHM", name: "BS Hospitality Management" },
-    { code: "BSTM", name: "BS Tourism Management" },
+    { code: "BSHM", name: "Bachelor of Science in Hospitality Management" },
+    { code: "BSTM", name: "Bachelor of Science in Tourism Management" },
   ],
-  // Industrial Technology Department
+  // IT Department (Industrial Technology)
   31: [
-    { code: "BSIT", name: "BS Industrial Technology" },
+    { code: "BSIT", name: "Bachelor of Science in Industrial Technology" },
   ],
   // Teacher Education Department
   32: [
@@ -68,11 +68,12 @@ export function resolveDepartmentKey(departmentIdOrName?: number | string | null
   }
 
   const str = String(departmentIdOrName).trim().toLowerCase();
-  if (str.includes("industrial")) return 31;
+  if (str.includes("industrial") || str.includes("itd") || str === "bsit") return 31;
   if (str.includes("hospitality") || str.includes("tourism") || str.includes("htm")) return 30;
   if (str.includes("agriculture") || str.includes("agri")) return 29;
   if (str.includes("teacher") || str.includes("education") || str.includes("ted")) return 32;
-  if (str.includes("information technology") || str.includes("it department") || str === "it") return 28;
+  if (str.includes("ict") || str.includes("information technology") || str.includes("bsinfotech")) return 28;
+  if (str === "it" || str.includes("it department") || str.includes("itd department")) return 31;
 
   return null;
 }

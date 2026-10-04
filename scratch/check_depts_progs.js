@@ -9,13 +9,11 @@ const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
 async function main() {
-  const count = await prisma.student.count();
-  console.log("TOTAL_STUDENTS_COUNT:", count);
-  const students = await prisma.student.findMany({
-    take: 10,
-    include: { user: true }
+  const depts = await prisma.department.findMany({
+    include: { academicPrograms: true }
   });
-  console.log("SAMPLE_STUDENTS:", JSON.stringify(students, null, 2));
+  console.log("CURRENT DEPARTMENTS & PROGRAMS:");
+  console.log(JSON.stringify(depts, null, 2));
 }
 
 main()

@@ -13,39 +13,61 @@ export async function ensureBsitCoursesExist(force = false) {
   }
 
   try {
-    // A. Rename old Information Technology (if it still has code BSIT) to "BS Info Tech"
-    await db.academicProgram.updateMany({
-      where: {
-        program_code: "BSIT",
-        OR: [
-          { program_name: { contains: "Information", mode: "insensitive" } },
-          { department: { department_name: { contains: "IT", mode: "insensitive" } } },
-        ],
-      },
-      data: {
-        program_code: "BS Info Tech",
-        program_name: "Bachelor of Science in Information Technology",
-      },
-    });
+    // A. Rename old Information Technology (if it still has code BSIT) to "BSInfoTech" safely
+    try {
+      const targetBsInfoTech = await db.academicProgram.findUnique({
+        where: { program_code: "BSInfoTech" },
+      });
 
-    // B. Rename old Industrial Technology (if it still has code BSINDTECH) to "BSIT"
-    await db.academicProgram.updateMany({
-      where: {
-        OR: [
-          { program_code: "BSINDTECH" },
-          {
-            AND: [
-              { program_name: { contains: "Industrial", mode: "insensitive" } },
-              { program_code: { not: "BSIT" } },
+      if (!targetBsInfoTech) {
+        const legacyIT = await db.academicProgram.findFirst({
+          where: {
+            program_code: "BSIT",
+            OR: [
+              { program_name: { contains: "Information", mode: "insensitive" } },
+              { department: { department_name: { contains: "IT", mode: "insensitive" } } },
             ],
           },
-        ],
-      },
-      data: {
-        program_code: "BSIT",
-        program_name: "Bachelor of Science in Industrial Technology",
-      },
-    });
+        });
+        if (legacyIT) {
+          await db.academicProgram.update({
+            where: { program_id: legacyIT.program_id },
+            data: {
+              program_code: "BSInfoTech",
+              program_name: "Bachelor of Science in Information Technology",
+            },
+          });
+        }
+      }
+
+      // B. Rename old Industrial Technology (if it still has code BSINDTECH) to "BSIT" safely
+      const targetBsit = await db.academicProgram.findUnique({
+        where: { program_code: "BSIT" },
+      });
+
+      if (!targetBsit) {
+        const legacyIndTech = await db.academicProgram.findFirst({
+          where: {
+            program_code: { not: "BSIT" },
+            OR: [
+              { program_code: "BSINDTECH" },
+              { program_name: { contains: "Industrial", mode: "insensitive" } },
+            ],
+          },
+        });
+        if (legacyIndTech) {
+          await db.academicProgram.update({
+            where: { program_id: legacyIndTech.program_id },
+            data: {
+              program_code: "BSIT",
+              program_name: "Bachelor of Science in Industrial Technology",
+            },
+          });
+        }
+      }
+    } catch (migErr) {
+      console.warn("Curriculum program code migration notice:", migErr);
+    }
 
     // 1. Ensure BSTM academic program exists
     const bstmExists = await db.academicProgram.findFirst({

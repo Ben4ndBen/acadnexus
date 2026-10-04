@@ -1,4 +1,4 @@
-export type DepartmentKey = "htm" | "agri" | "indtech" | "ted" | "it";
+export type DepartmentKey = "htm" | "agri" | "itd" | "ted" | "ict" | "indtech" | "it";
 
 export interface DepartmentTheme {
   key: DepartmentKey;
@@ -27,11 +27,11 @@ export interface DepartmentTheme {
   };
 }
 
-export const DEPARTMENT_THEMES: Record<DepartmentKey, DepartmentTheme> = {
+export const DEPARTMENT_THEMES: Record<string, DepartmentTheme> = {
   htm: {
     key: "htm",
     shortName: "HTM",
-    fullName: "Hospitality and Tourism Management Department",
+    fullName: "HTM Department",
     themeLabel: "Yellow and White",
     colors: {
       primary: "#CA8A04",
@@ -80,10 +80,10 @@ export const DEPARTMENT_THEMES: Record<DepartmentKey, DepartmentTheme> = {
       ringColor: "focus:ring-emerald-400",
     },
   },
-  indtech: {
-    key: "indtech",
-    shortName: "IndTech",
-    fullName: "Industrial Technology Department",
+  itd: {
+    key: "itd",
+    shortName: "IT",
+    fullName: "ITD Department",
     themeLabel: "Pink and White",
     colors: {
       primary: "#DB2777",
@@ -109,7 +109,7 @@ export const DEPARTMENT_THEMES: Record<DepartmentKey, DepartmentTheme> = {
   ted: {
     key: "ted",
     shortName: "TED",
-    fullName: "Teacher Education Department",
+    fullName: "Teacher Education Department (TED)",
     themeLabel: "Blue and White",
     colors: {
       primary: "#2563EB",
@@ -132,10 +132,10 @@ export const DEPARTMENT_THEMES: Record<DepartmentKey, DepartmentTheme> = {
       ringColor: "focus:ring-blue-400",
     },
   },
-  it: {
-    key: "it",
-    shortName: "IT",
-    fullName: "IT Department",
+  ict: {
+    key: "ict",
+    shortName: "ICT",
+    fullName: "ICT Department",
     themeLabel: "Black and White",
     colors: {
       primary: "#18181B",
@@ -160,11 +160,15 @@ export const DEPARTMENT_THEMES: Record<DepartmentKey, DepartmentTheme> = {
   },
 };
 
+// Aliases for backwards compatibility
+DEPARTMENT_THEMES.indtech = DEPARTMENT_THEMES.itd;
+DEPARTMENT_THEMES.it = DEPARTMENT_THEMES.itd;
+
 /**
  * Resolves department key from any identifier (department name, code, chair ID, program code).
  */
 export function getDepartmentKey(identifier?: string | null): DepartmentKey {
-  if (!identifier) return "it";
+  if (!identifier) return "ict";
   const str = identifier.trim().toLowerCase();
 
   if (
@@ -186,19 +190,6 @@ export function getDepartmentKey(identifier?: string | null): DepartmentKey {
   }
 
   if (
-    str.includes("indtech") ||
-    str.includes("industrial technology") ||
-    str.includes("industrial tech") ||
-    str.includes("bsindtech") ||
-    str.includes("industrial") ||
-    str === "bsit" ||
-    str === "chair_indtech" ||
-    str === "faculty-indtech"
-  ) {
-    return "indtech";
-  }
-
-  if (
     str.includes("ted") ||
     str.includes("teacher education") ||
     str.includes("education") ||
@@ -209,19 +200,36 @@ export function getDepartmentKey(identifier?: string | null): DepartmentKey {
   }
 
   if (
-    str.includes("info tech") ||
-    str.includes("information technology") ||
-    str.includes("bs info tech") ||
+    str.includes("ict") ||
     str.includes("bsinfotech") ||
-    str.includes("it department") ||
-    str === "it" ||
-    str === "chair_it" ||
+    str.includes("information technology") ||
+    str === "chair_ict" ||
+    str === "faculty-ict" ||
     str === "faculty-001"
   ) {
-    return "it";
+    return "ict";
   }
 
-  return "it";
+  if (
+    str.includes("industrial") ||
+    str.includes("itd") ||
+    str.includes("indtech") ||
+    str.includes("bsindtech") ||
+    str === "bsit" ||
+    str === "it" ||
+    str.includes("it department") ||
+    str.includes("itd department") ||
+    str === "chair_indtech" ||
+    str === "chair_itd" ||
+    str === "chair_it" ||
+    str === "faculty-indtech" ||
+    str === "faculty-itd" ||
+    str === "faculty-it"
+  ) {
+    return "itd";
+  }
+
+  return "ict";
 }
 
 /**
@@ -229,7 +237,7 @@ export function getDepartmentKey(identifier?: string | null): DepartmentKey {
  */
 export function getDepartmentTheme(identifier?: string | null): DepartmentTheme {
   const key = getDepartmentKey(identifier);
-  return DEPARTMENT_THEMES[key];
+  return DEPARTMENT_THEMES[key] || DEPARTMENT_THEMES.ict;
 }
 
 /**
@@ -238,7 +246,7 @@ export function getDepartmentTheme(identifier?: string | null): DepartmentTheme 
 export const ALL_DEPARTMENT_THEMES = [
   DEPARTMENT_THEMES.htm,
   DEPARTMENT_THEMES.agri,
-  DEPARTMENT_THEMES.indtech,
+  DEPARTMENT_THEMES.itd,
   DEPARTMENT_THEMES.ted,
-  DEPARTMENT_THEMES.it,
+  DEPARTMENT_THEMES.ict,
 ];

@@ -68,3 +68,23 @@ export function determineSemesterFromDate(
     };
   }
 }
+
+export function getStudentMiddleInitial(middleName?: string | null): string {
+  if (!middleName) return "";
+  const trimmed = middleName.trim();
+  if (!trimmed || trimmed.toUpperCase() === "NONE" || trimmed.toUpperCase() === "N/A") return "";
+  return `${trimmed.charAt(0).toUpperCase()}.`;
+}
+
+export function formatStudentName(
+  student: { first_name: string; last_name: string; middle_name?: string | null },
+  format: "lastFirst" | "firstLast" = "lastFirst"
+): string {
+  const mi = getStudentMiddleInitial(student.middle_name);
+  if (format === "lastFirst") {
+    return mi ? `${student.last_name}, ${student.first_name} ${mi}` : `${student.last_name}, ${student.first_name}`;
+  } else {
+    return mi ? `${student.first_name} ${mi} ${student.last_name}` : `${student.first_name} ${student.last_name}`;
+  }
+}
+

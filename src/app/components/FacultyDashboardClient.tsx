@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useEffect } from "react";
+import { useState, useTransition, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { 
   BookOpen, Award, FileText, ClipboardList, PenTool, CheckCircle, 
@@ -14,6 +14,7 @@ import {
   getQuestionBankQuestions, saveQuestionBankQuestion, deleteQuestionBankQuestion,
   archiveExamination, reuseArchivedExamination, getArchivedExaminations,
   getCurrentAcademicYear, getFacultyEnrolledStudentsAndGrades,
+  getCourseRoster, enrollStudentInCourse, bulkEnrollStudentsInCourse, unenrollStudentFromCourse,
   acknowledgeAssignedCoursesAction
 } from "@/app/actions/faculty";
 import { 
@@ -21,6 +22,7 @@ import {
   exportExamSubmissionsToExcel, 
   exportMissedStudentsToExcel 
 } from "@/lib/exportExcel";
+import { getProgramsForDepartment } from "@/lib/courseDepartmentMapping";
 
 interface FacultyDashboardClientProps {
   faculty: {
@@ -99,7 +101,7 @@ export function FacultyDashboardClient({
   studentExams = []
 }: FacultyDashboardClientProps) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<"overview" | "tracker" | "submissions" | "profile" | "override" | "question_bank" | "archive">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "tracker" | "submissions" | "profile" | "override" | "question_bank" | "archive" | "students">("overview");
 
   // Popup modal state for newly assigned courses upon first / new login
   const [showAssignedCoursesModal, setShowAssignedCoursesModal] = useState<boolean>(() => {
@@ -124,6 +126,84 @@ export function FacultyDashboardClient({
       setShowAssignedCoursesModal(false);
     }
   };
+
+  // --- Class Roster & Student Enrollment Tab State ---
+  const [selectedRosterCourseId, setSelectedRosterCourseId] = useState<number>(() => {
+    return courses[0]?.course_id || 0;
+  });
+  const [classRosterStudents, setClassRosterStudents] = useState<any[]>([]);
+  const [loadingClassRoster, setLoadingClassRoster] = useState(false);
+  const [rosterSearch, setRosterSearch] = useState("");
+  const [enrollModalOpen, setEnrollModalOpen] = useState(false);
+  const [bulkEnrollModalOpen, setBulkEnrollModalOpen] = useState(false);
+
+  // Automatically resolve default program matching the faculty's department
+  const deptProgram = useMemo(() => {
+    const deptProgs = getProgramsForDepartment(faculty.department?.department_name);
+    if (deptProgs.length > 0) {
+      const matched = programs.find((p) =>
+        deptProgs.some((dp) => dp.code.toUpperCase() === p.program_code.toUpperCase())
+      );
+      if (matched) return matched;
+    }
+    return programs[0] || null;
+  }, [faculty.department?.department_name, programs]);
+
+  const defaultProgId = deptProgram?.program_id
+    ? String(deptProgram.program_id)
+    : programs[0]?.program_id
+    ? String(programs[0].program_id)
+    : "";
+
+  // Single Enroll Form State
+  const [enrollForm, setEnrollForm] = useState({
+    institutionalId: "",
+    firstName: "",
+    middleName: "",
+    lastName: "",
+    programId: defaultProgId,
+    yearLevel: "1",
+    section: "A",
+  });
+  const [isSubmittingEnroll, setIsSubmittingEnroll] = useState(false);
+  const [enrollError, setEnrollError] = useState<string | null>(null);
+  const [enrollSuccess, setEnrollSuccess] = useState<string | null>(null);
+
+  // Bulk Enroll Form State
+  const [bulkInput, setBulkInput] = useState("");
+  const [bulkProgramId, setBulkProgramId] = useState(defaultProgId);
+  const [bulkYearLevel, setBulkYearLevel] = useState("1");
+  const [bulkSection, setBulkSection] = useState("A");
+  const [isSubmittingBulk, setIsSubmittingBulk] = useState(false);
+  const [bulkResult, setBulkResult] = useState<{ message: string; errors?: string[] } | null>(null);
+
+  useEffect(() => {
+    if (defaultProgId && !enrollForm.programId) {
+      setEnrollForm((prev) => ({ ...prev, programId: defaultProgId }));
+      setBulkProgramId(defaultProgId);
+    }
+  }, [defaultProgId]);
+
+  // Unenroll state
+  const [unenrollingId, setUnenrollingId] = useState<number | null>(null);
+
+  const fetchRoster = async (cId: number) => {
+    if (!cId) return;
+    setLoadingClassRoster(true);
+    const res = await getCourseRoster(cId);
+    setLoadingClassRoster(false);
+    if (res.success) {
+      setClassRosterStudents(res.students || []);
+    } else {
+      setClassRosterStudents([]);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === "students" && selectedRosterCourseId) {
+      fetchRoster(selectedRosterCourseId);
+    }
+  }, [activeTab, selectedRosterCourseId]);
 
   // --- Question Bank Tab State ---
   const [qbFilters, setQbFilters] = useState({
@@ -392,6 +472,7 @@ export function FacultyDashboardClient({
   
   // Profile form state
   const [firstName, setFirstName] = useState(faculty.first_name);
+  const [middleName, setMiddleName] = useState(faculty.middle_name || "");
   const [lastName, setLastName] = useState(faculty.last_name);
   const [profileMessage, setProfileMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
@@ -416,7 +497,11 @@ export function FacultyDashboardClient({
   const [isLoadingMissedStudents, setIsLoadingMissedStudents] = useState(false);
   
   const [overrideModalOpen, setOverrideModalOpen] = useState(false);
-  const [selectedOverrideStudent, setSelectedOverrideStudent] = useState<{ student_id: number; first_name: string; last_name: string } | null>(null);
+  const [selectedOverrideStudentIds, setSelectedOverrideStudentIds] = useState<number[]>([]);
+  const [popupStudentSearchInput, setPopupStudentSearchInput] = useState("");
+  const [popupStudentSearchTerm, setPopupStudentSearchTerm] = useState("");
+  const [studentSearchTerm, setStudentSearchTerm] = useState("");
+  const [officialExamScheduleText, setOfficialExamScheduleText] = useState("");
   const [overrideForm, setOverrideForm] = useState({
     start_date: new Date().toISOString().split("T")[0],
     start_time: "09:00",
@@ -434,6 +519,13 @@ export function FacultyDashboardClient({
       alert(res.error);
     } else {
       setMissedStudents(res.students || []);
+      if (res.officialDateIso) {
+        setOfficialExamScheduleText(
+          new Date(res.officialDateIso).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" })
+        );
+      } else {
+        setOfficialExamScheduleText("Standard Examination Schedule");
+      }
     }
   };
 
@@ -442,32 +534,65 @@ export function FacultyDashboardClient({
       fetchMissedStudents(selectedOverrideExamId);
     } else {
       setMissedStudents([]);
+      setOfficialExamScheduleText("");
+      setStudentSearchTerm("");
     }
   }, [selectedOverrideExamId]);
 
   const handleOverrideSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedOverrideStudent || !selectedOverrideExamId) return;
+    if (selectedOverrideStudentIds.length === 0 || !selectedOverrideExamId) {
+      alert("Please select at least one assigned student allowed to retake the examination.");
+      return;
+    }
 
     const startTimeStr = `${overrideForm.start_date}T${overrideForm.start_time}:00`;
     const endTimeStr = `${overrideForm.end_date}T${overrideForm.end_time}:00`;
 
     setIsSavingOverride(true);
     const { grantStudentOverride } = await import("@/app/actions/faculty");
-    const res = await grantStudentOverride(
-      faculty.faculty_id,
-      selectedOverrideStudent.student_id,
-      selectedOverrideExamId,
-      startTimeStr,
-      endTimeStr
-    );
+    
+    let successCount = 0;
+    let lastError = "";
+
+    for (const studentId of selectedOverrideStudentIds) {
+      const res = await grantStudentOverride(
+        faculty.faculty_id,
+        studentId,
+        selectedOverrideExamId,
+        startTimeStr,
+        endTimeStr
+      );
+      if (res.error) {
+        lastError = res.error;
+      } else {
+        successCount++;
+      }
+    }
+
     setIsSavingOverride(false);
+
+    if (successCount > 0) {
+      alert(`Examination successfully reopened for ${successCount} student(s)! Official examination date and TOS remain preserved.`);
+      setOverrideModalOpen(false);
+      fetchMissedStudents(selectedOverrideExamId);
+      router.refresh();
+    } else {
+      alert(lastError || "Failed to grant override for selected student(s).");
+    }
+  };
+
+  const handleRevokeOverride = async (studentId: number) => {
+    if (!selectedOverrideExamId) return;
+    if (!confirm("Are you sure you want to revoke this student's reopened examination window?")) return;
+
+    const { revokeStudentOverride } = await import("@/app/actions/faculty");
+    const res = await revokeStudentOverride(faculty.faculty_id, studentId, selectedOverrideExamId);
 
     if (res.error) {
       alert(res.error);
     } else {
-      alert("Override granted successfully! Student exam attempts have been reset.");
-      setOverrideModalOpen(false);
+      alert("Reopened examination access window revoked successfully.");
       fetchMissedStudents(selectedOverrideExamId);
       router.refresh();
     }
@@ -546,6 +671,91 @@ export function FacultyDashboardClient({
     }
   };
 
+  const handleSingleEnroll = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setEnrollError(null);
+    setEnrollSuccess(null);
+    setIsSubmittingEnroll(true);
+
+    const res = await enrollStudentInCourse(faculty.faculty_id, selectedRosterCourseId, {
+      institutionalId: enrollForm.institutionalId,
+      firstName: enrollForm.firstName,
+      middleName: enrollForm.middleName,
+      lastName: enrollForm.lastName,
+      programId: Number(enrollForm.programId),
+      yearLevel: Number(enrollForm.yearLevel),
+      section: enrollForm.section,
+    });
+    setIsSubmittingEnroll(false);
+
+    if (res.error) {
+      setEnrollError(res.error);
+    } else {
+      setEnrollSuccess(res.message || "Student enrolled successfully!");
+      fetchRoster(selectedRosterCourseId);
+      setTimeout(() => {
+        setEnrollModalOpen(false);
+        setEnrollForm({
+          institutionalId: "",
+          firstName: "",
+          middleName: "",
+          lastName: "",
+          programId: programs[0]?.program_id ? String(programs[0].program_id) : "",
+          yearLevel: "1",
+          section: "A",
+        });
+        setEnrollSuccess(null);
+      }, 1200);
+    }
+  };
+
+  const handleBulkEnroll = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBulkResult(null);
+    setIsSubmittingBulk(true);
+
+    const res = await bulkEnrollStudentsInCourse(
+      faculty.faculty_id,
+      selectedRosterCourseId,
+      bulkInput,
+      Number(bulkProgramId),
+      Number(bulkYearLevel),
+      bulkSection
+    );
+    setIsSubmittingBulk(false);
+
+    if (res.error) {
+      setBulkResult({ message: res.error, errors: [] });
+    } else {
+      setBulkResult({
+        message: res.message || `Successfully enrolled ${res.enrolledCount} students!`,
+        errors: res.errors,
+      });
+      fetchRoster(selectedRosterCourseId);
+      if (res.enrolledCount && res.enrolledCount > 0) {
+        setTimeout(() => {
+          setBulkEnrollModalOpen(false);
+          setBulkInput("");
+          setBulkResult(null);
+        }, 2000);
+      }
+    }
+  };
+
+  const handleUnenroll = async (studentId: number, studentName: string) => {
+    if (!confirm(`Are you sure you want to unenroll ${studentName} from this class?`)) {
+      return;
+    }
+    setUnenrollingId(studentId);
+    const res = await unenrollStudentFromCourse(faculty.faculty_id, selectedRosterCourseId, studentId);
+    setUnenrollingId(null);
+    if (res.error) {
+      alert(res.error);
+    } else {
+      fetchRoster(selectedRosterCourseId);
+    }
+  };
+
   const handleCreateExam = async () => {
     setIsCreatingExam(true);
     const res = await createExamDraft(faculty.faculty_id);
@@ -578,7 +788,7 @@ export function FacultyDashboardClient({
     setIsSavingProfile(true);
     setProfileMessage(null);
 
-    const res = await updateFacultyProfile(faculty.faculty_id, firstName, lastName);
+    const res = await updateFacultyProfile(faculty.faculty_id, firstName, lastName, middleName);
     setIsSavingProfile(false);
     
     if (res.success) {
@@ -622,7 +832,7 @@ export function FacultyDashboardClient({
         return (
           <span className="inline-flex items-center gap-1.5 text-xs font-semibold bg-indigo-50 text-indigo-800 border border-indigo-200 px-2.5 py-1 rounded-full shadow-sm">
             <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
-            Pending DI Clearance
+            Pending Directorate Approval
           </span>
         );
       case "Approved":
@@ -810,6 +1020,17 @@ export function FacultyDashboardClient({
           Examination Workflow Tracker
         </button>
         <button
+          onClick={() => setActiveTab("students")}
+          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-bold rounded-xl transition-all duration-300 ${
+            activeTab === "students"
+              ? "bg-emerald-600 text-white shadow-md shadow-emerald-600/20"
+              : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+          }`}
+        >
+          <GraduationCap className="w-4 h-4" />
+          Class Students
+        </button>
+        <button
           onClick={() => setActiveTab("submissions")}
           className={`flex items-center gap-2 px-4 py-2.5 text-sm font-bold rounded-xl transition-all duration-300 ${
             activeTab === "submissions"
@@ -989,7 +1210,7 @@ export function FacultyDashboardClient({
                 </div>
               ) : (
                 <div className="text-center py-6 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
-                  <p className="text-xs text-slate-500">No courses assigned yet by DI/Chair.</p>
+                  <p className="text-xs text-slate-500">No official courses assigned yet by Department Chair or Academic Directorate.</p>
                 </div>
               )}
             </div>
@@ -1305,8 +1526,8 @@ export function FacultyDashboardClient({
                           }`}>
                             3
                           </div>
-                          <p className="text-xs font-extrabold text-slate-800 mt-2">DI Clearance</p>
-                          <p className="text-[10px] text-slate-400 mt-0.5">Director verification</p>
+                          <p className="text-xs font-extrabold text-slate-800 mt-2">Directorate Approval</p>
+                          <p className="text-[10px] text-slate-400 mt-0.5">Academic Directorate review</p>
                           <div className={`hidden md:block absolute left-0 right-1/2 top-4 h-[2px] -z-0 ${
                             ["Pending_DI", "Approved"].includes(exam.current_status) ? "bg-emerald-600" : "bg-slate-200"
                           }`} />
@@ -1516,7 +1737,7 @@ export function FacultyDashboardClient({
                           <div className="font-extrabold text-slate-800">{studentName}</div>
                           <div className="text-[10px] text-slate-400 font-mono mt-0.5">{se.student.user.institutional_id}</div>
                           <div className="text-[9px] text-emerald-700 font-bold uppercase mt-0.5">
-                            {se.student.program.program_code} - Yr {se.student.year_level} Sec {se.student.section}
+                            {se.student.program.program_code} - Yr {se.student.year_level}
                           </div>
                         </td>
                         <td className="p-4 min-w-[150px]">
@@ -1597,7 +1818,7 @@ export function FacultyDashboardClient({
                 Schedules Override Engine
               </h2>
               <p className="text-slate-500 text-xs mt-1">
-                View approved examinations and override testing schedules, windows, dates, or sections to fix scheduling conflicts.
+                View approved examinations and override testing schedules, windows, or dates to fix scheduling conflicts.
               </p>
             </div>
 
@@ -1626,7 +1847,7 @@ export function FacultyDashboardClient({
                           <td className="px-6 py-4">
                             {target ? (
                               <span className="font-semibold text-slate-800">
-                                {programName} {target.year_level}-{target.section}
+                                {programName} Year {target.year_level}
                               </span>
                             ) : (
                               <span className="text-slate-400 italic">Not Scheduled</span>
@@ -1700,99 +1921,224 @@ export function FacultyDashboardClient({
             </div>
 
             {selectedOverrideExamId && (
-              <div className="space-y-4 pt-2 animate-in fade-in duration-300">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-bold text-slate-900">Target Cohort & Student Attempts</h3>
-                  {missedStudents && missedStudents.length > 0 && (
+              <div className="space-y-5 pt-2 animate-in fade-in duration-300">
+                {/* Official Exam Schedule Preserved Banner */}
+                <div className="bg-blue-50/80 border border-blue-200/80 rounded-2xl p-4 text-xs space-y-1.5 shadow-sm">
+                  <div className="flex items-center gap-1.5 text-blue-900 font-bold uppercase tracking-wider text-[10px]">
+                    <Calendar className="w-4 h-4 text-blue-600" />
+                    Official Examination Schedule & Date (Preserved in TOS)
+                  </div>
+                  <p className="text-slate-900 font-extrabold text-sm">
+                    {officialExamScheduleText || "Official Examination Schedule"}
+                  </p>
+                  <p className="text-[11px] text-slate-600 leading-relaxed pt-0.5">
+                    ✓ Reopening an examination creates an individual attempt window <strong>exclusively for the selected assigned student</strong>. Reopening will <strong>not alter</strong> the official exam schedule date or TOS records.
+                  </p>
+                </div>
+
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900">Assigned Students & Reopen Controls</h3>
+                    <p className="text-xs text-slate-500">Only students assigned to take this examination are eligible for an individual reopened attempt.</p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
                     <button
                       onClick={() => {
-                        const targetExam = faculty.examinations.find(e => e.exam_id === selectedOverrideExamId);
-                        exportMissedStudentsToExcel(targetExam ? targetExam.title : "Exam", missedStudents);
+                        setSelectedOverrideStudentIds([]);
+                        setPopupStudentSearchInput("");
+                        setPopupStudentSearchTerm("");
+                        setOverrideModalOpen(true);
                       }}
-                      className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[11px] px-3 py-1.5 rounded-lg shadow-sm transition-all cursor-pointer"
+                      className="inline-flex items-center gap-1.5 bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-[11px] px-3.5 py-1.5 rounded-lg shadow-sm transition-all cursor-pointer"
                     >
-                      <Download className="w-3.5 h-3.5" />
-                      Export Cohort Excel
+                      <Clock className="w-3.5 h-3.5" />
+                      Override Schedule & Assign Retake
                     </button>
-                  )}
+                    {missedStudents && missedStudents.length > 0 && (
+                      <button
+                        onClick={() => {
+                          const targetExam = faculty.examinations.find(e => e.exam_id === selectedOverrideExamId);
+                          exportMissedStudentsToExcel(targetExam ? targetExam.title : "Exam", missedStudents);
+                        }}
+                        className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[11px] px-3 py-1.5 rounded-lg shadow-sm transition-all cursor-pointer"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        Export Student List Excel
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Interactive Student Search & Select Bar */}
+                <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between bg-slate-50 border border-slate-200/80 p-3 rounded-2xl">
+                  <div className="relative flex-1">
+                    <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+                    <input
+                      type="text"
+                      placeholder="Search assigned student by name or ID..."
+                      value={studentSearchTerm}
+                      onChange={e => setStudentSearchTerm(e.target.value)}
+                      className="w-full bg-white border border-slate-200 text-xs font-medium text-slate-800 pl-9 pr-4 py-2.5 rounded-xl transition-all shadow-sm focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
+                  <div className="sm:w-72">
+                    <select
+                      onChange={e => {
+                        const sId = Number(e.target.value);
+                        if (sId) {
+                          setSelectedOverrideStudentIds([sId]);
+                          setPopupStudentSearchInput("");
+                          setPopupStudentSearchTerm("");
+                          const found = missedStudents.find(s => s.student_id === sId);
+                          if (found && found.override && found.override.is_active) {
+                            setOverrideForm({
+                              start_date: found.override.new_start_time.split("T")[0],
+                              start_time: found.override.new_start_time.split("T")[1]?.slice(0, 5) || "09:00",
+                              end_date: found.override.new_end_time.split("T")[0],
+                              end_time: found.override.new_end_time.split("T")[1]?.slice(0, 5) || "09:00",
+                            });
+                          } else {
+                            setOverrideForm({
+                              start_date: new Date().toISOString().split("T")[0],
+                              start_time: "09:00",
+                              end_date: new Date(Date.now() + 86400000).toISOString().split("T")[0],
+                              end_time: "09:00",
+                            });
+                          }
+                          setOverrideModalOpen(true);
+                        }
+                      }}
+                      value=""
+                      className="w-full bg-white border border-slate-200 text-xs font-bold text-amber-800 bg-amber-50/50 px-3 py-2.5 rounded-xl cursor-pointer"
+                    >
+                      <option value="">-- Choose Student to Reopen --</option>
+                      {missedStudents.map(s => (
+                        <option key={s.student_id} value={s.student_id}>
+                          {s.first_name} {s.middle_name ? `${s.middle_name.trim().charAt(0).toUpperCase()}. ` : ""}{s.last_name} ({s.institutional_id})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
 
                 {isLoadingMissedStudents ? (
                   <div className="flex items-center gap-2 text-xs text-slate-500 py-6">
-                    <Loader2 className="w-4 h-4 animate-spin text-emerald-600" />
-                    <span>Loading student records...</span>
+                    <Loader2 className="w-4 h-4 animate-spin text-amber-600" />
+                    <span>Loading assigned student records...</span>
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-slate-100 text-left text-xs text-slate-600 font-semibold">
                       <thead className="bg-slate-50 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
                         <tr>
-                          <th className="px-6 py-3">Student Name</th>
+                          <th className="px-6 py-3">Assigned Student</th>
                           <th className="px-6 py-3">ID / Email</th>
-                          <th className="px-6 py-3">Exam Status</th>
-                          <th className="px-6 py-3 text-right">Access Controls</th>
+                          <th className="px-6 py-3">Attempt / Reopen Status</th>
+                          <th className="px-6 py-3 text-right">Override Actions</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 bg-white">
-                        {missedStudents.map(student => {
-                          const attempt = student.attempt;
-                          
-                          let statusNode = (
-                            <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase bg-rose-50 text-rose-700 border border-rose-100">
-                              Missed Exam
-                            </span>
-                          );
+                        {missedStudents
+                          .filter(student =>
+                            `${student.first_name} ${student.last_name} ${student.institutional_id}`
+                              .toLowerCase()
+                              .includes(studentSearchTerm.toLowerCase())
+                          )
+                          .map(student => {
+                            const attempt = student.attempt;
+                            const override = student.override;
+                            
+                            let statusNode = (
+                              <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase bg-rose-50 text-rose-700 border border-rose-100">
+                                Missed Exam / Not Taken
+                              </span>
+                            );
 
-                          if (attempt) {
-                            if (attempt.submitted_at) {
+                            if (override && override.is_active) {
                               statusNode = (
-                                <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase bg-emerald-50 text-emerald-700 border border-emerald-100">
-                                  Completed ({attempt.total_score} pts)
-                                </span>
-                              );
-                            } else {
-                              statusNode = (
-                                <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase bg-amber-50 text-amber-700 border border-amber-100">
-                                  Ongoing / Active
-                                </span>
-                              );
-                            }
-                          }
-
-                          return (
-                            <tr key={student.student_id} className="hover:bg-slate-50/50 transition-colors">
-                              <td className="px-6 py-4 font-bold text-slate-800">
-                                {student.first_name} {student.last_name}
-                              </td>
-                              <td className="px-6 py-4">
-                                <div className="space-y-0.5 text-slate-500">
-                                  <p className="font-semibold text-slate-700">{student.institutional_id}</p>
-                                  <p className="text-[10px]">{student.institutional_email}</p>
+                                <div className="space-y-0.5">
+                                  <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase bg-amber-100 text-amber-800 border border-amber-200 inline-block">
+                                    Reopened Window Active
+                                  </span>
+                                  <p className="text-[10px] text-amber-900 font-semibold">
+                                    {new Date(override.new_start_time).toLocaleDateString([], { month: 'short', day: 'numeric' })} ({new Date(override.new_start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - {new Date(override.new_end_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})
+                                  </p>
                                 </div>
-                              </td>
-                              <td className="px-6 py-4">{statusNode}</td>
-                              <td className="px-6 py-4 text-right">
-                                <button
-                                  onClick={() => {
-                                    setSelectedOverrideStudent({
-                                      student_id: student.student_id,
-                                      first_name: student.first_name,
-                                      last_name: student.last_name
-                                    });
-                                    setOverrideModalOpen(true);
-                                  }}
-                                  className="px-3.5 py-1.5 text-[11px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-100 rounded-lg shadow-sm transition-all"
-                                >
-                                  Grant Reset Access
-                                </button>
-                              </td>
-                            </tr>
-                          );
-                        })}
+                              );
+                            } else if (attempt) {
+                              if (attempt.submitted_at) {
+                                statusNode = (
+                                  <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase bg-emerald-50 text-emerald-700 border border-emerald-100">
+                                    Completed ({attempt.total_score} pts)
+                                  </span>
+                                );
+                              } else {
+                                statusNode = (
+                                  <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase bg-amber-50 text-amber-700 border border-amber-100">
+                                    Ongoing / Active
+                                  </span>
+                                );
+                              }
+                            }
+
+                            return (
+                              <tr key={student.student_id} className="hover:bg-slate-50/50 transition-colors">
+                                <td className="px-6 py-4 font-bold text-slate-800">
+                                  {student.first_name} {student.middle_name ? `${student.middle_name.trim().charAt(0).toUpperCase()}. ` : ""}{student.last_name}
+                                </td>
+                                <td className="px-6 py-4">
+                                  <div className="space-y-0.5 text-slate-500">
+                                    <p className="font-semibold text-slate-700">{student.institutional_id}</p>
+                                    <p className="text-[10px]">{student.institutional_email}</p>
+                                  </div>
+                                </td>
+                                <td className="px-6 py-4">{statusNode}</td>
+                                <td className="px-6 py-4 text-right">
+                                  <div className="flex items-center justify-end gap-2">
+                                    <button
+                                      onClick={() => {
+                                        setSelectedOverrideStudentIds([student.student_id]);
+                                        setPopupStudentSearchInput("");
+                                        setPopupStudentSearchTerm("");
+                                        if (override && override.is_active) {
+                                          setOverrideForm({
+                                            start_date: override.new_start_time.split("T")[0],
+                                            start_time: override.new_start_time.split("T")[1]?.slice(0, 5) || "09:00",
+                                            end_date: override.new_end_time.split("T")[0],
+                                            end_time: override.new_end_time.split("T")[1]?.slice(0, 5) || "09:00",
+                                          });
+                                        } else {
+                                          setOverrideForm({
+                                            start_date: new Date().toISOString().split("T")[0],
+                                            start_time: "09:00",
+                                            end_date: new Date(Date.now() + 86400000).toISOString().split("T")[0],
+                                            end_time: "09:00",
+                                          });
+                                        }
+                                        setOverrideModalOpen(true);
+                                      }}
+                                      className="px-3 py-1.5 text-[11px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg shadow-sm transition-all"
+                                    >
+                                      {override && override.is_active ? "Modify Reopened Window" : "Reopen Examination"}
+                                    </button>
+                                    {override && override.is_active && (
+                                      <button
+                                        onClick={() => handleRevokeOverride(student.student_id)}
+                                        className="px-2.5 py-1.5 text-[11px] font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-all"
+                                        title="Revoke Reopened Window"
+                                      >
+                                        Revoke
+                                      </button>
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
                         {missedStudents.length === 0 && (
                           <tr>
                             <td colSpan={4} className="text-center py-8 text-slate-400 italic">
-                              No students found in the target cohort.
+                              No assigned students found for this examination.
                             </td>
                           </tr>
                         )}
@@ -1804,91 +2150,251 @@ export function FacultyDashboardClient({
             )}
           </div>
 
-          {/* STUDENT OVERRIDE MODAL */}
-          {overrideModalOpen && selectedOverrideStudent && (
+          {/* REOPEN EXAMINATION / OVERRIDE SCHEDULE POPUP MODAL */}
+          {overrideModalOpen && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-              <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl border border-slate-200">
-                <div className="flex justify-between items-start mb-6">
+              <div className="bg-white rounded-3xl p-6 sm:p-7 max-w-xl w-full shadow-2xl border border-slate-200 space-y-5 max-h-[90vh] flex flex-col overflow-hidden">
+                {/* Header */}
+                <div className="flex justify-between items-start shrink-0">
                   <div>
-                    <h3 className="text-xl font-bold text-slate-900">Grant Individual Access Override</h3>
+                    <h3 className="text-xl font-extrabold text-slate-900 flex items-center gap-2">
+                      <Clock className="w-5 h-5 text-amber-600" /> Override Schedule & Assign Retake
+                    </h3>
                     <p className="text-xs text-slate-500 mt-1">
-                      Reset access for student <span className="font-bold text-emerald-600">{selectedOverrideStudent.first_name} {selectedOverrideStudent.last_name}</span>.
+                      Faculty can search and select assigned student(s) allowed to retake this examination.
                     </p>
                   </div>
-                  <button onClick={() => setOverrideModalOpen(false)} className="text-slate-400 hover:text-slate-600">
-                    <span className="text-xl leading-none">&times;</span>
+                  <button
+                    onClick={() => setOverrideModalOpen(false)}
+                    className="text-slate-400 hover:text-slate-600 p-1"
+                  >
+                    <span className="text-2xl leading-none">&times;</span>
                   </button>
                 </div>
 
-                <form onSubmit={handleOverrideSubmit} className="space-y-4">
-                  <div className="bg-rose-50 border border-rose-100 rounded-xl p-3.5 text-xs text-rose-800 font-medium">
-                    ⚠️ Granting an override will delete the student's previous attempt and answers (if any exist) to allow a completely clean restart.
+                {/* Main Body Content */}
+                <div className="overflow-y-auto space-y-4 pr-1">
+                  {/* Official Schedule Banner (Preserved) */}
+                  <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3.5 text-xs space-y-1">
+                    <p className="text-slate-600 font-bold uppercase tracking-wider text-[10px] flex items-center gap-1.5">
+                      <Calendar className="w-3.5 h-3.5 text-blue-600" /> Official Examination Schedule (Preserved)
+                    </p>
+                    <p className="text-slate-800 font-semibold text-xs">
+                      {officialExamScheduleText || "Original schedule from Examination Record / TOS"}
+                    </p>
+                    <p className="text-[10px] text-slate-500 leading-relaxed pt-0.5">
+                      ✓ Reopening this exam applies <strong>strictly to chosen selected student(s)</strong>. It does not alter the official exam schedule date or TOS record for other students.
+                    </p>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-slate-600 block">Override Start Date</label>
-                      <input
-                        type="date"
-                        required
-                        value={overrideForm.start_date}
-                        onChange={e => setOverrideForm(prev => ({ ...prev, start_date: e.target.value }))}
-                        className="w-full bg-slate-50 border border-slate-200 text-sm font-medium text-slate-800 px-4 py-2.5 rounded-xl transition-all"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-slate-600 block">Override Start Time</label>
-                      <input
-                        type="time"
-                        required
-                        value={overrideForm.start_time}
-                        onChange={e => setOverrideForm(prev => ({ ...prev, start_time: e.target.value }))}
-                        className="w-full bg-slate-50 border border-slate-200 text-sm font-medium text-slate-800 px-4 py-2.5 rounded-xl transition-all"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-slate-600 block">Override End Date</label>
-                      <input
-                        type="date"
-                        required
-                        value={overrideForm.end_date}
-                        onChange={e => setOverrideForm(prev => ({ ...prev, end_date: e.target.value }))}
-                        className="w-full bg-slate-50 border border-slate-200 text-sm font-medium text-slate-800 px-4 py-2.5 rounded-xl transition-all"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-slate-600 block">Override End Time</label>
-                      <input
-                        type="time"
-                        required
-                        value={overrideForm.end_time}
-                        onChange={e => setOverrideForm(prev => ({ ...prev, end_time: e.target.value }))}
-                        className="w-full bg-slate-50 border border-slate-200 text-sm font-medium text-slate-800 px-4 py-2.5 rounded-xl transition-all"
-                      />
+                  {/* Student Search Box with Search Button inside Modal */}
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-700 block">
+                      Search & Assign Student(s) Allowed to Retake
+                    </label>
+                    <div className="flex gap-2">
+                      <div className="relative flex-1">
+                        <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                        <input
+                          type="text"
+                          placeholder="Search student by name or ID..."
+                          value={popupStudentSearchInput}
+                          onChange={e => setPopupStudentSearchInput(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              setPopupStudentSearchTerm(popupStudentSearchInput);
+                            }
+                          }}
+                          className="w-full bg-slate-50 border border-slate-200 text-xs font-medium text-slate-800 pl-9 pr-3 py-2.5 rounded-xl transition-all focus:outline-none focus:border-amber-500 focus:bg-white"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setPopupStudentSearchTerm(popupStudentSearchInput)}
+                        className="px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl transition-all shadow-sm flex items-center gap-1.5 shrink-0 cursor-pointer"
+                      >
+                        <Search className="w-3.5 h-3.5" />
+                        Search Name
+                      </button>
                     </div>
                   </div>
 
-                  <div className="pt-4 flex justify-end gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setOverrideModalOpen(false)}
-                      className="px-5 py-2.5 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={isSavingOverride}
-                      className="px-5 py-2.5 text-xs font-extrabold text-white bg-amber-600 hover:bg-amber-700 rounded-xl flex items-center gap-2 disabled:opacity-50"
-                    >
-                      {isSavingOverride && <Loader2 className="w-4 h-4 animate-spin" />}
-                      Grant Access
-                    </button>
+                  {/* Student Checkbox List */}
+                  <div className="border border-slate-200 rounded-2xl p-3 bg-slate-50/50 space-y-2 max-h-48 overflow-y-auto">
+                    <div className="flex justify-between items-center pb-2 border-b border-slate-200/60">
+                      <span className="text-[11px] font-extrabold text-amber-900 bg-amber-100/80 px-2 py-0.5 rounded-md border border-amber-200">
+                        {selectedOverrideStudentIds.length} Student(s) Selected
+                      </span>
+                      <div className="flex gap-2 text-[10px]">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const filteredIds = missedStudents
+                              .filter(s =>
+                                `${s.first_name} ${s.last_name} ${s.institutional_id}`
+                                  .toLowerCase()
+                                  .includes(popupStudentSearchTerm.toLowerCase())
+                              )
+                              .map(s => s.student_id);
+                            setSelectedOverrideStudentIds(Array.from(new Set([...selectedOverrideStudentIds, ...filteredIds])));
+                          }}
+                          className="text-amber-700 font-bold hover:underline"
+                        >
+                          Select All Filtered
+                        </button>
+                        <span className="text-slate-300">|</span>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedOverrideStudentIds([])}
+                          className="text-slate-500 font-bold hover:underline"
+                        >
+                          Clear All
+                        </button>
+                      </div>
+                    </div>
+
+                    {missedStudents
+                      .filter(student =>
+                        `${student.first_name} ${student.last_name} ${student.institutional_id}`
+                          .toLowerCase()
+                          .includes(popupStudentSearchTerm.toLowerCase())
+                      )
+                      .map(student => {
+                        const isChecked = selectedOverrideStudentIds.includes(student.student_id);
+                        const override = student.override;
+                        return (
+                          <label
+                            key={student.student_id}
+                            className={`flex items-center justify-between p-2.5 rounded-xl border transition-all cursor-pointer ${
+                              isChecked
+                                ? "bg-amber-50/90 border-amber-300 text-amber-950 font-medium shadow-sm"
+                                : "bg-white border-slate-200 text-slate-700 hover:border-slate-300"
+                            }`}
+                          >
+                            <div className="flex items-center gap-3">
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={() => {
+                                  if (isChecked) {
+                                    setSelectedOverrideStudentIds(prev => prev.filter(id => id !== student.student_id));
+                                  } else {
+                                    setSelectedOverrideStudentIds(prev => [...prev, student.student_id]);
+                                  }
+                                }}
+                                className="w-4 h-4 text-amber-600 rounded border-slate-300 focus:ring-amber-500 accent-amber-600 cursor-pointer"
+                              />
+                              <div>
+                                <p className="text-xs font-bold text-slate-900">
+                                  {student.first_name} {student.middle_name ? `${student.middle_name.trim().charAt(0).toUpperCase()}. ` : ""}{student.last_name}
+                                </p>
+                                <p className="text-[10px] text-slate-500">
+                                  ID: {student.institutional_id}
+                                </p>
+                              </div>
+                            </div>
+                            {override && override.is_active ? (
+                              <span className="px-2 py-0.5 rounded-md text-[9px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                                Already Reopened
+                              </span>
+                            ) : student.attempt?.submitted_at ? (
+                              <span className="px-2 py-0.5 rounded-md text-[9px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                Completed ({student.attempt.total_score} pts)
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded-md text-[9px] font-bold bg-rose-100 text-rose-800 border border-rose-200">
+                                Not Taken / Missed
+                              </span>
+                            )}
+                          </label>
+                        );
+                      })}
+
+                    {missedStudents.filter(student =>
+                      `${student.first_name} ${student.last_name} ${student.institutional_id}`
+                        .toLowerCase()
+                        .includes(popupStudentSearchTerm.toLowerCase())
+                    ).length === 0 && (
+                      <p className="text-center text-xs text-slate-400 py-4 italic">
+                        No matching assigned students found.
+                      </p>
+                    )}
                   </div>
-                </form>
+
+                  {/* Override Form Inputs */}
+                  <form onSubmit={handleOverrideSubmit} className="space-y-4 pt-1">
+                    <div className="bg-amber-50 border border-amber-100 rounded-xl p-3 text-xs text-amber-900 font-medium">
+                      ⚠️ Reopening will reset any previous incomplete attempt for the selected student(s) to allow a clean retake during the specified reopened window.
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-bold text-slate-600 block">Reopened Start Date</label>
+                        <input
+                          type="date"
+                          required
+                          value={overrideForm.start_date}
+                          onChange={e => setOverrideForm(prev => ({ ...prev, start_date: e.target.value }))}
+                          className="w-full bg-slate-50 border border-slate-200 text-xs font-medium text-slate-800 px-3 py-2 rounded-xl transition-all"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-bold text-slate-600 block">Reopened Start Time</label>
+                        <input
+                          type="time"
+                          required
+                          value={overrideForm.start_time}
+                          onChange={e => setOverrideForm(prev => ({ ...prev, start_time: e.target.value }))}
+                          className="w-full bg-slate-50 border border-slate-200 text-xs font-medium text-slate-800 px-3 py-2 rounded-xl transition-all"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-bold text-slate-600 block">Reopened End Date</label>
+                        <input
+                          type="date"
+                          required
+                          value={overrideForm.end_date}
+                          onChange={e => setOverrideForm(prev => ({ ...prev, end_date: e.target.value }))}
+                          className="w-full bg-slate-50 border border-slate-200 text-xs font-medium text-slate-800 px-3 py-2 rounded-xl transition-all"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-bold text-slate-600 block">Reopened End Time</label>
+                        <input
+                          type="time"
+                          required
+                          value={overrideForm.end_time}
+                          onChange={e => setOverrideForm(prev => ({ ...prev, end_time: e.target.value }))}
+                          className="w-full bg-slate-50 border border-slate-200 text-xs font-medium text-slate-800 px-3 py-2 rounded-xl transition-all"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="pt-3 flex justify-end gap-3 border-t border-slate-100">
+                      <button
+                        type="button"
+                        onClick={() => setOverrideModalOpen(false)}
+                        className="px-5 py-2.5 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={isSavingOverride || selectedOverrideStudentIds.length === 0}
+                        className="px-5 py-2.5 text-xs font-extrabold text-white bg-amber-600 hover:bg-amber-700 rounded-xl flex items-center gap-2 disabled:opacity-50 transition-all cursor-pointer"
+                      >
+                        {isSavingOverride && <Loader2 className="w-4 h-4 animate-spin" />}
+                        {selectedOverrideStudentIds.length > 0
+                          ? `Assign Retake (${selectedOverrideStudentIds.length} Selected)`
+                          : "Select Student(s) to Assign"}
+                      </button>
+                    </div>
+                  </form>
+                </div>
               </div>
             </div>
           )}
@@ -1908,10 +2414,10 @@ export function FacultyDashboardClient({
                   Subject Enrollment & Exam Status
                 </div>
                 <h3 className="text-xl font-extrabold text-white tracking-tight">
-                  Enrolled Students & Grade Reports
+                  Class Students & Grade Reports
                 </h3>
                 <p className="text-xs text-slate-300 max-w-xl leading-relaxed">
-                  View students enrolled in your assigned subjects, inspect their exam scores & calculated grades, and track whether they took or missed scheduled examinations.
+                  View class students in your assigned subjects, inspect their exam scores & calculated grades, and track whether they took or missed scheduled examinations.
                 </p>
               </div>
               <button
@@ -1920,7 +2426,7 @@ export function FacultyDashboardClient({
                 className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-black px-6 py-3.5 rounded-2xl shadow-lg hover:shadow-emerald-500/25 transition-all duration-300 flex items-center gap-2 shrink-0 cursor-pointer active:scale-95 border border-emerald-400"
               >
                 <GraduationCap className="w-4.5 h-4.5" />
-                View Enrolled Students & Grades
+                View Class Students & Grades
               </button>
             </div>
           </div>
@@ -1945,7 +2451,7 @@ export function FacultyDashboardClient({
                 </div>
               )}
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="space-y-1.5">
                   <label className="text-xs font-bold text-slate-600 block">First Name</label>
                   <input
@@ -1953,6 +2459,18 @@ export function FacultyDashboardClient({
                     required
                     value={firstName}
                     onChange={(e) => setFirstName(e.target.value)}
+                    placeholder="e.g. Maria"
+                    className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 text-sm font-medium text-slate-800 placeholder:text-slate-400 px-4 py-2.5 rounded-xl transition-all duration-300"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-600 block">Middle Name / Initial</label>
+                  <input
+                    type="text"
+                    value={middleName}
+                    onChange={(e) => setMiddleName(e.target.value)}
+                    placeholder="e.g. Santos or S."
                     className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 text-sm font-medium text-slate-800 placeholder:text-slate-400 px-4 py-2.5 rounded-xl transition-all duration-300"
                   />
                 </div>
@@ -1964,6 +2482,7 @@ export function FacultyDashboardClient({
                     required
                     value={lastName}
                     onChange={(e) => setLastName(e.target.value)}
+                    placeholder="e.g. Reyes"
                     className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 text-sm font-medium text-slate-800 placeholder:text-slate-400 px-4 py-2.5 rounded-xl transition-all duration-300"
                   />
                 </div>
@@ -2035,29 +2554,16 @@ export function FacultyDashboardClient({
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-xs font-bold text-slate-600 block mb-1">Year Level</label>
-                  <select 
-                    required
-                    value={scheduleForm.year_level}
-                    onChange={e => setScheduleForm({...scheduleForm, year_level: e.target.value})}
-                    className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 text-sm font-medium text-slate-900 placeholder:text-slate-500 px-4 py-2.5 rounded-xl transition-all duration-300"
-                  >
-                    {[1, 2, 3, 4, 5].map(y => <option key={y} value={y}>{y}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-xs font-bold text-slate-600 block mb-1">Section / Cohort</label>
-                  <input 
-                    type="text" required
-                    value={scheduleForm.section}
-                    onChange={e => setScheduleForm({...scheduleForm, section: e.target.value})}
-                    placeholder="e.g. All Sections, A, General"
-                    className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 text-sm font-medium text-slate-900 placeholder:text-slate-500 px-4 py-2.5 rounded-xl transition-all duration-300"
-                  />
-                  <p className="text-[10px] text-slate-400 mt-1">Leave as "All Sections" to target all students in this year level.</p>
-                </div>
+              <div>
+                <label className="text-xs font-bold text-slate-600 block mb-1">Year Level</label>
+                <select 
+                  required
+                  value={scheduleForm.year_level}
+                  onChange={e => setScheduleForm({...scheduleForm, year_level: e.target.value})}
+                  className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 text-sm font-medium text-slate-900 placeholder:text-slate-500 px-4 py-2.5 rounded-xl transition-all duration-300"
+                >
+                  {[1, 2, 3, 4].map(y => <option key={y} value={y}>{y}</option>)}
+                </select>
               </div>
 
               <div>
@@ -2381,6 +2887,381 @@ export function FacultyDashboardClient({
         </div>
       )}
 
+      {/* CLASS ROSTER & STUDENT ENROLLMENT TAB */}
+      {activeTab === "students" && (() => {
+        const selectedCourse = courses.find((c) => c.course_id === selectedRosterCourseId) || courses[0];
+        const filteredRosterStudents = classRosterStudents.filter((s) => {
+          if (!rosterSearch.trim()) return true;
+          const q = rosterSearch.toLowerCase();
+          return (
+            s.institutional_id.toLowerCase().includes(q) ||
+            s.first_name.toLowerCase().includes(q) ||
+            s.last_name.toLowerCase().includes(q) ||
+            (s.program_code && s.program_code.toLowerCase().includes(q)) ||
+            (s.section && s.section.toLowerCase().includes(q))
+          );
+        });
+
+        return (
+          <div className="bg-white border border-slate-200/80 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6">
+            {/* Header & Controls */}
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border-b border-slate-100 pb-6">
+              <div>
+                <h2 className="text-xl font-extrabold text-slate-900 flex items-center gap-2">
+                  <span className="w-1.5 h-6 bg-emerald-600 rounded-full" />
+                  Subject Class List
+                </h2>
+                <p className="text-slate-500 text-xs mt-1">
+                  Official student class list assigned to this subject. Only students enrolled in this specific course section are listed here.
+                </p>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEnrollError(null);
+                    setEnrollSuccess(null);
+                    setEnrollModalOpen(true);
+                  }}
+                  className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-xl text-xs font-bold shadow-sm transition-all"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Add Student to Class</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => fetchRoster(selectedRosterCourseId)}
+                  disabled={loadingClassRoster}
+                  title="Refresh Class List"
+                  className="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl transition-all"
+                >
+                  <RefreshCw className={`w-4 h-4 ${loadingClassRoster ? "animate-spin text-emerald-600" : ""}`} />
+                </button>
+              </div>
+            </div>
+
+            {/* Course Selector & Search Filter Bar */}
+            <div className="bg-slate-50 border border-slate-200/80 p-4 sm:p-5 rounded-2xl flex flex-col md:flex-row gap-4 items-center justify-between">
+              {/* Course Dropdown */}
+              <div className="w-full md:w-auto flex-1 flex flex-col sm:flex-row sm:items-center gap-3">
+                <label className="text-[11px] font-black uppercase text-slate-500 tracking-wider shrink-0">
+                  Select Course:
+                </label>
+                <select
+                  value={selectedRosterCourseId}
+                  onChange={(e) => setSelectedRosterCourseId(Number(e.target.value))}
+                  className="w-full sm:max-w-md bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 px-3.5 py-2.5 focus:outline-emerald-500 shadow-sm"
+                >
+                  {courses.map((c) => (
+                    <option key={c.course_id} value={c.course_id}>
+                      {c.course_code} - {c.course_title}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Search Bar */}
+              <div className="w-full md:w-72 relative">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+                <input
+                  type="text"
+                  placeholder="Filter student ID or name..."
+                  value={rosterSearch}
+                  onChange={(e) => setRosterSearch(e.target.value)}
+                  className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-4 py-2 text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-emerald-500 shadow-sm"
+                />
+              </div>
+            </div>
+
+            {/* Current Course Summary Banner */}
+            {selectedCourse && (
+              <div className="flex items-center justify-between bg-emerald-50/60 border border-emerald-100 rounded-2xl px-5 py-3.5">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-black text-xs shadow-sm">
+                    {selectedCourse.course_code.split(" ")[0] || "IT"}
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-black text-slate-900">
+                      {selectedCourse.course_code} - {selectedCourse.course_title}
+                    </h4>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      Active Subject Class List
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-bold text-emerald-800 bg-emerald-100/70 border border-emerald-200 px-3 py-1 rounded-full">
+                    {classRosterStudents.length} Class Students
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Roster Table */}
+            {loadingClassRoster ? (
+              <div className="flex flex-col items-center justify-center py-20 text-slate-400 space-y-3">
+                <Loader2 className="w-8 h-8 animate-spin text-emerald-600" />
+                <p className="text-xs font-bold text-slate-500">Loading subject class list...</p>
+              </div>
+            ) : filteredRosterStudents.length > 0 ? (
+              <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50/80 border-b border-slate-200 text-[10.5px] font-black uppercase text-slate-500 tracking-wider">
+                        <th className="py-3 px-4">Student ID Number</th>
+                        <th className="py-3 px-4">Student Full Name</th>
+                        <th className="py-3 px-4">Program</th>
+                        <th className="py-3 px-4">Year Level</th>
+                        <th className="py-3 px-4">Date Enrolled</th>
+                        <th className="py-3 px-4 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-xs">
+                      {filteredRosterStudents.map((s) => (
+                        <tr key={s.student_id} className="hover:bg-slate-50/60 transition-colors">
+                          <td className="py-3 px-4">
+                            <span className="font-mono font-black text-xs px-2.5 py-1 bg-slate-100 text-slate-800 border border-slate-200 rounded-lg">
+                              {s.institutional_id}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 font-bold text-slate-800">
+                            {s.last_name}, {s.first_name}
+                          </td>
+                          <td className="py-3 px-4">
+                            <span className="font-semibold text-slate-600 bg-slate-50 px-2 py-0.5 rounded border border-slate-200 text-[11px]">
+                              {s.program_code || "BSIT"}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 font-medium text-slate-600">
+                            Year {s.year_level}
+                          </td>
+                          <td className="py-3 px-4 text-slate-400 text-[11px]">
+                            {new Date(s.enrolled_at).toLocaleDateString()}
+                          </td>
+                          <td className="py-3 px-4 text-right">
+                            <button
+                              type="button"
+                              disabled={unenrollingId === s.student_id}
+                              onClick={() => handleUnenroll(s.student_id, `${s.first_name} ${s.last_name}`)}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-200 text-xs font-bold transition-all disabled:opacity-50"
+                            >
+                              {unenrollingId === s.student_id ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <Trash2 className="w-3.5 h-3.5" />
+                              )}
+                              <span>Remove from Class</span>
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-16 px-4 border-2 border-dashed border-slate-200 rounded-3xl space-y-3">
+                <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto border border-emerald-100">
+                  <Users className="w-6 h-6" />
+                </div>
+                <h3 className="text-sm font-bold text-slate-800">
+                  {rosterSearch.trim() ? "No class students match your search" : "No class students registered for this subject"}
+                </h3>
+                <p className="text-xs text-slate-400 max-w-md mx-auto">
+                  {rosterSearch.trim()
+                    ? "Try adjusting your search criteria or clear the filter."
+                    : "Add student ID numbers to register them in this subject class list. Once listed, students can access scheduled examinations for this course."}
+                </p>
+                {!rosterSearch.trim() && (
+                  <div className="pt-2 flex justify-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEnrollError(null);
+                        setEnrollSuccess(null);
+                        setEnrollModalOpen(true);
+                      }}
+                      className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-sm transition-all"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>Add Student to Class</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
+      {/* SINGLE STUDENT ENROLLMENT MODAL */}
+      {enrollModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
+          <form
+            onSubmit={handleSingleEnroll}
+            className="bg-white border border-slate-200 rounded-3xl max-w-md w-full p-6 sm:p-7 shadow-2xl space-y-4 relative"
+          >
+            <div className="flex justify-between items-start border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+                  <GraduationCap className="w-5 h-5 text-emerald-600" />
+                  Add Student to Class List
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Insert student ID number to assign student to this course section
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEnrollModalOpen(false)}
+                className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-400 hover:text-slate-700"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Info notice */}
+            <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-xl text-xs text-emerald-900 leading-relaxed">
+              <span className="font-bold">Class Section Assignment: </span>
+              Assigning student account to this subject class list.
+            </div>
+
+            {/* Error & Success */}
+            {enrollError && (
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs font-bold text-rose-800 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>{enrollError}</span>
+              </div>
+            )}
+            {enrollSuccess && (
+              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs font-bold text-emerald-800 flex items-center gap-2">
+                <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>{enrollSuccess}</span>
+              </div>
+            )}
+
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-extrabold text-slate-700 block mb-1">
+                  Student ID Number <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. 2023-0001-AB"
+                  value={enrollForm.institutionalId}
+                  onChange={(e) => setEnrollForm({ ...enrollForm, institutionalId: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-200 focus:bg-white text-xs font-bold text-slate-900 px-3.5 py-2.5 rounded-xl transition-all"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="text-xs font-extrabold text-slate-700 block mb-1">
+                    First Name <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Juan"
+                    value={enrollForm.firstName}
+                    onChange={(e) => setEnrollForm({ ...enrollForm, firstName: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 focus:bg-white text-xs font-medium text-slate-900 px-3.5 py-2.5 rounded-xl transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-extrabold text-slate-700 block mb-1">
+                    Middle Initial / Name
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. S. or Santos"
+                    value={enrollForm.middleName}
+                    onChange={(e) => setEnrollForm({ ...enrollForm, middleName: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 focus:bg-white text-xs font-medium text-slate-900 px-3.5 py-2.5 rounded-xl transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-extrabold text-slate-700 block mb-1">
+                    Last Name <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Dela Cruz"
+                    value={enrollForm.lastName}
+                    onChange={(e) => setEnrollForm({ ...enrollForm, lastName: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 focus:bg-white text-xs font-medium text-slate-900 px-3.5 py-2.5 rounded-xl transition-all"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-extrabold text-slate-700 block mb-1">
+                  Academic Program
+                </label>
+                {(() => {
+                  const selProg = programs.find((p) => String(p.program_id) === String(enrollForm.programId)) || deptProgram || programs[0];
+                  return (
+                    <div className="w-full bg-slate-100/90 border border-slate-200/90 text-xs font-bold text-slate-800 px-3.5 py-2.5 rounded-xl flex items-center justify-between shadow-inner">
+                      <span>
+                        {selProg ? `${selProg.program_code} - ${selProg.program_name}` : "BSInfoTech - Bachelor of Science in Information Technology"}
+                      </span>
+                      <span className="font-mono text-[10px] font-black text-emerald-800 bg-emerald-100/80 border border-emerald-200 px-2 py-0.5 rounded-md shrink-0">
+                        {selProg?.program_code || "BSInfoTech"}
+                      </span>
+                    </div>
+                  );
+                })()}
+              </div>
+
+              <div>
+                <label className="text-xs font-extrabold text-slate-700 block mb-1">
+                  Year Level
+                </label>
+                <select
+                  value={enrollForm.yearLevel}
+                  onChange={(e) => setEnrollForm({ ...enrollForm, yearLevel: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-200 focus:bg-white text-xs font-bold text-slate-900 px-3.5 py-2.5 rounded-xl transition-all"
+                >
+                  <option value="1">1st Year</option>
+                  <option value="2">2nd Year</option>
+                  <option value="3">3rd Year</option>
+                  <option value="4">4th Year</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="border-t border-slate-100 pt-3 flex justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setEnrollModalOpen(false)}
+                className="px-4 py-2.5 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isSubmittingEnroll}
+                className="flex items-center gap-2 px-5 py-2.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-sm transition-all disabled:opacity-75"
+              >
+                {isSubmittingEnroll ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Adding Student...</span>
+                  </>
+                ) : (
+                  <span>Add Student to Class</span>
+                )}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
       {/* QUESTION CRUD MODAL */}
       {qModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
@@ -2690,10 +3571,10 @@ export function FacultyDashboardClient({
                 </div>
                 <div>
                   <h3 className="text-lg sm:text-xl font-black text-slate-900">
-                    Enrolled Students & Exam Performance Roster
+                    Class Students & Exam Performance Roster
                   </h3>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Students enrolled in your subjects, their exam completion status, and calculated grade percentages.
+                    Class students taking your subjects, their exam completion status, and calculated grade percentages.
                   </p>
                 </div>
               </div>
@@ -2833,7 +3714,7 @@ export function FacultyDashboardClient({
                 if (filtered.length === 0) {
                   return (
                     <div className="text-center py-20 text-slate-400 text-xs">
-                      No enrolled students found matching the selected filters.
+                      No class students found matching the selected filters.
                     </div>
                   );
                 }
@@ -2850,13 +3731,13 @@ export function FacultyDashboardClient({
                             <div>
                               <div className="flex items-center gap-2">
                                 <h4 className="text-sm font-black text-slate-900">
-                                  {student.first_name} {student.last_name}
+                                  {student.first_name} {student.middle_name ? `${student.middle_name.trim().charAt(0).toUpperCase()}. ` : ""}{student.last_name}
                                 </h4>
                                 <span className="text-[10px] bg-slate-100 text-slate-700 font-bold px-2 py-0.5 rounded-md border border-slate-200">
                                   {student.institutional_id}
                                 </span>
                                 <span className="text-[10px] bg-emerald-50 text-emerald-700 font-bold px-2 py-0.5 rounded-md border border-emerald-100">
-                                  {student.program_code} {student.year_level}-{student.section}
+                                  {student.program_code} Year {student.year_level}
                                 </span>
                               </div>
                               <p className="text-xs text-emerald-700 font-bold mt-0.5">
@@ -2959,7 +3840,7 @@ export function FacultyDashboardClient({
                   Assigned Teaching Courses
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Designated by the Director of Instruction (DI) & Academic Administration
+                  Designated by the Academic Directorate & Campus Administration
                 </p>
               </div>
             </div>

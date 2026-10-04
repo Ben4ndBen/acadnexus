@@ -8,7 +8,7 @@ export interface Exam {
   title: string;
   course_code: string;
   course_name: string;
-  exam_type: "Prelim" | "Midterm" | "Semi-Final" | "Final" | "Quiz" | "Long Test";
+  exam_type: "Prelim" | "Midterm" | "Final" | "Quiz" | "Long Test";
   scheduled_date: string; // ISO string
   duration_minutes: number;
   total_items: number;
@@ -29,7 +29,6 @@ interface ExaminationFeedProps {
 const EXAM_TYPE_COLOR: Record<Exam["exam_type"], { bg: string; text: string }> = {
   Prelim:       { bg: "#EFF6FF", text: "#1E4D9B" },
   Midterm:      { bg: "#FFF7ED", text: "#92400E" },
-  "Semi-Final": { bg: "#F0FDF4", text: "#166534" },
   Final:        { bg: "#FDF2F8", text: "#701A75" },
   Quiz:         { bg: "#F0F9FF", text: "#0369A1" },
   "Long Test":  { bg: "#FEFCE8", text: "#713F12" },
@@ -96,7 +95,7 @@ export default function ExaminationFeed({ exams, student }: ExaminationFeedProps
         <div>
           <h2 className="feed-title">Examination feed</h2>
           <p className="feed-sub">
-            Showing exams for {student.program} · Year {student.year_level} · Section {student.section}
+            Showing exams for {student.program} · Year {student.year_level}
           </p>
         </div>
         <div className="filter-row" role="group" aria-label="Filter exams">

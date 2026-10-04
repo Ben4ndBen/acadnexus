@@ -67,13 +67,6 @@ export async function startStudentExam(examId: number, studentId: number) {
           exam_id: examId,
           program_id: student.program_id,
           year_level: student.year_level,
-          OR: [
-            { section: student.section },
-            { section: { in: ["All", "ALL", "all", "All Sections", "all sections", "Any", "any", ""] } },
-            { section: { equals: student.section, mode: "insensitive" } },
-            { section: "General" },
-            { section: "A" },
-          ],
           exam: {
             current_status: "Approved",
           },

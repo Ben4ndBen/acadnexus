@@ -1,21 +1,24 @@
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 const { PrismaClient } = require("@prisma/client");
 const { PrismaPg } = require("@prisma/adapter-pg");
 const { Pool } = require("pg");
 require("dotenv").config();
 
-const connectionString = process.env.DATABASE_URL || process.env.DIRECT_URL;
-const pool = new Pool({ connectionString });
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false
+  }
+});
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
 async function main() {
-  const count = await prisma.student.count();
-  console.log("TOTAL_STUDENTS_COUNT:", count);
-  const students = await prisma.student.findMany({
-    take: 10,
-    include: { user: true }
+  await prisma.user.update({
+    where: { user_id: 57 },
+    data: { username: "faculty_ict" }
   });
-  console.log("SAMPLE_STUDENTS:", JSON.stringify(students, null, 2));
+  console.log("Updated user 57 username to faculty_ict");
 }
 
 main()

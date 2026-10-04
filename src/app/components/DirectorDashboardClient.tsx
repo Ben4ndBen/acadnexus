@@ -245,6 +245,7 @@ export function DirectorDashboardClient({
   const [isSavingAssignedCourses, setIsSavingAssignedCourses] = useState(false);
   const [assignMessage, setAssignMessage] = useState<string | null>(null);
   const [facultySearchQuery, setFacultySearchQuery] = useState("");
+  const [selectedFacultyDeptFilter, setSelectedFacultyDeptFilter] = useState<string>("ALL");
 
   // Handler for changing department in registration modal
   const handleDeptChange = (newDeptId: string) => {
@@ -819,8 +820,13 @@ export function DirectorDashboardClient({
                 <div className="flex justify-between items-start mb-3 gap-2">
                   <div>
                     <h3 className="font-bold text-slate-800 text-base">{dept.department_name}</h3>
-                    <div className="mt-1">
+                    <div className="mt-1 flex flex-wrap items-center gap-1.5">
                       <DepartmentBadge department={dept.department_name} size="sm" />
+                      {getProgramsForDepartment(dept.department_id || dept.department_name).map(p => (
+                        <span key={p.code} className="text-[10px] font-extrabold px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-100">
+                          {p.code}
+                        </span>
+                      ))}
                     </div>
                   </div>
                   <div className={`text-xs font-extrabold px-2.5 py-1 rounded-full border ${
@@ -1016,7 +1022,6 @@ export function DirectorDashboardClient({
                   <option value="Midterm">Midterm Examination</option>
                   <option value="Final">Final Examination</option>
                   <option value="Prelim">Prelim Examination</option>
-                  <option value="Semi-Final">Semi-Final Examination</option>
                 </select>
                 <p className="text-[11px] text-slate-400">Default term locked for exam creation across faculty</p>
               </div>
@@ -1126,7 +1131,7 @@ export function DirectorDashboardClient({
                 Faculty Directory & Teaching Load Allocation
               </h2>
               <p className="text-slate-500 text-xs mt-1">
-                View department instructors and configure their official assigned teaching subjects.
+                View department instructors, inspect teaching load breakdowns by course category, and allocate official offerings.
               </p>
             </div>
 
@@ -1134,102 +1139,247 @@ export function DirectorDashboardClient({
               <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
               <input
                 type="text"
-                placeholder="Search faculty name or ID..."
+                placeholder="Search faculty name, ID, or @username..."
                 value={facultySearchQuery}
                 onChange={(e) => setFacultySearchQuery(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-4 py-2 text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-indigo-500 shadow-sm"
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-4 py-2 text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-indigo-500 focus:bg-white transition-all shadow-xs"
               />
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            {facultyMembers
-              .filter((f) => {
-                if (!facultySearchQuery.trim()) return true;
-                const q = facultySearchQuery.toLowerCase();
-                const fullName = `${f.first_name} ${f.last_name}`.toLowerCase();
-                const instId = (f.user?.institutional_id || "").toLowerCase();
-                const uName = (f.user?.username || "").toLowerCase();
-                return fullName.includes(q) || instId.includes(q) || uName.includes(q);
+          {/* Department / Category Filter Bar */}
+          <div className="bg-slate-50/90 border border-slate-200/80 p-2 rounded-2xl flex flex-wrap items-center gap-1.5 shadow-xs">
+            <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider px-2">
+              Category / Dept:
+            </span>
+            <button
+              type="button"
+              onClick={() => setSelectedFacultyDeptFilter("ALL")}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                selectedFacultyDeptFilter === "ALL"
+                  ? "bg-indigo-600 text-white shadow-sm shadow-indigo-600/20"
+                  : "bg-white text-slate-700 hover:bg-slate-100 border border-slate-200/60"
+              }`}
+            >
+              All Categories ({facultyMembers.length})
+            </button>
+            {departmentsList.map((d) => {
+              const count = facultyMembers.filter(
+                (f) => f.department?.department_name === d.department_name
+              ).length;
+              return (
+                <button
+                  key={d.department_id}
+                  type="button"
+                  onClick={() => setSelectedFacultyDeptFilter(d.department_name)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                    selectedFacultyDeptFilter === d.department_name
+                      ? "bg-indigo-600 text-white shadow-sm shadow-indigo-600/20"
+                      : "bg-white text-slate-700 hover:bg-slate-100 border border-slate-200/60"
+                  }`}
+                >
+                  {d.department_name} ({count})
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Category / Department Grouped Sections */}
+          <div className="space-y-8 pt-2">
+            {departmentsList
+              .map((dept) => {
+                const members = facultyMembers.filter((f) => {
+                  if (f.department?.department_name !== dept.department_name) return false;
+                  if (facultySearchQuery.trim()) {
+                    const q = facultySearchQuery.toLowerCase();
+                    const fullName = `${f.first_name} ${f.last_name}`.toLowerCase();
+                    const instId = (f.user?.institutional_id || "").toLowerCase();
+                    const uName = (f.user?.username || "").toLowerCase();
+                    return fullName.includes(q) || instId.includes(q) || uName.includes(q);
+                  }
+                  return true;
+                });
+
+                return {
+                  department_id: dept.department_id,
+                  department_name: dept.department_name,
+                  members,
+                };
               })
-              .map((faculty) => {
-                const assigned = faculty.facultyCourses?.map((fc: any) => fc.course) || [];
-                return (
-                  <div
-                    key={faculty.faculty_id}
-                    className="border border-slate-200 rounded-2xl p-5 hover:shadow-md transition-all duration-300 bg-gradient-to-br from-white to-slate-50/40 flex flex-col justify-between gap-4"
-                  >
-                    <div className="space-y-3">
-                      <div className="flex justify-between items-start gap-3">
-                        <div className="flex items-center gap-3">
-                          <div className="w-11 h-11 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-sm shrink-0">
-                            {faculty.first_name[0]}{faculty.last_name[0]}
-                          </div>
-                          <div>
-                            <h3 className="text-sm font-bold text-slate-900">
-                              {faculty.first_name} {faculty.middle_name ? `${faculty.middle_name.charAt(0)}. ` : ""}{faculty.last_name}
-                            </h3>
-                            <p className="text-[11px] text-slate-500 font-mono mt-0.5">
-                              {faculty.user?.institutional_id || `ID: ${faculty.faculty_id}`}
-                              {faculty.user?.username && <span className="text-indigo-600 font-semibold ml-1.5">(@{faculty.user.username})</span>}
-                            </p>
-                          </div>
-                        </div>
-
-                        {faculty.department?.department_name && (
-                          <DepartmentBadge department={faculty.department.department_name} size="sm" />
-                        )}
+              .filter((group) => {
+                if (selectedFacultyDeptFilter !== "ALL") {
+                  return group.department_name === selectedFacultyDeptFilter;
+                }
+                return group.members.length > 0;
+              })
+              .map((group) => (
+                <div key={group.department_id} className="space-y-4">
+                  {/* Category Section Header Banner */}
+                  <div className="bg-slate-50/90 border-l-4 border-indigo-600 border-y border-r border-slate-200/80 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2.5 bg-indigo-100/90 text-indigo-700 rounded-xl shrink-0">
+                        <Building2 className="w-5 h-5" />
                       </div>
-
-                      {/* Assigned Courses Badges */}
-                      <div className="pt-2 border-t border-slate-100 space-y-1.5">
-                        <div className="flex items-center justify-between text-[11px] font-bold text-slate-600">
-                          <span className="flex items-center gap-1.5">
-                            <BookOpen className="w-3.5 h-3.5 text-indigo-600" />
-                            Assigned Courses ({assigned.length})
-                          </span>
+                      <div>
+                        <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+                          {group.department_name}
+                        </h3>
+                        <div className="flex flex-wrap items-center gap-1.5 mt-1 text-[11px]">
+                          <span className="text-slate-500 font-medium">Programs:</span>
+                          {getProgramsForDepartment(group.department_id || group.department_name).map(p => (
+                            <span key={p.code} className="text-[10px] font-extrabold px-2 py-0.5 rounded-md bg-white text-indigo-700 border border-indigo-200 shadow-2xs">
+                              {p.name} ({p.code})
+                            </span>
+                          ))}
                         </div>
-
-                        {assigned.length > 0 ? (
-                          <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
-                            {assigned.map((c: any) => (
-                              <span
-                                key={c.course_id}
-                                className="inline-flex items-center gap-1 text-[10px] font-bold bg-indigo-50 text-indigo-800 border border-indigo-200/80 px-2 py-0.5 rounded-lg"
-                                title={c.course_title}
-                              >
-                                <span className="font-mono font-black">{c.course_code}</span>
-                                <span className="max-w-[120px] truncate text-[9px] text-indigo-600">
-                                  {c.course_title}
-                                </span>
-                              </span>
-                            ))}
-                          </div>
-                        ) : (
-                          <p className="text-[11px] text-amber-600 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200/60 inline-block font-semibold">
-                            No courses assigned yet.
-                          </p>
-                        )}
                       </div>
                     </div>
-
-                    <div className="pt-3 border-t border-slate-100 flex justify-end">
-                      <button
-                        type="button"
-                        onClick={() => handleOpenAssignModal(faculty)}
-                        className="px-3.5 py-2 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer"
-                      >
-                        <BookOpen className="w-3.5 h-3.5" />
-                        <span>Assign / Edit Subjects</span>
-                      </button>
-                    </div>
+                    <span className="bg-indigo-100/90 text-indigo-800 border border-indigo-200 text-xs font-black px-3 py-1 rounded-full shadow-2xs self-start sm:self-auto">
+                      {group.members.length} {group.members.length === 1 ? "Instructor" : "Instructors"}
+                    </span>
                   </div>
-                );
-              })}
+
+                  {/* Grid of Faculty Cards under this Category */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    {group.members.map((faculty) => {
+                      const assigned = faculty.facultyCourses?.map((fc: any) => fc.course) || [];
+
+                      // Categorize assigned courses by subject category
+                      const categorizedCourses = assigned.reduce((acc: Record<string, any[]>, c: any) => {
+                        const code = (c.course_code || "").toUpperCase();
+                        const title = (c.course_title || "").toUpperCase();
+                        let categoryName = "Professional & Major Courses";
+                        if (
+                          code.startsWith("GE") ||
+                          code.startsWith("PATHFIT") ||
+                          code.startsWith("NSTP") ||
+                          code.includes("CDRM") ||
+                          code.includes("ITCH") ||
+                          title.includes("GENERAL EDUCATION") ||
+                          title.includes("TECHNICAL COMM")
+                        ) {
+                          categoryName = "General Education (GE)";
+                        } else if (code.startsWith("ITD") || code.startsWith("ELECTIVE")) {
+                          categoryName = "Elective Courses";
+                        }
+                        if (!acc[categoryName]) acc[categoryName] = [];
+                        acc[categoryName].push(c);
+                        return acc;
+                      }, {});
+
+                      return (
+                        <div
+                          key={faculty.faculty_id}
+                          className="border border-slate-200/90 hover:border-indigo-300 rounded-3xl p-5 hover:shadow-lg transition-all duration-300 bg-white flex flex-col justify-between gap-5 group"
+                        >
+                          <div className="space-y-4">
+                            {/* Faculty Header Card */}
+                            <div className="flex justify-between items-start gap-3">
+                              <div className="flex items-center gap-3.5">
+                                <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-indigo-700 to-indigo-500 text-white font-extrabold flex items-center justify-center text-sm shadow-md shadow-indigo-500/20 shrink-0">
+                                  {faculty.first_name[0]}{faculty.last_name[0]}
+                                </div>
+                                <div>
+                                  <h3 className="text-sm font-extrabold text-slate-900 group-hover:text-indigo-900 transition-colors">
+                                    {faculty.first_name} {faculty.middle_name ? `${faculty.middle_name.charAt(0)}. ` : ""}{faculty.last_name}
+                                  </h3>
+                                  <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                                    <span className="text-[11px] text-slate-500 font-mono font-medium">
+                                      {faculty.user?.institutional_id || `ID: ${faculty.faculty_id}`}
+                                    </span>
+                                    {faculty.user?.username && (
+                                      <span className="text-[10px] text-indigo-600 bg-indigo-50 border border-indigo-100 font-bold px-1.5 py-0.2 rounded-md">
+                                        @{faculty.user.username}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {faculty.department?.department_name && (
+                                <DepartmentBadge department={faculty.department.department_name} size="sm" />
+                              )}
+                            </div>
+
+                            {/* Categorized Assigned Courses Section */}
+                            <div className="pt-3 border-t border-slate-100 space-y-2.5">
+                              <div className="flex items-center justify-between text-[11px] font-bold text-slate-700">
+                                <span className="flex items-center gap-1.5">
+                                  <BookOpen className="w-3.5 h-3.5 text-indigo-600" />
+                                  Assigned Teaching Load
+                                </span>
+                                <span className="bg-indigo-50 text-indigo-700 border border-indigo-200/80 px-2 py-0.5 rounded-full text-[10px] font-black">
+                                  {assigned.length} {assigned.length === 1 ? "Subject" : "Subjects"}
+                                </span>
+                              </div>
+
+                              {assigned.length > 0 ? (
+                                <div className="space-y-2.5 max-h-40 overflow-y-auto pr-1">
+                                  {Object.entries(categorizedCourses).map(([catName, catCourses]) => {
+                                    let badgeColor = "bg-indigo-50 text-indigo-900 border-indigo-200/80";
+                                    let dotColor = "bg-indigo-500";
+                                    if (catName.includes("General")) {
+                                      badgeColor = "bg-emerald-50 text-emerald-900 border-emerald-200/80";
+                                      dotColor = "bg-emerald-500";
+                                    } else if (catName.includes("Elective")) {
+                                      badgeColor = "bg-amber-50 text-amber-900 border-amber-200/80";
+                                      dotColor = "bg-amber-500";
+                                    }
+
+                                    return (
+                                      <div key={catName} className="space-y-1.5">
+                                        <div className="text-[10px] font-black uppercase text-slate-500 tracking-wider flex items-center gap-1.5">
+                                          <span className={`w-1.5 h-1.5 rounded-full ${dotColor}`} />
+                                          {catName} ({(catCourses as any[]).length})
+                                        </div>
+                                        <div className="flex flex-wrap gap-1.5">
+                                          {(catCourses as any[]).map((c: any) => (
+                                            <span
+                                              key={c.course_id}
+                                              className={`inline-flex items-center gap-1 text-[10px] font-bold border px-2.5 py-1 rounded-xl shadow-2xs transition-all hover:scale-[1.02] ${badgeColor}`}
+                                              title={c.course_title}
+                                            >
+                                              <span className="font-mono font-black">{c.course_code}</span>
+                                              <span className="max-w-[140px] truncate text-[9.5px] font-medium opacity-90">
+                                                {c.course_title}
+                                              </span>
+                                            </span>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              ) : (
+                                <div className="bg-amber-50/80 border border-dashed border-amber-200 rounded-2xl p-3 text-center">
+                                  <p className="text-[11px] text-amber-700 font-bold">
+                                    No teaching subjects currently assigned.
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="pt-3 border-t border-slate-100 flex justify-end">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenAssignModal(faculty)}
+                              className="inline-flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs px-4 py-2 rounded-xl shadow-xs hover:shadow-md transition-all cursor-pointer"
+                            >
+                              <BookOpen className="w-3.5 h-3.5" />
+                              <span>Assign / Edit Subjects</span>
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
 
             {facultyMembers.length === 0 && (
-              <div className="col-span-full text-center py-16 border-2 border-dashed border-slate-200 rounded-3xl">
-                <p className="text-slate-500 text-xs">No faculty instructors registered in the institution yet.</p>
+              <div className="text-center py-16 border-2 border-dashed border-slate-200 rounded-3xl">
+                <p className="text-slate-500 text-xs font-semibold">No faculty instructors registered in the institution yet.</p>
               </div>
             )}
           </div>
@@ -1391,12 +1541,12 @@ export function DirectorDashboardClient({
                     />
                   </div>
                   <div>
-                    <label className="text-xs font-bold text-slate-700 block mb-1">Middle Name</label>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">Middle Name / Initial</label>
                     <input
                       type="text"
                       value={middleName}
                       onChange={(e) => setMiddleName(e.target.value)}
-                      placeholder="e.g. Santos"
+                      placeholder="e.g. Santos or S."
                       className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-xs font-medium text-slate-800 p-3 rounded-xl outline-none"
                     />
                   </div>

@@ -52,7 +52,7 @@ export function exportStudentGradesRosterToExcel(
     const row: Record<string, any> = {
       "Student Name": fullName,
       "Student ID": s.institutional_id,
-      "Program & Section": `${s.program_code} ${s.year_level}-${s.section}`,
+      "Program & Year": `${s.program_code} Year ${s.year_level}`,
       "Subject Code": s.course_code,
       "Subject Title": s.course_title,
     };
@@ -118,7 +118,7 @@ export function exportStudentGradesRosterToExcel(
         const row: Record<string, any> = {
           "Student Name": fullName,
           "Student ID": cs.institutional_id,
-          "Program & Section": `${cs.program_code} ${cs.year_level}-${cs.section}`,
+          "Program & Year": `${cs.program_code} Year ${cs.year_level}`,
         };
 
         courseExamMap.forEach((examInfo, examId) => {
@@ -195,7 +195,7 @@ export function exportExamSubmissionsToExcel(
       "Score (pts)": se.total_score,
       "Max Score (pts)": maxExamScore || "N/A",
       "Percentage Grade": pct,
-      "Program & Section": `${se.student.program.program_code} ${se.student.year_level}-${se.student.section}`,
+      "Program & Year": `${se.student.program.program_code} Year ${se.student.year_level}`,
       "Submission Trigger": se.submission_trigger.replace("_", " "),
       "Violations Count": se.violations_count,
       "Started At": new Date(se.started_at).toLocaleString(),
@@ -217,7 +217,7 @@ export function exportExamSubmissionsToExcel(
 }
 
 /**
- * Export Missed Student Cohort to Excel
+ * Export Missed Student List to Excel
  * Organized with Student Name FIRST, followed by ID, Score, and Status
  */
 export function exportMissedStudentsToExcel(
@@ -235,15 +235,26 @@ export function exportMissedStudentsToExcel(
       submission_trigger: string;
       total_score: number;
     } | null;
+    override?: {
+      override_id: number;
+      new_start_time: string;
+      new_end_time: string;
+      is_active: boolean;
+    } | null;
   }>
 ) {
   if (!students) return;
 
   const rows = students.map((s) => {
-    let statusText = "Missed Exam";
+    let statusText = "Missed Exam / Not Taken";
     let scoreText: string | number = "0 (Missed)";
+    let reopenedInfo = "N/A";
 
-    if (s.attempt) {
+    if (s.override && s.override.is_active) {
+      statusText = "Reopened Window Active";
+      scoreText = "Reopened (Pending)";
+      reopenedInfo = `${new Date(s.override.new_start_time).toLocaleString()} to ${new Date(s.override.new_end_time).toLocaleString()}`;
+    } else if (s.attempt) {
       if (s.attempt.submitted_at) {
         statusText = "Completed Exam";
         scoreText = `${s.attempt.total_score} pts`;
@@ -258,6 +269,7 @@ export function exportMissedStudentsToExcel(
       "Student ID": s.institutional_id,
       "Score": scoreText,
       "Exam Status": statusText,
+      "Reopened Access Window": reopenedInfo,
       "Email": s.institutional_email,
       "Submitted Timestamp": s.attempt?.submitted_at ? new Date(s.attempt.submitted_at).toLocaleString() : "N/A",
     };
@@ -269,9 +281,9 @@ export function exportMissedStudentsToExcel(
   const keys = Object.keys(rows[0] || {});
   worksheet["!cols"] = keys.map((k) => ({ wch: Math.max(k.length + 4, 18) }));
 
-  XLSX.utils.book_append_sheet(workbook, worksheet, "Cohort Exam Status");
+  XLSX.utils.book_append_sheet(workbook, worksheet, "Student Exam Status");
 
   const cleanTitle = examTitle.replace(/[^a-zA-Z0-9]/g, "_").substring(0, 25);
   const timestamp = new Date().toISOString().slice(0, 10);
-  XLSX.writeFile(workbook, `${cleanTitle}_Cohort_Scores_${timestamp}.xlsx`);
+  XLSX.writeFile(workbook, `${cleanTitle}_Student_Scores_${timestamp}.xlsx`);
 }

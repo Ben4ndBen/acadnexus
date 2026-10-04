@@ -3,26 +3,30 @@
 import db from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { ExamStatus } from "@prisma/client";
+import { getExpectedYearLevelForCourse } from "@/lib/bsitCurriculum";
 
-export async function updateFacultyProfile(facultyId: number, firstName: string, lastName: string) {
+export async function updateFacultyProfile(facultyId: number, firstName: string, lastName: string, middleName?: string) {
   if (!firstName || !lastName) {
     return { error: "First name and last name are required." };
   }
 
   try {
+    const trimmedMiddle = middleName ? middleName.trim() : null;
     await db.faculty.update({
       where: { faculty_id: facultyId },
       data: {
-        first_name: firstName,
-        last_name: lastName,
+        first_name: firstName.trim(),
+        middle_name: trimmedMiddle,
+        last_name: lastName.trim(),
       },
     });
 
+    const mi = trimmedMiddle ? `${trimmedMiddle.charAt(0).toUpperCase()}. ` : "";
     // Log the profile update action
     await db.auditLog.create({
       data: {
         user_id: facultyId,
-        action_performed: `Updated profile details: ${firstName} ${lastName}`,
+        action_performed: `Updated profile details: ${firstName.trim()} ${mi}${lastName.trim()}`,
         ip_address: "127.0.0.1",
       },
     });
@@ -320,11 +324,55 @@ export async function saveExamConfig(formData: FormData) {
   }
 }
 
+async function syncAndGetYearLevelEnrolledStudents(courseId: number) {
+  const course = await db.course.findUnique({
+    where: { course_id: courseId },
+  });
+
+  if (!course) return { course: null, targetYearLevel: null };
+
+  const targetYearLevel = getExpectedYearLevelForCourse(course.course_code, course.course_title);
+
+  if (targetYearLevel) {
+    // Auto-sync missing students matching this subject's expected year level
+    const eligibleStudents = await db.student.findMany({
+      where: { year_level: targetYearLevel },
+      select: { student_id: true },
+    });
+
+    if (eligibleStudents.length > 0) {
+      const existingEnrollments = await db.studentCourse.findMany({
+        where: { course_id: courseId },
+        select: { student_id: true },
+      });
+
+      const existingSet = new Set(existingEnrollments.map((e) => e.student_id));
+      const missingIds = eligibleStudents.map((s) => s.student_id).filter((id) => !existingSet.has(id));
+
+      if (missingIds.length > 0) {
+        await db.studentCourse.createMany({
+          data: missingIds.map((studentId) => ({
+            student_id: studentId,
+            course_id: courseId,
+          })),
+          skipDuplicates: true,
+        });
+      }
+    }
+  }
+
+  return { course, targetYearLevel };
+}
+
 export async function getAssignedStudentsForCourse(courseId: number) {
   try {
-    // 1. Fetch students directly enrolled in this course via StudentCourse
+    const { targetYearLevel } = await syncAndGetYearLevelEnrolledStudents(courseId);
+
     const enrolled = await db.studentCourse.findMany({
-      where: { course_id: courseId },
+      where: {
+        course_id: courseId,
+        ...(targetYearLevel ? { student: { year_level: targetYearLevel } } : {}),
+      },
       include: {
         student: {
           include: {
@@ -340,50 +388,23 @@ export async function getAssignedStudentsForCourse(courseId: number) {
       },
     });
 
-    if (enrolled.length > 0) {
-      return {
-        success: true,
-        students: enrolled.map((e) => ({
-          student_id: e.student.student_id,
-          institutional_id: e.student.user.institutional_id,
-          first_name: e.student.first_name,
-          last_name: e.student.last_name,
-          program_code: e.student.program.program_code,
-          program_name: e.student.program.program_name,
-          year_level: e.student.year_level,
-          section: e.student.section,
-        })),
-      };
-    }
-
-    // 2. Fallback: If no student courses specifically match this course yet, fetch enrolled students
-    const allStudents = await db.student.findMany({
-      include: {
-        user: true,
-        program: true,
-      },
-      orderBy: {
-        last_name: "asc",
-      },
-      take: 50,
-    });
-
     return {
       success: true,
-      students: allStudents.map((s) => ({
-        student_id: s.student_id,
-        institutional_id: s.user.institutional_id,
-        first_name: s.first_name,
-        last_name: s.last_name,
-        program_code: s.program.program_code,
-        program_name: s.program.program_name,
-        year_level: s.year_level,
-        section: s.section,
+      students: enrolled.map((e) => ({
+        student_id: e.student.student_id,
+        institutional_id: e.student.user.institutional_id,
+        first_name: e.student.first_name,
+        middle_name: e.student.middle_name,
+        last_name: e.student.last_name,
+        program_code: e.student.program.program_code,
+        program_name: e.student.program.program_name,
+        year_level: e.student.year_level,
+        section: e.student.section,
       })),
     };
   } catch (err: any) {
     console.error("Error getting assigned students for course:", err);
-    return { error: err.message || "Failed to fetch enrolled students." };
+    return { error: err.message || "Failed to fetch class students." };
   }
 }
 
@@ -918,44 +939,79 @@ export async function getMissedStudentsForExam(facultyId: number, examId: number
   try {
     const exam = await db.examination.findUnique({
       where: { exam_id: examId },
-      include: { examTargets: true }
+      include: {
+        examTargets: true,
+        studentOverrides: {
+          where: { is_active: true }
+        }
+      }
     });
 
     if (!exam || exam.faculty_id !== facultyId) {
       return { error: "Examination not found or unauthorized." };
     }
 
+    const selectedIds = exam.selected_student_ids || [];
     const students: any[] = [];
     const seenStudentIds = new Set<number>();
 
-    for (const target of exam.examTargets) {
-      const cohort = await db.student.findMany({
+    if (selectedIds.length > 0) {
+      // Load the exact students assigned to take the exam during creation
+      const assignedStudents = await db.student.findMany({
         where: {
-          program_id: target.program_id,
-          year_level: target.year_level,
-          section: target.section
+          student_id: { in: selectedIds }
         },
         include: {
           user: true,
           studentExams: {
             where: { exam_id: examId }
+          },
+          studentOverrides: {
+            where: { exam_id: examId, is_active: true }
           }
         }
       });
-      
-      for (const s of cohort) {
+      for (const s of assignedStudents) {
         if (!seenStudentIds.has(s.student_id)) {
           seenStudentIds.add(s.student_id);
           students.push(s);
+        }
+      }
+    } else {
+      // Fallback if no explicit selected student list is set
+      for (const target of exam.examTargets) {
+        const studentListForTarget = await db.student.findMany({
+          where: {
+            program_id: target.program_id,
+            year_level: target.year_level,
+          },
+          include: {
+            user: true,
+            studentExams: {
+              where: { exam_id: examId }
+            },
+            studentOverrides: {
+              where: { exam_id: examId, is_active: true }
+            }
+          }
+        });
+        
+        for (const s of studentListForTarget) {
+          if (!seenStudentIds.has(s.student_id)) {
+            seenStudentIds.add(s.student_id);
+            students.push(s);
+          }
         }
       }
     }
 
     const studentList = students.map(s => {
       const attempt = s.studentExams[0] || null;
+      const override = s.studentOverrides[0] || null;
       return {
         student_id: s.student_id,
         first_name: s.first_name,
+        middle_name: s.middle_name,
         last_name: s.last_name,
         institutional_email: s.user.institutional_email,
         institutional_id: s.user.institutional_id,
@@ -965,14 +1021,35 @@ export async function getMissedStudentsForExam(facultyId: number, examId: number
           submitted_at: attempt.submitted_at ? attempt.submitted_at.toISOString() : null,
           submission_trigger: attempt.submission_trigger,
           total_score: attempt.total_score
+        } : null,
+        override: override ? {
+          override_id: override.override_id,
+          new_start_time: override.new_start_time.toISOString(),
+          new_end_time: override.new_end_time.toISOString(),
+          is_active: override.is_active
         } : null
       };
     });
 
-    return { success: true, students: studentList };
+    const firstTarget = exam.examTargets[0];
+    const officialDateIso = exam.exam_date
+      ? exam.exam_date.toISOString()
+      : (firstTarget ? firstTarget.scheduled_date.toISOString() : null);
+
+    return {
+      success: true,
+      examTitle: exam.title,
+      officialDateIso,
+      officialTargetSchedule: firstTarget ? {
+        scheduled_date: firstTarget.scheduled_date.toISOString(),
+        start_time: firstTarget.start_time.toISOString(),
+        end_time: firstTarget.end_time.toISOString(),
+      } : null,
+      students: studentList
+    };
   } catch (err: any) {
     console.error("Error in getMissedStudentsForExam:", err);
-    return { error: err.message || "Failed to fetch missed student cohort." };
+    return { error: err.message || "Failed to fetch assigned student list." };
   }
 }
 
@@ -992,11 +1069,18 @@ export async function grantStudentOverride(
       return { error: "Examination not found or unauthorized." };
     }
 
+    // Verify if student is explicitly assigned when selected_student_ids is set
+    if (exam.selected_student_ids && exam.selected_student_ids.length > 0) {
+      if (!exam.selected_student_ids.includes(studentId)) {
+        return { error: "Selected student is not assigned to this examination." };
+      }
+    }
+
     const startTime = new Date(startTimeStr);
     const endTime = new Date(endTimeStr);
 
     await db.$transaction(async (tx) => {
-      // 1. Delete existing student exam attempt and answers to clean state
+      // 1. Delete existing student exam attempt and answers to clean state for reopening
       const studentExam = await tx.studentExam.findFirst({
         where: { student_id: studentId, exam_id: examId }
       });
@@ -1009,7 +1093,7 @@ export async function grantStudentOverride(
         });
       }
 
-      // 2. Upsert override record
+      // 2. Upsert override record strictly targeting the selected student
       await tx.studentOverride.upsert({
         where: {
           student_id_exam_id: {
@@ -1035,7 +1119,7 @@ export async function grantStudentOverride(
       await tx.auditLog.create({
         data: {
           user_id: facultyId,
-          action_performed: `Granted administrative exam override for Student ID: ${studentId} on Exam ID: ${examId} (Window: ${startTimeStr} to ${endTimeStr})`,
+          action_performed: `Reopened examination (Exam ID: ${examId}, Title: "${exam.title}") strictly for Student ID: ${studentId}. Individual Reopened Window: ${startTimeStr} to ${endTimeStr}. Official exam date and TOS preserved.`,
           ip_address: "127.0.0.1"
         }
       });
@@ -1046,7 +1130,48 @@ export async function grantStudentOverride(
     return { success: true };
   } catch (err: any) {
     console.error("Error in grantStudentOverride:", err);
-    return { error: err.message || "Failed to grant override access." };
+    return { error: err.message || "Failed to reopen examination for student." };
+  }
+}
+
+export async function revokeStudentOverride(
+  facultyId: number,
+  studentId: number,
+  examId: number
+) {
+  try {
+    const exam = await db.examination.findUnique({
+      where: { exam_id: examId }
+    });
+
+    if (!exam || exam.faculty_id !== facultyId) {
+      return { error: "Examination not found or unauthorized." };
+    }
+
+    await db.studentOverride.updateMany({
+      where: {
+        student_id: studentId,
+        exam_id: examId,
+      },
+      data: {
+        is_active: false,
+      }
+    });
+
+    await db.auditLog.create({
+      data: {
+        user_id: facultyId,
+        action_performed: `Revoked individual reopened exam window for Student ID: ${studentId} on Exam ID: ${examId}`,
+        ip_address: "127.0.0.1"
+      }
+    });
+
+    revalidatePath("/dashboard/faculty");
+    revalidatePath("/dashboard/student");
+    return { success: true };
+  } catch (err: any) {
+    console.error("Error in revokeStudentOverride:", err);
+    return { error: err.message || "Failed to revoke reopened access." };
   }
 }
 
@@ -1392,15 +1517,15 @@ export async function getFacultyEnrolledStudentsAndGrades(facultyId: number) {
     const aggregatedList: any[] = [];
 
     for (const [courseId, { course, exams: courseExams }] of courseMap.entries()) {
-      const targetCohorts: Array<{ program_id: number; year_level: number; section: string }> = [];
-      const cohortKeySet = new Set<string>();
+      const targetGroups: Array<{ program_id: number; year_level: number; section: string }> = [];
+      const groupKeySet = new Set<string>();
 
       for (const ex of courseExams) {
         for (const target of ex.examTargets) {
           const key = `${target.program_id}-${target.year_level}-${target.section}`;
-          if (!cohortKeySet.has(key)) {
-            cohortKeySet.add(key);
-            targetCohorts.push({
+          if (!groupKeySet.has(key)) {
+            groupKeySet.add(key);
+            targetGroups.push({
               program_id: target.program_id,
               year_level: target.year_level,
               section: target.section
@@ -1411,10 +1536,10 @@ export async function getFacultyEnrolledStudentsAndGrades(facultyId: number) {
 
       const studentsMap = new Map<number, any>();
 
-      if (targetCohorts.length > 0) {
-        const cohortStudents = await db.student.findMany({
+      if (targetGroups.length > 0) {
+        const groupStudents = await db.student.findMany({
           where: {
-            OR: targetCohorts.map(tc => ({
+            OR: targetGroups.map(tc => ({
               program_id: tc.program_id,
               year_level: tc.year_level,
               section: tc.section
@@ -1426,7 +1551,7 @@ export async function getFacultyEnrolledStudentsAndGrades(facultyId: number) {
           }
         });
 
-        for (const s of cohortStudents) {
+        for (const s of groupStudents) {
           studentsMap.set(s.student_id, s);
         }
       }
@@ -1504,6 +1629,7 @@ export async function getFacultyEnrolledStudentsAndGrades(facultyId: number) {
           course_title: course.course_title,
           student_id: student.student_id,
           first_name: student.first_name,
+          middle_name: student.middle_name,
           last_name: student.last_name,
           institutional_id: student.user.institutional_id,
           institutional_email: student.user.institutional_email || `${student.user.institutional_id.toLowerCase()}@acadnexus.bsc.edu.ph`,
@@ -1527,8 +1653,13 @@ export async function getFacultyEnrolledStudentsAndGrades(facultyId: number) {
 
 export async function getCourseRoster(courseId: number) {
   try {
+    const { targetYearLevel } = await syncAndGetYearLevelEnrolledStudents(courseId);
+
     const enrollments = await db.studentCourse.findMany({
-      where: { course_id: courseId },
+      where: {
+        course_id: courseId,
+        ...(targetYearLevel ? { student: { year_level: targetYearLevel } } : {}),
+      },
       include: {
         student: {
           include: {
@@ -1548,6 +1679,7 @@ export async function getCourseRoster(courseId: number) {
       student_id: e.student.student_id,
       institutional_id: e.student.user.institutional_id,
       first_name: e.student.first_name,
+      middle_name: e.student.middle_name,
       last_name: e.student.last_name,
       program_id: e.student.program_id,
       program_code: e.student.program.program_code,
@@ -1570,6 +1702,7 @@ export async function enrollStudentInCourse(
   data: {
     institutionalId: string;
     firstName: string;
+    middleName?: string;
     lastName: string;
     programId?: number;
     yearLevel?: number;
@@ -1641,6 +1774,7 @@ export async function enrollStudentInCourse(
           where: { student_id: targetStudentId },
           data: {
             first_name: data.firstName.trim() || undefined,
+            middle_name: data.middleName?.trim() || undefined,
             last_name: data.lastName.trim() || undefined,
             year_level: data.yearLevel ? Number(data.yearLevel) : undefined,
             section: data.section ? data.section.trim() : undefined,
@@ -1649,9 +1783,9 @@ export async function enrollStudentInCourse(
       }
     } else {
       // 3. User does not exist: Provision new Student user account
-      // Initial default password is set to their Student ID number
+      // Initial default password is set to 'dukay'
       const salt = await bcrypt.genSalt(10);
-      const defaultPasswordHash = await bcrypt.hash(formattedId, salt);
+      const defaultPasswordHash = await bcrypt.hash("dukay", salt);
 
       // Determine default program if not specified
       let programId = data.programId ? Number(data.programId) : undefined;
@@ -1677,6 +1811,7 @@ export async function enrollStudentInCourse(
           data: {
             student_id: newUser.user_id,
             first_name: data.firstName?.trim() || "Student",
+            middle_name: data.middleName?.trim() || null,
             last_name: data.lastName?.trim() || formattedId,
             program_id: programId!,
             year_level: Number(data.yearLevel) || 1,

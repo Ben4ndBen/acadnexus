@@ -26,12 +26,26 @@ interface Target {
   end_time: string;
 }
 
+interface OfficialSchedule {
+  scheduled_date: string;
+  start_time?: string | null;
+  end_time?: string | null;
+}
+
+interface ReopenedWindow {
+  start_time: string;
+  end_time: string;
+}
+
 interface Exam {
   exam_id: number;
   title: string;
   time_limit_minutes: number;
   course: Course;
   target: Target;
+  is_reopened?: boolean;
+  official_schedule?: OfficialSchedule | null;
+  reopened_window?: ReopenedWindow | null;
 }
 
 interface CompletedExam {
@@ -49,6 +63,7 @@ interface CompletedExam {
 interface Student {
   student_id: number;
   first_name: string;
+  middle_name?: string | null;
   last_name: string;
   year_level: number;
   section: string;
@@ -195,7 +210,9 @@ export function StudentDashboardClient({
             <div>
               <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Full Name</p>
               <p className="text-sm font-bold text-slate-800 mt-0.5">
-                {student ? `${student.first_name} ${student.last_name}` : "Not Seeded"}
+                {student
+                  ? `${student.first_name} ${student.middle_name ? `${student.middle_name.trim().charAt(0).toUpperCase()}. ` : ""}${student.last_name}`
+                  : "Not Seeded"}
               </p>
             </div>
             <div>
@@ -348,10 +365,17 @@ export function StudentDashboardClient({
                       key={exam.target.target_id}
                       className="flex flex-col sm:flex-row sm:items-center justify-between border border-slate-100 p-5 rounded-2xl bg-gradient-to-r from-rose-50/20 to-transparent hover:border-rose-100 transition-all gap-4"
                     >
-                      <div className="space-y-1">
-                        <span className="text-[10px] font-bold bg-rose-100 text-rose-700 px-2 py-0.5 rounded-full uppercase tracking-wider">
-                          Live Now
-                        </span>
+                      <div className="space-y-1 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-[10px] font-bold bg-rose-100 text-rose-700 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                            Live Now
+                          </span>
+                          {exam.is_reopened && (
+                            <span className="text-[10px] font-bold bg-amber-100 text-amber-800 px-2.5 py-0.5 rounded-full uppercase tracking-wider border border-amber-200">
+                              Reopened for You
+                            </span>
+                          )}
+                        </div>
                         <h4 className="font-bold text-slate-800 text-base mt-1">{exam.title}</h4>
                         <p className="text-xs text-slate-400 flex items-center gap-1.5">
                           <BookOpen className="w-3.5 h-3.5" /> {exam.course.course_title} ({exam.course.course_code})
@@ -359,10 +383,28 @@ export function StudentDashboardClient({
                         <p className="text-xs text-slate-400 flex items-center gap-1.5">
                           <Clock className="w-3.5 h-3.5" /> Time Limit: {exam.time_limit_minutes} minutes
                         </p>
-                        <div className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-100 px-2.5 py-1 rounded-lg w-fit mt-1.5 shadow-sm">
-                          <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                          Digitally Signed by Chairperson & Director for Instruction
-                        </div>
+                        
+                        {exam.is_reopened ? (
+                          <div className="bg-amber-50/80 border border-amber-200/80 rounded-xl p-3 text-xs space-y-1.5 mt-2">
+                            {exam.official_schedule && (
+                              <p className="text-slate-600 font-medium text-[11px] flex items-center gap-1.5">
+                                <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                                <span className="font-bold text-slate-700">Official Exam Date:</span>{" "}
+                                {new Date(exam.official_schedule.scheduled_date).toLocaleDateString([], { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' })}
+                              </p>
+                            )}
+                            <p className="text-amber-900 font-bold text-[11px] flex items-center gap-1.5 pt-0.5 border-t border-amber-200/60">
+                              <span className="w-2 h-2 rounded-full bg-amber-500 inline-block animate-pulse"></span>
+                              <span>Your Individual Reopened Window:</span>{" "}
+                              <span>{new Date(exam.target.start_time).toLocaleDateString([], { month: 'short', day: 'numeric' })} at {new Date(exam.target.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - {new Date(exam.target.end_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-100 px-2.5 py-1 rounded-lg w-fit mt-1.5 shadow-sm">
+                            <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                            Digitally Signed by Chairperson & Director for Instruction
+                          </div>
+                        )}
                       </div>
                       <Link
                         href={`/dashboard/student/exam/${exam.exam_id}`}
@@ -380,7 +422,7 @@ export function StudentDashboardClient({
                   </div>
                   <h3 className="font-bold text-slate-700 text-sm">No live examinations</h3>
                   <p className="text-slate-400 text-xs max-w-xs mt-1">
-                    There are no exams currently active for your section.
+                    There are no exams currently active for your program and year level.
                   </p>
                 </div>
               )}
@@ -398,7 +440,14 @@ export function StudentDashboardClient({
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {upcomingExams.map((exam) => (
                     <div key={exam.target.target_id} className="border border-slate-100 hover:border-blue-100 p-5 rounded-2xl space-y-3 transition-all">
-                      <h4 className="font-bold text-slate-800 text-base leading-snug">{exam.title}</h4>
+                      <div className="flex items-center justify-between gap-2">
+                        <h4 className="font-bold text-slate-800 text-base leading-snug">{exam.title}</h4>
+                        {exam.is_reopened && (
+                          <span className="text-[10px] font-bold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full uppercase tracking-wider border border-amber-200 whitespace-nowrap">
+                            Reopened Window
+                          </span>
+                        )}
+                      </div>
                       <p className="text-xs text-slate-500 font-medium">
                         {exam.course.course_title} ({exam.course.course_code})
                       </p>
@@ -406,15 +455,31 @@ export function StudentDashboardClient({
                         <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
                         Digitally Signed by Chairperson & Director for Instruction
                       </div>
-                      <div className="bg-slate-50 p-3 rounded-xl text-xs space-y-1.5 border border-slate-100">
-                        <p className="text-slate-700 font-semibold flex items-center gap-2">
-                          <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-                          Date: {new Date(exam.target.scheduled_date).toLocaleDateString([], { timeZone: 'UTC' })}
-                        </p>
-                        <p className="text-slate-500 flex items-center gap-2 pl-3.5">
-                          Time: {new Date(exam.target.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })} - {new Date(exam.target.end_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })}
-                        </p>
-                      </div>
+                      
+                      {exam.is_reopened ? (
+                        <div className="bg-amber-50/80 border border-amber-200/80 p-3 rounded-xl text-xs space-y-1.5">
+                          {exam.official_schedule && (
+                            <p className="text-slate-600 font-medium text-[11px] flex items-center gap-1.5">
+                              <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                              <span className="font-bold text-slate-700">Official Exam Date:</span>{" "}
+                              {new Date(exam.official_schedule.scheduled_date).toLocaleDateString([], { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' })}
+                            </p>
+                          )}
+                          <p className="text-amber-900 font-bold text-[11px] pt-1 border-t border-amber-200/60">
+                            Reopened Access Window: {new Date(exam.target.start_time).toLocaleDateString([], { month: 'short', day: 'numeric' })} ({new Date(exam.target.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - {new Date(exam.target.end_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="bg-slate-50 p-3 rounded-xl text-xs space-y-1.5 border border-slate-100">
+                          <p className="text-slate-700 font-semibold flex items-center gap-2">
+                            <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                            Official Date: {new Date(exam.target.scheduled_date).toLocaleDateString([], { timeZone: 'UTC' })}
+                          </p>
+                          <p className="text-slate-500 flex items-center gap-2 pl-3.5">
+                            Time: {new Date(exam.target.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })} - {new Date(exam.target.end_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })}
+                          </p>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -451,7 +516,7 @@ export function StudentDashboardClient({
                           "Max Score (pts)": examMaxPoints,
                           "Percentage Grade": `${percentage}%`,
                           "Date Submitted": new Date(se.submitted_at || se.started_at).toLocaleString(),
-                          "Digital Verification": "Signed by Chair & DI"
+                          "Digital Verification": "Signed by Department Chair & Academic Director"
                         };
                       });
                       const workbook = XLSX.utils.book_new();

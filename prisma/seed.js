@@ -42,7 +42,7 @@ async function main() {
   // 2. Seed 5 Departments
   console.log("Seeding departments...");
   const itDept = await prisma.department.create({
-    data: { department_name: "IT Department" },
+    data: { department_name: "ICT Department" },
   });
   const agriDept = await prisma.department.create({
     data: { department_name: "Agriculture Department" },
@@ -51,7 +51,7 @@ async function main() {
     data: { department_name: "Hospitality and Tourism Management Department" },
   });
   const industrialDept = await prisma.department.create({
-    data: { department_name: "Industrial Technology Department" },
+    data: { department_name: "IT Department" },
   });
   const teacherEduDept = await prisma.department.create({
     data: { department_name: "Teacher Education Department" },
@@ -61,7 +61,7 @@ async function main() {
   console.log("Seeding programs...");
   const bsitProg = await prisma.academicProgram.create({
     data: {
-      program_code: "BS Info Tech",
+      program_code: "BSInfoTech",
       program_name: "Bachelor of Science in Information Technology",
       department_id: itDept.department_id,
     },
@@ -97,14 +97,14 @@ async function main() {
   const beedProg = await prisma.academicProgram.create({
     data: {
       program_code: "BEED",
-      program_name: "Bachelor of science in elementary education",
+      program_name: "Bachelor of Elementary Education",
       department_id: teacherEduDept.department_id,
     },
   });
   const bsedProg = await prisma.academicProgram.create({
     data: {
       program_code: "BSED",
-      program_name: "Bachelor of Science in Secondary education",
+      program_name: "Bachelor of Secondary Education",
       department_id: teacherEduDept.department_id,
     },
   });
@@ -239,8 +239,8 @@ async function main() {
   // 4. Industrial Technology Chair & Faculty
   const indtechChairUser = await prisma.user.create({
     data: {
-      institutional_id: "CHAIR-INDTECH",
-      username: "chair_indtech",
+      institutional_id: "CHAIR-ITD",
+      username: "chair_itd",
       password_hash: passwordHash,
       role: "Chair",
     },
@@ -250,8 +250,8 @@ async function main() {
   });
   const indtechFacultyUser = await prisma.user.create({
     data: {
-      institutional_id: "FACULTY-INDTECH",
-      username: "faculty_indtech",
+      institutional_id: "FACULTY-ITD",
+      username: "faculty_itd",
       password_hash: passwordHash,
       role: "Faculty",
     },
@@ -511,10 +511,10 @@ async function main() {
   console.log("Created test accounts (all passwords are 'password123'):");
   console.log("  - Director: DIRECTOR-001");
   console.log("  - Student: 2023-0001-AB (Janice Delfin)");
-  console.log("  - IT Chair: CHAIR-001 | Faculty: FACULTY-001");
+  console.log("  - ICT Chair: CHAIR-001 | Faculty: FACULTY-001");
   console.log("  - Agriculture Chair: CHAIR-AGRI | Faculty: FACULTY-AGRI");
   console.log("  - Hospitality & Tourism Chair: CHAIR-HTM | Faculty: FACULTY-HTM");
-  console.log("  - Industrial Tech Chair: CHAIR-INDTECH | Faculty: FACULTY-INDTECH");
+  console.log("  - ITD Chair: CHAIR-ITD | Faculty: FACULTY-ITD");
   console.log("  - Teacher Education (TED) Chair: CHAIR-TED | Faculty: FACULTY-TED");
 }
 
