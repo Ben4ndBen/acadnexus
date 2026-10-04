@@ -1087,20 +1087,20 @@ export function ExamBuilderWizard({
                     </div>
                   </div>
                   <span className="self-start sm:self-auto bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-[10px] font-black uppercase px-2.5 py-1 rounded-full">
-                    Required First
+                    Required Step
                   </span>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {/* Examination Term (Configured by DI - Non-editable) */}
+                  {/* Examination Term (Configured by Directorate - Non-editable) */}
                   <div className="space-y-1.5">
                     <label className="text-xs font-bold text-emerald-200 block">
-                      Examination Term <span className="text-emerald-300/80 font-normal">(Configured by DI)</span>
+                      Examination Term <span className="text-emerald-300/80 font-normal">(Directorate Standard)</span>
                     </label>
                     <div className="w-full bg-slate-900/90 border border-emerald-500/40 text-emerald-300 text-sm font-extrabold px-3.5 py-2.5 rounded-xl flex items-center justify-between">
                       <span>{term} Examination</span>
                       <span className="text-[10px] font-black uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 px-2 py-0.5 rounded-md">
-                        Locked by DI
+                        Directorate Standard
                       </span>
                     </div>
                   </div>
@@ -1126,7 +1126,7 @@ export function ExamBuilderWizard({
                       <span>Applicable Academic Semester:</span>
                     </div>
                     <p className="text-[11px] text-slate-300">
-                      Automatically determined based on exam date (<span className="text-white font-mono font-bold">{examDate}</span>) and active academic period configured by the DI.
+                      Automatically determined based on exam date (<span className="text-white font-mono font-bold">{examDate}</span>) and active academic period set by the Academic Directorate.
                     </p>
                   </div>
                   <div className="bg-emerald-500 text-slate-950 text-xs font-black px-3.5 py-1.5 rounded-xl shadow-sm shrink-0 flex items-center gap-1.5">
@@ -1136,7 +1136,7 @@ export function ExamBuilderWizard({
                 </div>
               </div>
 
-              {/* 2. Assigned Subject Selection (Auto-populated Course Code & Title) */}
+              {/* 2. Assigned Subject Selection (Official Course Details) */}
               <div className="space-y-4 border-t border-slate-100 pt-5">
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
@@ -1144,11 +1144,11 @@ export function ExamBuilderWizard({
                     2. Assigned Subject
                   </h3>
                   <span className="text-[10px] font-black uppercase text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
-                    Auto-Populated Details
+                    Official Course Parameters
                   </span>
                 </div>
                 <p className="text-xs text-slate-400">
-                  Select from your assigned teaching load. Course code and course title are automatically populated.
+                  Select from your official teaching load. Course code and title will load automatically.
                 </p>
 
                 <div className="space-y-2">
@@ -1166,10 +1166,10 @@ export function ExamBuilderWizard({
                   </select>
                 </div>
 
-                {/* Auto-populated Course Code & Title Badges */}
+                {/* Course Code & Title Syllabus Badges */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="bg-slate-50/80 border border-slate-200/80 rounded-2xl p-3.5 space-y-1">
-                    <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Course Code (Auto)</span>
+                    <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Course Code (Syllabus)</span>
                     <div className="flex items-center gap-2">
                       <span className="font-mono text-base font-black text-slate-900 bg-white border border-slate-200 px-2.5 py-1 rounded-lg shadow-sm">
                         {selectedCourse.course_code || "N/A"}
@@ -1179,7 +1179,7 @@ export function ExamBuilderWizard({
                   </div>
 
                   <div className="bg-slate-50/80 border border-slate-200/80 rounded-2xl p-3.5 space-y-1">
-                    <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Course Title (Auto)</span>
+                    <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Course Title (Syllabus)</span>
                     <p className="text-sm font-bold text-slate-800 line-clamp-1">
                       {selectedCourse.course_title || "N/A"}
                     </p>

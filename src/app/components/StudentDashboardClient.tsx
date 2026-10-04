@@ -63,6 +63,7 @@ interface CompletedExam {
 interface Student {
   student_id: number;
   first_name: string;
+  middle_name?: string | null;
   last_name: string;
   year_level: number;
   section: string;
@@ -209,7 +210,9 @@ export function StudentDashboardClient({
             <div>
               <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Full Name</p>
               <p className="text-sm font-bold text-slate-800 mt-0.5">
-                {student ? `${student.first_name} ${student.last_name}` : "Not Seeded"}
+                {student
+                  ? `${student.first_name} ${student.middle_name ? `${student.middle_name.trim().charAt(0).toUpperCase()}. ` : ""}${student.last_name}`
+                  : "Not Seeded"}
               </p>
             </div>
             <div>
@@ -513,7 +516,7 @@ export function StudentDashboardClient({
                           "Max Score (pts)": examMaxPoints,
                           "Percentage Grade": `${percentage}%`,
                           "Date Submitted": new Date(se.submitted_at || se.started_at).toLocaleString(),
-                          "Digital Verification": "Signed by Chair & DI"
+                          "Digital Verification": "Signed by Department Chair & Academic Director"
                         };
                       });
                       const workbook = XLSX.utils.book_new();

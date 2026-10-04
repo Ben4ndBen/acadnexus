@@ -444,8 +444,15 @@ export function ChairDashboardClient({
             </div>
             <div className="space-y-4">
               <div>
-                <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Department Name</p>
+                <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Department & Academic Programs</p>
                 <p className="text-sm font-bold text-slate-800 mt-0.5">{departmentName}</p>
+                <div className="flex flex-wrap gap-1.5 mt-1.5">
+                  {getProgramsForDepartment(departmentId || departmentName).map(p => (
+                    <span key={p.code} className="text-[10px] font-extrabold px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200">
+                      {p.name} ({p.code})
+                    </span>
+                  ))}
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-4 border-t border-slate-100 pt-4">
                 <div>
@@ -1448,12 +1455,12 @@ export function ChairDashboardClient({
                     />
                   </div>
                   <div>
-                    <label className="text-xs font-bold text-slate-700 block mb-1">Middle Name</label>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">Middle Name / Initial</label>
                     <input
                       type="text"
                       value={middleName}
                       onChange={(e) => setMiddleName(e.target.value)}
-                      placeholder="e.g. Dela"
+                      placeholder="e.g. Dela or D."
                       className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-xs font-medium text-slate-800 p-3 rounded-xl outline-none"
                     />
                   </div>

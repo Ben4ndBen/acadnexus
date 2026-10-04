@@ -820,8 +820,13 @@ export function DirectorDashboardClient({
                 <div className="flex justify-between items-start mb-3 gap-2">
                   <div>
                     <h3 className="font-bold text-slate-800 text-base">{dept.department_name}</h3>
-                    <div className="mt-1">
+                    <div className="mt-1 flex flex-wrap items-center gap-1.5">
                       <DepartmentBadge department={dept.department_name} size="sm" />
+                      {getProgramsForDepartment(dept.department_id || dept.department_name).map(p => (
+                        <span key={p.code} className="text-[10px] font-extrabold px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-100">
+                          {p.code}
+                        </span>
+                      ))}
                     </div>
                   </div>
                   <div className={`text-xs font-extrabold px-2.5 py-1 rounded-full border ${
@@ -1219,9 +1224,14 @@ export function DirectorDashboardClient({
                         <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
                           {group.department_name}
                         </h3>
-                        <p className="text-[11px] text-slate-500 font-medium">
-                          Instructors & teaching load allocation under this department unit
-                        </p>
+                        <div className="flex flex-wrap items-center gap-1.5 mt-1 text-[11px]">
+                          <span className="text-slate-500 font-medium">Programs:</span>
+                          {getProgramsForDepartment(group.department_id || group.department_name).map(p => (
+                            <span key={p.code} className="text-[10px] font-extrabold px-2 py-0.5 rounded-md bg-white text-indigo-700 border border-indigo-200 shadow-2xs">
+                              {p.name} ({p.code})
+                            </span>
+                          ))}
+                        </div>
                       </div>
                     </div>
                     <span className="bg-indigo-100/90 text-indigo-800 border border-indigo-200 text-xs font-black px-3 py-1 rounded-full shadow-2xs self-start sm:self-auto">
@@ -1531,12 +1541,12 @@ export function DirectorDashboardClient({
                     />
                   </div>
                   <div>
-                    <label className="text-xs font-bold text-slate-700 block mb-1">Middle Name</label>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">Middle Name / Initial</label>
                     <input
                       type="text"
                       value={middleName}
                       onChange={(e) => setMiddleName(e.target.value)}
-                      placeholder="e.g. Santos"
+                      placeholder="e.g. Santos or S."
                       className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-xs font-medium text-slate-800 p-3 rounded-xl outline-none"
                     />
                   </div>

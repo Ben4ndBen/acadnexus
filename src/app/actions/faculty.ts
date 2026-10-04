@@ -4,25 +4,28 @@ import db from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { ExamStatus } from "@prisma/client";
 
-export async function updateFacultyProfile(facultyId: number, firstName: string, lastName: string) {
+export async function updateFacultyProfile(facultyId: number, firstName: string, lastName: string, middleName?: string) {
   if (!firstName || !lastName) {
     return { error: "First name and last name are required." };
   }
 
   try {
+    const trimmedMiddle = middleName ? middleName.trim() : null;
     await db.faculty.update({
       where: { faculty_id: facultyId },
       data: {
-        first_name: firstName,
-        last_name: lastName,
+        first_name: firstName.trim(),
+        middle_name: trimmedMiddle,
+        last_name: lastName.trim(),
       },
     });
 
+    const mi = trimmedMiddle ? `${trimmedMiddle.charAt(0).toUpperCase()}. ` : "";
     // Log the profile update action
     await db.auditLog.create({
       data: {
         user_id: facultyId,
-        action_performed: `Updated profile details: ${firstName} ${lastName}`,
+        action_performed: `Updated profile details: ${firstName.trim()} ${mi}${lastName.trim()}`,
         ip_address: "127.0.0.1",
       },
     });
@@ -347,6 +350,7 @@ export async function getAssignedStudentsForCourse(courseId: number) {
           student_id: e.student.student_id,
           institutional_id: e.student.user.institutional_id,
           first_name: e.student.first_name,
+          middle_name: e.student.middle_name,
           last_name: e.student.last_name,
           program_code: e.student.program.program_code,
           program_name: e.student.program.program_name,
@@ -374,6 +378,7 @@ export async function getAssignedStudentsForCourse(courseId: number) {
         student_id: s.student_id,
         institutional_id: s.user.institutional_id,
         first_name: s.first_name,
+        middle_name: s.middle_name,
         last_name: s.last_name,
         program_code: s.program.program_code,
         program_name: s.program.program_name,
@@ -990,6 +995,7 @@ export async function getMissedStudentsForExam(facultyId: number, examId: number
       return {
         student_id: s.student_id,
         first_name: s.first_name,
+        middle_name: s.middle_name,
         last_name: s.last_name,
         institutional_email: s.user.institutional_email,
         institutional_id: s.user.institutional_id,
@@ -1607,6 +1613,7 @@ export async function getFacultyEnrolledStudentsAndGrades(facultyId: number) {
           course_title: course.course_title,
           student_id: student.student_id,
           first_name: student.first_name,
+          middle_name: student.middle_name,
           last_name: student.last_name,
           institutional_id: student.user.institutional_id,
           institutional_email: student.user.institutional_email || `${student.user.institutional_id.toLowerCase()}@acadnexus.bsc.edu.ph`,
@@ -1651,6 +1658,7 @@ export async function getCourseRoster(courseId: number) {
       student_id: e.student.student_id,
       institutional_id: e.student.user.institutional_id,
       first_name: e.student.first_name,
+      middle_name: e.student.middle_name,
       last_name: e.student.last_name,
       program_id: e.student.program_id,
       program_code: e.student.program.program_code,

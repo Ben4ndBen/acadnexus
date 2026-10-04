@@ -445,6 +445,7 @@ export function FacultyDashboardClient({
   
   // Profile form state
   const [firstName, setFirstName] = useState(faculty.first_name);
+  const [middleName, setMiddleName] = useState(faculty.middle_name || "");
   const [lastName, setLastName] = useState(faculty.last_name);
   const [profileMessage, setProfileMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
@@ -758,7 +759,7 @@ export function FacultyDashboardClient({
     setIsSavingProfile(true);
     setProfileMessage(null);
 
-    const res = await updateFacultyProfile(faculty.faculty_id, firstName, lastName);
+    const res = await updateFacultyProfile(faculty.faculty_id, firstName, lastName, middleName);
     setIsSavingProfile(false);
     
     if (res.success) {
@@ -802,7 +803,7 @@ export function FacultyDashboardClient({
         return (
           <span className="inline-flex items-center gap-1.5 text-xs font-semibold bg-indigo-50 text-indigo-800 border border-indigo-200 px-2.5 py-1 rounded-full shadow-sm">
             <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
-            Pending DI Clearance
+            Pending Directorate Approval
           </span>
         );
       case "Approved":
@@ -1180,7 +1181,7 @@ export function FacultyDashboardClient({
                 </div>
               ) : (
                 <div className="text-center py-6 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
-                  <p className="text-xs text-slate-500">No courses assigned yet by DI/Chair.</p>
+                  <p className="text-xs text-slate-500">No official courses assigned yet by Department Chair or Academic Directorate.</p>
                 </div>
               )}
             </div>
@@ -1496,8 +1497,8 @@ export function FacultyDashboardClient({
                           }`}>
                             3
                           </div>
-                          <p className="text-xs font-extrabold text-slate-800 mt-2">DI Clearance</p>
-                          <p className="text-[10px] text-slate-400 mt-0.5">Director verification</p>
+                          <p className="text-xs font-extrabold text-slate-800 mt-2">Directorate Approval</p>
+                          <p className="text-[10px] text-slate-400 mt-0.5">Academic Directorate review</p>
                           <div className={`hidden md:block absolute left-0 right-1/2 top-4 h-[2px] -z-0 ${
                             ["Pending_DI", "Approved"].includes(exam.current_status) ? "bg-emerald-600" : "bg-slate-200"
                           }`} />
@@ -1984,7 +1985,7 @@ export function FacultyDashboardClient({
                       <option value="">-- Choose Student to Reopen --</option>
                       {missedStudents.map(s => (
                         <option key={s.student_id} value={s.student_id}>
-                          {s.first_name} {s.last_name} ({s.institutional_id})
+                          {s.first_name} {s.middle_name ? `${s.middle_name.trim().charAt(0).toUpperCase()}. ` : ""}{s.last_name} ({s.institutional_id})
                         </option>
                       ))}
                     </select>
@@ -2054,7 +2055,7 @@ export function FacultyDashboardClient({
                             return (
                               <tr key={student.student_id} className="hover:bg-slate-50/50 transition-colors">
                                 <td className="px-6 py-4 font-bold text-slate-800">
-                                  {student.first_name} {student.last_name}
+                                  {student.first_name} {student.middle_name ? `${student.middle_name.trim().charAt(0).toUpperCase()}. ` : ""}{student.last_name}
                                 </td>
                                 <td className="px-6 py-4">
                                   <div className="space-y-0.5 text-slate-500">
@@ -2257,7 +2258,7 @@ export function FacultyDashboardClient({
                               />
                               <div>
                                 <p className="text-xs font-bold text-slate-900">
-                                  {student.first_name} {student.last_name}
+                                  {student.first_name} {student.middle_name ? `${student.middle_name.trim().charAt(0).toUpperCase()}. ` : ""}{student.last_name}
                                 </p>
                                 <p className="text-[10px] text-slate-500">
                                   ID: {student.institutional_id}
@@ -2421,7 +2422,7 @@ export function FacultyDashboardClient({
                 </div>
               )}
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="space-y-1.5">
                   <label className="text-xs font-bold text-slate-600 block">First Name</label>
                   <input
@@ -2429,6 +2430,18 @@ export function FacultyDashboardClient({
                     required
                     value={firstName}
                     onChange={(e) => setFirstName(e.target.value)}
+                    placeholder="e.g. Maria"
+                    className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 text-sm font-medium text-slate-800 placeholder:text-slate-400 px-4 py-2.5 rounded-xl transition-all duration-300"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-600 block">Middle Name / Initial</label>
+                  <input
+                    type="text"
+                    value={middleName}
+                    onChange={(e) => setMiddleName(e.target.value)}
+                    placeholder="e.g. Santos or S."
                     className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 text-sm font-medium text-slate-800 placeholder:text-slate-400 px-4 py-2.5 rounded-xl transition-all duration-300"
                   />
                 </div>
@@ -2440,6 +2453,7 @@ export function FacultyDashboardClient({
                     required
                     value={lastName}
                     onChange={(e) => setLastName(e.target.value)}
+                    placeholder="e.g. Reyes"
                     className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 text-sm font-medium text-slate-800 placeholder:text-slate-400 px-4 py-2.5 rounded-xl transition-all duration-300"
                   />
                 </div>
@@ -3812,7 +3826,7 @@ export function FacultyDashboardClient({
                             <div>
                               <div className="flex items-center gap-2">
                                 <h4 className="text-sm font-black text-slate-900">
-                                  {student.first_name} {student.last_name}
+                                  {student.first_name} {student.middle_name ? `${student.middle_name.trim().charAt(0).toUpperCase()}. ` : ""}{student.last_name}
                                 </h4>
                                 <span className="text-[10px] bg-slate-100 text-slate-700 font-bold px-2 py-0.5 rounded-md border border-slate-200">
                                   {student.institutional_id}
@@ -3921,7 +3935,7 @@ export function FacultyDashboardClient({
                   Assigned Teaching Courses
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Designated by the Director of Instruction (DI) & Academic Administration
+                  Designated by the Academic Directorate & Campus Administration
                 </p>
               </div>
             </div>
