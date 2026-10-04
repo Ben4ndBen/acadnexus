@@ -1702,6 +1702,7 @@ export async function enrollStudentInCourse(
   data: {
     institutionalId: string;
     firstName: string;
+    middleName?: string;
     lastName: string;
     programId?: number;
     yearLevel?: number;
@@ -1773,6 +1774,7 @@ export async function enrollStudentInCourse(
           where: { student_id: targetStudentId },
           data: {
             first_name: data.firstName.trim() || undefined,
+            middle_name: data.middleName?.trim() || undefined,
             last_name: data.lastName.trim() || undefined,
             year_level: data.yearLevel ? Number(data.yearLevel) : undefined,
             section: data.section ? data.section.trim() : undefined,
@@ -1809,6 +1811,7 @@ export async function enrollStudentInCourse(
           data: {
             student_id: newUser.user_id,
             first_name: data.firstName?.trim() || "Student",
+            middle_name: data.middleName?.trim() || null,
             last_name: data.lastName?.trim() || formattedId,
             program_id: programId!,
             year_level: Number(data.yearLevel) || 1,

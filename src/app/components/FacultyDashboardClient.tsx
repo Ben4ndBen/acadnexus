@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useEffect } from "react";
+import { useState, useTransition, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { 
   BookOpen, Award, FileText, ClipboardList, PenTool, CheckCircle, 
@@ -22,6 +22,7 @@ import {
   exportExamSubmissionsToExcel, 
   exportMissedStudentsToExcel 
 } from "@/lib/exportExcel";
+import { getProgramsForDepartment } from "@/lib/courseDepartmentMapping";
 
 interface FacultyDashboardClientProps {
   faculty: {
@@ -136,12 +137,31 @@ export function FacultyDashboardClient({
   const [enrollModalOpen, setEnrollModalOpen] = useState(false);
   const [bulkEnrollModalOpen, setBulkEnrollModalOpen] = useState(false);
 
+  // Automatically resolve default program matching the faculty's department
+  const deptProgram = useMemo(() => {
+    const deptProgs = getProgramsForDepartment(faculty.department?.department_name);
+    if (deptProgs.length > 0) {
+      const matched = programs.find((p) =>
+        deptProgs.some((dp) => dp.code.toUpperCase() === p.program_code.toUpperCase())
+      );
+      if (matched) return matched;
+    }
+    return programs[0] || null;
+  }, [faculty.department?.department_name, programs]);
+
+  const defaultProgId = deptProgram?.program_id
+    ? String(deptProgram.program_id)
+    : programs[0]?.program_id
+    ? String(programs[0].program_id)
+    : "";
+
   // Single Enroll Form State
   const [enrollForm, setEnrollForm] = useState({
     institutionalId: "",
     firstName: "",
+    middleName: "",
     lastName: "",
-    programId: programs[0]?.program_id ? String(programs[0].program_id) : "",
+    programId: defaultProgId,
     yearLevel: "1",
     section: "A",
   });
@@ -151,11 +171,18 @@ export function FacultyDashboardClient({
 
   // Bulk Enroll Form State
   const [bulkInput, setBulkInput] = useState("");
-  const [bulkProgramId, setBulkProgramId] = useState(programs[0]?.program_id ? String(programs[0].program_id) : "");
+  const [bulkProgramId, setBulkProgramId] = useState(defaultProgId);
   const [bulkYearLevel, setBulkYearLevel] = useState("1");
   const [bulkSection, setBulkSection] = useState("A");
   const [isSubmittingBulk, setIsSubmittingBulk] = useState(false);
   const [bulkResult, setBulkResult] = useState<{ message: string; errors?: string[] } | null>(null);
+
+  useEffect(() => {
+    if (defaultProgId && !enrollForm.programId) {
+      setEnrollForm((prev) => ({ ...prev, programId: defaultProgId }));
+      setBulkProgramId(defaultProgId);
+    }
+  }, [defaultProgId]);
 
   // Unenroll state
   const [unenrollingId, setUnenrollingId] = useState<number | null>(null);
@@ -653,6 +680,7 @@ export function FacultyDashboardClient({
     const res = await enrollStudentInCourse(faculty.faculty_id, selectedRosterCourseId, {
       institutionalId: enrollForm.institutionalId,
       firstName: enrollForm.firstName,
+      middleName: enrollForm.middleName,
       lastName: enrollForm.lastName,
       programId: Number(enrollForm.programId),
       yearLevel: Number(enrollForm.yearLevel),
@@ -670,6 +698,7 @@ export function FacultyDashboardClient({
         setEnrollForm({
           institutionalId: "",
           firstName: "",
+          middleName: "",
           lastName: "",
           programId: programs[0]?.program_id ? String(programs[0].program_id) : "",
           yearLevel: "1",
@@ -2880,15 +2909,15 @@ export function FacultyDashboardClient({
               <div>
                 <h2 className="text-xl font-extrabold text-slate-900 flex items-center gap-2">
                   <span className="w-1.5 h-6 bg-emerald-600 rounded-full" />
-                  Class Students Roster
+                  Subject Class List
                 </h2>
                 <p className="text-slate-500 text-xs mt-1">
-                  Official student roster assigned to this subject. Only students enrolled in this specific course section are listed here.
+                  Official student class list assigned to this subject. Only students enrolled in this specific course section are listed here.
                 </p>
               </div>
 
               {/* Action Buttons */}
-              <div className="flex flex-wrap items-center gap-2.5">
+              <div className="flex items-center gap-2.5">
                 <button
                   type="button"
                   onClick={() => {
@@ -2903,20 +2932,9 @@ export function FacultyDashboardClient({
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
-                    setBulkResult(null);
-                    setBulkEnrollModalOpen(true);
-                  }}
-                  className="flex items-center gap-2 bg-slate-800 hover:bg-slate-900 text-white px-4 py-2.5 rounded-xl text-xs font-bold shadow-sm transition-all"
-                >
-                  <Users className="w-4 h-4" />
-                  <span>Batch Add Student IDs</span>
-                </button>
-                <button
-                  type="button"
                   onClick={() => fetchRoster(selectedRosterCourseId)}
                   disabled={loadingClassRoster}
-                  title="Refresh Roster"
+                  title="Refresh Class List"
                   className="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl transition-all"
                 >
                   <RefreshCw className={`w-4 h-4 ${loadingClassRoster ? "animate-spin text-emerald-600" : ""}`} />
@@ -2969,7 +2987,7 @@ export function FacultyDashboardClient({
                       {selectedCourse.course_code} - {selectedCourse.course_title}
                     </h4>
                     <p className="text-[11px] text-slate-500 mt-0.5">
-                      Active Class Roster for this Subject
+                      Active Subject Class List
                     </p>
                   </div>
                 </div>
@@ -2985,7 +3003,7 @@ export function FacultyDashboardClient({
             {loadingClassRoster ? (
               <div className="flex flex-col items-center justify-center py-20 text-slate-400 space-y-3">
                 <Loader2 className="w-8 h-8 animate-spin text-emerald-600" />
-                <p className="text-xs font-bold text-slate-500">Loading class section roster...</p>
+                <p className="text-xs font-bold text-slate-500">Loading subject class list...</p>
               </div>
             ) : filteredRosterStudents.length > 0 ? (
               <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
@@ -3055,7 +3073,7 @@ export function FacultyDashboardClient({
                 <p className="text-xs text-slate-400 max-w-md mx-auto">
                   {rosterSearch.trim()
                     ? "Try adjusting your search criteria or clear the filter."
-                    : "Add student ID numbers to register them in this class roster. Once listed, students can access scheduled examinations for this course."}
+                    : "Add student ID numbers to register them in this subject class list. Once listed, students can access scheduled examinations for this course."}
                 </p>
                 {!rosterSearch.trim() && (
                   <div className="pt-2 flex justify-center gap-3">
@@ -3070,17 +3088,6 @@ export function FacultyDashboardClient({
                     >
                       <Plus className="w-4 h-4" />
                       <span>Add Student to Class</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setBulkResult(null);
-                        setBulkEnrollModalOpen(true);
-                      }}
-                      className="flex items-center gap-2 bg-slate-800 hover:bg-slate-900 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-sm transition-all"
-                    >
-                      <Users className="w-4 h-4" />
-                      <span>Batch Add Student IDs</span>
                     </button>
                   </div>
                 )}
@@ -3101,7 +3108,7 @@ export function FacultyDashboardClient({
               <div>
                 <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
                   <GraduationCap className="w-5 h-5 text-emerald-600" />
-                  Add Student to Class Roster
+                  Add Student to Class List
                 </h3>
                 <p className="text-xs text-slate-400 mt-0.5">
                   Insert student ID number to assign student to this course section
@@ -3119,7 +3126,7 @@ export function FacultyDashboardClient({
             {/* Info notice */}
             <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-xl text-xs text-emerald-900 leading-relaxed">
               <span className="font-bold">Class Section Assignment: </span>
-              Assigning student account to this course. Academic Program is locked to the department's connected program.
+              Assigning student account to this subject class list.
             </div>
 
             {/* Error & Success */}
@@ -3151,7 +3158,7 @@ export function FacultyDashboardClient({
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="text-xs font-extrabold text-slate-700 block mb-1">
                     First Name <span className="text-rose-500">*</span>
@@ -3162,6 +3169,18 @@ export function FacultyDashboardClient({
                     placeholder="e.g. Juan"
                     value={enrollForm.firstName}
                     onChange={(e) => setEnrollForm({ ...enrollForm, firstName: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 focus:bg-white text-xs font-medium text-slate-900 px-3.5 py-2.5 rounded-xl transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-extrabold text-slate-700 block mb-1">
+                    Middle Initial / Name
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. S. or Santos"
+                    value={enrollForm.middleName}
+                    onChange={(e) => setEnrollForm({ ...enrollForm, middleName: e.target.value })}
                     className="w-full bg-slate-50 border border-slate-200 focus:bg-white text-xs font-medium text-slate-900 px-3.5 py-2.5 rounded-xl transition-all"
                   />
                 </div>
@@ -3181,23 +3200,22 @@ export function FacultyDashboardClient({
               </div>
 
               <div>
-                <label className="text-xs font-extrabold text-slate-700 flex items-center justify-between mb-1">
-                  <span>Academic Program</span>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
-                    Locked to Department
-                  </span>
+                <label className="text-xs font-extrabold text-slate-700 block mb-1">
+                  Academic Program
                 </label>
-                <select
-                  disabled
-                  value={enrollForm.programId}
-                  className="w-full bg-slate-100 border border-slate-200 text-xs font-bold text-slate-500 px-3.5 py-2.5 rounded-xl cursor-not-allowed opacity-80"
-                >
-                  {programs.map((p) => (
-                    <option key={p.program_id} value={p.program_id}>
-                      {p.program_code} - {p.program_name}
-                    </option>
-                  ))}
-                </select>
+                {(() => {
+                  const selProg = programs.find((p) => String(p.program_id) === String(enrollForm.programId)) || deptProgram || programs[0];
+                  return (
+                    <div className="w-full bg-slate-100/90 border border-slate-200/90 text-xs font-bold text-slate-800 px-3.5 py-2.5 rounded-xl flex items-center justify-between shadow-inner">
+                      <span>
+                        {selProg ? `${selProg.program_code} - ${selProg.program_name}` : "BSInfoTech - Bachelor of Science in Information Technology"}
+                      </span>
+                      <span className="font-mono text-[10px] font-black text-emerald-800 bg-emerald-100/80 border border-emerald-200 px-2 py-0.5 rounded-md shrink-0">
+                        {selProg?.program_code || "BSInfoTech"}
+                      </span>
+                    </div>
+                  );
+                })()}
               </div>
 
               <div>
@@ -3237,126 +3255,6 @@ export function FacultyDashboardClient({
                   </>
                 ) : (
                   <span>Add Student to Class</span>
-                )}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {/* BATCH INSERT STUDENT IDS MODAL */}
-      {bulkEnrollModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
-          <form
-            onSubmit={handleBulkEnroll}
-            className="bg-white border border-slate-200 rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl space-y-4 relative"
-          >
-            <div className="flex justify-between items-start border-b border-slate-100 pb-3">
-              <div>
-                <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
-                  <Users className="w-5 h-5 text-emerald-600" />
-                  Batch Add Student IDs to Class
-                </h3>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  Paste multiple student IDs to assign them to this course section simultaneously
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setBulkEnrollModalOpen(false)}
-                className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-400 hover:text-slate-700"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {bulkResult && (
-              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-900 space-y-1">
-                <p className="font-bold">{bulkResult.message}</p>
-                {bulkResult.errors && bulkResult.errors.length > 0 && (
-                  <ul className="list-disc pl-4 text-rose-700 text-[11px] space-y-0.5 mt-1">
-                    {bulkResult.errors.map((err, i) => (
-                      <li key={i}>{err}</li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            )}
-
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs font-extrabold text-slate-700 block mb-1">
-                  Paste Student IDs (One per line, or ID, First Name, Last Name):
-                </label>
-                <textarea
-                  rows={5}
-                  required
-                  placeholder={"2023-0001-AB, Juan, Dela Cruz\n2023-0002-AB, Maria, Santos\n2023-0003-AB"}
-                  value={bulkInput}
-                  onChange={(e) => setBulkInput(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 focus:bg-white text-xs font-mono text-slate-900 p-3 rounded-xl transition-all"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[11px] font-extrabold text-slate-700 flex items-center justify-between mb-1">
-                    <span>Default Program</span>
-                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
-                      Locked
-                    </span>
-                  </label>
-                  <select
-                    disabled
-                    value={bulkProgramId}
-                    onChange={(e) => setBulkProgramId(e.target.value)}
-                    className="w-full bg-slate-100 border border-slate-200 text-xs font-bold text-slate-500 p-2 rounded-xl cursor-not-allowed opacity-80"
-                  >
-                    {programs.map((p) => (
-                      <option key={p.program_id} value={p.program_id}>
-                        {p.program_code}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-[11px] font-extrabold text-slate-700 block mb-1">
-                    Default Year
-                  </label>
-                  <select
-                    value={bulkYearLevel}
-                    onChange={(e) => setBulkYearLevel(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 text-xs font-bold text-slate-900 p-2 rounded-xl"
-                  >
-                    <option value="1">1st Year</option>
-                    <option value="2">2nd Year</option>
-                    <option value="3">3rd Year</option>
-                    <option value="4">4th Year</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            <div className="border-t border-slate-100 pt-3 flex justify-end gap-2.5">
-              <button
-                type="button"
-                onClick={() => setBulkEnrollModalOpen(false)}
-                className="px-4 py-2.5 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={isSubmittingBulk}
-                className="flex items-center gap-2 px-5 py-2.5 text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 rounded-xl shadow-sm transition-all disabled:opacity-75"
-              >
-                {isSubmittingBulk ? (
-                  <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    <span>Processing Batch...</span>
-                  </>
-                ) : (
-                  <span>Batch Add Students</span>
                 )}
               </button>
             </div>
