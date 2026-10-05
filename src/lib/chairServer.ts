@@ -34,7 +34,7 @@ export async function ensureChairsAndDepartmentsExist(force = false) {
         ],
       },
       {
-        name: "HTM Department",
+        name: "Hospitality and Tourism Management Department",
         chairId: "CHAIR-HTM",
         chairUsername: "chair_htm",
         facultyId: "FACULTY-HTM",
@@ -47,9 +47,9 @@ export async function ensureChairsAndDepartmentsExist(force = false) {
       },
       {
         name: "ICT Department",
-        chairId: "CHAIR-001",
+        chairId: "CHAIR-ICT",
         chairUsername: "chair_ict",
-        facultyId: "FACULTY-001",
+        facultyId: "FACULTY-ICT",
         facultyFirstName: "Mark",
         facultyLastName: "Abad",
         programs: [
@@ -57,7 +57,7 @@ export async function ensureChairsAndDepartmentsExist(force = false) {
         ],
       },
       {
-        name: "ITD Department",
+        name: "IT Department",
         chairId: "CHAIR-ITD",
         chairUsername: "chair_itd",
         facultyId: "FACULTY-ITD",
@@ -68,7 +68,7 @@ export async function ensureChairsAndDepartmentsExist(force = false) {
         ],
       },
       {
-        name: "Teacher Education Department (TED)",
+        name: "Teacher Education Department",
         chairId: "CHAIR-TED",
         chairUsername: "chair_ted",
         facultyId: "FACULTY-TED",
@@ -229,8 +229,8 @@ export async function ensureChairsAndDepartmentsExist(force = false) {
       });
 
       if (!chairRecord) {
-        const existingDeptChair = await db.chair.findUnique({
-          where: { department_id: dept.department_id },
+        const existingDeptChair = await db.chair.findFirst({
+          where: { department_id: dept.department_id, is_program_chair: false },
         });
 
         if (!existingDeptChair) {

@@ -1,17 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import Link from "next/link";
 import { 
   BookOpen, Calendar, Award, ShieldAlert, Clock, CheckCircle, 
   Hourglass, ArrowRight, ShieldCheck, Download, Lock, KeyRound,
-  Eye, EyeOff, Loader2, AlertCircle, X, Shield
+  Eye, EyeOff, Loader2, AlertCircle, X, Shield, Filter, Bell
 } from "lucide-react";
 import * as XLSX from "xlsx";
 
 import { getDepartmentTheme } from "@/lib/departmentThemes";
 import { DepartmentBadge } from "@/app/components/DepartmentBadge";
 import { updateStudentPassword } from "@/app/actions/student";
+import { getExpectedYearAndSemForCourse } from "@/lib/bsitCurriculum";
 
 interface Course {
   course_id: number;
@@ -88,6 +89,7 @@ interface StudentDashboardClientProps {
   institutionalId: string;
   userId: number;
   requirePasswordUpdate?: boolean;
+  activeSemester?: number;
 }
 
 type TabType = "active" | "upcoming" | "completed" | "missed";
@@ -104,6 +106,7 @@ export function StudentDashboardClient({
   institutionalId,
   userId,
   requirePasswordUpdate = false,
+  activeSemester = 1,
 }: StudentDashboardClientProps) {
   const [activeTab, setActiveTab] = useState<TabType>(() => {
     if (activeExams && activeExams.length > 0) return "active";
@@ -146,9 +149,23 @@ export function StudentDashboardClient({
       }, 1400);
     }
   };
+
   const deptTheme = getDepartmentTheme(
     student?.program?.department?.department_name || student?.program?.program_code
   );
+
+  // Filter enrolled courses to show ONLY subjects for student's year level and active semester
+  const filteredEnrolledCourses = useMemo(() => {
+    if (!enrolledCourses || enrolledCourses.length === 0) return [];
+    const studentYear = student?.year_level || 1;
+    const currentSem = activeSemester || 1;
+
+    return enrolledCourses.filter((c) => {
+      const meta = getExpectedYearAndSemForCourse(c.course_code, c.course_title, student?.program?.program_code);
+      if (!meta) return true;
+      return meta.yearLevel === studentYear && meta.semester === currentSem;
+    });
+  }, [enrolledCourses, student, activeSemester]);
 
   const tabs = [
     {
@@ -156,27 +173,33 @@ export function StudentDashboardClient({
       label: "Active Exams",
       count: activeExams.length,
       icon: Clock,
-      badgeColor: "bg-rose-100 text-rose-700 border-rose-200",
+      badgeColor: activeExams.length > 0 ? "bg-rose-100 text-rose-700 border-rose-200" : "bg-slate-100 text-slate-500 border-slate-200",
       activeColor: "bg-rose-50 border-rose-500 text-rose-700",
       pulse: activeExams.length > 0,
+      dotColor: "bg-rose-500",
+      pingColor: "bg-rose-400",
     },
     {
       id: "upcoming" as TabType,
       label: "Upcoming Exams",
       count: upcomingExams.length,
       icon: Calendar,
-      badgeColor: "bg-blue-100 text-blue-700 border-blue-200",
+      badgeColor: upcomingExams.length > 0 ? "bg-blue-100 text-blue-700 border-blue-200" : "bg-slate-100 text-slate-500 border-slate-200",
       activeColor: "bg-blue-50 border-blue-500 text-blue-700",
-      pulse: false,
+      pulse: upcomingExams.length > 0,
+      dotColor: "bg-blue-500",
+      pingColor: "bg-blue-400",
     },
     {
       id: "completed" as TabType,
       label: "Completed Exams",
       count: completedExams.length,
       icon: Award,
-      badgeColor: "bg-emerald-100 text-emerald-700 border-emerald-200",
+      badgeColor: completedExams.length > 0 ? "bg-emerald-100 text-emerald-700 border-emerald-200" : "bg-slate-100 text-slate-500 border-slate-200",
       activeColor: "bg-emerald-50 border-emerald-500 text-emerald-700",
       pulse: false,
+      dotColor: "bg-emerald-500",
+      pingColor: "bg-emerald-400",
     },
     {
       id: "missed" as TabType,
@@ -185,9 +208,12 @@ export function StudentDashboardClient({
       icon: ShieldAlert,
       badgeColor: missedExams.length > 0 ? "bg-amber-100 text-amber-700 border-amber-200" : "bg-slate-100 text-slate-500 border-slate-200",
       activeColor: "bg-amber-50 border-amber-500 text-amber-700",
-      pulse: false,
+      pulse: missedExams.length > 0,
+      dotColor: "bg-amber-500",
+      pingColor: "bg-amber-400",
     },
   ];
+
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
@@ -236,12 +262,12 @@ export function StudentDashboardClient({
               <div className="flex items-center justify-between">
                 <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Enrolled Subjects</p>
                 <span className="text-xs font-black bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md border border-blue-100">
-                  {enrolledSubjectsCount}
+                  {filteredEnrolledCourses.length}
                 </span>
               </div>
-              {enrolledCourses.length > 0 ? (
+              {filteredEnrolledCourses.length > 0 ? (
                 <div className="flex flex-wrap gap-1.5 pt-1">
-                  {enrolledCourses.map((c) => (
+                  {filteredEnrolledCourses.map((c) => (
                     <span
                       key={c.course_id}
                       title={c.course_title}
@@ -253,7 +279,7 @@ export function StudentDashboardClient({
                   ))}
                 </div>
               ) : (
-                <p className="text-xs text-slate-400 italic">No enrolled subjects registered.</p>
+                <p className="text-xs text-slate-400 italic">No enrolled subjects for Year {student?.year_level}.</p>
               )}
             </div>
 
@@ -302,10 +328,13 @@ export function StudentDashboardClient({
                   }`}
                 >
                   <div className="flex items-center gap-3">
-                    <div className="relative">
+                    <div className="relative flex items-center justify-center">
                       <Icon className={`w-5 h-5 ${isActive ? "" : "text-slate-400"}`} />
                       {tab.pulse && (
-                        <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-rose-500 rounded-full animate-ping" />
+                        <>
+                          <span className={`absolute -top-1 -right-1.5 w-2.5 h-2.5 ${tab.pingColor} rounded-full animate-ping`} />
+                          <span className={`absolute -top-1 -right-1.5 w-2.5 h-2.5 ${tab.dotColor} rounded-full border border-white`} />
+                        </>
                       )}
                     </div>
                     <span>{tab.label}</span>
@@ -322,6 +351,60 @@ export function StudentDashboardClient({
 
       {/* Main Tab Panel Area */}
       <div className="lg:col-span-3 space-y-6 flex flex-col">
+        {/* Quick Notification Alert Banner */}
+        {(activeExams.length > 0 || upcomingExams.length > 0 || missedExams.length > 0) && (
+          <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-4 rounded-3xl border border-indigo-900/40 shadow-sm flex flex-wrap items-center justify-between gap-3 text-xs font-medium">
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <div className="p-2 bg-indigo-600/30 rounded-xl border border-indigo-500/30 shrink-0">
+                <Bell className="w-4 h-4 text-indigo-300 animate-bounce" />
+              </div>
+              <div className="space-y-0.5">
+                <p className="font-extrabold text-white text-xs flex items-center gap-2">
+                  <span>Examination Alerts</span>
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                </p>
+                <p className="text-slate-300 text-[11px] flex flex-wrap items-center gap-2">
+                  {activeExams.length > 0 && (
+                    <span className="text-rose-300 font-bold">
+                      • {activeExams.length} Live Active Exam{activeExams.length === 1 ? "" : "s"}
+                    </span>
+                  )}
+                  {upcomingExams.length > 0 && (
+                    <span className="text-blue-300 font-bold">
+                      • {upcomingExams.length} Upcoming Exam{upcomingExams.length === 1 ? "" : "s"}
+                    </span>
+                  )}
+                  {missedExams.length > 0 && (
+                    <span className="text-amber-300 font-bold">
+                      • {missedExams.length} Missed Exam{missedExams.length === 1 ? "" : "s"}
+                    </span>
+                  )}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {activeExams.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("active")}
+                  className="bg-rose-600 hover:bg-rose-500 text-white font-extrabold text-[11px] px-3 py-1.5 rounded-xl transition-all shadow-xs cursor-pointer"
+                >
+                  View Active ({activeExams.length})
+                </button>
+              )}
+              {upcomingExams.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("upcoming")}
+                  className="bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-[11px] px-3 py-1.5 rounded-xl transition-all shadow-xs cursor-pointer"
+                >
+                  View Upcoming ({upcomingExams.length})
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Mobile Tabs Bar (Visible on mobile/tablet, hidden on desktop) */}
         <div className="lg:hidden bg-white border border-slate-200 rounded-3xl p-3 shadow-sm">
           <div className="flex overflow-x-auto gap-2 no-scrollbar pb-1">
@@ -332,13 +415,21 @@ export function StudentDashboardClient({
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center gap-2 px-4 py-3 rounded-2xl border text-xs font-bold whitespace-nowrap transition-all flex-1 justify-center ${
+                  className={`flex items-center gap-2 px-4 py-3 rounded-2xl border text-xs font-bold whitespace-nowrap transition-all flex-1 justify-center relative ${
                     isActive
                       ? `${tab.activeColor} shadow-sm`
                       : "bg-transparent border-transparent text-slate-500 hover:bg-slate-50"
                   }`}
                 >
-                  <Icon className="w-4 h-4" />
+                  <div className="relative flex items-center justify-center">
+                    <Icon className="w-4 h-4" />
+                    {tab.pulse && (
+                      <>
+                        <span className={`absolute -top-1 -right-1 w-2 h-2 ${tab.pingColor} rounded-full animate-ping`} />
+                        <span className={`absolute -top-1 -right-1 w-2 h-2 ${tab.dotColor} rounded-full border border-white`} />
+                      </>
+                    )}
+                  </div>
                   <span>{tab.label}</span>
                   <span className={`text-[10px] px-1.5 py-0.2 rounded-full border ${tab.badgeColor}`}>
                     {tab.count}
@@ -496,6 +587,8 @@ export function StudentDashboardClient({
               )}
             </div>
           )}
+
+
 
           {activeTab === "completed" && (
             <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-6 h-full min-h-[300px]">

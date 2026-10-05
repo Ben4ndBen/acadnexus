@@ -305,8 +305,13 @@ export const BSTM_CURRICULUM: CurriculumItem[] = [
 
 export const ALL_CURRICULUMS = [...BSIT_CURRICULUM, ...BSHM_CURRICULUM, ...BSA_CURRICULUM, ...BSTM_CURRICULUM];
 
-/** Gets curriculum items for a given program code & year level */
-export function getCurriculumForProgram(programCode: string, yearLevel: number): CurriculumItem[] {
+/** Gets curriculum items for a given program code & optional year level & semester */
+export function getCurriculumForProgram(
+  programCode?: string | null,
+  yearLevel?: number | null,
+  semester?: number | null
+): CurriculumItem[] {
+  if (!programCode) return ALL_CURRICULUMS;
   const codeUpper = programCode.toUpperCase();
   let targetProgram: "BSIT" | "BSHM" | "BSA" | "BSTM" | null = null;
 
@@ -326,11 +331,57 @@ export function getCurriculumForProgram(programCode: string, yearLevel: number):
     targetProgram = "BSTM";
   }
 
-  if (!targetProgram) return [];
+  if (!targetProgram) return ALL_CURRICULUMS;
 
-  return ALL_CURRICULUMS.filter(
-    (item) => item.programCode === targetProgram && item.yearLevel === yearLevel
-  );
+  return ALL_CURRICULUMS.filter((item) => {
+    if (item.programCode !== targetProgram && item.programCode !== "COMMON") return false;
+    if (yearLevel && item.yearLevel !== yearLevel) return false;
+    if (semester && item.semester !== semester) return false;
+    return true;
+  });
+}
+
+export interface YearSemGroup {
+  yearLevel: number;
+  semester: number;
+  yearLabel: string;
+  semLabel: string;
+  items: CurriculumItem[];
+}
+
+/** Group curriculum items by Year Level and Semester for a given program */
+export function getCurriculumByYearAndSem(programCode?: string | null): YearSemGroup[] {
+  const years = [1, 2, 3, 4];
+  const sems = [1, 2];
+  const groups: YearSemGroup[] = [];
+
+  const yearLabels: Record<number, string> = {
+    1: "1st Year",
+    2: "2nd Year",
+    3: "3rd Year",
+    4: "4th Year",
+  };
+  const semLabels: Record<number, string> = {
+    1: "1st Semester",
+    2: "2nd Semester",
+  };
+
+  for (const y of years) {
+    for (const s of sems) {
+      const items = getCurriculumForProgram(programCode, y, s);
+      if (items.length > 0) {
+        groups.push({
+          yearLevel: y,
+          semester: s,
+          yearLabel: yearLabels[y],
+          semLabel: semLabels[s],
+          items,
+        });
+      }
+    }
+  }
+
+  return groups;
 }
 
 /**
@@ -372,4 +423,50 @@ export function getExpectedYearLevelForCourse(courseCode: string, courseTitle?: 
 
   return null;
 }
+
+/** Automatically determines expected year level and semester for a course */
+export function getExpectedYearAndSemForCourse(
+  courseCode: string,
+  courseTitle?: string,
+  programCode?: string
+): { yearLevel: number; semester: number } | null {
+  if (!courseCode) return null;
+  const cleanCode = courseCode.trim().toUpperCase();
+  const cleanNoSpaces = cleanCode.replace(/\s+/g, "");
+
+  let targetCurriculum = ALL_CURRICULUMS;
+  if (programCode) {
+    targetCurriculum = getCurriculumForProgram(programCode);
+  }
+
+  const found = targetCurriculum.find(
+    (item) => item.code.replace(/\s+/g, "").toUpperCase() === cleanNoSpaces
+  ) || ALL_CURRICULUMS.find(
+    (item) => item.code.replace(/\s+/g, "").toUpperCase() === cleanNoSpaces
+  );
+
+  if (found) {
+    return { yearLevel: found.yearLevel, semester: found.semester };
+  }
+
+  if (courseTitle) {
+    const cleanTitle = courseTitle.trim().toLowerCase();
+    const foundTitle = targetCurriculum.find(
+      (item) => item.title.trim().toLowerCase() === cleanTitle
+    ) || ALL_CURRICULUMS.find(
+      (item) => item.title.trim().toLowerCase() === cleanTitle
+    );
+    if (foundTitle) {
+      return { yearLevel: foundTitle.yearLevel, semester: foundTitle.semester };
+    }
+  }
+
+  const yearOnly = getExpectedYearLevelForCourse(courseCode, courseTitle);
+  if (yearOnly) {
+    return { yearLevel: yearOnly, semester: 1 };
+  }
+
+  return null;
+}
+
 

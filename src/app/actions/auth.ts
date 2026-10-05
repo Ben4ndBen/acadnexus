@@ -310,7 +310,7 @@ export async function registerInstructorByAdminAction(prevState: any, formData: 
           username: username,
           password_hash: passwordHash,
           role: "Faculty",
-          require_password_update: true,
+          require_password_update: false,
         },
       });
 

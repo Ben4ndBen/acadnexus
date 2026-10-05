@@ -7,7 +7,8 @@ import { NotificationBell } from "@/app/components/NotificationBell";
 import { GraduationCap, BookOpen, Calendar, Award, ShieldAlert, Clock, CheckCircle, Hourglass, ArrowRight } from "lucide-react";
 import { StudentDashboardClient } from "@/app/components/StudentDashboardClient";
 
-import { getCachedStudentUser } from "@/lib/cache";
+import { getCachedStudentUser, getActiveAcademicPeriodCached } from "@/lib/cache";
+import { getExpectedYearAndSemForCourse } from "@/lib/bsitCurriculum";
 
 export const dynamic = "force-dynamic";
 
@@ -128,8 +129,16 @@ export default async function StudentDashboard() {
     }
   });
 
-  const enrolledSubjectsCount = uniqueCoursesMap.size;
-  const enrolledCoursesList = Array.from(uniqueCoursesMap.values());
+  const academicPeriod = await getActiveAcademicPeriodCached();
+  const activeSemester = academicPeriod.active_semester?.includes("2") ? 2 : 1;
+
+  const rawCoursesList = Array.from(uniqueCoursesMap.values());
+  const enrolledCoursesList = rawCoursesList.filter((c) => {
+    const meta = getExpectedYearAndSemForCourse(c.course_code, c.course_title, student?.program?.program_code);
+    if (!meta) return true;
+    return meta.yearLevel === student.year_level && meta.semester === activeSemester;
+  });
+  const enrolledSubjectsCount = enrolledCoursesList.length;
 
   // Average examination performance
   let totalPointsAccumulated = 0;
@@ -303,7 +312,9 @@ export default async function StudentDashboard() {
           <div className="flex items-center gap-4">
             <div className="hidden sm:block text-right">
               <p className="text-sm font-semibold text-slate-800">
-                {student ? `${student.first_name} ${student.last_name}` : "Student User"}
+                {student
+                  ? `${student.first_name} ${student.middle_name ? `${student.middle_name.trim().charAt(0).toUpperCase()}. ` : ""}${student.last_name}`
+                  : "Student User"}
               </p>
               <p className="text-xs text-slate-500">{institutionalId}</p>
             </div>
@@ -409,6 +420,7 @@ export default async function StudentDashboard() {
           institutionalId={institutionalId}
           userId={dbUser.user_id}
           requirePasswordUpdate={!!dbUser?.require_password_update}
+          activeSemester={activeSemester}
         />
       </main>
 

@@ -17,8 +17,11 @@ import { DepartmentBadge } from "@/app/components/DepartmentBadge";
 import { 
   getProgramsForDepartment, 
   filterCoursesForDepartment, 
-  isCourseInDepartmentOrProgram 
+  isCourseInDepartmentOrProgram,
+  getDepartmentKeyForProgram,
+  resolveDepartmentKey
 } from "@/lib/courseDepartmentMapping";
+import { getExpectedYearAndSemForCourse } from "@/lib/bsitCurriculum";
 
 interface DirectorDashboardClientProps {
   directorUserId: number;
@@ -226,6 +229,8 @@ export function DirectorDashboardClient({
   const [deptId, setDeptId] = useState("");
   const [regProgramCode, setRegProgramCode] = useState("");
   const [regIncludeGE, setRegIncludeGE] = useState(false);
+  const [regYearLevel, setRegYearLevel] = useState<number>(0);
+  const [regSemester, setRegSemester] = useState<number>(0);
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPass, setShowPass] = useState(false);
@@ -240,6 +245,8 @@ export function DirectorDashboardClient({
   const [assignFacultyTarget, setAssignFacultyTarget] = useState<any | null>(null);
   const [editProgramCode, setEditProgramCode] = useState("");
   const [editIncludeGE, setEditIncludeGE] = useState(false);
+  const [editYearLevel, setEditYearLevel] = useState<number>(0);
+  const [editSemester, setEditSemester] = useState<number>(0);
   const [editCourseIds, setEditCourseIds] = useState<number[]>([]);
   const [editCourseSearchQuery, setEditCourseSearchQuery] = useState("");
   const [isSavingAssignedCourses, setIsSavingAssignedCourses] = useState(false);
@@ -247,10 +254,41 @@ export function DirectorDashboardClient({
   const [facultySearchQuery, setFacultySearchQuery] = useState("");
   const [selectedFacultyDeptFilter, setSelectedFacultyDeptFilter] = useState<string>("ALL");
 
+  // Handler for changing program in registration modal (Program chosen first -> Dept auto-assigned)
+  const handleProgramChange = (newProgramCode: string) => {
+    setRegProgramCode(newProgramCode);
+    if (!newProgramCode) {
+      setDeptId("");
+      return;
+    }
+    const targetDeptKey = getDepartmentKeyForProgram(newProgramCode);
+    const matchedDept = departmentsList?.find((d) => {
+      if (d.department_name === "CITD") return false;
+      const key = resolveDepartmentKey(d.department_id, d.department_name);
+      return key === targetDeptKey;
+    });
+    if (matchedDept) {
+      setDeptId(String(matchedDept.department_id));
+    }
+    // Clean up selected courses that don't belong to the newly selected program
+    setSelectedCourseIds((prev) =>
+      prev.filter((id) => {
+        const c = courses.find((item) => item.course_id === id);
+        if (!c) return false;
+        return isCourseInDepartmentOrProgram(c.course_code, null, newProgramCode, regIncludeGE);
+      })
+    );
+  };
+
   // Handler for changing department in registration modal
   const handleDeptChange = (newDeptId: string) => {
     setDeptId(newDeptId);
-    setRegProgramCode("");
+    const progs = getProgramsForDepartment(newDeptId);
+    if (progs.length === 1) {
+      setRegProgramCode(progs[0].code);
+    } else {
+      setRegProgramCode("");
+    }
     // Clean up selected courses that don't belong to the newly selected department
     setSelectedCourseIds((prev) =>
       prev.filter((id) => {
@@ -261,17 +299,19 @@ export function DirectorDashboardClient({
     );
   };
 
-  // Filtered courses for Register Instructor Modal based on selected Department & Program
+  // Filtered courses for Register Instructor Modal based on selected Department, Program, Year & Sem
   const availableRegisterCourses = useMemo(() => {
     if (!deptId) return [];
     return filterCoursesForDepartment(courses, deptId, {
       programCode: regProgramCode,
       includeGeneralEducation: regIncludeGE,
       searchQuery: courseSearchQuery,
+      yearLevel: regYearLevel || null,
+      semester: regSemester || null,
     });
-  }, [courses, deptId, regProgramCode, regIncludeGE, courseSearchQuery]);
+  }, [courses, deptId, regProgramCode, regIncludeGE, courseSearchQuery, regYearLevel, regSemester]);
 
-  // Filtered courses for Assign / Edit Modal based on target Instructor's Department & Program
+  // Filtered courses for Assign / Edit Modal based on target Instructor's Department, Program, Year & Sem
   const availableEditCourses = useMemo(() => {
     if (!assignFacultyTarget) return [];
     const targetDeptId = assignFacultyTarget.department_id || assignFacultyTarget.department?.department_id;
@@ -279,8 +319,11 @@ export function DirectorDashboardClient({
       programCode: editProgramCode,
       includeGeneralEducation: editIncludeGE,
       searchQuery: editCourseSearchQuery,
+      yearLevel: editYearLevel || null,
+      semester: editSemester || null,
     });
-  }, [courses, assignFacultyTarget, editProgramCode, editIncludeGE, editCourseSearchQuery]);
+  }, [courses, assignFacultyTarget, editProgramCode, editIncludeGE, editCourseSearchQuery, editYearLevel, editSemester]);
+
 
   const handleRegisterInstructorSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -319,7 +362,16 @@ export function DirectorDashboardClient({
     const currentCourseIds = faculty.facultyCourses?.map((fc: any) => fc.course.course_id) || [];
     setEditCourseIds(currentCourseIds);
     setEditCourseSearchQuery("");
-    setEditProgramCode("");
+    
+    const targetDeptId = faculty.department_id || faculty.department?.department_id;
+    const targetDeptName = faculty.department?.department_name || departmentsList?.find((d) => d.department_id === targetDeptId)?.department_name;
+    const deptProgs = getProgramsForDepartment(targetDeptId, targetDeptName);
+    if (deptProgs.length > 0) {
+      setEditProgramCode(deptProgs[0].code);
+    } else {
+      setEditProgramCode("");
+    }
+    
     setEditIncludeGE(false);
     setAssignMessage(null);
     setAssignModalOpen(true);
@@ -1163,7 +1215,9 @@ export function DirectorDashboardClient({
             >
               All Categories ({facultyMembers.length})
             </button>
-            {departmentsList.map((d) => {
+            {departmentsList
+              .filter((d) => d.department_name !== "CITD")
+              .map((d) => {
               const count = facultyMembers.filter(
                 (f) => f.department?.department_name === d.department_name
               ).length;
@@ -1187,6 +1241,7 @@ export function DirectorDashboardClient({
           {/* Category / Department Grouped Sections */}
           <div className="space-y-8 pt-2">
             {departmentsList
+              .filter((d) => d.department_name !== "CITD")
               .map((dept) => {
                 const members = facultyMembers.filter((f) => {
                   if (f.department?.department_name !== dept.department_name) return false;
@@ -1215,161 +1270,101 @@ export function DirectorDashboardClient({
               .map((group) => (
                 <div key={group.department_id} className="space-y-4">
                   {/* Category Section Header Banner */}
-                  <div className="bg-slate-50/90 border-l-4 border-indigo-600 border-y border-r border-slate-200/80 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2.5 bg-indigo-100/90 text-indigo-700 rounded-xl shrink-0">
-                        <Building2 className="w-5 h-5" />
+                  <div className="bg-slate-100/80 border border-slate-200 rounded-2xl px-4 py-3 flex items-center justify-between shadow-2xs">
+                    <div className="flex items-center gap-2.5">
+                      <div className="p-1.5 bg-indigo-600 text-white rounded-lg shrink-0">
+                        <Building2 className="w-4 h-4" />
                       </div>
-                      <div>
-                        <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
-                          {group.department_name}
-                        </h3>
-                        <div className="flex flex-wrap items-center gap-1.5 mt-1 text-[11px]">
-                          <span className="text-slate-500 font-medium">Programs:</span>
-                          {getProgramsForDepartment(group.department_id || group.department_name).map(p => (
-                            <span key={p.code} className="text-[10px] font-extrabold px-2 py-0.5 rounded-md bg-white text-indigo-700 border border-indigo-200 shadow-2xs">
-                              {p.name} ({p.code})
-                            </span>
-                          ))}
-                        </div>
-                      </div>
+                      <h3 className="text-sm font-extrabold text-slate-900">
+                        {group.department_name}
+                      </h3>
                     </div>
-                    <span className="bg-indigo-100/90 text-indigo-800 border border-indigo-200 text-xs font-black px-3 py-1 rounded-full shadow-2xs self-start sm:self-auto">
-                      {group.members.length} {group.members.length === 1 ? "Instructor" : "Instructors"}
+                    <span className="text-[11px] font-extrabold text-slate-600 bg-white border border-slate-200 px-2.5 py-0.5 rounded-full shadow-2xs">
+                      {group.members.length} {group.members.length === 1 ? "Faculty Member" : "Faculty Members"}
                     </span>
                   </div>
 
-                  {/* Grid of Faculty Cards under this Category */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  {/* Minimalist Faculty List */}
+                  <div className="space-y-3">
                     {group.members.map((faculty) => {
                       const assigned = faculty.facultyCourses?.map((fc: any) => fc.course) || [];
-
-                      // Categorize assigned courses by subject category
-                      const categorizedCourses = assigned.reduce((acc: Record<string, any[]>, c: any) => {
-                        const code = (c.course_code || "").toUpperCase();
-                        const title = (c.course_title || "").toUpperCase();
-                        let categoryName = "Professional & Major Courses";
-                        if (
-                          code.startsWith("GE") ||
-                          code.startsWith("PATHFIT") ||
-                          code.startsWith("NSTP") ||
-                          code.includes("CDRM") ||
-                          code.includes("ITCH") ||
-                          title.includes("GENERAL EDUCATION") ||
-                          title.includes("TECHNICAL COMM")
-                        ) {
-                          categoryName = "General Education (GE)";
-                        } else if (code.startsWith("ITD") || code.startsWith("ELECTIVE")) {
-                          categoryName = "Elective Courses";
-                        }
-                        if (!acc[categoryName]) acc[categoryName] = [];
-                        acc[categoryName].push(c);
-                        return acc;
-                      }, {});
 
                       return (
                         <div
                           key={faculty.faculty_id}
-                          className="border border-slate-200/90 hover:border-indigo-300 rounded-3xl p-5 hover:shadow-lg transition-all duration-300 bg-white flex flex-col justify-between gap-5 group"
+                          className="bg-white border border-slate-200/90 rounded-2xl p-4 shadow-2xs hover:border-indigo-300 hover:shadow-sm transition-all space-y-3"
                         >
-                          <div className="space-y-4">
-                            {/* Faculty Header Card */}
-                            <div className="flex justify-between items-start gap-3">
-                              <div className="flex items-center gap-3.5">
-                                <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-indigo-700 to-indigo-500 text-white font-extrabold flex items-center justify-center text-sm shadow-md shadow-indigo-500/20 shrink-0">
-                                  {faculty.first_name[0]}{faculty.last_name[0]}
-                                </div>
-                                <div>
-                                  <h3 className="text-sm font-extrabold text-slate-900 group-hover:text-indigo-900 transition-colors">
-                                    {faculty.first_name} {faculty.middle_name ? `${faculty.middle_name.charAt(0)}. ` : ""}{faculty.last_name}
-                                  </h3>
-                                  <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                                    <span className="text-[11px] text-slate-500 font-mono font-medium">
-                                      {faculty.user?.institutional_id || `ID: ${faculty.faculty_id}`}
+                          {/* Row 1: Profile & Action Button */}
+                          <div className="flex flex-wrap items-center justify-between gap-3 pb-2.5 border-b border-slate-100">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-xl bg-indigo-700 text-white font-extrabold text-xs flex items-center justify-center shrink-0 shadow-2xs">
+                                {faculty.first_name[0]}{faculty.last_name[0]}
+                              </div>
+                              <div>
+                                <h4 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
+                                  {faculty.first_name} {faculty.middle_name ? `${faculty.middle_name.charAt(0)}. ` : ""}{faculty.last_name}
+                                </h4>
+                                <div className="flex items-center gap-2 mt-0.5 text-[11px]">
+                                  <span className="font-mono text-slate-500 font-semibold">
+                                    {faculty.user?.institutional_id || `ID: ${faculty.faculty_id}`}
+                                  </span>
+                                  {faculty.user?.username && (
+                                    <span className="text-[10px] text-indigo-700 bg-indigo-50 border border-indigo-100 font-bold px-1.5 py-0.2 rounded-md">
+                                      @{faculty.user.username}
                                     </span>
-                                    {faculty.user?.username && (
-                                      <span className="text-[10px] text-indigo-600 bg-indigo-50 border border-indigo-100 font-bold px-1.5 py-0.2 rounded-md">
-                                        @{faculty.user.username}
-                                      </span>
-                                    )}
-                                  </div>
+                                  )}
                                 </div>
                               </div>
-
-                              {faculty.department?.department_name && (
-                                <DepartmentBadge department={faculty.department.department_name} size="sm" />
-                              )}
                             </div>
 
-                            {/* Categorized Assigned Courses Section */}
-                            <div className="pt-3 border-t border-slate-100 space-y-2.5">
-                              <div className="flex items-center justify-between text-[11px] font-bold text-slate-700">
-                                <span className="flex items-center gap-1.5">
-                                  <BookOpen className="w-3.5 h-3.5 text-indigo-600" />
-                                  Assigned Teaching Load
-                                </span>
-                                <span className="bg-indigo-50 text-indigo-700 border border-indigo-200/80 px-2 py-0.5 rounded-full text-[10px] font-black">
-                                  {assigned.length} {assigned.length === 1 ? "Subject" : "Subjects"}
-                                </span>
-                              </div>
-
-                              {assigned.length > 0 ? (
-                                <div className="space-y-2.5 max-h-40 overflow-y-auto pr-1">
-                                  {Object.entries(categorizedCourses).map(([catName, catCourses]) => {
-                                    let badgeColor = "bg-indigo-50 text-indigo-900 border-indigo-200/80";
-                                    let dotColor = "bg-indigo-500";
-                                    if (catName.includes("General")) {
-                                      badgeColor = "bg-emerald-50 text-emerald-900 border-emerald-200/80";
-                                      dotColor = "bg-emerald-500";
-                                    } else if (catName.includes("Elective")) {
-                                      badgeColor = "bg-amber-50 text-amber-900 border-amber-200/80";
-                                      dotColor = "bg-amber-500";
-                                    }
-
-                                    return (
-                                      <div key={catName} className="space-y-1.5">
-                                        <div className="text-[10px] font-black uppercase text-slate-500 tracking-wider flex items-center gap-1.5">
-                                          <span className={`w-1.5 h-1.5 rounded-full ${dotColor}`} />
-                                          {catName} ({(catCourses as any[]).length})
-                                        </div>
-                                        <div className="flex flex-wrap gap-1.5">
-                                          {(catCourses as any[]).map((c: any) => (
-                                            <span
-                                              key={c.course_id}
-                                              className={`inline-flex items-center gap-1 text-[10px] font-bold border px-2.5 py-1 rounded-xl shadow-2xs transition-all hover:scale-[1.02] ${badgeColor}`}
-                                              title={c.course_title}
-                                            >
-                                              <span className="font-mono font-black">{c.course_code}</span>
-                                              <span className="max-w-[140px] truncate text-[9.5px] font-medium opacity-90">
-                                                {c.course_title}
-                                              </span>
-                                            </span>
-                                          ))}
-                                        </div>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              ) : (
-                                <div className="bg-amber-50/80 border border-dashed border-amber-200 rounded-2xl p-3 text-center">
-                                  <p className="text-[11px] text-amber-700 font-bold">
-                                    No teaching subjects currently assigned.
-                                  </p>
-                                </div>
-                              )}
+                            <div className="flex items-center gap-2">
+                              <span className="text-[11px] font-extrabold text-slate-600 bg-slate-100 border border-slate-200/80 px-2.5 py-1 rounded-xl">
+                                {assigned.length} {assigned.length === 1 ? "Subject" : "Subjects"}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleOpenAssignModal(faculty)}
+                                className="inline-flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs px-3.5 py-1.5 rounded-xl shadow-xs transition-all cursor-pointer"
+                              >
+                                <BookOpen className="w-3.5 h-3.5" />
+                                <span>Assign / Edit</span>
+                              </button>
                             </div>
                           </div>
 
-                          <div className="pt-3 border-t border-slate-100 flex justify-end">
-                            <button
-                              type="button"
-                              onClick={() => handleOpenAssignModal(faculty)}
-                              className="inline-flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs px-4 py-2 rounded-xl shadow-xs hover:shadow-md transition-all cursor-pointer"
-                            >
-                              <BookOpen className="w-3.5 h-3.5" />
-                              <span>Assign / Edit Subjects</span>
-                            </button>
-                          </div>
+                          {/* Row 2: Minimalist Subject List */}
+                          {assigned.length > 0 ? (
+                            <div className="flex flex-wrap gap-1.5 pt-0.5">
+                              {assigned.map((c: any) => {
+                                const code = (c.course_code || "").toUpperCase();
+                                const isGE = code.startsWith("GE") || code.startsWith("PATHFIT") || code.startsWith("NSTP") || code.includes("CDRM") || code.includes("ITCH");
+                                const isElective = code.startsWith("ITD") || code.startsWith("ELECTIVE");
+
+                                const styleClass = isGE
+                                  ? "bg-emerald-50/90 text-emerald-950 border-emerald-200"
+                                  : isElective
+                                  ? "bg-amber-50/90 text-amber-950 border-amber-200"
+                                  : "bg-indigo-50/90 text-indigo-950 border-indigo-200";
+
+                                return (
+                                  <span
+                                    key={c.course_id}
+                                    className={`inline-flex items-center gap-1.5 text-[11px] font-bold border px-2.5 py-1 rounded-xl shadow-2xs ${styleClass}`}
+                                    title={c.course_title}
+                                  >
+                                    <span className="font-mono font-black">{c.course_code}</span>
+                                    <span className="max-w-[220px] truncate text-[10px] font-medium opacity-90">
+                                      {c.course_title}
+                                    </span>
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <p className="text-[11px] text-slate-400 font-medium italic">
+                              No subjects assigned yet for this instructor.
+                            </p>
+                          )}
                         </div>
                       );
                     })}
@@ -1437,9 +1432,10 @@ export function DirectorDashboardClient({
 
       {/* REGISTER INSTRUCTOR MODAL */}
       {registerModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-lg w-full shadow-2xl border border-slate-200 my-8">
-            <div className="flex justify-between items-start mb-6">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4 sm:p-6">
+          <div className="bg-white rounded-3xl max-w-3xl sm:max-w-4xl w-full shadow-2xl border border-slate-200 flex flex-col max-h-[90vh] overflow-hidden my-auto">
+            {/* Modal Header (Fixed Top) */}
+            <div className="flex justify-between items-center px-6 py-5 border-b border-slate-100 shrink-0 bg-white">
               <div className="flex items-center gap-3">
                 <div className="bg-emerald-100 text-emerald-700 p-2.5 rounded-2xl">
                   <UserPlus className="w-6 h-6" />
@@ -1451,14 +1447,14 @@ export function DirectorDashboardClient({
               </div>
               <button 
                 onClick={() => setRegisterModalOpen(false)} 
-                className="text-slate-400 hover:text-slate-600 p-1 rounded-full hover:bg-slate-100 transition-colors"
+                className="text-slate-400 hover:text-slate-600 p-2 rounded-full hover:bg-slate-100 transition-colors cursor-pointer"
               >
-                <X className="w-5 h-5" />
+                <X className="w-6 h-6" />
               </button>
             </div>
 
             {regSuccess ? (
-              <div className="space-y-6">
+              <div className="p-6 sm:p-8 space-y-6 overflow-y-auto flex-1 font-sans">
                 <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center space-y-3">
                   <div className="w-12 h-12 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center mx-auto">
                     <CheckCircle className="w-7 h-7" />
@@ -1489,22 +1485,23 @@ export function DirectorDashboardClient({
                       setPassword("");
                       setConfirmPassword("");
                     }}
-                    className="px-5 py-2.5 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors"
+                    className="px-5 py-2.5 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
                   >
                     Register Another Instructor
                   </button>
                   <button
                     type="button"
                     onClick={() => setRegisterModalOpen(false)}
-                    className="px-5 py-2.5 text-xs font-extrabold text-white bg-indigo-700 hover:bg-indigo-800 rounded-xl shadow-md transition-colors"
+                    className="px-5 py-2.5 text-xs font-extrabold text-white bg-indigo-700 hover:bg-indigo-800 rounded-xl shadow-md transition-colors cursor-pointer"
                   >
                     Done
                   </button>
                 </div>
               </div>
             ) : (
-              <form onSubmit={handleRegisterInstructorSubmit} className="space-y-4">
-                {regError && (
+              <form onSubmit={handleRegisterInstructorSubmit} className="flex flex-col flex-1 overflow-hidden">
+                <div className="p-6 sm:p-8 space-y-5 overflow-y-auto flex-1 font-sans">
+                  {regError && (
                   <div className="bg-rose-50 border border-rose-200 text-rose-700 p-3.5 rounded-xl text-xs flex items-center gap-2">
                     <AlertCircle className="w-4 h-4 shrink-0" />
                     <span>{regError}</span>
@@ -1565,23 +1562,61 @@ export function DirectorDashboardClient({
                   </div>
                 </div>
 
+                {/* 1. Academic Program Selection (Selected First) */}
                 <div>
                   <label className="text-xs font-bold text-slate-700 block mb-1">
-                    Department Assignment <span className="text-rose-500">*</span>
+                    Academic Program <span className="text-rose-500">*</span>
                   </label>
                   <select
                     required
-                    value={deptId}
-                    onChange={(e) => handleDeptChange(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-xs font-medium text-slate-800 p-3 rounded-xl outline-none"
+                    value={regProgramCode}
+                    onChange={(e) => handleProgramChange(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-xs font-bold text-slate-800 p-3 rounded-xl outline-none cursor-pointer"
                   >
-                    <option value="" disabled>-- Select Department --</option>
-                    {departmentsList.map((d) => (
-                      <option key={d.department_id} value={d.department_id}>
-                        {d.department_name}
-                      </option>
-                    ))}
+                    <option value="" disabled>-- Select Academic Program --</option>
+                    <option value="BSA">Bachelor of Science in Agriculture (BSA)</option>
+                    <option value="BEED">Bachelor of Elementary Education (BEED)</option>
+                    <option value="BSED">Bachelor of Secondary Education (BSED)</option>
+                    <option value="BSInfoTech">Bachelor of Science in Information Technology (BSInfoTech)</option>
+                    <option value="BSIT">Bachelor of Science in Industrial Technology (BSIT)</option>
+                    <option value="BSHM">Bachelor of Science in Hospitality Management (BSHM)</option>
+                    <option value="BSTM">Bachelor of Science in Tourism Management (BSTM)</option>
                   </select>
+
+                  {/* Display majors if BSED or BSIT selected */}
+                  {regProgramCode === "BSED" && (
+                    <div className="mt-1 text-[11px] text-slate-500 font-medium flex items-center gap-1.5 flex-wrap">
+                      <span className="font-semibold text-slate-700">Majors:</span>
+                      <span className="bg-slate-100 text-slate-700 text-[10px] font-bold px-2 py-0.5 rounded-md border border-slate-200">English</span>
+                      <span className="bg-slate-100 text-slate-700 text-[10px] font-bold px-2 py-0.5 rounded-md border border-slate-200">Science</span>
+                      <span className="bg-slate-100 text-slate-700 text-[10px] font-bold px-2 py-0.5 rounded-md border border-slate-200">Mathematics</span>
+                    </div>
+                  )}
+                  {regProgramCode === "BSIT" && (
+                    <div className="mt-1 text-[11px] text-slate-500 font-medium flex items-center gap-1.5 flex-wrap">
+                      <span className="font-semibold text-slate-700">Majors:</span>
+                      <span className="bg-slate-100 text-slate-700 text-[10px] font-bold px-2 py-0.5 rounded-md border border-slate-200">ARCHITECTURE</span>
+                      <span className="bg-slate-100 text-slate-700 text-[10px] font-bold px-2 py-0.5 rounded-md border border-slate-200">AUTOMOTIVE</span>
+                      <span className="bg-slate-100 text-slate-700 text-[10px] font-bold px-2 py-0.5 rounded-md border border-slate-200">ELECTRONICS</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* 2. Department Assignment (Automated & Non-editable - Minimalist) */}
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">
+                    Department <span className="text-slate-400 font-normal">(Auto-assigned)</span>
+                  </label>
+                  <input
+                    type="text"
+                    disabled
+                    value={
+                      deptId
+                        ? departmentsList?.find((d) => String(d.department_id) === String(deptId))?.department_name || "Assigned Department"
+                        : "Select a program above"
+                    }
+                    className="w-full bg-slate-100 border border-slate-200 text-xs font-bold text-slate-700 p-3 rounded-xl cursor-not-allowed outline-none"
+                  />
                 </div>
 
                 {/* Course / Subject Assignment Section */}
@@ -1612,29 +1647,37 @@ export function DirectorDashboardClient({
                     </div>
                   ) : (
                     <>
-                      {/* Program & General Education Filters */}
+                      {/* Year Level, Semester & GE Filters */}
                       <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-200/60">
-                        {getProgramsForDepartment(deptId).length > 1 ? (
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-[11px] font-bold text-slate-600">Program:</span>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <div className="flex items-center gap-1 text-[11px] font-bold text-slate-600">
+                            <span>Year:</span>
                             <select
-                              value={regProgramCode}
-                              onChange={(e) => setRegProgramCode(e.target.value)}
-                              className="bg-white border border-slate-200 text-[11px] font-semibold text-slate-800 rounded-lg px-2 py-1 outline-none focus:ring-2 focus:ring-indigo-500/20"
+                              value={regYearLevel}
+                              onChange={(e) => setRegYearLevel(Number(e.target.value))}
+                              className="bg-white border border-slate-200 text-[11px] font-semibold text-slate-800 rounded-lg px-1.5 py-1 outline-none cursor-pointer"
                             >
-                              <option value="">All Department Programs</option>
-                              {getProgramsForDepartment(deptId).map((p) => (
-                                <option key={p.code} value={p.code}>
-                                  {p.name} ({p.code})
-                                </option>
-                              ))}
+                              <option value={0}>All Years</option>
+                              <option value={1}>1st Year</option>
+                              <option value={2}>2nd Year</option>
+                              <option value={3}>3rd Year</option>
+                              <option value={4}>4th Year</option>
                             </select>
                           </div>
-                        ) : (
-                          <div className="text-[11px] text-slate-600 font-medium">
-                            Program: <span className="font-bold text-slate-800">{getProgramsForDepartment(deptId)[0]?.name || "Department Core"}</span>
+
+                          <div className="flex items-center gap-1 text-[11px] font-bold text-slate-600">
+                            <span>Sem:</span>
+                            <select
+                              value={regSemester}
+                              onChange={(e) => setRegSemester(Number(e.target.value))}
+                              className="bg-white border border-slate-200 text-[11px] font-semibold text-slate-800 rounded-lg px-1.5 py-1 outline-none cursor-pointer"
+                            >
+                              <option value={0}>All Semesters</option>
+                              <option value={1}>1st Sem</option>
+                              <option value={2}>2nd Sem</option>
+                            </select>
                           </div>
-                        )}
+                        </div>
 
                         <label className="flex items-center gap-1.5 text-[11px] font-medium text-slate-600 cursor-pointer select-none bg-white border border-slate-200/80 px-2 py-1 rounded-lg hover:border-slate-300">
                           <input
@@ -1643,7 +1686,7 @@ export function DirectorDashboardClient({
                             onChange={(e) => setRegIncludeGE(e.target.checked)}
                             className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 w-3 h-3"
                           />
-                          <span>Include General Education (GE)</span>
+                          <span>Include GE Subjects</span>
                         </label>
                       </div>
 
@@ -1685,9 +1728,10 @@ export function DirectorDashboardClient({
                       )}
 
                       {/* Checkbox List of Available Department Courses */}
-                      <div className="max-h-44 overflow-y-auto space-y-1 bg-white border border-slate-200 rounded-xl p-2">
+                      <div className="max-h-48 overflow-y-auto space-y-1 bg-white border border-slate-200 rounded-xl p-2">
                         {availableRegisterCourses.map((c) => {
                           const isChecked = selectedCourseIds.includes(c.course_id);
+                          const yearSem = getExpectedYearAndSemForCourse(c.course_code, c.course_title, regProgramCode || undefined);
                           return (
                             <label
                               key={c.course_id}
@@ -1712,7 +1756,12 @@ export function DirectorDashboardClient({
                               <span className="font-mono text-[11px] font-black text-slate-900 bg-slate-100 px-1.5 py-0.5 rounded shrink-0">
                                 {c.course_code}
                               </span>
-                              <span className="truncate">{c.course_title}</span>
+                              <span className="truncate flex-1">{c.course_title}</span>
+                              {yearSem && (
+                                <span className="text-[9.5px] font-extrabold bg-amber-50 text-amber-800 border border-amber-200 px-1.5 py-0.5 rounded shrink-0">
+                                  Yr {yearSem.yearLevel} Sem {yearSem.semester}
+                                </span>
+                              )}
                             </label>
                           );
                         })}
@@ -1763,19 +1812,21 @@ export function DirectorDashboardClient({
                     />
                   </div>
                 </div>
+                </div>
 
-                <div className="pt-4 flex justify-end gap-3 border-t border-slate-100">
+                {/* Fixed Sticky Footer */}
+                <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/90 flex justify-end gap-3 shrink-0">
                   <button
                     type="button"
                     onClick={() => setRegisterModalOpen(false)}
-                    className="px-5 py-2.5 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors"
+                    className="px-5 py-2.5 text-xs font-bold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 rounded-xl transition-colors cursor-pointer"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={isSubmittingReg}
-                    className="px-5 py-2.5 text-xs font-extrabold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl flex items-center gap-2 disabled:opacity-50 shadow-md transition-all"
+                    className="px-5 py-2.5 text-xs font-extrabold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl flex items-center gap-2 disabled:opacity-50 shadow-md transition-all cursor-pointer"
                   >
                     {isSubmittingReg ? (
                       <>
@@ -1798,9 +1849,10 @@ export function DirectorDashboardClient({
 
       {/* ASSIGN / EDIT COURSES MODAL */}
       {assignModalOpen && assignFacultyTarget && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-lg w-full shadow-2xl border border-slate-200 my-8 space-y-5">
-            <div className="flex justify-between items-start">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4 sm:p-6">
+          <div className="bg-white rounded-3xl max-w-3xl sm:max-w-4xl w-full shadow-2xl border border-slate-200 flex flex-col max-h-[90vh] overflow-hidden my-auto">
+            {/* Modal Header (Fixed Top) */}
+            <div className="flex justify-between items-center px-6 py-5 border-b border-slate-100 shrink-0 bg-white">
               <div className="flex items-center gap-3">
                 <div className="bg-indigo-100 text-indigo-700 p-2.5 rounded-2xl">
                   <BookOpen className="w-6 h-6" />
@@ -1816,11 +1868,14 @@ export function DirectorDashboardClient({
               </div>
               <button
                 onClick={() => setAssignModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 p-1 rounded-full hover:bg-slate-100 transition-colors"
+                className="text-slate-400 hover:text-slate-600 p-2 rounded-full hover:bg-slate-100 transition-colors cursor-pointer"
               >
-                <X className="w-5 h-5" />
+                <X className="w-6 h-6" />
               </button>
             </div>
+
+            {/* Modal Body (Scrollable) */}
+            <div className="p-6 sm:p-8 space-y-5 overflow-y-auto flex-1 font-sans">
 
             {assignMessage && (
               <div className="bg-rose-50 border border-rose-200 text-rose-700 p-3 rounded-xl text-xs flex items-center gap-2">
@@ -1829,44 +1884,88 @@ export function DirectorDashboardClient({
               </div>
             )}
 
-            {assignFacultyTarget && (
-              <div className="bg-indigo-50/60 border border-indigo-100 rounded-xl p-3 flex flex-wrap items-center justify-between gap-2 text-xs">
-                <div>
-                  <span className="text-slate-500">Department:</span>{" "}
-                  <strong className="text-indigo-950 font-bold">
-                    {assignFacultyTarget.department?.department_name ||
-                      departmentsList.find((d) => d.department_id === assignFacultyTarget.department_id)?.department_name ||
-                      "Assigned Department"}
-                  </strong>
-                </div>
-                {getProgramsForDepartment(assignFacultyTarget.department_id || assignFacultyTarget.department?.department_id).length > 1 && (
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[11px] font-bold text-slate-600">Program:</span>
-                    <select
-                      value={editProgramCode}
-                      onChange={(e) => setEditProgramCode(e.target.value)}
-                      className="bg-white border border-slate-200 text-[11px] font-semibold text-slate-800 rounded-lg px-2 py-1 outline-none focus:ring-2 focus:ring-indigo-500/20"
-                    >
-                      <option value="">All Department Programs</option>
-                      {getProgramsForDepartment(assignFacultyTarget.department_id || assignFacultyTarget.department?.department_id).map((p) => (
-                        <option key={p.code} value={p.code}>
-                          {p.name} ({p.code})
-                        </option>
-                      ))}
-                    </select>
+            {assignFacultyTarget && (() => {
+              const targetDeptId = assignFacultyTarget.department_id || assignFacultyTarget.department?.department_id;
+              const deptName = assignFacultyTarget.department?.department_name ||
+                departmentsList.find((d) => d.department_id === targetDeptId)?.department_name ||
+                "Assigned Department";
+              const deptProgs = getProgramsForDepartment(targetDeptId, deptName);
+
+              return (
+                <div className="bg-indigo-50/60 border border-indigo-100 rounded-xl p-3 flex flex-wrap items-center justify-between gap-3 text-xs">
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <div>
+                      <span className="text-slate-500">Department:</span>{" "}
+                      <strong className="text-indigo-950 font-bold">{deptName}</strong>
+                    </div>
+
+                    {deptProgs.length === 1 ? (
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-slate-500 font-medium">Academic Program:</span>
+                        <span className="text-[11px] font-bold text-slate-800 bg-white border border-slate-200 rounded-lg px-2.5 py-1 select-none">
+                          {deptProgs[0].name} ({deptProgs[0].code})
+                        </span>
+                      </div>
+                    ) : deptProgs.length > 1 ? (
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-slate-500 font-medium">Academic Program:</span>
+                        <select
+                          value={editProgramCode}
+                          onChange={(e) => setEditProgramCode(e.target.value)}
+                          className="bg-white border border-slate-200 text-[11px] font-semibold text-slate-800 rounded-lg px-2 py-1 outline-none cursor-pointer focus:ring-2 focus:ring-indigo-500/20"
+                        >
+                          {deptProgs.map((p) => (
+                            <option key={p.code} value={p.code}>
+                              {p.name} ({p.code})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    ) : null}
                   </div>
-                )}
-                <label className="flex items-center gap-1.5 text-[11px] font-medium text-slate-600 cursor-pointer select-none bg-white border border-slate-200/80 px-2 py-1 rounded-lg hover:border-slate-300">
-                  <input
-                    type="checkbox"
-                    checked={editIncludeGE}
-                    onChange={(e) => setEditIncludeGE(e.target.checked)}
-                    className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 w-3 h-3"
-                  />
-                  <span>Include GE Subjects</span>
-                </label>
-              </div>
-            )}
+
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <label className="flex items-center gap-1.5 text-[11px] font-medium text-slate-600 cursor-pointer select-none bg-white border border-slate-200/80 px-2 py-1 rounded-lg hover:border-slate-300">
+                      <input
+                        type="checkbox"
+                        checked={editIncludeGE}
+                        onChange={(e) => setEditIncludeGE(e.target.checked)}
+                        className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5 cursor-pointer"
+                      />
+                      <span>Include GE Subjects</span>
+                    </label>
+
+                    <div className="flex items-center gap-1 text-[11px] font-bold text-slate-600">
+                      <span>Year:</span>
+                      <select
+                        value={editYearLevel}
+                        onChange={(e) => setEditYearLevel(Number(e.target.value))}
+                        className="bg-white border border-slate-200 text-[11px] font-semibold text-slate-800 rounded-lg px-1.5 py-1 outline-none cursor-pointer"
+                      >
+                        <option value={0}>All Years</option>
+                        <option value={1}>1st Year</option>
+                        <option value={2}>2nd Year</option>
+                        <option value={3}>3rd Year</option>
+                        <option value={4}>4th Year</option>
+                      </select>
+                    </div>
+
+                    <div className="flex items-center gap-1 text-[11px] font-bold text-slate-600">
+                      <span>Sem:</span>
+                      <select
+                        value={editSemester}
+                        onChange={(e) => setEditSemester(Number(e.target.value))}
+                        className="bg-white border border-slate-200 text-[11px] font-semibold text-slate-800 rounded-lg px-1.5 py-1 outline-none cursor-pointer"
+                      >
+                        <option value={0}>All Semesters</option>
+                        <option value={1}>1st Sem</option>
+                        <option value={2}>2nd Sem</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
 
             <div className="space-y-3">
               <div className="flex items-center justify-between">
@@ -1950,12 +2049,14 @@ export function DirectorDashboardClient({
                 )}
               </div>
             </div>
+            </div>
 
-            <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
+            {/* Modal Footer (Fixed Bottom) */}
+            <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/90 flex justify-end gap-3 shrink-0">
               <button
                 type="button"
                 onClick={() => setAssignModalOpen(false)}
-                className="px-5 py-2.5 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors"
+                className="px-5 py-2.5 text-xs font-bold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 rounded-xl transition-colors cursor-pointer"
               >
                 Cancel
               </button>

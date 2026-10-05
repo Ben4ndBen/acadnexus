@@ -8,6 +8,7 @@ import { ChairDashboardClient } from "@/app/components/ChairDashboardClient";
 
 import { getCoursesCached } from "@/lib/cache";
 import { ensureChairsAndDepartmentsExist } from "@/lib/chairServer";
+import { ensureBsitCoursesExist } from "@/lib/bsitCurriculumServer";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +25,7 @@ export default async function ChairDashboard() {
   const role = user.user_metadata?.role;
   const institutionalId = user.user_metadata?.institutional_id;
 
-  if (role !== "Chair") {
+  if (role !== "Chair" && role !== "ProgramChair") {
     redirect("/");
   }
 
@@ -117,6 +118,9 @@ export default async function ChairDashboard() {
   // Extract all department exams
   const departmentExams = department.faculty.flatMap(f => f.examinations);
 
+  // Ensure all curriculum subjects exist in database
+  await ensureBsitCoursesExist();
+
   // Fetch courses for assignment using cached query
   const courses = await getCoursesCached();
 
@@ -169,6 +173,8 @@ export default async function ChairDashboard() {
           chairUserId={dbUser.user_id}
           departmentId={department.department_id}
           departmentName={department.department_name}
+          isProgramChair={dbUser.role === "ProgramChair" || !!chair.is_program_chair}
+          chairTitle={dbUser.role === "ProgramChair" || chair.is_program_chair ? "Program Chairperson" : "Department Chairperson"}
           facultyMembers={formattedFaculty as any}
           pendingApprovals={formattedApprovals as any}
           departmentExams={departmentExams as any}

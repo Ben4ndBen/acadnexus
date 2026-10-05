@@ -204,7 +204,10 @@ export function getDepartmentKey(identifier?: string | null): DepartmentKey {
     str.includes("bsinfotech") ||
     str.includes("information technology") ||
     str === "chair_ict" ||
+    str === "chair-ict" ||
+    str === "faculty_ict" ||
     str === "faculty-ict" ||
+    str === "faculty_it" ||
     str === "faculty-001"
   ) {
     return "ict";
@@ -216,15 +219,14 @@ export function getDepartmentKey(identifier?: string | null): DepartmentKey {
     str.includes("indtech") ||
     str.includes("bsindtech") ||
     str === "bsit" ||
-    str === "it" ||
     str.includes("it department") ||
     str.includes("itd department") ||
     str === "chair_indtech" ||
     str === "chair_itd" ||
-    str === "chair_it" ||
+    str === "chair-itd" ||
     str === "faculty-indtech" ||
-    str === "faculty-itd" ||
-    str === "faculty-it"
+    str === "faculty_itd" ||
+    str === "faculty-itd"
   ) {
     return "itd";
   }

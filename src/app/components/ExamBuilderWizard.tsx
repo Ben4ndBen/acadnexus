@@ -291,7 +291,7 @@ export function ExamBuilderWizard({
   );
 
   // 2. Assigned Subjects (Faculty's load)
-  const effectiveAssignedSubjects = assignedSubjects.length > 0 ? assignedSubjects : courses;
+  const effectiveAssignedSubjects = assignedSubjects;
   const [courseId, setCourseId] = useState<number>(exam.course_id || effectiveAssignedSubjects[0]?.course_id || 0);
 
   // Selected Course Object (for auto-populating course code and course title)
@@ -385,7 +385,7 @@ export function ExamBuilderWizard({
     }
     setLoadingStudents(true);
     try {
-      const res = await getAssignedStudentsForCourse(newId);
+      const res = await getAssignedStudentsForCourse(newId, facultyId);
       if (res.success && res.students) {
         setAssignedStudents(res.students);
         setSelectedStudentIds(res.students.map(s => s.student_id));
@@ -754,7 +754,7 @@ export function ExamBuilderWizard({
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   // Step 1 Validation
-  const isConfigValid = title.trim() !== "" && courseId > 0 && timeLimit > 0 && examDate.trim() !== "";
+  const isConfigValid = title.trim() !== "" && courseId > 0 && timeLimit > 0 && examDate.trim() !== "" && effectiveAssignedSubjects.length > 0;
 
   // Question Image Upload handlers
   const [uploadingImage, setUploadingImage] = useState<boolean>(false);
@@ -1416,20 +1416,32 @@ export function ExamBuilderWizard({
                 Select from your official teaching load. Course code and title will load automatically.
               </p>
 
-              <div className="space-y-2">
-                <label className="text-xs font-extrabold text-slate-700 block">Select Assigned Subject <span className="text-rose-500">*</span></label>
-                <select
-                  value={courseId}
-                  onChange={(e) => handleCourseChange(Number(e.target.value))}
-                  className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 text-sm font-bold text-slate-800 px-4 py-2.5 rounded-xl transition-all duration-300"
-                >
-                  {effectiveAssignedSubjects.map((c) => (
-                    <option key={c.course_id} value={c.course_id}>
-                      {c.course_code} — {c.course_title}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {effectiveAssignedSubjects.length === 0 ? (
+                <div className="p-4 bg-amber-50 border border-amber-200/80 rounded-2xl space-y-1 text-amber-900">
+                  <div className="flex items-center gap-2 font-bold text-xs">
+                    <AlertCircle className="w-4 h-4 text-amber-600" />
+                    <span>No Teaching Subjects Assigned Yet</span>
+                  </div>
+                  <p className="text-[11px] text-amber-800 leading-relaxed">
+                    The Campus Director has not assigned any teaching subjects/courses to your faculty load yet. You cannot build or submit an examination until subjects are officially assigned by the Director.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <label className="text-xs font-extrabold text-slate-700 block">Select Assigned Subject <span className="text-rose-500">*</span></label>
+                  <select
+                    value={courseId}
+                    onChange={(e) => handleCourseChange(Number(e.target.value))}
+                    className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 text-sm font-bold text-slate-800 px-4 py-2.5 rounded-xl transition-all duration-300"
+                  >
+                    {effectiveAssignedSubjects.map((c) => (
+                      <option key={c.course_id} value={c.course_id}>
+                        {c.course_code} — {c.course_title}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               {/* Course Code & Title Syllabus Badges */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
