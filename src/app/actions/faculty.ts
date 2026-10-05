@@ -6,12 +6,84 @@ import { ExamStatus } from "@prisma/client";
 import { getExpectedYearLevelForCourse, getExpectedYearAndSemForCourse } from "@/lib/bsitCurriculum";
 import { getProgramsForDepartment } from "@/lib/courseDepartmentMapping";
 
-export async function updateFacultyProfile(facultyId: number, firstName: string, lastName: string, middleName?: string) {
-  if (!firstName || !lastName) {
-    return { error: "First name and last name are required." };
-  }
-
+export async function updateFacultyProfile(
+  facultyId: number,
+  formDataOrFirstName: FormData | string,
+  lastNameArg?: string,
+  middleNameArg?: string
+) {
   try {
+    let firstName = "";
+    let lastName = "";
+    let middleName: string | null = null;
+    let removeImage = false;
+    let profileImageFile: File | null = null;
+
+    if (formDataOrFirstName instanceof FormData) {
+      firstName = (formDataOrFirstName.get("firstName") as string) || "";
+      middleName = (formDataOrFirstName.get("middleName") as string) || null;
+      lastName = (formDataOrFirstName.get("lastName") as string) || "";
+      removeImage = formDataOrFirstName.get("removeImage") === "true";
+      profileImageFile = formDataOrFirstName.get("profileImage") as File | null;
+    } else {
+      firstName = formDataOrFirstName;
+      lastName = lastNameArg || "";
+      middleName = middleNameArg || null;
+    }
+
+    if (!firstName || !lastName) {
+      return { error: "First name and last name are required." };
+    }
+
+    const { writeFile, mkdir, unlink } = await import("fs/promises");
+    const { join } = await import("path");
+
+    const faculty = await db.faculty.findUnique({
+      where: { faculty_id: facultyId },
+    });
+
+    if (!faculty) {
+      return { error: "Faculty profile not found." };
+    }
+
+    let profileImagePath = faculty.profile_image;
+
+    // 1. Remove picture if requested
+    if (removeImage) {
+      if (profileImagePath && profileImagePath.startsWith("/uploads/profiles/")) {
+        try {
+          const oldPath = join(process.cwd(), "public", profileImagePath);
+          await unlink(oldPath);
+        } catch (e) {
+          // File might already be gone, ignore
+        }
+      }
+      profileImagePath = null;
+    } 
+    // 2. Upload/replace picture if new file provided
+    else if (profileImageFile && profileImageFile.size > 0 && profileImageFile.name !== "undefined") {
+      if (profileImagePath && profileImagePath.startsWith("/uploads/profiles/")) {
+        try {
+          const oldPath = join(process.cwd(), "public", profileImagePath);
+          await unlink(oldPath);
+        } catch (e) {
+          // ignore
+        }
+      }
+
+      const bytes = await profileImageFile.arrayBuffer();
+      const buffer = Buffer.from(bytes);
+
+      const uploadDir = join(process.cwd(), "public", "uploads", "profiles");
+      await mkdir(uploadDir, { recursive: true });
+
+      const uniqueFilename = `${facultyId}-${Date.now()}-${profileImageFile.name.replace(/[^a-zA-Z0-9.-]/g, "_")}`;
+      const absolutePath = join(uploadDir, uniqueFilename);
+      await writeFile(absolutePath, buffer);
+
+      profileImagePath = `/uploads/profiles/${uniqueFilename}`;
+    }
+
     const trimmedMiddle = middleName ? middleName.trim() : null;
     await db.faculty.update({
       where: { faculty_id: facultyId },
@@ -19,26 +91,27 @@ export async function updateFacultyProfile(facultyId: number, firstName: string,
         first_name: firstName.trim(),
         middle_name: trimmedMiddle,
         last_name: lastName.trim(),
+        profile_image: profileImagePath,
       },
     });
 
     const mi = trimmedMiddle ? `${trimmedMiddle.charAt(0).toUpperCase()}. ` : "";
-    // Log the profile update action
     await db.auditLog.create({
       data: {
         user_id: facultyId,
-        action_performed: `Updated profile details: ${firstName.trim()} ${mi}${lastName.trim()}`,
+        action_performed: `Updated profile details and picture: ${firstName.trim()} ${mi}${lastName.trim()}`,
         ip_address: "127.0.0.1",
       },
     });
 
     revalidatePath("/dashboard/faculty");
-    return { success: true };
+    return { success: true, profileImage: profileImagePath };
   } catch (err: any) {
     console.error("Error updating profile:", err);
     return { error: err.message || "Failed to update profile." };
   }
 }
+
 
 export async function updateExamStatus(examId: number, status: ExamStatus, userId: number) {
   try {

@@ -6,7 +6,7 @@ import {
   BookOpen, Award, FileText, ClipboardList, PenTool, CheckCircle, 
   User, Shield, Settings, Activity, Send, RotateCcw, AlertCircle, RefreshCw, Mail,
   Plus, Trash2, Calendar, Lock, Camera, Check, ShieldAlert, Loader2, ShieldCheck, Clock,
-  X, AlertTriangle, Archive, Search, Edit, GraduationCap, Users, Download, Layers
+  X, AlertTriangle, Archive, Search, Edit, GraduationCap, Users, Download, Layers, Upload
 } from "lucide-react";
 import { 
   updateFacultyProfile, updateExamStatus, createExamDraft, deleteExam, 
@@ -486,6 +486,9 @@ export function FacultyDashboardClient({
   const [firstName, setFirstName] = useState(faculty.first_name);
   const [middleName, setMiddleName] = useState(faculty.middle_name || "");
   const [lastName, setLastName] = useState(faculty.last_name);
+  const [profileImageFile, setProfileImageFile] = useState<File | null>(null);
+  const [profileImagePreview, setProfileImagePreview] = useState<string | null>(faculty.profile_image || null);
+  const [removeProfileImage, setRemoveProfileImage] = useState<boolean>(false);
   const [profileMessage, setProfileMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
 
@@ -825,16 +828,56 @@ export function FacultyDashboardClient({
     }
   };
 
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      setProfileMessage({ type: "error", text: "Selected image exceeds 5MB size limit. Please select a smaller photo." });
+      return;
+    }
+
+    setProfileImageFile(file);
+    setProfileImagePreview(URL.createObjectURL(file));
+    setRemoveProfileImage(false);
+    setProfileMessage(null);
+  };
+
+  const handleRemoveImage = () => {
+    setProfileImageFile(null);
+    setProfileImagePreview(null);
+    setRemoveProfileImage(true);
+    setProfileMessage(null);
+  };
+
   const handleProfileSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSavingProfile(true);
     setProfileMessage(null);
 
-    const res = await updateFacultyProfile(faculty.faculty_id, firstName, lastName, middleName);
+    const formData = new FormData();
+    formData.append("firstName", firstName);
+    formData.append("middleName", middleName);
+    formData.append("lastName", lastName);
+    formData.append("removeImage", String(removeProfileImage));
+    if (profileImageFile) {
+      formData.append("profileImage", profileImageFile);
+    }
+
+    const res = await updateFacultyProfile(faculty.faculty_id, formData);
     setIsSavingProfile(false);
     
     if (res.success) {
-      setProfileMessage({ type: "success", text: "Profile details updated successfully!" });
+      setProfileMessage({ type: "success", text: "Profile details & photo updated successfully!" });
+      if (res.profileImage !== undefined) {
+        setProfileImagePreview(res.profileImage);
+        faculty.profile_image = res.profileImage;
+      } else if (removeProfileImage) {
+        setProfileImagePreview(null);
+        faculty.profile_image = null;
+      }
+      setProfileImageFile(null);
+      setRemoveProfileImage(false);
       router.refresh();
     } else {
       setProfileMessage({ type: "error", text: res.error || "Failed to update profile." });
@@ -1162,11 +1205,11 @@ export function FacultyDashboardClient({
               <div className="p-6 flex flex-col items-center text-center space-y-4">
                 {/* Profile Image Frame */}
                 <div className="relative w-28 h-28 rounded-2xl overflow-hidden border-2 border-[#E2A123] bg-[#7A151A]/40 shadow-inner flex items-center justify-center shrink-0">
-                  {faculty.profile_image ? (
-                    <img src={faculty.profile_image} alt={`${faculty.first_name} ${faculty.last_name}`} className="w-full h-full object-cover" />
+                  {profileImagePreview ? (
+                    <img src={profileImagePreview} alt={`${firstName} ${lastName}`} className="w-full h-full object-cover" />
                   ) : (
                     <div className="w-full h-full bg-gradient-to-tr from-[#7A151A] to-amber-700 flex items-center justify-center text-white text-3xl font-black">
-                      {faculty.first_name.charAt(0)}{faculty.last_name.charAt(0)}
+                      {firstName.charAt(0)}{lastName.charAt(0)}
                     </div>
                   )}
                 </div>
@@ -2618,6 +2661,93 @@ export function FacultyDashboardClient({
                   {profileMessage.text}
                 </div>
               )}
+
+              {/* Profile Photo Management */}
+              <div className="bg-slate-50 border border-slate-200/80 p-5 rounded-2xl space-y-4">
+                <div className="flex flex-col sm:flex-row items-center gap-6">
+                  {/* Photo Avatar Preview Frame */}
+                  <div className="relative group/profileAvatar shrink-0">
+                    <div className="w-28 h-28 rounded-2xl overflow-hidden border-2 border-slate-300 bg-white flex items-center justify-center shadow-md relative">
+                      {profileImagePreview ? (
+                        <img
+                          src={profileImagePreview}
+                          alt={`${firstName} ${lastName}`}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-gradient-to-tr from-[#7A151A] to-amber-700 flex items-center justify-center text-white text-3xl font-black">
+                          {firstName.charAt(0)}{lastName.charAt(0)}
+                        </div>
+                      )}
+                      <label className="absolute inset-0 bg-slate-900/50 opacity-0 group-hover/profileAvatar:opacity-100 flex flex-col items-center justify-center text-white cursor-pointer transition-all duration-300">
+                        <Camera className="w-6 h-6 mb-1" />
+                        <span className="text-[10px] font-extrabold uppercase tracking-wider">Change</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={handleImageChange}
+                        />
+                      </label>
+                    </div>
+                    {profileImagePreview && (
+                      <span className="absolute -top-1.5 -right-1.5 bg-emerald-500 text-white p-1 rounded-full shadow-md border-2 border-white">
+                        <Check className="w-3 h-3" />
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Photo Description & Actions */}
+                  <div className="flex-1 space-y-3 text-center sm:text-left">
+                    <div>
+                      <div className="flex items-center justify-center sm:justify-start gap-2">
+                        <h3 className="text-sm font-extrabold text-slate-800">Profile Photo</h3>
+                        {profileImagePreview ? (
+                          <span className="text-[10px] bg-emerald-100 text-emerald-800 font-extrabold px-2.5 py-0.5 rounded-full border border-emerald-200">
+                            Custom Photo Active
+                          </span>
+                        ) : (
+                          <span className="text-[10px] bg-slate-200 text-slate-700 font-bold px-2.5 py-0.5 rounded-full border border-slate-300">
+                            Default Initials Avatar
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                        Upload, edit, or remove your profile picture. Your photo will be displayed on your digital faculty identity card and official reports.
+                      </p>
+                    </div>
+
+                    {/* Action Buttons: Add, Upload, Replace, Remove */}
+                    <div className="flex flex-wrap items-center justify-center sm:justify-start gap-3 pt-1">
+                      <label className="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-extrabold px-4 py-2.5 rounded-xl shadow-sm transition-all cursor-pointer flex items-center gap-2">
+                        <Upload className="w-3.5 h-3.5" />
+                        <span>{profileImagePreview ? "Upload New Photo" : "Add Profile Photo"}</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={handleImageChange}
+                        />
+                      </label>
+
+                      {profileImagePreview && (
+                        <button
+                          type="button"
+                          onClick={handleRemoveImage}
+                          className="bg-rose-50 hover:bg-rose-100 active:scale-95 text-rose-700 border border-rose-200 text-xs font-extrabold px-4 py-2.5 rounded-xl transition-all cursor-pointer flex items-center gap-2"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Remove Photo</span>
+                        </button>
+                      )}
+                    </div>
+
+                    <p className="text-[10px] text-slate-400 font-medium">
+                      Supported formats: JPG, PNG, WEBP, GIF. Maximum size: 5MB.
+                    </p>
+                  </div>
+                </div>
+              </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="space-y-1.5">
