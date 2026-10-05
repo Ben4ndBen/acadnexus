@@ -83,6 +83,15 @@ export function resolveDepartmentKey(departmentIdOrName?: number | string | null
     return "ALL";
   }
 
+  const str = `${departmentIdOrName || ""} ${departmentName || ""}`.trim().toLowerCase();
+
+  if (str.includes("citd") || str.includes("college of information")) return "CITD";
+  if (str.includes("ict") || str.includes("bsinfotech") || (str.includes("information technology") && !str.includes("industrial"))) return "ICT";
+  if (str.includes("industrial") || str.includes("bsit") || str.includes("indtech") || (str.includes("it department") && !str.includes("ict")) || (/\b(itd|it)\b/.test(str) && !str.includes("citd") && !str.includes("ict"))) return "ITD";
+  if (str.includes("hospitality") || str.includes("tourism") || str.includes("htm")) return "HTM";
+  if (str.includes("agriculture") || str.includes("agri")) return "AGRI";
+  if (str.includes("teacher") || str.includes("education") || str.includes("ted")) return "TED";
+
   // Numeric ID checks matching database autoincrement IDs
   const numId = Number(departmentIdOrName);
   if (!isNaN(numId) && numId > 0) {
@@ -94,26 +103,30 @@ export function resolveDepartmentKey(departmentIdOrName?: number | string | null
     if (numId === 6) return "HTM";
   }
 
-  const str = `${departmentIdOrName || ""} ${departmentName || ""}`.trim().toLowerCase();
-
-  if (str.includes("citd") || str.includes("college of information") || str === "1") return "CITD";
-  if (str.includes("ict") || str.includes("information technology") || str.includes("bsinfotech") || str === "2") return "ICT";
-  if (str.includes("industrial") || str.includes("industrial technology") || str === "3" || (str.includes("it department") && !str.includes("ict")) || (/\b(itd|it)\b/.test(str) && !str.includes("citd") && !str.includes("ict"))) return "ITD";
-  if (str.includes("hospitality") || str.includes("tourism") || str.includes("htm") || str === "6") return "HTM";
-  if (str.includes("agriculture") || str.includes("agri") || str === "5") return "AGRI";
-  if (str.includes("teacher") || str.includes("education") || str.includes("ted") || str === "4") return "TED";
-
   return "ALL";
 }
 
 /**
- * Gets list of programs for a given department.
+ * Gets list of programs for a given department and optional specific program code.
  */
-export function getProgramsForDepartment(departmentIdOrName?: number | string | null, departmentName?: string | null): DepartmentProgramInfo[] {
+export function getProgramsForDepartment(
+  departmentIdOrName?: number | string | null,
+  departmentName?: string | null,
+  programCode?: string | null
+): DepartmentProgramInfo[] {
+  const pCode = (programCode || "").trim().toUpperCase();
   const deptKey = resolveDepartmentKey(departmentIdOrName, departmentName);
-  const rawList = deptKey === "ALL" 
+
+  let rawList = deptKey === "ALL" 
     ? Object.values(DEPARTMENT_PROGRAMS_MAP).flat() 
     : (DEPARTMENT_PROGRAMS_MAP[deptKey] || []);
+
+  if (pCode) {
+    const filteredByProg = rawList.filter((p) => p.code.toUpperCase() === pCode);
+    if (filteredByProg.length > 0) {
+      return filteredByProg;
+    }
+  }
 
   const seen = new Set<string>();
   return rawList.filter((p) => {

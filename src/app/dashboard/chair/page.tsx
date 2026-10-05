@@ -37,6 +37,7 @@ export default async function ChairDashboard() {
     include: {
       chair: {
         include: {
+          program: true,
           department: {
             include: {
               faculty: {
@@ -59,7 +60,27 @@ export default async function ChairDashboard() {
           },
           approvals: {
             where: {
-              chair_review_status: "Pending"
+              chair_review_status: "Pending",
+              exam: {
+                current_status: "Pending_Chair",
+              },
+            },
+            include: {
+              exam: {
+                include: {
+                  course: true,
+                  faculty: true,
+                  questionBank: true
+                }
+              },
+            },
+          },
+          progApprovals: {
+            where: {
+              prog_chair_review_status: "Pending",
+              exam: {
+                current_status: "Pending_Program_Chair",
+              },
             },
             include: {
               exam: {
@@ -102,8 +123,57 @@ export default async function ChairDashboard() {
     );
   }
 
+  const isProgChair = dbUser.role === "ProgramChair" || !!chair.is_program_chair;
+
+  // Format clean department name without redundant "Department" suffix
+  let cleanDeptName = (department.department_name || "").trim();
+  if (cleanDeptName.toLowerCase().endsWith(" department")) {
+    cleanDeptName = cleanDeptName.substring(0, cleanDeptName.length - " department".length).trim();
+  }
+
+  // Determine Title without redundant "Department" words
+  let chairTitle = isProgChair ? "Program Chairperson" : "Department Chairperson";
+  if (isProgChair && chair.program) {
+    if (chair.program.program_code === "BSInfoTech") chairTitle = "Program Chairperson (ICT)";
+    else if (chair.program.program_code === "BSIT") chairTitle = "Program Chairperson (IT)";
+    else if (chair.program.program_code === "BEED") chairTitle = "Program Chairperson (TED - Elementary)";
+    else if (chair.program.program_code === "BSED") chairTitle = "Program Chairperson (TED - Secondary)";
+    else chairTitle = `Program Chairperson (${chair.program.program_code})`;
+  } else if (!isProgChair && cleanDeptName) {
+    chairTitle = `Department Chairperson (${cleanDeptName})`;
+  }
+
+  // If CITD Department Chair, also load faculty from sub-departments (ICT, IT)
+  let allFaculty = [...department.faculty];
+  if (!isProgChair && department.department_name === "CITD") {
+    const childFaculty = await db.faculty.findMany({
+      where: {
+        department: {
+          department_name: { in: ["ICT Department", "IT Department"] },
+        },
+      },
+      include: {
+        examinations: true,
+        facultyPortfolios: {
+          orderBy: { academic_year: "desc" },
+          take: 1,
+        },
+        facultyCourses: {
+          include: { course: true },
+        },
+      },
+    });
+
+    const existingFacultyIds = new Set(allFaculty.map((f) => f.faculty_id));
+    for (const cf of childFaculty) {
+      if (!existingFacultyIds.has(cf.faculty_id)) {
+        allFaculty.push(cf);
+      }
+    }
+  }
+
   // Format faculty members to ensure compliance_percentage is a string/number
-  const formattedFaculty = department.faculty.map(f => ({
+  const formattedFaculty = allFaculty.map(f => ({
     ...f,
     facultyPortfolios: f.facultyPortfolios.map(p => ({
       ...p,
@@ -111,12 +181,39 @@ export default async function ChairDashboard() {
     }))
   }));
 
-  // Format pending approvals to ensure decimal/dates are serializable if needed
-  // (In this case, dates and decimals are handled or not present in the essential payload)
-  const formattedApprovals = chair.approvals;
+  // Selected Pending Approvals depending on whether Program Chair or Dept Chair
+  let formattedApprovals = isProgChair ? chair.progApprovals : chair.approvals;
+
+  // If CITD Department Chair, also fetch any Pending_Chair approvals assigned to CITD chair
+  if (!isProgChair && department.department_name === "CITD") {
+    const extraApprovals = await db.approvalWorkflow.findMany({
+      where: {
+        reviewed_by_chair_id: chair.chair_id,
+        chair_review_status: "Pending",
+        exam: {
+          current_status: "Pending_Chair",
+        },
+      },
+      include: {
+        exam: {
+          include: {
+            course: true,
+            faculty: true,
+            questionBank: true,
+          },
+        },
+      },
+    });
+    const seenWorkflows = new Set(formattedApprovals.map((a) => a.workflow_id));
+    for (const exApp of extraApprovals) {
+      if (!seenWorkflows.has(exApp.workflow_id)) {
+        formattedApprovals.push(exApp as any);
+      }
+    }
+  }
 
   // Extract all department exams
-  const departmentExams = department.faculty.flatMap(f => f.examinations);
+  const departmentExams = allFaculty.flatMap(f => f.examinations);
 
   // Ensure all curriculum subjects exist in database
   await ensureBsitCoursesExist();
@@ -136,14 +233,14 @@ export default async function ChairDashboard() {
             <div>
               <span className="font-extrabold text-slate-900 tracking-tight">AcadNexus</span>
               <span className="text-xs text-amber-600 font-bold ml-2 bg-amber-50 px-2.5 py-1 rounded-full uppercase tracking-wider">
-                Chair Portal
+                {isProgChair ? "Program Chair Portal" : "Department Chair Portal"}
               </span>
             </div>
           </div>
           <div className="flex items-center gap-4">
             <div className="hidden sm:block text-right">
               <p className="text-sm font-semibold text-slate-800">
-                Chair ({dbUser?.institutional_id})
+                {chairTitle} ({dbUser?.institutional_id})
               </p>
               <p className="text-xs text-slate-500">{institutionalId}</p>
             </div>
@@ -160,10 +257,10 @@ export default async function ChairDashboard() {
           <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff03_1px,transparent_1px),linear-gradient(to_bottom,#ffffff03_1px,transparent_1px)] bg-[size:16px_16px]" />
           <div className="relative z-10 space-y-4">
             <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
-              Welcome back, Chair!
+              Welcome back, {chairTitle}!
             </h1>
             <p className="text-amber-100 max-w-xl text-sm leading-relaxed">
-              Verify drafted syllabi, evaluate examination formats and Table of Specifications (TOS), and oversee the accreditation status of the department.
+              Verify drafted syllabi, evaluate examination formats and Table of Specifications (TOS), and oversee academic compliance.
             </p>
           </div>
         </div>
@@ -173,8 +270,9 @@ export default async function ChairDashboard() {
           chairUserId={dbUser.user_id}
           departmentId={department.department_id}
           departmentName={department.department_name}
-          isProgramChair={dbUser.role === "ProgramChair" || !!chair.is_program_chair}
-          chairTitle={dbUser.role === "ProgramChair" || chair.is_program_chair ? "Program Chairperson" : "Department Chairperson"}
+          isProgramChair={isProgChair}
+          programCode={chair.program?.program_code}
+          chairTitle={chairTitle}
           facultyMembers={formattedFaculty as any}
           pendingApprovals={formattedApprovals as any}
           departmentExams={departmentExams as any}

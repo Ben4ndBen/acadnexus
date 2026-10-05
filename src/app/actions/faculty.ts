@@ -65,21 +65,65 @@ export async function updateExamStatus(examId: number, status: ExamStatus, userI
         // Find a Chair to assign (e.g. for the faculty's department)
         const faculty = await tx.faculty.findUnique({
           where: { faculty_id: userId },
+          include: { department: true },
         });
 
         if (!faculty) {
           return { error: "Faculty profile not found. Please contact an admin." };
         }
 
-        let deptChair = await tx.chair.findFirst({
-          where: { department_id: faculty.department_id, is_program_chair: false },
-        }) || await tx.chair.findFirst({
-          where: { department_id: faculty.department_id },
+        const examWithTargets = await tx.examination.findUnique({
+          where: { exam_id: examId },
+          include: {
+            examTargets: { include: { program: true } },
+            course: true,
+          },
         });
 
+        const targetProgramIds = examWithTargets?.examTargets?.map((t) => t.program_id) || [];
+        let targetProgramId = targetProgramIds.length > 0 ? targetProgramIds[0] : null;
+
+        // Fallback: If no target program ID explicitly set in examTargets, find program by course code
+        if (!targetProgramId && examWithTargets?.course) {
+          const courseCode = examWithTargets.course.course_code.trim().toUpperCase();
+          if (courseCode.startsWith("ITC") || courseCode.startsWith("ITE") || courseCode.startsWith("ITM") || courseCode.startsWith("ITD") || courseCode === "ENT 403" || courseCode.includes("INFOTECH")) {
+            const prog = await tx.academicProgram.findUnique({ where: { program_code: "BSInfoTech" } });
+            if (prog) targetProgramId = prog.program_id;
+          } else if (courseCode.startsWith("IND") || courseCode.startsWith("IT")) {
+            const prog = await tx.academicProgram.findUnique({ where: { program_code: "BSIT" } });
+            if (prog) targetProgramId = prog.program_id;
+          } else if (courseCode.startsWith("EDUC")) {
+            const prog = await tx.academicProgram.findFirst({ where: { program_code: { in: ["BEED", "BSED"] } } });
+            if (prog) targetProgramId = prog.program_id;
+          }
+        }
+
+        // Find Program Chair for this program (if any)
+        let progChair = targetProgramId ? await tx.chair.findFirst({
+          where: { program_id: targetProgramId, is_program_chair: true },
+        }) : null;
+
+        // Find Department Chair for this department (e.g. CITD for ICT/IT, TED for BEED/BSED, HTM, AGRI)
+        let deptChair: any = null;
+        const deptName = faculty.department.department_name.trim().toLowerCase();
+
+        if (deptName.includes("ict") || deptName.includes("it department") || deptName.includes("citd") || deptName.includes("industrial")) {
+          const citdDept = await tx.department.findFirst({ where: { department_name: "CITD" } });
+          if (citdDept) {
+            deptChair = await tx.chair.findFirst({
+              where: { department_id: citdDept.department_id, is_program_chair: false },
+            });
+          }
+        } else if (deptName.includes("teacher education") || deptName.includes("ted")) {
+          const tedDept = await tx.department.findFirst({ where: { department_name: "Teacher Education Department" } });
+          if (tedDept) {
+            deptChair = await tx.chair.findFirst({
+              where: { department_id: tedDept.department_id, is_program_chair: false },
+            });
+          }
+        }
+
         if (!deptChair) {
-          const { ensureChairsAndDepartmentsExist } = await import("@/lib/chairServer");
-          await ensureChairsAndDepartmentsExist();
           deptChair = await tx.chair.findFirst({
             where: { department_id: faculty.department_id, is_program_chair: false },
           }) || await tx.chair.findFirst({
@@ -90,18 +134,6 @@ export async function updateExamStatus(examId: number, status: ExamStatus, userI
         if (!deptChair) {
           return { error: "No department chair found for your department. Cannot submit exam for review." };
         }
-
-        const examWithTargets = await tx.examination.findUnique({
-          where: { exam_id: examId },
-          include: { examTargets: true },
-        });
-
-        const targetProgramIds = examWithTargets?.examTargets?.map((t) => t.program_id) || [];
-        const targetProgramId = targetProgramIds.length > 0 ? targetProgramIds[0] : null;
-
-        let progChair = targetProgramId ? await tx.chair.findFirst({
-          where: { program_id: targetProgramId, is_program_chair: true },
-        }) : null;
 
         if (progChair) {
           status = "Pending_Program_Chair";
@@ -2211,7 +2243,7 @@ export async function assignCoursesToFacultyAction(facultyId: number, courseIds:
     if (!currentUser) return { error: "Unauthorized. Please log in first." };
 
     const currentRole = currentUser.user_metadata?.role;
-    if (currentRole !== "Director" && currentRole !== "Chair") {
+    if (currentRole !== "Director" && currentRole !== "Chair" && currentRole !== "ProgramChair") {
       return { error: "Unauthorized. Only Director or Chair can assign courses to faculty." };
     }
 

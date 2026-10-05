@@ -16,7 +16,7 @@ export function LoginForm() {
       let path = "/";
       if (state.role === "Student") path = "/dashboard/student";
       else if (state.role === "Faculty") path = "/dashboard/faculty";
-      else if (state.role === "Chair") path = "/dashboard/chair";
+      else if (state.role === "Chair" || state.role === "ProgramChair") path = "/dashboard/chair";
       else if (state.role === "Director") path = "/dashboard/director";
       
       window.location.href = path;

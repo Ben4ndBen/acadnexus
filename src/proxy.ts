@@ -90,7 +90,7 @@ export async function proxy(request: NextRequest) {
     if (path.startsWith("/dashboard/faculty") && role !== "Faculty") {
       return redirectUserToDashboard(role, url);
     }
-    if (path.startsWith("/dashboard/chair") && role !== "Chair") {
+    if (path.startsWith("/dashboard/chair") && role !== "Chair" && role !== "ProgramChair") {
       return redirectUserToDashboard(role, url);
     }
     if (path.startsWith("/dashboard/director") && role !== "Director") {
@@ -111,7 +111,7 @@ function redirectUserToDashboard(role: string | undefined, url: URL) {
     url.pathname = "/dashboard/student";
   } else if (role === "Faculty") {
     url.pathname = "/dashboard/faculty";
-  } else if (role === "Chair") {
+  } else if (role === "Chair" || role === "ProgramChair") {
     url.pathname = "/dashboard/chair";
   } else if (role === "Director") {
     url.pathname = "/dashboard/director";

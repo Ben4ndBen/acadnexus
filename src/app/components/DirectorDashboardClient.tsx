@@ -758,7 +758,8 @@ export function DirectorDashboardClient({
               >
                 <option value="ALL">All Statuses</option>
                 <option value="Draft">Draft</option>
-                <option value="Pending_Chair">Pending Chair</option>
+                <option value="Pending_Program_Chair">Pending Program Chairperson</option>
+                <option value="Pending_Chair">Pending Department Chairperson</option>
                 <option value="Pending_DI">Pending DI</option>
                 <option value="Approved">Approved (Live)</option>
                 <option value="Returned">Returned</option>
@@ -809,9 +810,10 @@ export function DirectorDashboardClient({
                           exam.current_status === "Returned" ? "bg-rose-50 text-rose-700 border-rose-200" :
                           exam.current_status === "Pending_DI" ? "bg-amber-50 text-amber-700 border-amber-200" :
                           exam.current_status === "Pending_Chair" ? "bg-blue-50 text-blue-700 border-blue-200" :
+                          exam.current_status === "Pending_Program_Chair" ? "bg-purple-50 text-purple-700 border-purple-200" :
                           "bg-slate-50 text-slate-600 border-slate-200"
                         }`}>
-                          {exam.current_status === "Approved" ? "Approved (Live)" : exam.current_status}
+                          {exam.current_status === "Approved" ? "Approved (Live)" : exam.current_status === "Pending_Program_Chair" ? "Pending Program Chairperson" : exam.current_status === "Pending_Chair" ? "Pending Dept Chairperson" : exam.current_status}
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">

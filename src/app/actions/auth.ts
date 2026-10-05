@@ -196,7 +196,7 @@ export async function registerInstructorByAdminAction(prevState: any, formData: 
     return { error: "Unauthorized. Please log in first." };
   }
   const currentRole = currentUser.user_metadata?.role;
-  if (currentRole !== "Director" && currentRole !== "Chair") {
+  if (currentRole !== "Director" && currentRole !== "Chair" && currentRole !== "ProgramChair") {
     return { error: "Unauthorized. Only Director or Chair can register an instructor." };
   }
 

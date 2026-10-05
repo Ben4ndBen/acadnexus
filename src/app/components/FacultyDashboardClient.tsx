@@ -41,7 +41,7 @@ interface FacultyDashboardClientProps {
       title: string;
       tos_file_path?: string | null;
       time_limit_minutes: number;
-      current_status: "Draft" | "Pending_Chair" | "Pending_DI" | "Approved" | "Returned";
+      current_status: "Draft" | "Pending_Program_Chair" | "Pending_Chair" | "Pending_DI" | "Approved" | "Returned";
       is_archived?: boolean;
       academic_year?: string | null;
       course: {
@@ -49,6 +49,8 @@ interface FacultyDashboardClientProps {
         course_title: string;
       };
       approvalWorkflow: {
+        reviewed_by_prog_chair_id?: number | null;
+        prog_chair_review_status?: string | null;
         chair_comments: string | null;
         chair_review_status: string;
         di_review_status: string;
@@ -861,18 +863,25 @@ export function FacultyDashboardClient({
             Draft
           </span>
         );
+      case "Pending_Program_Chair":
+        return (
+          <span className="inline-flex items-center gap-1.5 text-xs font-semibold bg-purple-50 text-purple-800 border border-purple-200 px-2.5 py-1 rounded-full shadow-sm">
+            <span className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse" />
+            Pending Program Chairperson Review
+          </span>
+        );
       case "Pending_Chair":
         return (
           <span className="inline-flex items-center gap-1.5 text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200 px-2.5 py-1 rounded-full shadow-sm">
             <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-            Pending Chair Review
+            Pending Department Chairperson Review
           </span>
         );
       case "Pending_DI":
         return (
           <span className="inline-flex items-center gap-1.5 text-xs font-semibold bg-indigo-50 text-indigo-800 border border-indigo-200 px-2.5 py-1 rounded-full shadow-sm">
             <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
-            Pending Directorate Approval
+            Pending Director for Instruction Approval
           </span>
         );
       case "Approved":
@@ -1390,17 +1399,25 @@ export function FacultyDashboardClient({
             
             {/* Filter Tabs */}
             <div className="flex flex-wrap gap-1.5 bg-slate-50 p-1.5 rounded-xl border border-slate-100">
-              {["ALL", "Draft", "Pending_Chair", "Pending_DI", "Approved", "Returned"].map((status) => (
+              {[
+                { id: "ALL", label: "All" },
+                { id: "Draft", label: "Draft" },
+                { id: "Pending_Program_Chair", label: "Pending Program Chairperson" },
+                { id: "Pending_Chair", label: "Pending Department Chairperson" },
+                { id: "Pending_DI", label: "Pending DI" },
+                { id: "Approved", label: "Approved" },
+                { id: "Returned", label: "Returned" },
+              ].map((tab) => (
                 <button
-                  key={status}
-                  onClick={() => setTrackerFilter(status)}
+                  key={tab.id}
+                  onClick={() => setTrackerFilter(tab.id)}
                   className={`px-3 py-1.5 text-xs font-extrabold rounded-lg transition-all ${
-                    trackerFilter === status
+                    trackerFilter === tab.id
                       ? "bg-white text-emerald-700 shadow-sm border border-slate-200/60"
                       : "text-slate-500 hover:text-slate-800"
                   }`}
                 >
-                  {status === "ALL" ? "All" : status.replace("_", " ")}
+                  {tab.label}
                 </button>
               ))}
             </div>
@@ -1529,77 +1546,180 @@ export function FacultyDashboardClient({
 
                     {/* Timeline Tracker */}
                     <div className="py-6">
-                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 md:gap-0">
-                        {/* Step 1: Draft */}
-                        <div className="relative flex flex-col items-center text-center">
-                          <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm border-2 z-10 transition-all ${
-                            ["Draft", "Pending_Chair", "Pending_DI", "Approved", "Returned"].includes(exam.current_status)
-                              ? "bg-emerald-600 border-emerald-600 text-white"
-                              : "bg-white border-slate-200 text-slate-400"
-                          }`}>
-                            1
-                          </div>
-                          <p className="text-xs font-extrabold text-slate-800 mt-2">Draft Mode</p>
-                          <p className="text-[10px] text-slate-400 mt-0.5">Authoring phase</p>
-                          <div className="hidden md:block absolute left-1/2 right-0 top-4 h-[2px] bg-emerald-600 -z-0" />
-                        </div>
+                      {(() => {
+                        const hasProgChair = !!exam.approvalWorkflow?.reviewed_by_prog_chair_id || ["Pending_Program_Chair"].includes(exam.current_status) || ["ITC", "ITE", "ITM", "ITD", "IND", "EDUC"].some(prefix => exam.course?.course_code?.startsWith(prefix));
+                        
+                        if (hasProgChair) {
+                          return (
+                            <div className="grid grid-cols-1 md:grid-cols-5 gap-4 md:gap-0">
+                              {/* Step 1: Draft */}
+                              <div className="relative flex flex-col items-center text-center">
+                                <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm border-2 z-10 transition-all ${
+                                  ["Draft", "Pending_Program_Chair", "Pending_Chair", "Pending_DI", "Approved", "Returned"].includes(exam.current_status)
+                                    ? "bg-emerald-600 border-emerald-600 text-white"
+                                    : "bg-white border-slate-200 text-slate-400"
+                                }`}>
+                                  1
+                                </div>
+                                <p className="text-xs font-extrabold text-slate-800 mt-2">Draft Mode</p>
+                                <p className="text-[10px] text-slate-400 mt-0.5">Authoring phase</p>
+                                <div className="hidden md:block absolute left-1/2 right-0 top-4 h-[2px] bg-emerald-600 -z-0" />
+                              </div>
 
-                        {/* Step 2: Chair Review */}
-                        <div className="relative flex flex-col items-center text-center">
-                          <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm border-2 z-10 transition-all ${
-                            ["Pending_Chair", "Pending_DI", "Approved", "Returned"].includes(exam.current_status)
-                              ? exam.current_status === "Returned" && exam.approvalWorkflow?.chair_review_status === "Returned"
-                                ? "bg-rose-500 border-rose-500 text-white"
-                                : "bg-emerald-600 border-emerald-600 text-white"
-                              : "bg-white border-slate-200 text-slate-400"
-                          }`}>
-                            2
-                          </div>
-                          <p className="text-xs font-extrabold text-slate-800 mt-2">Chair Approval</p>
-                          <p className="text-[10px] text-slate-400 mt-0.5">Departmental audit</p>
-                          <div className={`hidden md:block absolute left-0 right-1/2 top-4 h-[2px] -z-0 ${
-                            ["Pending_Chair", "Pending_DI", "Approved", "Returned"].includes(exam.current_status) ? "bg-emerald-600" : "bg-slate-200"
-                          }`} />
-                          <div className={`hidden md:block absolute left-1/2 right-0 top-4 h-[2px] -z-0 ${
-                            ["Pending_DI", "Approved"].includes(exam.current_status) ? "bg-emerald-600" : "bg-slate-200"
-                          }`} />
-                        </div>
+                              {/* Step 2: Program Chairperson Review (Reviewed by) */}
+                              <div className="relative flex flex-col items-center text-center">
+                                <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm border-2 z-10 transition-all ${
+                                  ["Pending_Program_Chair", "Pending_Chair", "Pending_DI", "Approved", "Returned"].includes(exam.current_status)
+                                    ? exam.current_status === "Returned" && exam.approvalWorkflow?.prog_chair_review_status === "Returned"
+                                      ? "bg-rose-500 border-rose-500 text-white"
+                                      : "bg-emerald-600 border-emerald-600 text-white"
+                                    : "bg-white border-slate-200 text-slate-400"
+                                }`}>
+                                  2
+                                </div>
+                                <p className="text-xs font-extrabold text-slate-800 mt-2">Program Chairperson</p>
+                                <p className="text-[10px] text-amber-600 font-bold mt-0.5">Reviewed by</p>
+                                <div className={`hidden md:block absolute left-0 right-1/2 top-4 h-[2px] -z-0 ${
+                                  ["Pending_Program_Chair", "Pending_Chair", "Pending_DI", "Approved", "Returned"].includes(exam.current_status) ? "bg-emerald-600" : "bg-slate-200"
+                                }`} />
+                                <div className={`hidden md:block absolute left-1/2 right-0 top-4 h-[2px] -z-0 ${
+                                  ["Pending_Chair", "Pending_DI", "Approved"].includes(exam.current_status) ? "bg-emerald-600" : "bg-slate-200"
+                                }`} />
+                              </div>
 
-                        {/* Step 3: DI Clearance */}
-                        <div className="relative flex flex-col items-center text-center">
-                          <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm border-2 z-10 transition-all ${
-                            ["Pending_DI", "Approved"].includes(exam.current_status)
-                              ? "bg-emerald-600 border-emerald-600 text-white"
-                              : "bg-white border-slate-200 text-slate-400"
-                          }`}>
-                            3
-                          </div>
-                          <p className="text-xs font-extrabold text-slate-800 mt-2">Directorate Approval</p>
-                          <p className="text-[10px] text-slate-400 mt-0.5">Academic Directorate review</p>
-                          <div className={`hidden md:block absolute left-0 right-1/2 top-4 h-[2px] -z-0 ${
-                            ["Pending_DI", "Approved"].includes(exam.current_status) ? "bg-emerald-600" : "bg-slate-200"
-                          }`} />
-                          <div className={`hidden md:block absolute left-1/2 right-0 top-4 h-[2px] -z-0 ${
-                            exam.current_status === "Approved" ? "bg-emerald-600" : "bg-slate-200"
-                          }`} />
-                        </div>
+                              {/* Step 3: Department Chairperson Review (Recommended by) */}
+                              <div className="relative flex flex-col items-center text-center">
+                                <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm border-2 z-10 transition-all ${
+                                  ["Pending_Chair", "Pending_DI", "Approved"].includes(exam.current_status)
+                                    ? exam.current_status === "Returned" && exam.approvalWorkflow?.chair_review_status === "Returned"
+                                      ? "bg-rose-500 border-rose-500 text-white"
+                                      : "bg-emerald-600 border-emerald-600 text-white"
+                                    : "bg-white border-slate-200 text-slate-400"
+                                }`}>
+                                  3
+                                </div>
+                                <p className="text-xs font-extrabold text-slate-800 mt-2">Department Chairperson</p>
+                                <p className="text-[10px] text-amber-600 font-bold mt-0.5">Recommended by</p>
+                                <div className={`hidden md:block absolute left-0 right-1/2 top-4 h-[2px] -z-0 ${
+                                  ["Pending_Chair", "Pending_DI", "Approved"].includes(exam.current_status) ? "bg-emerald-600" : "bg-slate-200"
+                                }`} />
+                                <div className={`hidden md:block absolute left-1/2 right-0 top-4 h-[2px] -z-0 ${
+                                  ["Pending_DI", "Approved"].includes(exam.current_status) ? "bg-emerald-600" : "bg-slate-200"
+                                }`} />
+                              </div>
 
-                        {/* Step 4: Approved */}
-                        <div className="relative flex flex-col items-center text-center">
-                          <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm border-2 z-10 transition-all ${
-                            exam.current_status === "Approved"
-                              ? "bg-emerald-600 border-emerald-600 text-white"
-                              : "bg-white border-slate-200 text-slate-400"
-                          }`}>
-                            4
+                              {/* Step 4: DI Clearance (Approved by) */}
+                              <div className="relative flex flex-col items-center text-center">
+                                <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm border-2 z-10 transition-all ${
+                                  ["Pending_DI", "Approved"].includes(exam.current_status)
+                                    ? "bg-emerald-600 border-emerald-600 text-white"
+                                    : "bg-white border-slate-200 text-slate-400"
+                                }`}>
+                                  4
+                                </div>
+                                <p className="text-xs font-extrabold text-slate-800 mt-2">Director for Instruction</p>
+                                <p className="text-[10px] text-amber-600 font-bold mt-0.5">Approved by</p>
+                                <div className={`hidden md:block absolute left-0 right-1/2 top-4 h-[2px] -z-0 ${
+                                  ["Pending_DI", "Approved"].includes(exam.current_status) ? "bg-emerald-600" : "bg-slate-200"
+                                }`} />
+                                <div className={`hidden md:block absolute left-1/2 right-0 top-4 h-[2px] -z-0 ${
+                                  exam.current_status === "Approved" ? "bg-emerald-600" : "bg-slate-200"
+                                }`} />
+                              </div>
+
+                              {/* Step 5: Approved / Live */}
+                              <div className="relative flex flex-col items-center text-center">
+                                <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm border-2 z-10 transition-all ${
+                                  exam.current_status === "Approved"
+                                    ? "bg-emerald-600 border-emerald-600 text-white"
+                                    : "bg-white border-slate-200 text-slate-400"
+                                }`}>
+                                  5
+                                </div>
+                                <p className="text-xs font-extrabold text-slate-800 mt-2">Active / Live</p>
+                                <p className="text-[10px] text-slate-400 mt-0.5">Targeted to students</p>
+                                <div className={`hidden md:block absolute left-0 right-1/2 top-4 h-[2px] -z-0 ${
+                                  exam.current_status === "Approved" ? "bg-emerald-600" : "bg-slate-200"
+                                }`} />
+                              </div>
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 md:gap-0">
+                            {/* Step 1: Draft */}
+                            <div className="relative flex flex-col items-center text-center">
+                              <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm border-2 z-10 transition-all ${
+                                ["Draft", "Pending_Chair", "Pending_DI", "Approved", "Returned"].includes(exam.current_status)
+                                  ? "bg-emerald-600 border-emerald-600 text-white"
+                                  : "bg-white border-slate-200 text-slate-400"
+                              }`}>
+                                1
+                              </div>
+                              <p className="text-xs font-extrabold text-slate-800 mt-2">Draft Mode</p>
+                              <p className="text-[10px] text-slate-400 mt-0.5">Authoring phase</p>
+                              <div className="hidden md:block absolute left-1/2 right-0 top-4 h-[2px] bg-emerald-600 -z-0" />
+                            </div>
+
+                            {/* Step 2: Department Chairperson Review (Recommended by) */}
+                            <div className="relative flex flex-col items-center text-center">
+                              <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm border-2 z-10 transition-all ${
+                                ["Pending_Chair", "Pending_DI", "Approved", "Returned"].includes(exam.current_status)
+                                  ? exam.current_status === "Returned" && exam.approvalWorkflow?.chair_review_status === "Returned"
+                                    ? "bg-rose-500 border-rose-500 text-white"
+                                    : "bg-emerald-600 border-emerald-600 text-white"
+                                  : "bg-white border-slate-200 text-slate-400"
+                              }`}>
+                                2
+                              </div>
+                              <p className="text-xs font-extrabold text-slate-800 mt-2">Department Chairperson</p>
+                              <p className="text-[10px] text-amber-600 font-bold mt-0.5">Recommended by</p>
+                              <div className={`hidden md:block absolute left-0 right-1/2 top-4 h-[2px] -z-0 ${
+                                ["Pending_Chair", "Pending_DI", "Approved", "Returned"].includes(exam.current_status) ? "bg-emerald-600" : "bg-slate-200"
+                              }`} />
+                              <div className={`hidden md:block absolute left-1/2 right-0 top-4 h-[2px] -z-0 ${
+                                ["Pending_DI", "Approved"].includes(exam.current_status) ? "bg-emerald-600" : "bg-slate-200"
+                              }`} />
+                            </div>
+
+                            {/* Step 3: DI Clearance (Approved by) */}
+                            <div className="relative flex flex-col items-center text-center">
+                              <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm border-2 z-10 transition-all ${
+                                ["Pending_DI", "Approved"].includes(exam.current_status)
+                                  ? "bg-emerald-600 border-emerald-600 text-white"
+                                  : "bg-white border-slate-200 text-slate-400"
+                              }`}>
+                                3
+                              </div>
+                              <p className="text-xs font-extrabold text-slate-800 mt-2">Director for Instruction</p>
+                              <p className="text-[10px] text-amber-600 font-bold mt-0.5">Approved by</p>
+                              <div className={`hidden md:block absolute left-0 right-1/2 top-4 h-[2px] -z-0 ${
+                                ["Pending_DI", "Approved"].includes(exam.current_status) ? "bg-emerald-600" : "bg-slate-200"
+                              }`} />
+                              <div className={`hidden md:block absolute left-1/2 right-0 top-4 h-[2px] -z-0 ${
+                                exam.current_status === "Approved" ? "bg-emerald-600" : "bg-slate-200"
+                              }`} />
+                            </div>
+
+                            {/* Step 4: Approved */}
+                            <div className="relative flex flex-col items-center text-center">
+                              <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm border-2 z-10 transition-all ${
+                                exam.current_status === "Approved"
+                                  ? "bg-emerald-600 border-emerald-600 text-white"
+                                  : "bg-white border-slate-200 text-slate-400"
+                              }`}>
+                                4
+                              </div>
+                              <p className="text-xs font-extrabold text-slate-800 mt-2">Active / Live</p>
+                              <p className="text-[10px] text-slate-400 mt-0.5">Targeted to students</p>
+                              <div className={`hidden md:block absolute left-0 right-1/2 top-4 h-[2px] -z-0 ${
+                                exam.current_status === "Approved" ? "bg-emerald-600" : "bg-slate-200"
+                              }`} />
+                            </div>
                           </div>
-                          <p className="text-xs font-extrabold text-slate-800 mt-2">Active / Live</p>
-                          <p className="text-[10px] text-slate-400 mt-0.5">Targeted to students</p>
-                          <div className={`hidden md:block absolute left-0 right-1/2 top-4 h-[2px] -z-0 ${
-                            exam.current_status === "Approved" ? "bg-emerald-600" : "bg-slate-200"
-                          }`} />
-                        </div>
-                      </div>
+                        );
+                      })()}
                     </div>
 
                     {/* Returned Comments Showcase */}

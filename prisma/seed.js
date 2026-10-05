@@ -241,7 +241,7 @@ async function main() {
   // BSInfoTech Program Chair (ICT Department)
   const ictProgChairUser = await prisma.user.create({
     data: {
-      institutional_id: "PROGCHAIR-ICT",
+      institutional_id: "PC-ICT",
       username: "progchair_ict",
       password_hash: passwordHash,
       role: "ProgramChair",
@@ -259,7 +259,7 @@ async function main() {
   // BSIT Program Chair (IT Department / Industrial Tech)
   const itdProgChairUser = await prisma.user.create({
     data: {
-      institutional_id: "PROGCHAIR-ITD",
+      institutional_id: "PC-ITD",
       username: "progchair_itd",
       password_hash: passwordHash,
       role: "ProgramChair",
@@ -277,7 +277,7 @@ async function main() {
   // BEED Program Chair (Teacher Education)
   const beedProgChairUser = await prisma.user.create({
     data: {
-      institutional_id: "PROGCHAIR-BEED",
+      institutional_id: "PC-BEED",
       username: "progchair_beed",
       password_hash: passwordHash,
       role: "ProgramChair",
@@ -295,7 +295,7 @@ async function main() {
   // BSED Program Chair (Teacher Education)
   const bsedProgChairUser = await prisma.user.create({
     data: {
-      institutional_id: "PROGCHAIR-BSED",
+      institutional_id: "PC-BSED",
       username: "progchair_bsed",
       password_hash: passwordHash,
       role: "ProgramChair",
