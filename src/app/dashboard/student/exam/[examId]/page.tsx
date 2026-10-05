@@ -8,7 +8,6 @@ import Link from "next/link";
 import { ShieldAlert, CheckCircle2, ArrowLeft, GraduationCap, Clock } from "lucide-react";
 
 export const dynamic = "force-dynamic";
-export const revalidate = 0;
 
 interface PageProps {
   params: Promise<{ examId: string }>;

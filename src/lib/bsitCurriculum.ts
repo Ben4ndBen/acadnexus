@@ -311,6 +311,8 @@ export function getCurriculumForProgram(programCode: string, yearLevel: number):
   let targetProgram: "BSIT" | "BSHM" | "BSA" | "BSTM" | null = null;
 
   if (
+    codeUpper === "BSIT" ||
+    codeUpper === "BS INFO TECH" ||
     codeUpper === "BSINFOTECH" ||
     codeUpper.includes("INFORMATION TECHNOLOGY") ||
     codeUpper.includes("INFOTECH")

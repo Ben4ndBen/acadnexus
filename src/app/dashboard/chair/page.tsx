@@ -6,10 +6,10 @@ import { NotificationBell } from "@/app/components/NotificationBell";
 import { ClipboardCheck } from "lucide-react";
 import { ChairDashboardClient } from "@/app/components/ChairDashboardClient";
 
+import { getCoursesCached } from "@/lib/cache";
 import { ensureChairsAndDepartmentsExist } from "@/lib/chairServer";
 
 export const dynamic = "force-dynamic";
-export const revalidate = 0;
 
 export default async function ChairDashboard() {
   const supabase = await createClient();
@@ -117,10 +117,8 @@ export default async function ChairDashboard() {
   // Extract all department exams
   const departmentExams = department.faculty.flatMap(f => f.examinations);
 
-  // Fetch courses for assignment
-  const courses = await db.course.findMany({
-    orderBy: { course_code: "asc" }
-  });
+  // Fetch courses for assignment using cached query
+  const courses = await getCoursesCached();
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans">

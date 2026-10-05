@@ -1,7 +1,8 @@
 "use server";
 
 import db from "@/lib/db";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
+import { getActiveAcademicPeriodCached } from "@/lib/cache";
 
 export async function reviewExamByDirector(
   workflowId: number,
@@ -221,50 +222,7 @@ export async function toggleIndividualHold(userId: number, examId: number, place
 import type { AcademicPeriodSettings } from "@/lib/academicUtils";
 
 export async function getActiveAcademicPeriod(): Promise<AcademicPeriodSettings> {
-  try {
-    const settings = await db.systemSetting.findMany({
-      where: {
-        key: {
-          in: [
-            "active_academic_year",
-            "active_semester",
-            "active_term",
-            "sem1_start",
-            "sem1_end",
-            "sem2_start",
-            "sem2_end",
-          ],
-        },
-      },
-    });
-
-    const map = new Map(settings.map(s => [s.key, s.value]));
-
-    const now = new Date();
-    const currentYear = now.getFullYear();
-    const defaultAY = now.getMonth() >= 5 ? `${currentYear}-${currentYear + 1}` : `${currentYear - 1}-${currentYear}`;
-
-    return {
-      active_academic_year: map.get("active_academic_year") || defaultAY,
-      active_semester: map.get("active_semester") || (now.getMonth() >= 7 ? "1st Semester" : "2nd Semester"),
-      active_term: map.get("active_term") || "Midterm",
-      sem1_start: map.get("sem1_start") || `${currentYear}-08-01`,
-      sem1_end: map.get("sem1_end") || `${currentYear}-12-31`,
-      sem2_start: map.get("sem2_start") || `${currentYear + 1}-01-01`,
-      sem2_end: map.get("sem2_end") || `${currentYear + 1}-05-31`,
-    };
-  } catch (err) {
-    console.error("Error fetching academic period:", err);
-    return {
-      active_academic_year: "2026-2027",
-      active_semester: "1st Semester",
-      active_term: "Midterm",
-      sem1_start: "2026-08-01",
-      sem1_end: "2026-12-31",
-      sem2_start: "2027-01-01",
-      sem2_end: "2027-05-31",
-    };
-  }
+  return getActiveAcademicPeriodCached();
 }
 
 export async function saveActiveAcademicPeriod(
@@ -305,6 +263,8 @@ export async function saveActiveAcademicPeriod(
       },
     });
 
+    revalidateTag("academic-period", "max");
+    revalidateTag("system-settings", "max");
     revalidatePath("/dashboard/director");
     revalidatePath("/dashboard/faculty");
     return { success: true };

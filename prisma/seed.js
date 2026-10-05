@@ -112,25 +112,41 @@ async function main() {
   // 4. Seed User Accounts & Roles
   console.log("Seeding user accounts...");
 
-  // --- Student ---
-  const studentUser = await prisma.user.create({
-    data: {
-      institutional_id: "2023-0001-AB",
-      password_hash: passwordHash,
-      role: "Student",
-    },
-  });
+  // --- Students ---
+  const initialStudents = [
+    { first_name: "Juan", last_name: "Dela Cruz", program_id: bsitProg.program_id, year_level: 4, section: "Section A", inst_id: "2023-0002-AB" },
+    { first_name: "Maria", last_name: "Santos", program_id: bsitProg.program_id, year_level: 4, section: "Section A", inst_id: "2023-0003-AB" },
+    { first_name: "Jose", last_name: "Reyes", program_id: bsitProg.program_id, year_level: 3, section: "Section B", inst_id: "2024-0004-AB" },
+    { first_name: "Angela", last_name: "Gonzales", program_id: bsitProg.program_id, year_level: 2, section: "Section A", inst_id: "2025-0005-AB" },
+    { first_name: "Christian", last_name: "Ramos", program_id: bsitProg.program_id, year_level: 1, section: "Section A", inst_id: "2026-0006-AB" },
+    { first_name: "Nicole", last_name: "Tan", program_id: agriProg.program_id, year_level: 4, section: "Section A", inst_id: "2023-0007-AB" },
+    { first_name: "Joshua", last_name: "Mendoza", program_id: agriProg.program_id, year_level: 3, section: "Section A", inst_id: "2024-0008-AB" },
+    { first_name: "Patricia", last_name: "Flores", program_id: htmProg.program_id, year_level: 4, section: "Section A", inst_id: "2023-0011-AB" },
+    { first_name: "Mark", last_name: "Villanueva", program_id: htmProg.program_id, year_level: 3, section: "Section A", inst_id: "2024-0012-AB" },
+    { first_name: "Andrea", last_name: "Gutierrez", program_id: itProg.program_id, year_level: 4, section: "Section A", inst_id: "2023-0019-AB" },
+    { first_name: "Samantha", last_name: "Pineda", program_id: educProg.program_id, year_level: 4, section: "Section A", inst_id: "2023-0023-AB" },
+  ];
 
-  await prisma.student.create({
-    data: {
-      student_id: studentUser.user_id,
-      first_name: "Janice",
-      last_name: "Delfin",
-      program_id: bsitProg.program_id,
-      year_level: 4,
-      section: "General",
-    },
-  });
+  for (const s of initialStudents) {
+    const sUser = await prisma.user.create({
+      data: {
+        institutional_id: s.inst_id,
+        password_hash: passwordHash,
+        role: "Student",
+        require_password_update: false,
+      },
+    });
+    await prisma.student.create({
+      data: {
+        student_id: sUser.user_id,
+        first_name: s.first_name,
+        last_name: s.last_name,
+        program_id: s.program_id,
+        year_level: s.year_level,
+        section: s.section,
+      },
+    });
+  }
 
   // --- Director ---
   const directorUser = await prisma.user.create({
@@ -510,7 +526,7 @@ async function main() {
   console.log("Database seeding completed successfully!");
   console.log("Created test accounts (all passwords are 'password123'):");
   console.log("  - Director: DIRECTOR-001");
-  console.log("  - Student: 2023-0001-AB (Janice Delfin)");
+  console.log("  - Students: 2023-0002-AB (Juan Dela Cruz), 2023-0003-AB (Maria Santos), etc.");
   console.log("  - ICT Chair: CHAIR-001 | Faculty: FACULTY-001");
   console.log("  - Agriculture Chair: CHAIR-AGRI | Faculty: FACULTY-AGRI");
   console.log("  - Hospitality & Tourism Chair: CHAIR-HTM | Faculty: FACULTY-HTM");

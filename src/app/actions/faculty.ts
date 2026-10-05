@@ -57,6 +57,10 @@ export async function updateExamStatus(examId: number, status: ExamStatus, userI
       // Allow submission for Chair review with integrated TOS matrix
       // Add or update ApprovalWorkflow record if needed
       if (status === "Pending_Chair") {
+        if (!exam.tos_file_path || exam.tos_file_path.trim() === "") {
+          return { error: "Submission Failed: Uploading a TOS PDF file (max 10MB) is required before submitting to the Department Chair." };
+        }
+
         // Find a Chair to assign (e.g. for the faculty's department)
         const faculty = await tx.faculty.findUnique({
           where: { faculty_id: userId },
@@ -338,31 +342,28 @@ async function syncAndGetYearLevelEnrolledStudents(courseId: number) {
 
   const targetYearLevel = getExpectedYearLevelForCourse(course.course_code, course.course_title);
 
-  if (targetYearLevel) {
-    // Auto-sync missing students matching this subject's expected year level
-    const eligibleStudents = await db.student.findMany({
-      where: { year_level: targetYearLevel },
+  // Auto-sync ALL students in database into studentCourse so faculty can assign any student across all year levels & programs
+  const eligibleStudents = await db.student.findMany({
+    select: { student_id: true },
+  });
+
+  if (eligibleStudents.length > 0) {
+    const existingEnrollments = await db.studentCourse.findMany({
+      where: { course_id: courseId },
       select: { student_id: true },
     });
 
-    if (eligibleStudents.length > 0) {
-      const existingEnrollments = await db.studentCourse.findMany({
-        where: { course_id: courseId },
-        select: { student_id: true },
+    const existingSet = new Set(existingEnrollments.map((e) => e.student_id));
+    const missingIds = eligibleStudents.map((s) => s.student_id).filter((id) => !existingSet.has(id));
+
+    if (missingIds.length > 0) {
+      await db.studentCourse.createMany({
+        data: missingIds.map((studentId) => ({
+          student_id: studentId,
+          course_id: courseId,
+        })),
+        skipDuplicates: true,
       });
-
-      const existingSet = new Set(existingEnrollments.map((e) => e.student_id));
-      const missingIds = eligibleStudents.map((s) => s.student_id).filter((id) => !existingSet.has(id));
-
-      if (missingIds.length > 0) {
-        await db.studentCourse.createMany({
-          data: missingIds.map((studentId) => ({
-            student_id: studentId,
-            course_id: courseId,
-          })),
-          skipDuplicates: true,
-        });
-      }
     }
   }
 
@@ -371,12 +372,12 @@ async function syncAndGetYearLevelEnrolledStudents(courseId: number) {
 
 export async function getAssignedStudentsForCourse(courseId: number) {
   try {
-    const { targetYearLevel } = await syncAndGetYearLevelEnrolledStudents(courseId);
+    // Auto-sync missing expected year level students, but fetch all enrolled students across all year levels
+    await syncAndGetYearLevelEnrolledStudents(courseId);
 
     const enrolled = await db.studentCourse.findMany({
       where: {
         course_id: courseId,
-        ...(targetYearLevel ? { student: { year_level: targetYearLevel } } : {}),
       },
       include: {
         student: {
@@ -908,6 +909,61 @@ export async function uploadQuestionAttachment(facultyId: number, formData: Form
   } catch (err: any) {
     console.error("Error in uploadQuestionAttachment:", err);
     return { error: err.message || "Failed to upload file." };
+  }
+}
+
+export async function uploadTosFileAction(examId: number, facultyId: number, formData: FormData) {
+  try {
+    const { writeFile, mkdir } = await import("fs/promises");
+    const { join } = await import("path");
+
+    const file = formData.get("file") as File | null;
+    if (!file || file.size === 0) {
+      return { error: "No file uploaded." };
+    }
+
+    // Strictly validate PDF extension / mime type
+    const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+    if (!isPdf) {
+      return { error: "Strict Requirement: Only PDF files (.pdf) are allowed for Table of Specifications (TOS) upload." };
+    }
+
+    // Validate maximum file size (10MB limit)
+    const MAX_SIZE = 10 * 1024 * 1024;
+    if (file.size > MAX_SIZE) {
+      return { error: "File Size Limit Exceeded: TOS PDF file must not exceed 10MB." };
+    }
+
+    const bytes = await file.arrayBuffer();
+    const buffer = Buffer.from(bytes);
+    const uploadDir = join(process.cwd(), "public", "uploads", "tos");
+    await mkdir(uploadDir, { recursive: true });
+    const uniqueFilename = `TOS-Exam${examId}-${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, "_")}`;
+    const absolutePath = join(uploadDir, uniqueFilename);
+    await writeFile(absolutePath, buffer);
+
+    const tosFilePath = `/uploads/tos/${uniqueFilename}`;
+
+    await db.examination.update({
+      where: { exam_id: examId },
+      data: { tos_file_path: tosFilePath },
+    });
+
+    await db.auditLog.create({
+      data: {
+        user_id: facultyId,
+        action_performed: `Uploaded TOS PDF file (${file.name}) for Exam ID: ${examId}`,
+        ip_address: "127.0.0.1",
+      },
+    });
+
+    revalidatePath("/dashboard/faculty");
+    revalidatePath(`/dashboard/faculty/exams/${examId}/builder`);
+
+    return { success: true, tos_file_path: tosFilePath };
+  } catch (err: any) {
+    console.error("Error uploading TOS PDF:", err);
+    return { error: err.message || "Failed to upload TOS PDF file." };
   }
 }
 
@@ -1658,12 +1714,11 @@ export async function getFacultyEnrolledStudentsAndGrades(facultyId: number) {
 
 export async function getCourseRoster(courseId: number) {
   try {
-    const { targetYearLevel } = await syncAndGetYearLevelEnrolledStudents(courseId);
+    await syncAndGetYearLevelEnrolledStudents(courseId);
 
     const enrollments = await db.studentCourse.findMany({
       where: {
         course_id: courseId,
-        ...(targetYearLevel ? { student: { year_level: targetYearLevel } } : {}),
       },
       include: {
         student: {

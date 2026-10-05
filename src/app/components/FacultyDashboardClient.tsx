@@ -1428,8 +1428,16 @@ export function FacultyDashboardClient({
                         {exam.current_status === "Draft" && (
                           <button
                             disabled={isTransitioning}
-                            onClick={() => handleStatusTransition(exam.exam_id, "Pending_Chair")}
-                            className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold px-3 py-2 rounded-xl shadow-sm transition-all duration-300"
+                            onClick={() => {
+                              if (!exam.tos_file_path || exam.tos_file_path.trim() === "") {
+                                alert("TOS PDF Required: Please upload a TOS PDF file (max 10MB) in the Exam Builder before submitting to the Department Chair.");
+                                router.push(`/dashboard/faculty/exams/${exam.exam_id}/builder`);
+                                return;
+                              }
+                              handleStatusTransition(exam.exam_id, "Pending_Chair");
+                            }}
+                            className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold px-3 py-2 rounded-xl shadow-sm transition-all duration-300 cursor-pointer"
+                            title={!exam.tos_file_path || exam.tos_file_path.trim() === "" ? "TOS PDF required before submitting" : "Submit exam for Chair review"}
                           >
                             {isTransitioning ? (
                               <RefreshCw className="w-3.5 h-3.5 animate-spin" />
