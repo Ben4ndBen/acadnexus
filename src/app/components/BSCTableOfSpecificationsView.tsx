@@ -100,6 +100,11 @@ export function BSCTableOfSpecificationsView({
   academicYear = "2026-2027",
   examDate = new Date().toISOString().split("T")[0],
   documentReference = "BSC-ODI-F-121",
+  facultyName,
+  facultyRank,
+  programChairName,
+  deptChairName,
+  directorInstructionName,
   totalItems,
   topics,
 }: BSCTableOfSpecificationsViewProps) {
@@ -288,6 +293,65 @@ export function BSCTableOfSpecificationsView({
           </tfoot>
         </table>
       </div>
+
+      {/* SIGNATURES / APPROVAL WORKFLOW BLOCK */}
+      {(() => {
+        const cCode = (courseCode || "").trim().toUpperCase();
+        const dName = (resolvedDeptName || "").toUpperCase();
+        const isSingleTier = dName.includes("AGRICULTURE") || dName.includes("HOSPITALITY") || cCode.startsWith("AGRI") || cCode.startsWith("HPC") || cCode.startsWith("TPC") || cCode.startsWith("BSA") || cCode.startsWith("BSHM") || cCode.startsWith("BSTM");
+        
+        return (
+          <div className="pt-6 border-t border-slate-300">
+            <div className={`grid grid-cols-1 ${isSingleTier ? "sm:grid-cols-3" : "sm:grid-cols-4"} gap-6 text-xs text-slate-900`}>
+              {/* Prepared by */}
+              <div className="space-y-8">
+                <p className="font-extrabold text-slate-950 uppercase tracking-wider text-[11px]">Prepared by:</p>
+                <div>
+                  <p className="font-bold text-slate-900 border-b border-slate-400 pb-1 uppercase tracking-wide">
+                    {facultyName || "FACULTY INSTRUCTOR"}
+                  </p>
+                  <p className="text-[11px] text-slate-500 font-semibold mt-1">{facultyRank || "Faculty Instructor"}</p>
+                </div>
+              </div>
+
+              {/* Reviewed by (Program Chair) - Only for ICT, IT, TED */}
+              {!isSingleTier && (
+                <div className="space-y-8">
+                  <p className="font-extrabold text-slate-950 uppercase tracking-wider text-[11px]">Reviewed by:</p>
+                  <div>
+                    <p className="font-bold text-slate-900 border-b border-slate-400 pb-1 uppercase tracking-wide">
+                      {programChairName || "PROGRAM CHAIRPERSON"}
+                    </p>
+                    <p className="text-[11px] text-slate-500 font-semibold mt-1">Program Chairperson</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Recommended by (Department Chair) */}
+              <div className="space-y-8">
+                <p className="font-extrabold text-slate-950 uppercase tracking-wider text-[11px]">Recommended by:</p>
+                <div>
+                  <p className="font-bold text-slate-900 border-b border-slate-400 pb-1 uppercase tracking-wide">
+                    {deptChairName || "DEPARTMENT CHAIRPERSON"}
+                  </p>
+                  <p className="text-[11px] text-slate-500 font-semibold mt-1">Department Chairperson</p>
+                </div>
+              </div>
+
+              {/* Approved by (DI) */}
+              <div className="space-y-8">
+                <p className="font-extrabold text-slate-950 uppercase tracking-wider text-[11px]">Approved by:</p>
+                <div>
+                  <p className="font-bold text-slate-900 border-b border-slate-400 pb-1 uppercase tracking-wide">
+                    {directorInstructionName || "DIRECTOR FOR INSTRUCTION"}
+                  </p>
+                  <p className="text-[11px] text-slate-500 font-semibold mt-1">Director for Instruction</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* OFFICIAL BSC FOOTER IMAGE */}
       <div className="w-full mt-6 border-t border-slate-200 pt-2">

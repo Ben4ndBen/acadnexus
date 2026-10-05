@@ -1,4 +1,5 @@
 import * as XLSX from "xlsx";
+import { formatStudentName } from "./academicUtils";
 
 export interface StudentRosterItem {
   course_id: number;
@@ -6,6 +7,7 @@ export interface StudentRosterItem {
   course_title: string;
   student_id: number;
   first_name: string;
+  middle_name?: string | null;
   last_name: string;
   institutional_id: string;
   institutional_email: string;
@@ -48,7 +50,7 @@ export function exportStudentGradesRosterToExcel(
   });
 
   const mainSheetRows = students.map((s) => {
-    const fullName = `${s.last_name}, ${s.first_name}`;
+    const fullName = formatStudentName(s);
     const row: Record<string, any> = {
       "Student Name": fullName,
       "Student ID": s.institutional_id,
@@ -114,7 +116,7 @@ export function exportStudentGradesRosterToExcel(
       });
 
       const courseRows = courseStudents.map((cs) => {
-        const fullName = `${cs.last_name}, ${cs.first_name}`;
+        const fullName = formatStudentName(cs);
         const row: Record<string, any> = {
           "Student Name": fullName,
           "Student ID": cs.institutional_id,
@@ -184,7 +186,7 @@ export function exportExamSubmissionsToExcel(
   if (!submissions) return;
 
   const rows = submissions.map((se) => {
-    const studentName = `${se.student.last_name}, ${se.student.first_name}`;
+    const studentName = formatStudentName(se.student);
     const pct = maxExamScore && maxExamScore > 0
       ? `${Math.round((se.total_score / maxExamScore) * 100)}%`
       : "N/A";
@@ -265,7 +267,7 @@ export function exportMissedStudentsToExcel(
     }
 
     return {
-      "Student Name": `${s.last_name}, ${s.first_name}`,
+      "Student Name": formatStudentName(s),
       "Student ID": s.institutional_id,
       "Score": scoreText,
       "Exam Status": statusText,

@@ -202,7 +202,7 @@ export default async function FacultyDashboard() {
           return getCoursesCached().then(async (allCourses) => {
             const facultyAssignedCourses = faculty.facultyCourses.map((fc) => fc.course);
             // When faculty creates exam and in the question bank, the only courses that should appear are the assigned ones!
-            const effectiveCourses = facultyAssignedCourses.length > 0 ? facultyAssignedCourses : allCourses;
+            const effectiveCourses = facultyAssignedCourses;
 
             return (
               <FacultyDashboardClient

@@ -23,6 +23,7 @@ import {
   exportMissedStudentsToExcel 
 } from "@/lib/exportExcel";
 import { getProgramsForDepartment } from "@/lib/courseDepartmentMapping";
+import { formatStudentName } from "@/lib/academicUtils";
 
 interface FacultyDashboardClientProps {
   faculty: {
@@ -40,7 +41,7 @@ interface FacultyDashboardClientProps {
       title: string;
       tos_file_path?: string | null;
       time_limit_minutes: number;
-      current_status: "Draft" | "Pending_Chair" | "Pending_DI" | "Approved" | "Returned";
+      current_status: "Draft" | "Pending_Program_Chair" | "Pending_Chair" | "Pending_DI" | "Approved" | "Returned";
       is_archived?: boolean;
       academic_year?: string | null;
       course: {
@@ -48,6 +49,8 @@ interface FacultyDashboardClientProps {
         course_title: string;
       };
       approvalWorkflow: {
+        reviewed_by_prog_chair_id?: number | null;
+        prog_chair_review_status?: string | null;
         chair_comments: string | null;
         chair_review_status: string;
         di_review_status: string;
@@ -137,6 +140,10 @@ export function FacultyDashboardClient({
   const [enrollModalOpen, setEnrollModalOpen] = useState(false);
   const [bulkEnrollModalOpen, setBulkEnrollModalOpen] = useState(false);
 
+  // Popup modal state when unassigned faculty attempts restricted actions
+  const [unassignedWarningModalOpen, setUnassignedWarningModalOpen] = useState<boolean>(false);
+  const [unassignedActionText, setUnassignedActionText] = useState<string>("creating examinations or adding students");
+
   // Automatically resolve default program matching the faculty's department
   const deptProgram = useMemo(() => {
     const deptProgs = getProgramsForDepartment(faculty.department?.department_name);
@@ -190,7 +197,7 @@ export function FacultyDashboardClient({
   const fetchRoster = async (cId: number) => {
     if (!cId) return;
     setLoadingClassRoster(true);
-    const res = await getCourseRoster(cId);
+    const res = await getCourseRoster(cId, faculty.faculty_id);
     setLoadingClassRoster(false);
     if (res.success) {
       setClassRosterStudents(res.students || []);
@@ -363,6 +370,11 @@ export function FacultyDashboardClient({
   };
 
   const handleReuseExam = async (examId: number) => {
+    if (courses.length === 0 || assignedCourses.length === 0) {
+      setUnassignedActionText("reusing archived examinations");
+      setUnassignedWarningModalOpen(true);
+      return;
+    }
     setIsReusingExamId(examId);
     try {
       const res = await reuseArchivedExamination(examId, faculty.faculty_id);
@@ -673,6 +685,12 @@ export function FacultyDashboardClient({
 
   const handleSingleEnroll = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (courses.length === 0 || assignedCourses.length === 0) {
+      setEnrollModalOpen(false);
+      setUnassignedActionText("adding students to the class roster");
+      setUnassignedWarningModalOpen(true);
+      return;
+    }
     setEnrollError(null);
     setEnrollSuccess(null);
     setIsSubmittingEnroll(true);
@@ -689,7 +707,13 @@ export function FacultyDashboardClient({
     setIsSubmittingEnroll(false);
 
     if (res.error) {
-      setEnrollError(res.error);
+      if (res.error.includes("UNASSIGNED_TEACHING_LOAD")) {
+        setEnrollModalOpen(false);
+        setUnassignedActionText("adding students to the class roster");
+        setUnassignedWarningModalOpen(true);
+      } else {
+        setEnrollError(res.error);
+      }
     } else {
       setEnrollSuccess(res.message || "Student enrolled successfully!");
       fetchRoster(selectedRosterCourseId);
@@ -711,6 +735,12 @@ export function FacultyDashboardClient({
 
   const handleBulkEnroll = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (courses.length === 0 || assignedCourses.length === 0) {
+      setBulkEnrollModalOpen(false);
+      setUnassignedActionText("bulk enrolling students to the class roster");
+      setUnassignedWarningModalOpen(true);
+      return;
+    }
     setBulkResult(null);
     setIsSubmittingBulk(true);
 
@@ -725,7 +755,13 @@ export function FacultyDashboardClient({
     setIsSubmittingBulk(false);
 
     if (res.error) {
-      setBulkResult({ message: res.error, errors: [] });
+      if (res.error.includes("UNASSIGNED_TEACHING_LOAD")) {
+        setBulkEnrollModalOpen(false);
+        setUnassignedActionText("bulk enrolling students to the class roster");
+        setUnassignedWarningModalOpen(true);
+      } else {
+        setBulkResult({ message: res.error, errors: [] });
+      }
     } else {
       setBulkResult({
         message: res.message || `Successfully enrolled ${res.enrolledCount} students!`,
@@ -757,12 +793,18 @@ export function FacultyDashboardClient({
   };
 
   const handleCreateExam = async () => {
+    if (courses.length === 0 || assignedCourses.length === 0) {
+      setUnassignedActionText("creating new examination drafts");
+      setUnassignedWarningModalOpen(true);
+      return;
+    }
     setIsCreatingExam(true);
     const res = await createExamDraft(faculty.faculty_id);
     setIsCreatingExam(false);
     
     if (res.error) {
-      alert(res.error);
+      setUnassignedActionText("creating new examination drafts");
+      setUnassignedWarningModalOpen(true);
     } else if (res.exam_id) {
       router.push(`/dashboard/faculty/exams/${res.exam_id}/builder`);
     }
@@ -821,18 +863,25 @@ export function FacultyDashboardClient({
             Draft
           </span>
         );
+      case "Pending_Program_Chair":
+        return (
+          <span className="inline-flex items-center gap-1.5 text-xs font-semibold bg-purple-50 text-purple-800 border border-purple-200 px-2.5 py-1 rounded-full shadow-sm">
+            <span className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse" />
+            Pending Program Chairperson Review
+          </span>
+        );
       case "Pending_Chair":
         return (
           <span className="inline-flex items-center gap-1.5 text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200 px-2.5 py-1 rounded-full shadow-sm">
             <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-            Pending Chair Review
+            Pending Department Chairperson Review
           </span>
         );
       case "Pending_DI":
         return (
           <span className="inline-flex items-center gap-1.5 text-xs font-semibold bg-indigo-50 text-indigo-800 border border-indigo-200 px-2.5 py-1 rounded-full shadow-sm">
             <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
-            Pending Directorate Approval
+            Pending Director for Instruction Approval
           </span>
         );
       case "Approved":
@@ -1350,17 +1399,25 @@ export function FacultyDashboardClient({
             
             {/* Filter Tabs */}
             <div className="flex flex-wrap gap-1.5 bg-slate-50 p-1.5 rounded-xl border border-slate-100">
-              {["ALL", "Draft", "Pending_Chair", "Pending_DI", "Approved", "Returned"].map((status) => (
+              {[
+                { id: "ALL", label: "All" },
+                { id: "Draft", label: "Draft" },
+                { id: "Pending_Program_Chair", label: "Pending Program Chairperson" },
+                { id: "Pending_Chair", label: "Pending Department Chairperson" },
+                { id: "Pending_DI", label: "Pending DI" },
+                { id: "Approved", label: "Approved" },
+                { id: "Returned", label: "Returned" },
+              ].map((tab) => (
                 <button
-                  key={status}
-                  onClick={() => setTrackerFilter(status)}
+                  key={tab.id}
+                  onClick={() => setTrackerFilter(tab.id)}
                   className={`px-3 py-1.5 text-xs font-extrabold rounded-lg transition-all ${
-                    trackerFilter === status
+                    trackerFilter === tab.id
                       ? "bg-white text-emerald-700 shadow-sm border border-slate-200/60"
                       : "text-slate-500 hover:text-slate-800"
                   }`}
                 >
-                  {status === "ALL" ? "All" : status.replace("_", " ")}
+                  {tab.label}
                 </button>
               ))}
             </div>
@@ -1489,77 +1546,180 @@ export function FacultyDashboardClient({
 
                     {/* Timeline Tracker */}
                     <div className="py-6">
-                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 md:gap-0">
-                        {/* Step 1: Draft */}
-                        <div className="relative flex flex-col items-center text-center">
-                          <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm border-2 z-10 transition-all ${
-                            ["Draft", "Pending_Chair", "Pending_DI", "Approved", "Returned"].includes(exam.current_status)
-                              ? "bg-emerald-600 border-emerald-600 text-white"
-                              : "bg-white border-slate-200 text-slate-400"
-                          }`}>
-                            1
-                          </div>
-                          <p className="text-xs font-extrabold text-slate-800 mt-2">Draft Mode</p>
-                          <p className="text-[10px] text-slate-400 mt-0.5">Authoring phase</p>
-                          <div className="hidden md:block absolute left-1/2 right-0 top-4 h-[2px] bg-emerald-600 -z-0" />
-                        </div>
+                      {(() => {
+                        const hasProgChair = !!exam.approvalWorkflow?.reviewed_by_prog_chair_id || ["Pending_Program_Chair"].includes(exam.current_status) || ["ITC", "ITE", "ITM", "ITD", "IND", "EDUC"].some(prefix => exam.course?.course_code?.startsWith(prefix));
+                        
+                        if (hasProgChair) {
+                          return (
+                            <div className="grid grid-cols-1 md:grid-cols-5 gap-4 md:gap-0">
+                              {/* Step 1: Draft */}
+                              <div className="relative flex flex-col items-center text-center">
+                                <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm border-2 z-10 transition-all ${
+                                  ["Draft", "Pending_Program_Chair", "Pending_Chair", "Pending_DI", "Approved", "Returned"].includes(exam.current_status)
+                                    ? "bg-emerald-600 border-emerald-600 text-white"
+                                    : "bg-white border-slate-200 text-slate-400"
+                                }`}>
+                                  1
+                                </div>
+                                <p className="text-xs font-extrabold text-slate-800 mt-2">Draft Mode</p>
+                                <p className="text-[10px] text-slate-400 mt-0.5">Authoring phase</p>
+                                <div className="hidden md:block absolute left-1/2 right-0 top-4 h-[2px] bg-emerald-600 -z-0" />
+                              </div>
 
-                        {/* Step 2: Chair Review */}
-                        <div className="relative flex flex-col items-center text-center">
-                          <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm border-2 z-10 transition-all ${
-                            ["Pending_Chair", "Pending_DI", "Approved", "Returned"].includes(exam.current_status)
-                              ? exam.current_status === "Returned" && exam.approvalWorkflow?.chair_review_status === "Returned"
-                                ? "bg-rose-500 border-rose-500 text-white"
-                                : "bg-emerald-600 border-emerald-600 text-white"
-                              : "bg-white border-slate-200 text-slate-400"
-                          }`}>
-                            2
-                          </div>
-                          <p className="text-xs font-extrabold text-slate-800 mt-2">Chair Approval</p>
-                          <p className="text-[10px] text-slate-400 mt-0.5">Departmental audit</p>
-                          <div className={`hidden md:block absolute left-0 right-1/2 top-4 h-[2px] -z-0 ${
-                            ["Pending_Chair", "Pending_DI", "Approved", "Returned"].includes(exam.current_status) ? "bg-emerald-600" : "bg-slate-200"
-                          }`} />
-                          <div className={`hidden md:block absolute left-1/2 right-0 top-4 h-[2px] -z-0 ${
-                            ["Pending_DI", "Approved"].includes(exam.current_status) ? "bg-emerald-600" : "bg-slate-200"
-                          }`} />
-                        </div>
+                              {/* Step 2: Program Chairperson Review (Reviewed by) */}
+                              <div className="relative flex flex-col items-center text-center">
+                                <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm border-2 z-10 transition-all ${
+                                  ["Pending_Program_Chair", "Pending_Chair", "Pending_DI", "Approved", "Returned"].includes(exam.current_status)
+                                    ? exam.current_status === "Returned" && exam.approvalWorkflow?.prog_chair_review_status === "Returned"
+                                      ? "bg-rose-500 border-rose-500 text-white"
+                                      : "bg-emerald-600 border-emerald-600 text-white"
+                                    : "bg-white border-slate-200 text-slate-400"
+                                }`}>
+                                  2
+                                </div>
+                                <p className="text-xs font-extrabold text-slate-800 mt-2">Program Chairperson</p>
+                                <p className="text-[10px] text-amber-600 font-bold mt-0.5">Reviewed by</p>
+                                <div className={`hidden md:block absolute left-0 right-1/2 top-4 h-[2px] -z-0 ${
+                                  ["Pending_Program_Chair", "Pending_Chair", "Pending_DI", "Approved", "Returned"].includes(exam.current_status) ? "bg-emerald-600" : "bg-slate-200"
+                                }`} />
+                                <div className={`hidden md:block absolute left-1/2 right-0 top-4 h-[2px] -z-0 ${
+                                  ["Pending_Chair", "Pending_DI", "Approved"].includes(exam.current_status) ? "bg-emerald-600" : "bg-slate-200"
+                                }`} />
+                              </div>
 
-                        {/* Step 3: DI Clearance */}
-                        <div className="relative flex flex-col items-center text-center">
-                          <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm border-2 z-10 transition-all ${
-                            ["Pending_DI", "Approved"].includes(exam.current_status)
-                              ? "bg-emerald-600 border-emerald-600 text-white"
-                              : "bg-white border-slate-200 text-slate-400"
-                          }`}>
-                            3
-                          </div>
-                          <p className="text-xs font-extrabold text-slate-800 mt-2">Directorate Approval</p>
-                          <p className="text-[10px] text-slate-400 mt-0.5">Academic Directorate review</p>
-                          <div className={`hidden md:block absolute left-0 right-1/2 top-4 h-[2px] -z-0 ${
-                            ["Pending_DI", "Approved"].includes(exam.current_status) ? "bg-emerald-600" : "bg-slate-200"
-                          }`} />
-                          <div className={`hidden md:block absolute left-1/2 right-0 top-4 h-[2px] -z-0 ${
-                            exam.current_status === "Approved" ? "bg-emerald-600" : "bg-slate-200"
-                          }`} />
-                        </div>
+                              {/* Step 3: Department Chairperson Review (Recommended by) */}
+                              <div className="relative flex flex-col items-center text-center">
+                                <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm border-2 z-10 transition-all ${
+                                  ["Pending_Chair", "Pending_DI", "Approved"].includes(exam.current_status)
+                                    ? exam.current_status === "Returned" && exam.approvalWorkflow?.chair_review_status === "Returned"
+                                      ? "bg-rose-500 border-rose-500 text-white"
+                                      : "bg-emerald-600 border-emerald-600 text-white"
+                                    : "bg-white border-slate-200 text-slate-400"
+                                }`}>
+                                  3
+                                </div>
+                                <p className="text-xs font-extrabold text-slate-800 mt-2">Department Chairperson</p>
+                                <p className="text-[10px] text-amber-600 font-bold mt-0.5">Recommended by</p>
+                                <div className={`hidden md:block absolute left-0 right-1/2 top-4 h-[2px] -z-0 ${
+                                  ["Pending_Chair", "Pending_DI", "Approved"].includes(exam.current_status) ? "bg-emerald-600" : "bg-slate-200"
+                                }`} />
+                                <div className={`hidden md:block absolute left-1/2 right-0 top-4 h-[2px] -z-0 ${
+                                  ["Pending_DI", "Approved"].includes(exam.current_status) ? "bg-emerald-600" : "bg-slate-200"
+                                }`} />
+                              </div>
 
-                        {/* Step 4: Approved */}
-                        <div className="relative flex flex-col items-center text-center">
-                          <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm border-2 z-10 transition-all ${
-                            exam.current_status === "Approved"
-                              ? "bg-emerald-600 border-emerald-600 text-white"
-                              : "bg-white border-slate-200 text-slate-400"
-                          }`}>
-                            4
+                              {/* Step 4: DI Clearance (Approved by) */}
+                              <div className="relative flex flex-col items-center text-center">
+                                <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm border-2 z-10 transition-all ${
+                                  ["Pending_DI", "Approved"].includes(exam.current_status)
+                                    ? "bg-emerald-600 border-emerald-600 text-white"
+                                    : "bg-white border-slate-200 text-slate-400"
+                                }`}>
+                                  4
+                                </div>
+                                <p className="text-xs font-extrabold text-slate-800 mt-2">Director for Instruction</p>
+                                <p className="text-[10px] text-amber-600 font-bold mt-0.5">Approved by</p>
+                                <div className={`hidden md:block absolute left-0 right-1/2 top-4 h-[2px] -z-0 ${
+                                  ["Pending_DI", "Approved"].includes(exam.current_status) ? "bg-emerald-600" : "bg-slate-200"
+                                }`} />
+                                <div className={`hidden md:block absolute left-1/2 right-0 top-4 h-[2px] -z-0 ${
+                                  exam.current_status === "Approved" ? "bg-emerald-600" : "bg-slate-200"
+                                }`} />
+                              </div>
+
+                              {/* Step 5: Approved / Live */}
+                              <div className="relative flex flex-col items-center text-center">
+                                <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm border-2 z-10 transition-all ${
+                                  exam.current_status === "Approved"
+                                    ? "bg-emerald-600 border-emerald-600 text-white"
+                                    : "bg-white border-slate-200 text-slate-400"
+                                }`}>
+                                  5
+                                </div>
+                                <p className="text-xs font-extrabold text-slate-800 mt-2">Active / Live</p>
+                                <p className="text-[10px] text-slate-400 mt-0.5">Targeted to students</p>
+                                <div className={`hidden md:block absolute left-0 right-1/2 top-4 h-[2px] -z-0 ${
+                                  exam.current_status === "Approved" ? "bg-emerald-600" : "bg-slate-200"
+                                }`} />
+                              </div>
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 md:gap-0">
+                            {/* Step 1: Draft */}
+                            <div className="relative flex flex-col items-center text-center">
+                              <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm border-2 z-10 transition-all ${
+                                ["Draft", "Pending_Chair", "Pending_DI", "Approved", "Returned"].includes(exam.current_status)
+                                  ? "bg-emerald-600 border-emerald-600 text-white"
+                                  : "bg-white border-slate-200 text-slate-400"
+                              }`}>
+                                1
+                              </div>
+                              <p className="text-xs font-extrabold text-slate-800 mt-2">Draft Mode</p>
+                              <p className="text-[10px] text-slate-400 mt-0.5">Authoring phase</p>
+                              <div className="hidden md:block absolute left-1/2 right-0 top-4 h-[2px] bg-emerald-600 -z-0" />
+                            </div>
+
+                            {/* Step 2: Department Chairperson Review (Recommended by) */}
+                            <div className="relative flex flex-col items-center text-center">
+                              <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm border-2 z-10 transition-all ${
+                                ["Pending_Chair", "Pending_DI", "Approved", "Returned"].includes(exam.current_status)
+                                  ? exam.current_status === "Returned" && exam.approvalWorkflow?.chair_review_status === "Returned"
+                                    ? "bg-rose-500 border-rose-500 text-white"
+                                    : "bg-emerald-600 border-emerald-600 text-white"
+                                  : "bg-white border-slate-200 text-slate-400"
+                              }`}>
+                                2
+                              </div>
+                              <p className="text-xs font-extrabold text-slate-800 mt-2">Department Chairperson</p>
+                              <p className="text-[10px] text-amber-600 font-bold mt-0.5">Recommended by</p>
+                              <div className={`hidden md:block absolute left-0 right-1/2 top-4 h-[2px] -z-0 ${
+                                ["Pending_Chair", "Pending_DI", "Approved", "Returned"].includes(exam.current_status) ? "bg-emerald-600" : "bg-slate-200"
+                              }`} />
+                              <div className={`hidden md:block absolute left-1/2 right-0 top-4 h-[2px] -z-0 ${
+                                ["Pending_DI", "Approved"].includes(exam.current_status) ? "bg-emerald-600" : "bg-slate-200"
+                              }`} />
+                            </div>
+
+                            {/* Step 3: DI Clearance (Approved by) */}
+                            <div className="relative flex flex-col items-center text-center">
+                              <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm border-2 z-10 transition-all ${
+                                ["Pending_DI", "Approved"].includes(exam.current_status)
+                                  ? "bg-emerald-600 border-emerald-600 text-white"
+                                  : "bg-white border-slate-200 text-slate-400"
+                              }`}>
+                                3
+                              </div>
+                              <p className="text-xs font-extrabold text-slate-800 mt-2">Director for Instruction</p>
+                              <p className="text-[10px] text-amber-600 font-bold mt-0.5">Approved by</p>
+                              <div className={`hidden md:block absolute left-0 right-1/2 top-4 h-[2px] -z-0 ${
+                                ["Pending_DI", "Approved"].includes(exam.current_status) ? "bg-emerald-600" : "bg-slate-200"
+                              }`} />
+                              <div className={`hidden md:block absolute left-1/2 right-0 top-4 h-[2px] -z-0 ${
+                                exam.current_status === "Approved" ? "bg-emerald-600" : "bg-slate-200"
+                              }`} />
+                            </div>
+
+                            {/* Step 4: Approved */}
+                            <div className="relative flex flex-col items-center text-center">
+                              <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm border-2 z-10 transition-all ${
+                                exam.current_status === "Approved"
+                                  ? "bg-emerald-600 border-emerald-600 text-white"
+                                  : "bg-white border-slate-200 text-slate-400"
+                              }`}>
+                                4
+                              </div>
+                              <p className="text-xs font-extrabold text-slate-800 mt-2">Active / Live</p>
+                              <p className="text-[10px] text-slate-400 mt-0.5">Targeted to students</p>
+                              <div className={`hidden md:block absolute left-0 right-1/2 top-4 h-[2px] -z-0 ${
+                                exam.current_status === "Approved" ? "bg-emerald-600" : "bg-slate-200"
+                              }`} />
+                            </div>
                           </div>
-                          <p className="text-xs font-extrabold text-slate-800 mt-2">Active / Live</p>
-                          <p className="text-[10px] text-slate-400 mt-0.5">Targeted to students</p>
-                          <div className={`hidden md:block absolute left-0 right-1/2 top-4 h-[2px] -z-0 ${
-                            exam.current_status === "Approved" ? "bg-emerald-600" : "bg-slate-200"
-                          }`} />
-                        </div>
-                      </div>
+                        );
+                      })()}
                     </div>
 
                     {/* Returned Comments Showcase */}
@@ -2929,11 +3089,16 @@ export function FacultyDashboardClient({
                 <button
                   type="button"
                   onClick={() => {
+                    if (courses.length === 0 || assignedCourses.length === 0) {
+                      setUnassignedActionText("adding students to the class roster");
+                      setUnassignedWarningModalOpen(true);
+                      return;
+                    }
                     setEnrollError(null);
                     setEnrollSuccess(null);
                     setEnrollModalOpen(true);
                   }}
-                  className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-xl text-xs font-bold shadow-sm transition-all"
+                  className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-xl text-xs font-bold shadow-sm transition-all cursor-pointer"
                 >
                   <Plus className="w-4 h-4" />
                   <span>Add Student to Class</span>
@@ -2941,9 +3106,9 @@ export function FacultyDashboardClient({
                 <button
                   type="button"
                   onClick={() => fetchRoster(selectedRosterCourseId)}
-                  disabled={loadingClassRoster}
+                  disabled={loadingClassRoster || courses.length === 0}
                   title="Refresh Class List"
-                  className="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl transition-all"
+                  className="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl transition-all disabled:opacity-50 disabled:pointer-events-none"
                 >
                   <RefreshCw className={`w-4 h-4 ${loadingClassRoster ? "animate-spin text-emerald-600" : ""}`} />
                 </button>
@@ -2951,37 +3116,47 @@ export function FacultyDashboardClient({
             </div>
 
             {/* Course Selector & Search Filter Bar */}
-            <div className="bg-slate-50 border border-slate-200/80 p-4 sm:p-5 rounded-2xl flex flex-col md:flex-row gap-4 items-center justify-between">
-              {/* Course Dropdown */}
-              <div className="w-full md:w-auto flex-1 flex flex-col sm:flex-row sm:items-center gap-3">
-                <label className="text-[11px] font-black uppercase text-slate-500 tracking-wider shrink-0">
-                  Select Course:
-                </label>
-                <select
-                  value={selectedRosterCourseId}
-                  onChange={(e) => setSelectedRosterCourseId(Number(e.target.value))}
-                  className="w-full sm:max-w-md bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 px-3.5 py-2.5 focus:outline-emerald-500 shadow-sm"
-                >
-                  {courses.map((c) => (
-                    <option key={c.course_id} value={c.course_id}>
-                      {c.course_code} - {c.course_title}
-                    </option>
-                  ))}
-                </select>
+            {courses.length === 0 ? (
+              <div className="bg-amber-50/80 border border-amber-200 p-6 rounded-2xl text-center space-y-2">
+                <AlertCircle className="w-8 h-8 text-amber-600 mx-auto" />
+                <h3 className="text-sm font-extrabold text-amber-900">No Teaching Subjects Assigned Yet</h3>
+                <p className="text-xs text-amber-800 max-w-md mx-auto leading-relaxed">
+                  The Campus Director has not assigned any teaching subjects or courses to your faculty account yet. The class student list remains empty until subjects are assigned to your load.
+                </p>
               </div>
+            ) : (
+              <div className="bg-slate-50 border border-slate-200/80 p-4 sm:p-5 rounded-2xl flex flex-col md:flex-row gap-4 items-center justify-between">
+                {/* Course Dropdown */}
+                <div className="w-full md:w-auto flex-1 flex flex-col sm:flex-row sm:items-center gap-3">
+                  <label className="text-[11px] font-black uppercase text-slate-500 tracking-wider shrink-0">
+                    Select Course:
+                  </label>
+                  <select
+                    value={selectedRosterCourseId}
+                    onChange={(e) => setSelectedRosterCourseId(Number(e.target.value))}
+                    className="w-full sm:max-w-md bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 px-3.5 py-2.5 focus:outline-emerald-500 shadow-sm"
+                  >
+                    {courses.map((c) => (
+                      <option key={c.course_id} value={c.course_id}>
+                        {c.course_code} - {c.course_title}
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
-              {/* Search Bar */}
-              <div className="w-full md:w-72 relative">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
-                <input
-                  type="text"
-                  placeholder="Filter student ID or name..."
-                  value={rosterSearch}
-                  onChange={(e) => setRosterSearch(e.target.value)}
-                  className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-4 py-2 text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-emerald-500 shadow-sm"
-                />
+                {/* Search Bar */}
+                <div className="w-full md:w-72 relative">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+                  <input
+                    type="text"
+                    placeholder="Filter student ID or name..."
+                    value={rosterSearch}
+                    onChange={(e) => setRosterSearch(e.target.value)}
+                    className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-4 py-2 text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-emerald-500 shadow-sm"
+                  />
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Current Course Summary Banner */}
             {selectedCourse && (
@@ -3036,7 +3211,7 @@ export function FacultyDashboardClient({
                             </span>
                           </td>
                           <td className="py-3 px-4 font-bold text-slate-800">
-                            {s.last_name}, {s.first_name}
+                            {formatStudentName(s)}
                           </td>
                           <td className="py-3 px-4">
                             <span className="font-semibold text-slate-600 bg-slate-50 px-2 py-0.5 rounded border border-slate-200 text-[11px]">
@@ -3088,11 +3263,16 @@ export function FacultyDashboardClient({
                     <button
                       type="button"
                       onClick={() => {
+                        if (courses.length === 0 || assignedCourses.length === 0) {
+                          setUnassignedActionText("adding students to the class roster");
+                          setUnassignedWarningModalOpen(true);
+                          return;
+                        }
                         setEnrollError(null);
                         setEnrollSuccess(null);
                         setEnrollModalOpen(true);
                       }}
-                      className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-sm transition-all"
+                      className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-sm transition-all cursor-pointer"
                     >
                       <Plus className="w-4 h-4" />
                       <span>Add Student to Class</span>
@@ -3912,6 +4092,68 @@ export function FacultyDashboardClient({
                     <span>Acknowledge & Access Workspace</span>
                   </>
                 )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* RESTRICTED UNASSIGNED FACULTY POPUP MODAL */}
+      {unassignedWarningModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl border border-slate-200 space-y-6 my-8 transform animate-in zoom-in-95 duration-200">
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-amber-500/10 text-amber-600 flex items-center justify-center shrink-0 border border-amber-500/20">
+                <ShieldAlert className="w-6 h-6" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <span className="text-[10px] font-black uppercase tracking-widest text-amber-700 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-200">
+                  Action Restricted
+                </span>
+                <h3 className="text-lg font-black text-slate-900 mt-1">
+                  No Teaching Load Assigned
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Campus Directorate Policy Requirement
+                </p>
+              </div>
+              <button
+                onClick={() => setUnassignedWarningModalOpen(false)}
+                className="p-1.5 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="bg-amber-50/70 border border-amber-200/80 rounded-2xl p-4 text-xs text-amber-900 leading-relaxed space-y-2">
+              <p className="font-bold">
+                Attention Instructor {faculty.first_name} {faculty.last_name}:
+              </p>
+              <p className="text-amber-800">
+                You cannot perform <strong>{unassignedActionText}</strong> because the Campus Director has not assigned any teaching subjects/courses to your faculty profile yet.
+              </p>
+            </div>
+
+            <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 space-y-2 text-xs">
+              <div className="flex items-center justify-between text-slate-600">
+                <span className="font-semibold text-slate-500">Department:</span>
+                <span className="font-bold text-slate-800">{faculty.department?.department_name || "Unassigned"}</span>
+              </div>
+              <div className="flex items-center justify-between text-slate-600">
+                <span className="font-semibold text-slate-500">Status:</span>
+                <span className="font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200 text-[11px]">
+                  Awaiting Director Load Assignment
+                </span>
+              </div>
+            </div>
+
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={() => setUnassignedWarningModalOpen(false)}
+                className="w-full py-3 text-xs font-extrabold text-white bg-slate-900 hover:bg-slate-800 active:scale-95 rounded-xl shadow-md transition-all cursor-pointer"
+              >
+                Understand & Close
               </button>
             </div>
           </div>

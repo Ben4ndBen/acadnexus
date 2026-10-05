@@ -3,7 +3,8 @@
 import db from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { ExamStatus } from "@prisma/client";
-import { getExpectedYearLevelForCourse } from "@/lib/bsitCurriculum";
+import { getExpectedYearLevelForCourse, getExpectedYearAndSemForCourse } from "@/lib/bsitCurriculum";
+import { getProgramsForDepartment } from "@/lib/courseDepartmentMapping";
 
 export async function updateFacultyProfile(facultyId: number, firstName: string, lastName: string, middleName?: string) {
   if (!firstName || !lastName) {
@@ -64,32 +65,88 @@ export async function updateExamStatus(examId: number, status: ExamStatus, userI
         // Find a Chair to assign (e.g. for the faculty's department)
         const faculty = await tx.faculty.findUnique({
           where: { faculty_id: userId },
+          include: { department: true },
         });
 
         if (!faculty) {
           return { error: "Faculty profile not found. Please contact an admin." };
         }
 
-        let chair = await tx.chair.findUnique({
-          where: { department_id: faculty.department_id },
+        const examWithTargets = await tx.examination.findUnique({
+          where: { exam_id: examId },
+          include: {
+            examTargets: { include: { program: true } },
+            course: true,
+          },
         });
 
-        if (!chair) {
-          const { ensureChairsAndDepartmentsExist } = await import("@/lib/chairServer");
-          await ensureChairsAndDepartmentsExist();
-          chair = await tx.chair.findUnique({
+        const targetProgramIds = examWithTargets?.examTargets?.map((t) => t.program_id) || [];
+        let targetProgramId = targetProgramIds.length > 0 ? targetProgramIds[0] : null;
+
+        // Fallback: If no target program ID explicitly set in examTargets, find program by course code
+        if (!targetProgramId && examWithTargets?.course) {
+          const courseCode = examWithTargets.course.course_code.trim().toUpperCase();
+          if (courseCode.startsWith("ITC") || courseCode.startsWith("ITE") || courseCode.startsWith("ITM") || courseCode.startsWith("ITD") || courseCode === "ENT 403" || courseCode.includes("INFOTECH")) {
+            const prog = await tx.academicProgram.findUnique({ where: { program_code: "BSInfoTech" } });
+            if (prog) targetProgramId = prog.program_id;
+          } else if (courseCode.startsWith("IND") || courseCode.startsWith("IT")) {
+            const prog = await tx.academicProgram.findUnique({ where: { program_code: "BSIT" } });
+            if (prog) targetProgramId = prog.program_id;
+          } else if (courseCode.startsWith("EDUC")) {
+            const prog = await tx.academicProgram.findFirst({ where: { program_code: { in: ["BEED", "BSED"] } } });
+            if (prog) targetProgramId = prog.program_id;
+          }
+        }
+
+        // Find Program Chair for this program (if any)
+        let progChair = targetProgramId ? await tx.chair.findFirst({
+          where: { program_id: targetProgramId, is_program_chair: true },
+        }) : null;
+
+        // Find Department Chair for this department (e.g. CITD for ICT/IT, TED for BEED/BSED, HTM, AGRI)
+        let deptChair: any = null;
+        const deptName = faculty.department.department_name.trim().toLowerCase();
+
+        if (deptName.includes("ict") || deptName.includes("it department") || deptName.includes("citd") || deptName.includes("industrial")) {
+          const citdDept = await tx.department.findFirst({ where: { department_name: "CITD" } });
+          if (citdDept) {
+            deptChair = await tx.chair.findFirst({
+              where: { department_id: citdDept.department_id, is_program_chair: false },
+            });
+          }
+        } else if (deptName.includes("teacher education") || deptName.includes("ted")) {
+          const tedDept = await tx.department.findFirst({ where: { department_name: "Teacher Education Department" } });
+          if (tedDept) {
+            deptChair = await tx.chair.findFirst({
+              where: { department_id: tedDept.department_id, is_program_chair: false },
+            });
+          }
+        }
+
+        if (!deptChair) {
+          deptChair = await tx.chair.findFirst({
+            where: { department_id: faculty.department_id, is_program_chair: false },
+          }) || await tx.chair.findFirst({
             where: { department_id: faculty.department_id },
           });
         }
 
-        if (!chair) {
+        if (!deptChair) {
           return { error: "No department chair found for your department. Cannot submit exam for review." };
+        }
+
+        if (progChair) {
+          status = "Pending_Program_Chair";
         }
 
         await tx.approvalWorkflow.upsert({
           where: { exam_id: examId },
           update: {
-            reviewed_by_chair_id: chair.chair_id,
+            reviewed_by_prog_chair_id: progChair ? progChair.chair_id : null,
+            prog_chair_review_status: progChair ? "Pending" : null,
+            prog_chair_comments: null,
+            prog_chair_action_timestamp: null,
+            reviewed_by_chair_id: deptChair.chair_id,
             chair_review_status: "Pending",
             chair_comments: null,
             chair_action_timestamp: null,
@@ -99,7 +156,9 @@ export async function updateExamStatus(examId: number, status: ExamStatus, userI
           },
           create: {
             exam_id: examId,
-            reviewed_by_chair_id: chair.chair_id,
+            reviewed_by_prog_chair_id: progChair ? progChair.chair_id : null,
+            prog_chair_review_status: progChair ? "Pending" : null,
+            reviewed_by_chair_id: deptChair.chair_id,
             chair_review_status: "Pending",
             di_review_status: "Hold",
           },
@@ -142,11 +201,7 @@ export async function createExamDraft(facultyId: number, courseId?: number) {
       if (assignedFc) {
         targetCourseId = assignedFc.course_id;
       } else {
-        const firstCourse = await db.course.findFirst();
-        if (!firstCourse) {
-          return { error: "No courses found in the database. Please contact an admin." };
-        }
-        targetCourseId = firstCourse.course_id;
+        return { error: "No teaching subjects assigned to your account yet by the Campus Director. Please contact your Campus Director to assign your teaching load." };
       }
     }
 
@@ -333,17 +388,94 @@ export async function saveExamConfig(formData: FormData) {
   }
 }
 
-async function syncAndGetYearLevelEnrolledStudents(courseId: number) {
+export async function getTargetProgramsForCourseAndFaculty(courseId: number, facultyId?: number): Promise<string[]> {
   const course = await db.course.findUnique({
     where: { course_id: courseId },
   });
 
-  if (!course) return { course: null, targetYearLevel: null };
+  if (!course) return [];
 
-  const targetYearLevel = getExpectedYearLevelForCourse(course.course_code, course.course_title);
+  const programCodes = new Set<string>();
 
-  // Auto-sync ALL students in database into studentCourse so faculty can assign any student across all year levels & programs
+  // 1. If facultyId is provided, resolve department & programs for faculty
+  if (facultyId) {
+    const faculty = await db.faculty.findUnique({
+      where: { faculty_id: facultyId },
+      include: { department: true },
+    });
+    if (faculty?.department) {
+      const deptProgs = getProgramsForDepartment(faculty.department.department_id, faculty.department.department_name);
+      deptProgs.forEach((p) => programCodes.add(p.code));
+    }
+  }
+
+  // 2. If no program codes resolved from facultyId, check faculty assigned to this course
+  if (programCodes.size === 0) {
+    const fc = await db.facultyCourse.findFirst({
+      where: { course_id: courseId },
+      include: {
+        faculty: {
+          include: { department: true },
+        },
+      },
+    });
+    if (fc?.faculty?.department) {
+      const deptProgs = getProgramsForDepartment(fc.faculty.department.department_id, fc.faculty.department.department_name);
+      deptProgs.forEach((p) => programCodes.add(p.code));
+    }
+  }
+
+  // 3. Fallback / Override based on course code conventions
+  const code = course.course_code.trim().toUpperCase();
+  if (code.startsWith("AGRI") || code.startsWith("AG EXT") || code.startsWith("AGB") || code.startsWith("AME") ||
+      code.startsWith("ANSCI") || code.startsWith("CROP PROT") || code.startsWith("CROP SCI") || code.startsWith("SOIL SCI") ||
+      code.startsWith("THESIS") || code === "PRACTICUM" || code.startsWith("SEM ") || code === "CA") {
+    programCodes.clear();
+    programCodes.add("BSA");
+  } else if (code.startsWith("ITC") || code.startsWith("ITE") || code.startsWith("ITM") || code.startsWith("ITD") || code === "ENT 403") {
+    programCodes.clear();
+    programCodes.add("BSInfoTech");
+  } else if ((code.startsWith("IND") || code.startsWith("IT")) && !code.startsWith("ITC") && !code.startsWith("ITE") && !code.startsWith("ITM")) {
+    programCodes.clear();
+    programCodes.add("BSIT");
+  } else if (code.startsWith("HPC") || code.startsWith("HMPE") || code === "PRAC" || code.startsWith("TPC") || code.startsWith("TPE") || code.startsWith("ITRM") || code === "OJT" || code.startsWith("THC") || code.startsWith("BME")) {
+    programCodes.clear();
+    programCodes.add("BSHM");
+    programCodes.add("BSTM");
+  } else if (code.startsWith("EDUC")) {
+    programCodes.clear();
+    programCodes.add("BEED");
+    programCodes.add("BSED");
+  }
+
+  return Array.from(programCodes);
+}
+
+async function syncAndGetYearLevelEnrolledStudents(courseId: number, facultyId?: number) {
+  const course = await db.course.findUnique({
+    where: { course_id: courseId },
+  });
+
+  if (!course) return { course: null, targetYearLevel: null, targetSemester: null, targetPrograms: [] };
+
+  const expectedInfo = getExpectedYearAndSemForCourse(course.course_code, course.course_title);
+  const targetYearLevel = expectedInfo?.yearLevel ?? getExpectedYearLevelForCourse(course.course_code, course.course_title);
+  const targetSemester = expectedInfo?.semester ?? null;
+  const targetPrograms = await getTargetProgramsForCourseAndFaculty(courseId, facultyId);
+
+  // Auto-sync students taking this subject (matching expected year level and target department/programs) into studentCourse
+  const studentWhere: any = {};
+  if (targetYearLevel) {
+    studentWhere.year_level = targetYearLevel;
+  }
+  if (targetPrograms.length > 0) {
+    studentWhere.program = {
+      program_code: { in: targetPrograms },
+    };
+  }
+
   const eligibleStudents = await db.student.findMany({
+    where: studentWhere,
     select: { student_id: true },
   });
 
@@ -367,18 +499,42 @@ async function syncAndGetYearLevelEnrolledStudents(courseId: number) {
     }
   }
 
-  return { course, targetYearLevel };
+  return { course, targetYearLevel, targetSemester, targetPrograms };
 }
 
-export async function getAssignedStudentsForCourse(courseId: number) {
+export async function getAssignedStudentsForCourse(courseId: number, facultyId?: number) {
   try {
-    // Auto-sync missing expected year level students, but fetch all enrolled students across all year levels
-    await syncAndGetYearLevelEnrolledStudents(courseId);
+    if (facultyId) {
+      const assignedCount = await db.facultyCourse.count({ where: { faculty_id: facultyId } });
+      if (assignedCount === 0) {
+        return { success: true, students: [] };
+      }
+      const isCourseAssigned = await db.facultyCourse.findFirst({
+        where: { faculty_id: facultyId, course_id: courseId },
+      });
+      if (!isCourseAssigned) {
+        return { success: true, students: [] };
+      }
+    }
+    const { course, targetYearLevel, targetPrograms } = await syncAndGetYearLevelEnrolledStudents(courseId, facultyId);
+
+    const studentFilter: any = {};
+    if (targetYearLevel) {
+      studentFilter.year_level = targetYearLevel;
+    }
+    if (targetPrograms.length > 0) {
+      studentFilter.program = {
+        program_code: { in: targetPrograms },
+      };
+    }
+
+    const whereCondition: any = { course_id: courseId };
+    if (Object.keys(studentFilter).length > 0) {
+      whereCondition.student = studentFilter;
+    }
 
     const enrolled = await db.studentCourse.findMany({
-      where: {
-        course_id: courseId,
-      },
+      where: whereCondition,
       include: {
         student: {
           include: {
@@ -1712,14 +1868,39 @@ export async function getFacultyEnrolledStudentsAndGrades(facultyId: number) {
   }
 }
 
-export async function getCourseRoster(courseId: number) {
+export async function getCourseRoster(courseId: number, facultyId?: number) {
   try {
-    await syncAndGetYearLevelEnrolledStudents(courseId);
+    if (facultyId) {
+      const assignedCount = await db.facultyCourse.count({ where: { faculty_id: facultyId } });
+      if (assignedCount === 0) {
+        return { success: true, students: [] };
+      }
+      const isCourseAssigned = await db.facultyCourse.findFirst({
+        where: { faculty_id: facultyId, course_id: courseId },
+      });
+      if (!isCourseAssigned) {
+        return { success: true, students: [] };
+      }
+    }
+    const { course, targetYearLevel, targetPrograms } = await syncAndGetYearLevelEnrolledStudents(courseId, facultyId);
+
+    const studentFilter: any = {};
+    if (targetYearLevel) {
+      studentFilter.year_level = targetYearLevel;
+    }
+    if (targetPrograms.length > 0) {
+      studentFilter.program = {
+        program_code: { in: targetPrograms },
+      };
+    }
+
+    const whereCondition: any = { course_id: courseId };
+    if (Object.keys(studentFilter).length > 0) {
+      whereCondition.student = studentFilter;
+    }
 
     const enrollments = await db.studentCourse.findMany({
-      where: {
-        course_id: courseId,
-      },
+      where: whereCondition,
       include: {
         student: {
           include: {
@@ -1777,6 +1958,21 @@ export async function enrollStudentInCourse(
   const formattedId = rawId.toUpperCase();
 
   try {
+    if (facultyId) {
+      const assignedCount = await db.facultyCourse.count({
+        where: { faculty_id: facultyId },
+      });
+      if (assignedCount === 0) {
+        return { error: "UNASSIGNED_TEACHING_LOAD: No teaching subjects/courses have been assigned to your faculty account yet by the Campus Director." };
+      }
+      const isAssigned = await db.facultyCourse.findFirst({
+        where: { faculty_id: facultyId, course_id: courseId },
+      });
+      if (!isAssigned) {
+        return { error: "UNASSIGNED_TEACHING_LOAD: This specific course/subject is not assigned to your teaching load by the Campus Director." };
+      }
+    }
+
     const bcrypt = await import("bcryptjs");
 
     // 1. Verify that course exists
@@ -1786,6 +1982,9 @@ export async function enrollStudentInCourse(
     if (!course) {
       return { error: "Selected course was not found." };
     }
+
+    const courseExpected = getExpectedYearAndSemForCourse(course.course_code, course.course_title);
+    const defaultYear = courseExpected?.yearLevel || 1;
 
     // 2. Check if user already exists
     const existingUser = await db.user.findUnique({
@@ -1874,7 +2073,7 @@ export async function enrollStudentInCourse(
             middle_name: data.middleName?.trim() || null,
             last_name: data.lastName?.trim() || formattedId,
             program_id: programId!,
-            year_level: Number(data.yearLevel) || 1,
+            year_level: Number(data.yearLevel) || defaultYear,
             section: data.section?.trim() || "A",
           },
         });
@@ -2044,7 +2243,7 @@ export async function assignCoursesToFacultyAction(facultyId: number, courseIds:
     if (!currentUser) return { error: "Unauthorized. Please log in first." };
 
     const currentRole = currentUser.user_metadata?.role;
-    if (currentRole !== "Director" && currentRole !== "Chair") {
+    if (currentRole !== "Director" && currentRole !== "Chair" && currentRole !== "ProgramChair") {
       return { error: "Unauthorized. Only Director or Chair can assign courses to faculty." };
     }
 
