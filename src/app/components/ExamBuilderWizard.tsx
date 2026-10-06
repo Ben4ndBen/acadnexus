@@ -73,6 +73,24 @@ interface ExamBuilderWizardProps {
     sem2_end: string;
   };
   initialAssignedStudents?: StudentItem[];
+  facultyDepartment?: string;
+}
+
+function toRomanNumeral(num: number): string {
+  const romanMap: [number, string][] = [
+    [1000, "M"], [900, "CM"], [500, "D"], [400, "CD"],
+    [100, "C"], [90, "XC"], [50, "L"], [40, "XL"],
+    [10, "X"], [9, "IX"], [5, "V"], [4, "IV"], [1, "I"]
+  ];
+  let result = "";
+  let val = num;
+  for (const [limit, letter] of romanMap) {
+    while (val >= limit) {
+      result += letter;
+      val -= limit;
+    }
+  }
+  return result || String(num);
 }
 
 export type TaxonomyLevel = 
@@ -301,7 +319,8 @@ export function ExamBuilderWizard({
   assignedSubjects = [], 
   facultyId,
   academicPeriodSettings,
-  initialAssignedStudents = []
+  initialAssignedStudents = [],
+  facultyDepartment
 }: ExamBuilderWizardProps) {
   const router = useRouter();
 
@@ -332,6 +351,65 @@ export function ExamBuilderWizard({
     || courses.find(c => c.course_id === courseId)
     || exam.course
     || { course_id: courseId, course_code: "", course_title: "" };
+
+  const dynamicDepartmentName = useMemo(() => {
+    const code = (selectedCourse?.course_code || "").trim().toUpperCase();
+    const title = (selectedCourse?.course_title || "").trim().toUpperCase();
+    const progCode = (selectedCourse as any)?.programCode ? String((selectedCourse as any).programCode).trim().toUpperCase() : "";
+    const deptRaw = (facultyDepartment || "").trim();
+
+    // Specific sub-departments for courses with program chairs
+    const isICT = code.startsWith("ITC") || code.startsWith("ITE") || code.startsWith("ITM") || code.startsWith("ITD") || code === "ENT 403" || code.includes("INFOTECH") || title.includes("COMPUTING") || title.includes("INFORMATION TECH") || progCode === "BSINFOTECH";
+    if (isICT) return "INFORMATION AND COMMUNICATIONS TECHNOLOGY DEPARTMENT";
+
+    const isIndustrialTech = code.startsWith("IND") || code.startsWith("BIT") || progCode === "BIT" || progCode === "BSINDTECH" || (code.startsWith("IT") && !isICT);
+    if (isIndustrialTech) return "INDUSTRIAL TECHNOLOGY DEPARTMENT";
+
+    const isTeacherEducation = code.startsWith("EDUC") || code.startsWith("BED") || code.startsWith("BSED") || code.startsWith("BEED") || title.includes("EDUCATION") || title.includes("TEACHING") || progCode === "BSED" || progCode === "BEED";
+    if (isTeacherEducation) return "TEACHER EDUCATION DEPARTMENT";
+
+    const isAgriculture = code.startsWith("AGRI") || title.includes("AGRICULTUR") || title.includes("FARM") || progCode === "BSA";
+    if (isAgriculture) return "AGRICULTURE DEPARTMENT";
+
+    const isHtm = code.startsWith("HTM") || code.startsWith("HM") || code.startsWith("TM") || title.includes("HOSPITALITY") || title.includes("TOURISM") || progCode === "BSHM" || progCode === "BSTM";
+    if (isHtm) return "HOSPITALITY AND TOURISM MANAGEMENT DEPARTMENT";
+
+    // Fallback to faculty raw department if present
+    if (deptRaw) {
+      const dLower = deptRaw.toLowerCase();
+      if (dLower.includes("ict") || dLower.includes("information and communications")) return "INFORMATION AND COMMUNICATIONS TECHNOLOGY DEPARTMENT";
+      if (dLower === "it department" || dLower.includes("industrial")) return "INDUSTRIAL TECHNOLOGY DEPARTMENT";
+      if (dLower.includes("citd") || dLower.includes("computer and industrial")) return "COMPUTER AND INDUSTRIAL TECHNOLOGY DEPARTMENT";
+      if (dLower.includes("agri")) return "AGRICULTURE DEPARTMENT";
+      if (dLower.includes("teacher") || dLower.includes("ted") || dLower.includes("education")) return "TEACHER EDUCATION DEPARTMENT";
+      if (dLower.includes("hospitality") || dLower.includes("tourism") || dLower.includes("htm")) return "HOSPITALITY AND TOURISM MANAGEMENT DEPARTMENT";
+      if (dLower.includes("business") || dLower.includes("bsba")) return "BUSINESS ADMINISTRATION DEPARTMENT";
+      
+      if (deptRaw.toUpperCase().endsWith("DEPARTMENT")) {
+        return deptRaw.toUpperCase();
+      }
+      return `${deptRaw.toUpperCase()} DEPARTMENT`;
+    }
+
+    return "ACADEMIC DEPARTMENT";
+  }, [facultyDepartment, selectedCourse]);
+
+  const hasProgramChair = useMemo(() => {
+    const code = (selectedCourse?.course_code || "").trim().toUpperCase();
+    const title = (selectedCourse?.course_title || "").trim().toUpperCase();
+    const progCode = (selectedCourse as any)?.programCode ? String((selectedCourse as any).programCode).trim().toUpperCase() : "";
+
+    // ICT (Information and Communications Technology / BSInfoTech)
+    const isICT = code.startsWith("ITC") || code.startsWith("ITE") || code.startsWith("ITM") || code.startsWith("ITD") || code === "ENT 403" || code.includes("INFOTECH") || title.includes("COMPUTING") || title.includes("INFORMATION TECH") || progCode === "BSINFOTECH";
+
+    // IT / Industrial Tech (Industrial Technology / BSIT / BIT / BSINDTECH)
+    const isIndustrialTech = code.startsWith("IND") || code.startsWith("BIT") || progCode === "BIT" || progCode === "BSINDTECH" || (code.startsWith("IT") && !isICT);
+
+    // TED (Teacher Education Department / BEED / BSED)
+    const isTED = code.startsWith("EDUC") || progCode.includes("BSED") || progCode.includes("BEED") || progCode.includes("TED") || title.includes("EDUCATION");
+
+    return isICT || isIndustrialTech || isTED;
+  }, [selectedCourse]);
 
   // Configuration Settings State - Title is auto-populated and not manually edited
   const [title, setTitle] = useState<string>(
@@ -489,18 +567,63 @@ export function ExamBuilderWizard({
   const handleCourseChange = async (newId: number) => {
     setCourseId(newId);
     const newCourse = effectiveAssignedSubjects.find(c => c.course_id === newId) || courses.find(c => c.course_id === newId);
+    let newTitle = title;
     if (newCourse) {
-      setTitle(`${term} Examination in ${newCourse.course_title || newCourse.course_code}`);
+      newTitle = `${term} Examination in ${newCourse.course_title || newCourse.course_code}`;
+      setTitle(newTitle);
     }
+    
     setLoadingStudents(true);
+    setSaveStatus({ type: "saving", message: "Auto-saving subject selection and updating title..." });
+
     try {
       const res = await getAssignedStudentsForCourse(newId);
+      let newStudentIds: number[] = [];
       if (res.success && res.students) {
         setAssignedStudents(res.students);
-        setSelectedStudentIds(res.students.map(s => s.student_id));
+        newStudentIds = res.students.map(s => s.student_id);
+        setSelectedStudentIds(newStudentIds);
+      }
+
+      // Auto-save updated subject & title configuration to DB immediately
+      const configData = new FormData();
+      configData.append("examId", String(exam.exam_id));
+      configData.append("facultyId", String(facultyId));
+      configData.append("title", newTitle);
+      configData.append("courseId", String(newId));
+      configData.append("timeLimitMinutes", String(timeLimit));
+      configData.append("randomizeItems", String(randomizeItems));
+      configData.append("timePenaltySeconds", String(timePenalty));
+      configData.append("scorePenaltyPoints", String(scorePenalty));
+      configData.append("term", term);
+      configData.append("examDate", examDate);
+      configData.append("semester", applicableSemester);
+      configData.append("academicYear", applicableAcademicYear);
+      configData.append("documentReference", documentReference);
+      configData.append("selectedStudentIds", JSON.stringify(newStudentIds));
+
+      const tosPayload = {
+        targetTotalItems: tosTargetTotalItems,
+        topicPlans: tosTopicPlans,
+        learningOutcomes: learningOutcomes,
+      };
+      configData.append("tosDataJson", JSON.stringify(tosPayload));
+
+      const configRes = await saveExamConfig(configData);
+      const sortedQs = sortQuestionsByType(questions);
+      const serializedQs = serializeQuestions(sortedQs);
+      const questionsRes = await saveExamQuestions(exam.exam_id, serializedQs, facultyId);
+
+      if (configRes.error || questionsRes.error) {
+        setSaveStatus({ type: "error", message: `Auto-save Error: ${configRes.error || questionsRes.error}` });
+      } else {
+        setSaveStatus({ type: "success", message: `Subject updated & auto-saved as draft (${newCourse?.course_code || "Subject"})!` });
+        setTimeout(() => setSaveStatus(null), 3000);
+        router.refresh();
       }
     } catch (err) {
-      console.error("Failed to load students for course:", err);
+      console.error("Failed to load students and auto-save course:", err);
+      setSaveStatus({ type: "error", message: "Failed to auto-save subject selection." });
     } finally {
       setLoadingStudents(false);
     }
@@ -536,6 +659,67 @@ export function ExamBuilderWizard({
 
   // Topic Accordion Dropdown Open/Closed State (Minimized by default)
   const [openTopics, setOpenTopics] = useState<Record<string, boolean>>({});
+
+  // Interactive Popup Modal State for Submission & Save Draft feedback
+  interface ModalState {
+    isOpen: boolean;
+    type: "success" | "error" | "warning" | "save_draft";
+    title: string;
+    message: string;
+    details?: string[];
+    onConfirm?: () => void;
+    confirmText?: string;
+  }
+  const [popupModal, setPopupModal] = useState<ModalState | null>(null);
+
+  // Comprehensive examination question completeness validator
+  const validateExamQuestions = (): { valid: boolean; issues: string[] } => {
+    const issues: string[] = [];
+    if (!questions || questions.length === 0) {
+      issues.push("No questions found in this examination.");
+      return { valid: false, issues };
+    }
+
+    questions.forEach((q, idx) => {
+      const itemNum = idx + 1;
+      if (!q.text || q.text.trim() === "") {
+        issues.push(`Item #${itemNum}: Question text prompt is empty.`);
+      }
+
+      if (q.question_type === "Multiple_Choice") {
+        if (!q.options || q.options.length < 2) {
+          issues.push(`Item #${itemNum}: Multiple Choice question requires at least 2 options.`);
+        } else if (q.options.some(opt => !opt || opt.trim() === "")) {
+          issues.push(`Item #${itemNum}: One or more Multiple Choice options are blank.`);
+        }
+        if (!q.correctAnswer || q.correctAnswer.trim() === "") {
+          issues.push(`Item #${itemNum}: Answer Key / Correct Option is not selected.`);
+        }
+      } else if (q.question_type === "True_False") {
+        if (q.correctAnswer !== "True" && q.correctAnswer !== "False") {
+          issues.push(`Item #${itemNum}: True or False answer key is not selected.`);
+        }
+      } else if (q.question_type === "Identification") {
+        if (!q.correctAnswer || q.correctAnswer.trim() === "") {
+          issues.push(`Item #${itemNum}: Identification answer key is blank.`);
+        }
+      } else if (q.question_type === "Fill_In_The_Blanks") {
+        if (!q.blanks || q.blanks.length === 0) {
+          issues.push(`Item #${itemNum}: No blanks configured for Fill in the Blanks question.`);
+        } else if (q.blanks.some(b => !b.answer || b.answer.trim() === "")) {
+          issues.push(`Item #${itemNum}: One or more blank answer keys are left empty.`);
+        }
+      } else if (q.question_type === "Matching_Type") {
+        if (!q.matches || q.matches.length === 0) {
+          issues.push(`Item #${itemNum}: Matching Type table has no rows.`);
+        } else if (q.matches.some(m => !m.premise || !m.choice || !m.premise.trim() || !m.choice.trim())) {
+          issues.push(`Item #${itemNum}: Matching Type row contains blank premises or choices.`);
+        }
+      }
+    });
+
+    return { valid: issues.length === 0, issues };
+  };
 
   const toggleTopicOpen = (topicName: string) => {
     setOpenTopics(prev => ({
@@ -686,11 +870,24 @@ export function ExamBuilderWizard({
   };
 
   // Native TOS Topic Alignment & Hours Allocation Calculator State
+  // Helper to parse stored TOS JSON data if present
+  const parsedTosData = useMemo(() => {
+    if (exam.tos_file_path && exam.tos_file_path.trim().startsWith("{")) {
+      try {
+        return JSON.parse(exam.tos_file_path);
+      } catch {}
+    }
+    return null;
+  }, [exam.tos_file_path]);
+
   const [tosTargetTotalItems, setTosTargetTotalItems] = useState<number>(
-    exam.questionBank.length > 0 ? exam.questionBank.length : 50
+    parsedTosData?.targetTotalItems || (exam.questionBank.length > 0 ? exam.questionBank.length : 50)
   );
 
   const [tosTopicPlans, setTosTopicPlans] = useState<Array<{ id: string; topic: string; hours: number }>>(() => {
+    if (parsedTosData?.topicPlans && Array.isArray(parsedTosData.topicPlans) && parsedTosData.topicPlans.length > 0) {
+      return parsedTosData.topicPlans;
+    }
     const uniqueFromQuestions = Array.from(new Set(exam.questionBank.map(q => q.topic?.trim()).filter(Boolean))) as string[];
     if (uniqueFromQuestions.length > 0) {
       return uniqueFromQuestions.map((t, idx) => ({
@@ -707,7 +904,9 @@ export function ExamBuilderWizard({
   });
 
   // Editable Learning Outcomes map per topic
-  const [learningOutcomes, setLearningOutcomes] = useState<Record<string, string>>({});
+  const [learningOutcomes, setLearningOutcomes] = useState<Record<string, string>>(
+    parsedTosData?.learningOutcomes || {}
+  );
 
   const handleUpdateLearningOutcome = (topicName: string, text: string) => {
     setLearningOutcomes(prev => ({
@@ -1097,6 +1296,92 @@ export function ExamBuilderWizard({
     return tosDistribution.reduce((sum, t) => sum + t.calculatedItems, 0);
   }, [tosDistribution]);
 
+  // Real-time background auto-save helper & debounced effect
+  const isInitialMount = useRef<boolean>(true);
+  const [autoSaveStatus, setAutoSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [lastSavedTime, setLastSavedTime] = useState<string | null>(null);
+
+  const autoSaveExamData = async (
+    qsToSave: QuestionState[] = questions,
+    plansToSave = tosTopicPlans,
+    targetItemsToSave = tosTargetTotalItems,
+    outcomesToSave = learningOutcomes
+  ) => {
+    try {
+      setAutoSaveStatus("saving");
+
+      const configData = new FormData();
+      configData.append("examId", String(exam.exam_id));
+      configData.append("facultyId", String(facultyId));
+      configData.append("title", title);
+      configData.append("courseId", String(courseId));
+      configData.append("timeLimitMinutes", String(timeLimit));
+      configData.append("randomizeItems", String(randomizeItems));
+      configData.append("timePenaltySeconds", String(timePenalty));
+      configData.append("scorePenaltyPoints", String(scorePenalty));
+      configData.append("term", term);
+      configData.append("examDate", examDate);
+      configData.append("semester", applicableSemester);
+      configData.append("academicYear", applicableAcademicYear);
+      configData.append("documentReference", documentReference);
+      configData.append("selectedStudentIds", JSON.stringify(selectedStudentIds));
+
+      const tosPayload = {
+        targetTotalItems: targetItemsToSave,
+        topicPlans: plansToSave,
+        learningOutcomes: outcomesToSave,
+      };
+      configData.append("tosDataJson", JSON.stringify(tosPayload));
+
+      const configRes = await saveExamConfig(configData);
+
+      const sortedQs = sortQuestionsByType(qsToSave);
+      const serializedQs = serializeQuestions(sortedQs);
+      const questionsRes = await saveExamQuestions(exam.exam_id, serializedQs, facultyId);
+
+      if (!configRes.error && !questionsRes.error) {
+        setAutoSaveStatus("saved");
+        const now = new Date();
+        setLastSavedTime(now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+        router.refresh();
+        return { success: true };
+      } else {
+        setAutoSaveStatus("error");
+        return { error: configRes.error || questionsRes.error };
+      }
+    } catch (err: any) {
+      console.error("Auto save failed:", err);
+      setAutoSaveStatus("error");
+      return { error: err.message || "Auto-save failed" };
+    }
+  };
+
+  useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      autoSaveExamData();
+    }, 1200);
+
+    return () => clearTimeout(timer);
+  }, [
+    questions,
+    tosTopicPlans,
+    tosTargetTotalItems,
+    learningOutcomes,
+    title,
+    timeLimit,
+    randomizeItems,
+    timePenalty,
+    scorePenalty,
+    examDate,
+    documentReference,
+    selectedStudentIds
+  ]);
+
   const handleAddTosTopic = () => {
     if (!newTopicName.trim()) return;
     const hrs = parseFloat(newTopicHours) || 1;
@@ -1105,21 +1390,25 @@ export function ExamBuilderWizard({
       topic: newTopicName.trim(),
       hours: Math.max(0.5, hrs),
     };
-    setTosTopicPlans(prev => [...prev, newEntry]);
+    const updatedPlans = [...tosTopicPlans, newEntry];
+    setTosTopicPlans(updatedPlans);
     setNewTopicName("");
     setNewTopicHours("4");
     setTosNotification(`Added "${newEntry.topic}" (${hrs} hrs) to TOS Alignment Matrix.`);
     setTimeout(() => setTosNotification(null), 4000);
+    autoSaveExamData(questions, updatedPlans);
   };
 
   const handleUpdateTosTopic = (id: string, updatedName: string, updatedHours: number) => {
-    setTosTopicPlans(prev =>
-      prev.map(t => (t.id === id ? { ...t, topic: updatedName, hours: Math.max(0.1, updatedHours) } : t))
-    );
+    const updatedPlans = tosTopicPlans.map(t => (t.id === id ? { ...t, topic: updatedName, hours: Math.max(0.1, updatedHours) } : t));
+    setTosTopicPlans(updatedPlans);
+    autoSaveExamData(questions, updatedPlans);
   };
 
   const handleDeleteTosTopic = (id: string) => {
-    setTosTopicPlans(prev => prev.filter(t => t.id !== id));
+    const updatedPlans = tosTopicPlans.filter(t => t.id !== id);
+    setTosTopicPlans(updatedPlans);
+    autoSaveExamData(questions, updatedPlans);
   };
 
   const syncQuestionsWithTos = () => {
@@ -1163,16 +1452,21 @@ export function ExamBuilderWizard({
       }
     });
 
-    setQuestions(sortQuestionsByType(newQuestionList));
-    if (activeQuestionIdx === -1 && newQuestionList.length > 0) {
+    const sortedNew = sortQuestionsByType(newQuestionList);
+    setQuestions(sortedNew);
+    if (activeQuestionIdx === -1 && sortedNew.length > 0) {
       setActiveQuestionIdx(0);
     }
+    return sortedNew;
   };
 
   const handleApplyTosToQuestions = () => {
-    syncQuestionsWithTos();
+    const sortedNew = syncQuestionsWithTos();
     setTosNotification(`Synchronized ${tosTargetTotalItems} exam items mapped to your TOS topics!`);
     setTimeout(() => setTosNotification(null), 4000);
+    if (sortedNew) {
+      autoSaveExamData(sortedNew, tosTopicPlans);
+    }
   };
 
 
@@ -1620,100 +1914,223 @@ export function ExamBuilderWizard({
 
   // Save changes to draft
   const handleSaveDraft = async () => {
-    setSaveStatus({ type: "saving", message: "Saving examination details..." });
+    setSaveStatus({ type: "saving", message: "Saving examination details and TOS structure..." });
 
-    // Step 1: Save Configuration Settings
-    const configData = new FormData();
-    configData.append("examId", String(exam.exam_id));
-    configData.append("facultyId", String(facultyId));
-    configData.append("title", title);
-    configData.append("courseId", String(courseId));
-    configData.append("timeLimitMinutes", String(timeLimit));
-    configData.append("randomizeItems", String(randomizeItems));
-    configData.append("timePenaltySeconds", String(timePenalty));
-    configData.append("scorePenaltyPoints", String(scorePenalty));
-    configData.append("term", term);
-    configData.append("examDate", examDate);
-    configData.append("semester", applicableSemester);
-    configData.append("academicYear", applicableAcademicYear);
-    configData.append("documentReference", documentReference);
-    configData.append("selectedStudentIds", JSON.stringify(selectedStudentIds));
+    try {
+      // Step 1: Save Configuration Settings
+      const configData = new FormData();
+      configData.append("examId", String(exam.exam_id));
+      configData.append("facultyId", String(facultyId));
+      configData.append("title", title);
+      configData.append("courseId", String(courseId));
+      configData.append("timeLimitMinutes", String(timeLimit));
+      configData.append("randomizeItems", String(randomizeItems));
+      configData.append("timePenaltySeconds", String(timePenalty));
+      configData.append("scorePenaltyPoints", String(scorePenalty));
+      configData.append("term", term);
+      configData.append("examDate", examDate);
+      configData.append("semester", applicableSemester);
+      configData.append("academicYear", applicableAcademicYear);
+      configData.append("documentReference", documentReference);
+      configData.append("selectedStudentIds", JSON.stringify(selectedStudentIds));
 
-    const configRes = await saveExamConfig(configData);
-    if (configRes.error) {
-      setSaveStatus({ type: "error", message: `Config Error: ${configRes.error}` });
-      return;
+      const tosPayload = {
+        targetTotalItems: tosTargetTotalItems,
+        topicPlans: tosTopicPlans,
+        learningOutcomes: learningOutcomes,
+      };
+      configData.append("tosDataJson", JSON.stringify(tosPayload));
+
+      const configRes = await saveExamConfig(configData);
+      if (configRes.error) {
+        setSaveStatus({ type: "error", message: `Config Error: ${configRes.error}` });
+        setPopupModal({
+          isOpen: true,
+          type: "error",
+          title: "Save Draft Failed",
+          message: configRes.error,
+        });
+        return;
+      }
+
+      // Step 2: Save Questions (Auto-arranged by Question Type)
+      const sortedQs = sortQuestionsByType(questions);
+      const serializedQs = serializeQuestions(sortedQs);
+      const questionsRes = await saveExamQuestions(exam.exam_id, serializedQs, facultyId);
+
+      if (questionsRes.error) {
+        setSaveStatus({ type: "error", message: `Questions Error: ${questionsRes.error}` });
+        setPopupModal({
+          isOpen: true,
+          type: "error",
+          title: "Save Draft Failed",
+          message: questionsRes.error,
+        });
+        return;
+      }
+
+      setSaveStatus({ type: "success", message: "Examination draft saved successfully!" });
+      setTimeout(() => setSaveStatus(null), 3000);
+      router.refresh();
+
+      // Display Save Draft Success Modal
+      setPopupModal({
+        isOpen: true,
+        type: "save_draft",
+        title: "Draft Saved Successfully!",
+        message: "Your examination settings, Table of Specifications (TOS), and Question Bank items have been saved as a draft.",
+        details: [
+          `Course: ${selectedCourse.course_code || selectedCourse.course_title}`,
+          `Total Questions: ${questions.length} items`,
+          `Saved at: ${new Date().toLocaleTimeString()}`
+        ],
+        confirmText: "Continue Editing"
+      });
+    } catch (err: any) {
+      console.error("Save draft error:", err);
+      setSaveStatus({ type: "error", message: err?.message || "An error occurred while saving the draft." });
+      setPopupModal({
+        isOpen: true,
+        type: "error",
+        title: "Save Draft Error",
+        message: err?.message || "An unexpected error occurred while saving your draft.",
+      });
     }
-
-    // Step 2: Save Questions (Auto-arranged by Question Type)
-    const sortedQs = sortQuestionsByType(questions);
-    const serializedQs = serializeQuestions(sortedQs);
-    const questionsRes = await saveExamQuestions(exam.exam_id, serializedQs, facultyId);
-
-    if (questionsRes.error) {
-      setSaveStatus({ type: "error", message: `Questions Error: ${questionsRes.error}` });
-      return;
-    }
-
-    setSaveStatus({ type: "success", message: "Examination saved as Draft successfully!" });
-    setTimeout(() => setSaveStatus(null), 3000);
-    router.refresh();
   };
 
   // Save and Submit for Review
   const handleSubmitForReview = async () => {
+    // 1. Comprehensive question completeness validation
+    const validation = validateExamQuestions();
+    if (!validation.valid) {
+      setPopupModal({
+        isOpen: true,
+        type: "warning",
+        title: "Incomplete Question Items Detected",
+        message: "Your examination contains incomplete questions or unassigned answer keys. Please complete all required fields before submitting.",
+        details: validation.issues.slice(0, 8),
+        confirmText: "Review & Fix Questions"
+      });
+      return;
+    }
+
+    // 2. Strict TOS PDF upload check
+    if (!hasTosUploaded) {
+      setPopupModal({
+        isOpen: true,
+        type: "warning",
+        title: "TOS PDF File Required",
+        message: "Strict Requirement: A Table of Specifications (TOS) PDF file must be uploaded before submitting your examination to the Chairperson.",
+        details: ["Please upload your TOS PDF file in Step 3 before submitting."],
+        confirmText: "Upload TOS File"
+      });
+      return;
+    }
+
     setIsSubmitting(true);
     setSaveStatus({ type: "saving", message: "Finalizing and saving exam before submission..." });
 
-    // First save configurations
-    const configData = new FormData();
-    configData.append("examId", String(exam.exam_id));
-    configData.append("facultyId", String(facultyId));
-    configData.append("title", title);
-    configData.append("courseId", String(courseId));
-    configData.append("timeLimitMinutes", String(timeLimit));
-    configData.append("randomizeItems", String(randomizeItems));
-    configData.append("timePenaltySeconds", String(timePenalty));
-    configData.append("scorePenaltyPoints", String(scorePenalty));
-    configData.append("term", term);
-    configData.append("examDate", examDate);
-    configData.append("semester", applicableSemester);
-    configData.append("academicYear", applicableAcademicYear);
-    configData.append("documentReference", documentReference);
-    configData.append("selectedStudentIds", JSON.stringify(selectedStudentIds));
+    try {
+      // First save configurations
+      const configData = new FormData();
+      configData.append("examId", String(exam.exam_id));
+      configData.append("facultyId", String(facultyId));
+      configData.append("title", title);
+      configData.append("courseId", String(courseId));
+      configData.append("timeLimitMinutes", String(timeLimit));
+      configData.append("randomizeItems", String(randomizeItems));
+      configData.append("timePenaltySeconds", String(timePenalty));
+      configData.append("scorePenaltyPoints", String(scorePenalty));
+      configData.append("term", term);
+      configData.append("examDate", examDate);
+      configData.append("semester", applicableSemester);
+      configData.append("academicYear", applicableAcademicYear);
+      configData.append("documentReference", documentReference);
+      configData.append("selectedStudentIds", JSON.stringify(selectedStudentIds));
 
-    const configRes = await saveExamConfig(configData);
-    if (configRes.error) {
-      setSaveStatus({ type: "error", message: `Config Error: ${configRes.error}` });
+      const tosPayload = {
+        targetTotalItems: tosTargetTotalItems,
+        topicPlans: tosTopicPlans,
+        learningOutcomes: learningOutcomes,
+      };
+      configData.append("tosDataJson", JSON.stringify(tosPayload));
+
+      const configRes = await saveExamConfig(configData);
+      if (configRes.error) {
+        setSaveStatus({ type: "error", message: `Config Error: ${configRes.error}` });
+        setPopupModal({
+          isOpen: true,
+          type: "error",
+          title: "Submission Failed",
+          message: configRes.error,
+        });
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Save questions (Auto-arranged by Question Type)
+      const sortedQs = sortQuestionsByType(questions);
+      const serializedQs = serializeQuestions(sortedQs);
+      const questionsRes = await saveExamQuestions(exam.exam_id, serializedQs, facultyId);
+
+      if (questionsRes.error) {
+        setSaveStatus({ type: "error", message: `Questions Error: ${questionsRes.error}` });
+        setPopupModal({
+          isOpen: true,
+          type: "error",
+          title: "Submission Failed",
+          message: questionsRes.error,
+        });
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Transition status to Pending_Chair
+      const statusRes = await updateExamStatus(exam.exam_id, "Pending_Chair", facultyId);
+      if (statusRes.error) {
+        setSaveStatus({ type: "error", message: `Submission Error: ${statusRes.error}` });
+        setPopupModal({
+          isOpen: true,
+          type: "error",
+          title: "Submission Failed",
+          message: statusRes.error,
+        });
+        setIsSubmitting(false);
+        return;
+      }
+
+      const reviewTarget = hasProgramChair ? "Program Chairperson" : "Department Chairperson";
+      setSaveStatus({ type: "success", message: `Examination successfully submitted to ${reviewTarget} for review!` });
       setIsSubmitting(false);
-      return;
-    }
 
-    // Save questions (Auto-arranged by Question Type)
-    const sortedQs = sortQuestionsByType(questions);
-    const serializedQs = serializeQuestions(sortedQs);
-    const questionsRes = await saveExamQuestions(exam.exam_id, serializedQs, facultyId);
-
-    if (questionsRes.error) {
-      setSaveStatus({ type: "error", message: `Questions Error: ${questionsRes.error}` });
+      // Display Submission Success Modal
+      setPopupModal({
+        isOpen: true,
+        type: "success",
+        title: "Examination Submitted Successfully!",
+        message: `Your examination "${title}" has been successfully submitted to the ${reviewTarget} for review.`,
+        details: [
+          `Review Target: ${reviewTarget}`,
+          `Total Items: ${questions.length} questions`,
+          `Status: Pending Review`
+        ],
+        confirmText: "Return to Dashboard",
+        onConfirm: () => {
+          router.push("/dashboard/faculty");
+          router.refresh();
+        }
+      });
+    } catch (err: any) {
+      console.error("Submit for review error:", err);
+      setSaveStatus({ type: "error", message: err?.message || "An error occurred while submitting the exam." });
+      setPopupModal({
+        isOpen: true,
+        type: "error",
+        title: "Submission Error",
+        message: err?.message || "An unexpected error occurred during submission.",
+      });
       setIsSubmitting(false);
-      return;
     }
-
-    // Transition status to Pending_Chair
-    const statusRes = await updateExamStatus(exam.exam_id, "Pending_Chair", facultyId);
-    if (statusRes.error) {
-      setSaveStatus({ type: "error", message: `Submission Error: ${statusRes.error}` });
-      setIsSubmitting(false);
-      return;
-    }
-
-    setSaveStatus({ type: "success", message: "Examination successfully submitted to Department Chair for review!" });
-    setIsSubmitting(false);
-    setTimeout(() => {
-      router.push("/dashboard/faculty");
-      router.refresh();
-    }, 2000);
   };
 
   return (
@@ -1730,9 +2147,35 @@ export function ExamBuilderWizard({
           </button>
           <div>
             <h1 className="text-xl font-extrabold text-slate-900 tracking-tight">Exam Creator Wizard</h1>
+            <p className="text-xs text-slate-500 font-medium">Real-time Auto-Save enabled for all configuration, TOS, and question bank edits</p>
           </div>
         </div>
 
+        <div className="flex items-center gap-3">
+          {autoSaveStatus === "saving" && (
+            <span className="inline-flex items-center gap-1.5 text-xs font-bold text-sky-800 bg-sky-50 border border-sky-200 px-3 py-1.5 rounded-full shadow-2xs">
+              <RefreshCw className="w-3.5 h-3.5 animate-spin text-sky-600" /> Auto-saving draft...
+            </span>
+          )}
+          {autoSaveStatus === "saved" && lastSavedTime && (
+            <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-full shadow-2xs">
+              <CheckCircle className="w-3.5 h-3.5 text-emerald-600" /> Auto-saved ({lastSavedTime})
+            </span>
+          )}
+          {autoSaveStatus === "error" && (
+            <span className="inline-flex items-center gap-1.5 text-xs font-bold text-rose-800 bg-rose-50 border border-rose-200 px-3 py-1.5 rounded-full shadow-2xs">
+              <AlertCircle className="w-3.5 h-3.5 text-rose-600" /> Auto-save warning
+            </span>
+          )}
+
+          <button
+            onClick={handleSaveDraft}
+            className="flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-extrabold px-4 py-2.5 rounded-xl transition-all shadow-sm cursor-pointer"
+          >
+            <Save className="w-4 h-4" />
+            Save Draft
+          </button>
+        </div>
       </div>
 
       {/* Save Notification Banner */}
@@ -3011,10 +3454,10 @@ export function ExamBuilderWizard({
 
                   <div
                     style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}
-                    className="w-full max-w-[1123px] mx-auto bg-white border-2 border-slate-300 rounded-3xl p-6 sm:p-10 shadow-xl space-y-4 select-text relative min-h-[790px] flex flex-col justify-between overflow-hidden print:max-w-none print:min-h-0 print:shadow-none print:border-none print:p-0 print:m-0 print:rounded-none print:break-after-page"
+                    className="tos-container w-full max-w-[1123px] mx-auto bg-white border-2 border-slate-300 rounded-3xl p-6 sm:p-10 shadow-xl space-y-4 select-text relative min-h-[790px] flex flex-col justify-between overflow-hidden print:max-w-none print:min-h-0 print:shadow-none print:border-none print:p-0 print:m-0 print:rounded-none print:break-after-page"
                   >
                     <style>{`
-                      .tos-container, .tos-container * {
+                      .tos-container, .tos-container *, .tq-container, .tq-container * {
                         font-family: Arial, Helvetica, sans-serif !important;
                       }
                       @media print {
@@ -3054,10 +3497,10 @@ export function ExamBuilderWizard({
                         />
                       </div>
 
-                      {/* NAME OF DEPARTMENT */}
+                      {/* DYNAMIC DEPARTMENT NAME */}
                       <div className="text-center pt-0.5">
                         <h3 className="font-sans font-bold text-sm sm:text-base text-black uppercase tracking-wider">
-                          NAME OF DEPARTMENT
+                          {dynamicDepartmentName}
                         </h3>
                       </div>
 
@@ -3108,55 +3551,55 @@ export function ExamBuilderWizard({
                         <table className="w-full text-left border-collapse text-[9.5px] print:text-[9px] table-fixed border-black font-sans">
                           <thead>
                             <tr className="bg-white text-black font-black uppercase text-center border-b border-black">
-                              <th rowSpan={3} className="py-2 px-1.5 border-r border-black w-[14%] text-left font-black align-middle text-[9px] leading-tight">LESSON / TOPIC</th>
-                              <th rowSpan={3} className="py-2 px-1.5 border-r border-black w-[21%] text-left font-black align-middle text-[9px] leading-tight">LEARNING OUTCOMES</th>
-                              <th rowSpan={3} className="py-2 px-1 border-r border-black w-[5.5%] font-black align-middle text-[8px] leading-tight">NO. OF TEACH ING HOURS</th>
-                              <th rowSpan={3} className="py-2 px-1 border-r border-black w-[5.5%] font-black align-middle text-[8px] leading-tight">% OF ALLO CATION</th>
-                              <th rowSpan={3} className="py-2 px-1 border-r border-black w-[5.5%] font-black align-middle text-[8px] leading-tight">NO. OF ITEMS</th>
-                              <th colSpan={7} className="py-1.5 px-1 border-r border-b border-black bg-white text-black font-black text-[9px] tracking-tight">
+                              <th rowSpan={3} className="py-2 px-1 border-r border-black w-[13%] text-left font-black align-middle text-[8.5px] leading-tight">LESSON / TOPIC</th>
+                              <th rowSpan={3} className="py-2 px-1 border-r border-black w-[16%] text-left font-black align-middle text-[8.5px] leading-tight">LEARNING OUTCOMES</th>
+                              <th rowSpan={3} className="py-2 px-0.5 border-r border-black w-[5%] font-black text-center align-middle text-[7.5px] leading-tight">NO. OF TEACHING HOURS</th>
+                              <th rowSpan={3} className="py-2 px-0.5 border-r border-black w-[5%] font-black text-center align-middle text-[7.5px] leading-tight">% OF ALLOCATION</th>
+                              <th rowSpan={3} className="py-2 px-0.5 border-r border-black w-[5%] font-black text-center align-middle text-[7.5px] leading-tight">NO. OF ITEMS</th>
+                              <th colSpan={7} className="py-1.5 px-0.5 border-r border-b border-black bg-white text-black font-black text-center text-[8.5px] tracking-tight">
                                 ITEM SPECIFICATION PER TAXONOMY OF LEARNING
                               </th>
-                              <th rowSpan={3} className="py-2 px-1 w-[9.5%] font-black align-middle text-[8px] leading-tight">ITEM PLACEMENT</th>
+                              <th rowSpan={3} className="py-2 px-1 border-black w-[6.5%] font-black text-center align-middle text-[7.5px] leading-tight">ITEM PLACEMENT</th>
                             </tr>
-                            <tr className="bg-white text-black font-black text-[7.5px] uppercase text-center border-b border-black">
-                              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-snug break-words">
-                                KNOW LEDGE /<br />REMEMBERING
+                            <tr className="bg-white text-black font-black text-[7px] uppercase text-center border-b border-black">
+                              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-normal text-center overflow-hidden">
+                                REMEMBERING /<br />KNOWLEDGE
                               </th>
-                              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-snug break-words">
-                                COMPRE HENSION /<br />UNDERSTANDING
+                              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-normal text-center overflow-hidden">
+                                UNDERSTANDING /<br />COMPREHENSION
                               </th>
-                              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-snug break-words">
-                                APPLICATION /<br />APPLYING
+                              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-normal text-center overflow-hidden">
+                                APPLYING /<br />APPLICATION
                               </th>
-                              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-snug break-words">
-                                ANALYSIS /<br />ANALYZING
+                              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-normal text-center overflow-hidden">
+                                ANALYZING /<br />ANALYSIS
                               </th>
-                              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-snug break-words">
-                                SYNTHESIS /<br />EVALUATING
+                              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-normal text-center overflow-hidden">
+                                EVALUATING /<br />SYNTHESIS
                               </th>
-                              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-snug break-words">
-                                EVALUATION /<br />CREA TING
+                              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-normal text-center overflow-hidden">
+                                CREATING /<br />EVALUATION
                               </th>
-                              <th rowSpan={2} className="py-2 px-0.5 border-r border-black bg-white font-black text-black text-[9px] align-middle">TOTAL</th>
+                              <th rowSpan={2} className="py-2 px-0.5 border-r border-black bg-white font-black text-black text-[8.5px] text-center align-middle">TOTAL</th>
                             </tr>
-                            <tr className="bg-white text-black font-black text-[9px] uppercase text-center border-b border-black">
-                              <th className="py-1 px-0.5 border-r border-black font-black underline">
-                                {overallTaxonomyPercents.remembering > 0 ? `${overallTaxonomyPercents.remembering}%` : "%"}
+                            <tr className="bg-white text-black font-black text-[8.5px] uppercase text-center border-b border-black">
+                              <th className="py-1 px-0.5 border-r border-black font-black text-center underline">
+                                {overallTaxonomyPercents.remembering}%
                               </th>
-                              <th className="py-1 px-0.5 border-r border-black font-black underline">
-                                {overallTaxonomyPercents.understanding > 0 ? `${overallTaxonomyPercents.understanding}%` : "%"}
+                              <th className="py-1 px-0.5 border-r border-black font-black text-center underline">
+                                {overallTaxonomyPercents.understanding}%
                               </th>
-                              <th className="py-1 px-0.5 border-r border-black font-black underline">
-                                {overallTaxonomyPercents.applying > 0 ? `${overallTaxonomyPercents.applying}%` : "%"}
+                              <th className="py-1 px-0.5 border-r border-black font-black text-center underline">
+                                {overallTaxonomyPercents.applying}%
                               </th>
-                              <th className="py-1 px-0.5 border-r border-black font-black underline">
-                                {overallTaxonomyPercents.analyzing > 0 ? `${overallTaxonomyPercents.analyzing}%` : "%"}
+                              <th className="py-1 px-0.5 border-r border-black font-black text-center underline">
+                                {overallTaxonomyPercents.analyzing}%
                               </th>
-                              <th className="py-1 px-0.5 border-r border-black font-black underline">
-                                {overallTaxonomyPercents.evaluating > 0 ? `${overallTaxonomyPercents.evaluating}%` : "%"}
+                              <th className="py-1 px-0.5 border-r border-black font-black text-center underline">
+                                {overallTaxonomyPercents.evaluating}%
                               </th>
-                              <th className="py-1 px-0.5 border-r border-black font-black underline">
-                                {overallTaxonomyPercents.creating > 0 ? `${overallTaxonomyPercents.creating}%` : "%"}
+                              <th className="py-1 px-0.5 border-r border-black font-black text-center underline">
+                                {overallTaxonomyPercents.creating}%
                               </th>
                             </tr>
                           </thead>
@@ -3168,26 +3611,19 @@ export function ExamBuilderWizard({
                                   <td className="py-2 px-2 font-bold text-black border-r border-black align-top">
                                     {row.topic}
                                   </td>
-                                  <td className="py-1 px-1.5 text-black border-r border-black text-[9.5px] align-top">
-                                    <textarea
-                                      rows={2}
-                                      value={learningOutcomes[row.topic] ?? `Demonstrates competency and learning outcomes for ${row.topic.toLowerCase()}.`}
-                                      onChange={(e) => {
-                                        handleUpdateLearningOutcome(row.topic, e.target.value);
-                                        e.target.style.height = "auto";
-                                        e.target.style.height = `${e.target.scrollHeight}px`;
-                                      }}
-                                      onFocus={(e) => {
-                                        e.target.style.height = "auto";
-                                        e.target.style.height = `${e.target.scrollHeight}px`;
-                                      }}
-                                      placeholder="Enter learning outcomes for this topic..."
-                                      className="w-full bg-transparent border-none p-0.5 font-sans text-[9.5px] text-black font-medium focus:outline-none transition-all print:p-0 print:m-0 resize-y whitespace-pre-wrap break-words overflow-hidden"
+                                  <td className="py-1 px-1.5 text-black border-r border-black text-[8.5px] align-top whitespace-pre-wrap break-words">
+                                    <div
+                                      contentEditable
+                                      suppressContentEditableWarning
+                                      onBlur={(e) => handleUpdateLearningOutcome(row.topic, e.currentTarget.innerText || "")}
+                                      className="w-full min-h-[32px] bg-transparent outline-none font-sans text-[8.5px] leading-snug text-black font-medium focus:bg-amber-50/80 focus:ring-1 focus:ring-amber-300 rounded p-0.5 transition-all cursor-text print:p-0 print:focus:bg-transparent print:focus:ring-0"
                                       title="Faculty: Click to edit learning outcomes for this topic"
-                                    />
+                                    >
+                                      {learningOutcomes[row.topic] ?? `Demonstrates competency and learning outcomes for ${row.topic.toLowerCase()}.`}
+                                    </div>
                                   </td>
                                   <td className="py-2 px-1 text-center font-bold text-black border-r border-black align-top">
-                                    {row.hoursTaught > 0 ? row.hoursTaught : "—"}
+                                    {row.hoursTaught > 0 ? row.hoursTaught : "0"}
                                   </td>
                                   <td className="py-2 px-1 text-center font-extrabold text-black border-r border-black align-top">
                                     {row.weightPercentage}%
@@ -3196,22 +3632,22 @@ export function ExamBuilderWizard({
                                     {row.count}
                                   </td>
                                   <td className="py-2 px-0.5 text-center border-r border-black font-bold text-black align-top">
-                                    {t.remembering.count > 0 ? t.remembering.count : "—"}
+                                    {t.remembering.count}
                                   </td>
                                   <td className="py-2 px-0.5 text-center border-r border-black font-bold text-black align-top">
-                                    {t.understanding.count > 0 ? t.understanding.count : "—"}
+                                    {t.understanding.count}
                                   </td>
                                   <td className="py-2 px-0.5 text-center border-r border-black font-bold text-black align-top">
-                                    {t.applying.count > 0 ? t.applying.count : "—"}
+                                    {t.applying.count}
                                   </td>
                                   <td className="py-2 px-0.5 text-center border-r border-black font-bold text-black align-top">
-                                    {t.analyzing.count > 0 ? t.analyzing.count : "—"}
+                                    {t.analyzing.count}
                                   </td>
                                   <td className="py-2 px-0.5 text-center border-r border-black font-bold text-black align-top">
-                                    {t.evaluating.count > 0 ? t.evaluating.count : "—"}
+                                    {t.evaluating.count}
                                   </td>
                                   <td className="py-2 px-0.5 text-center border-r border-black font-bold text-black align-top">
-                                    {t.creating.count > 0 ? t.creating.count : "—"}
+                                    {t.creating.count}
                                   </td>
                                   <td className="py-2 px-0.5 text-center border-r border-black font-black text-black bg-white align-top">
                                     {row.count}
@@ -3237,22 +3673,22 @@ export function ExamBuilderWizard({
                                   {questions.length}
                                 </td>
                                 <td className="py-2 px-0.5 text-center border-r border-black font-black bg-[#f4a100]">
-                                  {tosTopicBreakdown.reduce((sum, r) => sum + r.taxonomy.remembering.count, 0) || "—"}
+                                  {tosTopicBreakdown.reduce((sum, r) => sum + r.taxonomy.remembering.count, 0)}
                                 </td>
                                 <td className="py-2 px-0.5 text-center border-r border-black font-black bg-[#f4a100]">
-                                  {tosTopicBreakdown.reduce((sum, r) => sum + r.taxonomy.understanding.count, 0) || "—"}
+                                  {tosTopicBreakdown.reduce((sum, r) => sum + r.taxonomy.understanding.count, 0)}
                                 </td>
                                 <td className="py-2 px-0.5 text-center border-r border-black font-black bg-[#f4a100]">
-                                  {tosTopicBreakdown.reduce((sum, r) => sum + r.taxonomy.applying.count, 0) || "—"}
+                                  {tosTopicBreakdown.reduce((sum, r) => sum + r.taxonomy.applying.count, 0)}
                                 </td>
                                 <td className="py-2 px-0.5 text-center border-r border-black font-black bg-[#f4a100]">
-                                  {tosTopicBreakdown.reduce((sum, r) => sum + r.taxonomy.analyzing.count, 0) || "—"}
+                                  {tosTopicBreakdown.reduce((sum, r) => sum + r.taxonomy.analyzing.count, 0)}
                                 </td>
                                 <td className="py-2 px-0.5 text-center border-r border-black font-black bg-[#f4a100]">
-                                  {tosTopicBreakdown.reduce((sum, r) => sum + r.taxonomy.evaluating.count, 0) || "—"}
+                                  {tosTopicBreakdown.reduce((sum, r) => sum + r.taxonomy.evaluating.count, 0)}
                                 </td>
                                 <td className="py-2 px-0.5 text-center border-r border-black font-black bg-[#f4a100]">
-                                  {tosTopicBreakdown.reduce((sum, r) => sum + r.taxonomy.creating.count, 0) || "—"}
+                                  {tosTopicBreakdown.reduce((sum, r) => sum + r.taxonomy.creating.count, 0)}
                                 </td>
                                 <td className="py-2 px-0.5 text-center border-r border-black font-black bg-[#f4a100]">
                                   {questions.length}
@@ -3322,7 +3758,8 @@ export function ExamBuilderWizard({
                 {previewPages.map((pageBlocks, pageIdx) => (
                   <div
                     key={pageIdx}
-                    className="w-full max-w-[850px] mx-auto bg-white border-2 border-slate-300 rounded-3xl p-6 sm:p-10 shadow-xl space-y-4 font-sans select-text relative min-h-[1050px] flex flex-col justify-between print:min-h-0 print:shadow-none print:border-none print:p-0 print:m-0 print:rounded-none"
+                    style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}
+                    className="tq-container w-full max-w-[850px] mx-auto bg-white border-2 border-slate-300 rounded-3xl p-6 sm:p-10 shadow-xl space-y-4 font-sans select-text relative min-h-[1050px] flex flex-col justify-between print:min-h-0 print:shadow-none print:border-none print:p-0 print:m-0 print:rounded-none"
                   >
                     <div className="space-y-4">
                       {/* BSC OFFICIAL HEADER IMAGE FOR EVERY A4 PAGE */}
@@ -3338,7 +3775,10 @@ export function ExamBuilderWizard({
                       {pageIdx === 0 ? (
                         <>
                           <div className="text-center space-y-1 py-1 border-b border-slate-200">
-                            <h2 className="text-base sm:text-lg font-black font-serif text-slate-900 tracking-wide uppercase">
+                            <h3 className="font-sans font-bold text-xs sm:text-sm text-slate-800 uppercase tracking-wider pb-0.5">
+                              {dynamicDepartmentName}
+                            </h3>
+                            <h2 className="text-base sm:text-lg font-black font-sans text-slate-900 tracking-wide uppercase">
                               OFFICIAL EXAMINATION PAPER
                             </h2>
                             <p className="text-xs font-bold text-slate-800 uppercase">
@@ -3409,18 +3849,18 @@ export function ExamBuilderWizard({
                             };
                             const qType = block.qType || "";
                             return (
-                              <div key={block.id} className="bg-slate-900 text-white p-3 rounded-xl flex items-center justify-between shadow-2xs mt-3">
-                                <div>
-                                  <h4 className="font-black text-xs uppercase tracking-wider">
-                                    TEST {block.testNum}. {typeTitles[qType] || qType.toUpperCase()}
+                              <div key={block.id} className="pt-3 pb-1.5 border-b-2 border-slate-900 mt-4 mb-2">
+                                <div className="flex items-baseline justify-between">
+                                  <h4 className="font-extrabold text-xs sm:text-sm text-slate-900 tracking-wide uppercase font-sans">
+                                    TEST {toRomanNumeral(block.testNum!)}. {typeTitles[qType] || qType.toUpperCase()}
                                   </h4>
-                                  <p className="text-[10px] text-slate-300 font-medium mt-0.5">
-                                    {typeDirections[qType]}
-                                  </p>
+                                  <span className="text-xs font-extrabold text-slate-900 font-sans tracking-tight">
+                                    ({block.points} {block.points === 1 ? "Point" : "Points"})
+                                  </span>
                                 </div>
-                                <span className="text-[10px] font-black bg-emerald-500 text-slate-950 px-2 py-0.5 rounded-md shrink-0">
-                                  {block.points} Pts Total
-                                </span>
+                                <p className="text-xs text-slate-700 italic font-sans mt-0.5 leading-tight">
+                                  <span className="font-bold not-italic">Directions: </span>{typeDirections[qType]}
+                                </p>
                               </div>
                             );
                           }
@@ -3690,10 +4130,10 @@ export function ExamBuilderWizard({
                 disabled={isSubmitting || questions.length === 0}
                 onClick={handleSubmitForReview}
                 className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold px-5 py-2.5 rounded-xl transition-all shadow-md hover:shadow-emerald-600/20 disabled:opacity-50 disabled:pointer-events-none cursor-pointer"
-                title="Final Submit to Department Chair"
+                title={hasProgramChair ? "Final Submit to Program Chairperson" : "Final Submit to Department Chairperson"}
               >
                 {isSubmitting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                Final Submit to Chair
+                {hasProgramChair ? "Final Submit to Prog Chair" : "Final Submit to Dept Chair"}
               </button>
             </div>
           </div>
@@ -3702,6 +4142,72 @@ export function ExamBuilderWizard({
       )}
 
 
+
+      {/* Interactive Notification Popup Modal */}
+      {popupModal && popupModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200 select-none">
+          <div className="bg-white rounded-3xl border border-slate-200/90 shadow-2xl max-w-md w-full overflow-hidden animate-in zoom-in-95 duration-200">
+            {/* Header / Banner */}
+            <div className={`p-6 text-center border-b ${
+              popupModal.type === "success" || popupModal.type === "save_draft"
+                ? "bg-emerald-50/80 border-emerald-100 text-emerald-950"
+                : popupModal.type === "warning"
+                ? "bg-amber-50/80 border-amber-100 text-amber-950"
+                : "bg-rose-50/80 border-rose-100 text-rose-950"
+            }`}>
+              <div className="mx-auto w-14 h-14 rounded-2xl flex items-center justify-center mb-3 shadow-sm border border-white/60 bg-white">
+                {popupModal.type === "success" ? (
+                  <CheckCircle className="w-8 h-8 text-emerald-600" />
+                ) : popupModal.type === "save_draft" ? (
+                  <Save className="w-8 h-8 text-emerald-600" />
+                ) : popupModal.type === "warning" ? (
+                  <AlertCircle className="w-8 h-8 text-amber-600" />
+                ) : (
+                  <AlertCircle className="w-8 h-8 text-rose-600" />
+                )}
+              </div>
+              <h3 className="text-lg font-extrabold tracking-tight">{popupModal.title}</h3>
+              <p className="text-xs font-semibold text-slate-600 mt-1">{popupModal.message}</p>
+            </div>
+
+            {/* Details Summary List */}
+            {popupModal.details && popupModal.details.length > 0 && (
+              <div className="p-5 bg-slate-50 border-b border-slate-100 space-y-2 max-h-48 overflow-y-auto">
+                <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Details Summary:</p>
+                <ul className="space-y-1.5">
+                  {popupModal.details.map((item, idx) => (
+                    <li key={idx} className="text-xs font-medium text-slate-700 flex items-start gap-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-1.5 shrink-0" />
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Action Footer */}
+            <div className="p-4 bg-white flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  if (popupModal.onConfirm) {
+                    popupModal.onConfirm();
+                  }
+                  setPopupModal(null);
+                }}
+                className={`w-full py-2.5 px-4 rounded-xl text-xs font-extrabold shadow-sm transition-all text-white cursor-pointer ${
+                  popupModal.type === "success" || popupModal.type === "save_draft"
+                    ? "bg-emerald-600 hover:bg-emerald-700 hover:shadow-emerald-600/20"
+                    : popupModal.type === "warning"
+                    ? "bg-amber-600 hover:bg-amber-700 text-white"
+                    : "bg-slate-900 hover:bg-slate-800"
+                }`}
+              >
+                {popupModal.confirmText || (popupModal.type === "success" ? "Got it!" : "Close")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

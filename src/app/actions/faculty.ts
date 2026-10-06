@@ -59,10 +59,6 @@ export async function updateExamStatus(examId: number, status: ExamStatus, userI
       // Allow submission for Chair review with integrated TOS matrix
       // Add or update ApprovalWorkflow record if needed
       if (status === "Pending_Chair") {
-        if (!exam.tos_file_path || exam.tos_file_path.trim() === "") {
-          return { error: "Submission Failed: Uploading a TOS PDF file (max 10MB) is required before submitting to the Department Chair." };
-        }
-
         // Find a Chair to assign (e.g. for the faculty's department)
         const faculty = await tx.faculty.findUnique({
           where: { faculty_id: userId },
@@ -314,7 +310,7 @@ export async function saveExamConfig(formData: FormData) {
     let tosFilePath = exam.tos_file_path; // Default to existing path
 
     const tosDataJson = formData.get("tosDataJson") as string | null;
-    if (tosDataJson && tosDataJson.trim() !== "") {
+    if (tosDataJson && tosDataJson.trim() !== "" && (!tosFilePath || !tosFilePath.startsWith("/uploads/"))) {
       tosFilePath = tosDataJson;
     }
 

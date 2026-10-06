@@ -1321,39 +1321,6 @@ export function FacultyDashboardClient({
                 </div>
               )}
             </div>
-
-            {/* Compliance Matrix */}
-            <div className="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-sm space-y-6">
-              <h2 className="text-lg font-bold text-slate-800 border-b border-slate-100 pb-3 flex items-center gap-2">
-                <span className="w-1.5 h-6 bg-emerald-600 rounded-full" />
-                Compliance Portfolio
-              </h2>
-              {faculty.facultyPortfolios && faculty.facultyPortfolios.length > 0 ? (
-                <div className="space-y-4">
-                  {faculty.facultyPortfolios.map((portfolio) => (
-                    <div key={portfolio.portfolio_id} className="border border-slate-100 rounded-2xl p-4 bg-slate-50/50 space-y-3">
-                      <div className="flex justify-between items-center">
-                        <span className="text-xs font-extrabold text-slate-700">AY {portfolio.academic_year} (Sem {portfolio.semester})</span>
-                        <span className="text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-100 px-2.5 py-0.5 rounded-full">
-                          {portfolio.compliance_percentage.toString()}% Compliance
-                        </span>
-                      </div>
-                      <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                        <div
-                          className="bg-emerald-500 h-full rounded-full transition-all duration-500"
-                          style={{ width: `${Number(portfolio.compliance_percentage)}%` }}
-                        />
-                      </div>
-                      <p className="text-[11px] text-slate-400 font-medium">Total Exams: {portfolio.total_exams_created}</p>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-8 bg-slate-50/30 rounded-2xl border border-dashed border-slate-200">
-                  <p className="text-xs text-slate-500">No compliance statistics recorded yet.</p>
-                </div>
-              )}
-            </div>
           </div>
 
           {/* Right Panel: Recent Exams and Quick Actions */}

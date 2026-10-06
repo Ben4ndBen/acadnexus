@@ -159,6 +159,7 @@ export default async function ExamBuilderPage({ params }: PageProps) {
           facultyId={faculty.faculty_id} 
           academicPeriodSettings={academicPeriodSettings}
           initialAssignedStudents={initialAssignedStudents}
+          facultyDepartment={faculty.department?.department_name}
         />
       </main>
 
