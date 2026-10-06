@@ -182,17 +182,21 @@ export default async function ChairDashboard() {
   }));
 
   // Selected Pending Approvals depending on whether Program Chair or Dept Chair
-  let formattedApprovals = isProgChair ? chair.progApprovals : chair.approvals;
-
-  // If CITD Department Chair, also fetch any Pending_Chair approvals assigned to CITD chair
-  if (!isProgChair && department.department_name === "CITD") {
-    const extraApprovals = await db.approvalWorkflow.findMany({
+  let formattedApprovals: any[] = [];
+  if (isProgChair) {
+    formattedApprovals = chair.progApprovals;
+  } else {
+    const deptFacultyIds = allFaculty.map((f) => f.faculty_id);
+    formattedApprovals = await db.approvalWorkflow.findMany({
       where: {
-        reviewed_by_chair_id: chair.chair_id,
         chair_review_status: "Pending",
         exam: {
           current_status: "Pending_Chair",
         },
+        OR: [
+          { reviewed_by_chair_id: chair.chair_id },
+          { exam: { faculty_id: { in: deptFacultyIds } } },
+        ],
       },
       include: {
         exam: {
@@ -204,12 +208,6 @@ export default async function ChairDashboard() {
         },
       },
     });
-    const seenWorkflows = new Set(formattedApprovals.map((a) => a.workflow_id));
-    for (const exApp of extraApprovals) {
-      if (!seenWorkflows.has(exApp.workflow_id)) {
-        formattedApprovals.push(exApp as any);
-      }
-    }
   }
 
   // Extract all department exams

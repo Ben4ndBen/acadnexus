@@ -36,6 +36,55 @@ export async function reviewExamByChair(
       const status = action === "Approve" ? "Approved" : "Returned";
       const nextExamStatus = action === "Approve" ? "Pending_Chair" : "Returned";
 
+      // Resolve the respective Department Chair to forward to when approved
+      let targetDeptChairId = currentWorkflow.reviewed_by_chair_id;
+
+      if (action === "Approve") {
+        const examDetails = await db.examination.findUnique({
+          where: { exam_id: examId },
+          include: {
+            faculty: { include: { department: true } },
+            course: true,
+          },
+        });
+
+        if (examDetails?.faculty) {
+          const facultyDeptId = examDetails.faculty.department_id;
+          const facultyDeptName = examDetails.faculty.department?.department_name?.trim().toLowerCase() || "";
+          const courseCode = examDetails.course?.course_code?.trim().toUpperCase() || "";
+
+          let deptChairRecord: any = null;
+
+          if (facultyDeptName.includes("citd") || facultyDeptName.includes("ict") || facultyDeptName.includes("industrial") || courseCode.startsWith("ITC") || courseCode.startsWith("IND")) {
+            const citdDept = await db.department.findFirst({ where: { department_name: "CITD" } });
+            if (citdDept) {
+              deptChairRecord = await db.chair.findFirst({
+                where: { department_id: citdDept.department_id, is_program_chair: false },
+              });
+            }
+          } else if (facultyDeptName.includes("teacher education") || facultyDeptName.includes("ted") || courseCode.startsWith("EDUC") || courseCode.startsWith("BEED") || courseCode.startsWith("BSED")) {
+            const tedDept = await db.department.findFirst({ where: { department_name: "Teacher Education Department" } });
+            if (tedDept) {
+              deptChairRecord = await db.chair.findFirst({
+                where: { department_id: tedDept.department_id, is_program_chair: false },
+              });
+            }
+          }
+
+          if (!deptChairRecord) {
+            deptChairRecord = await db.chair.findFirst({
+              where: { department_id: facultyDeptId, is_program_chair: false },
+            }) || await db.chair.findFirst({
+              where: { department_id: facultyDeptId },
+            });
+          }
+
+          if (deptChairRecord) {
+            targetDeptChairId = deptChairRecord.chair_id;
+          }
+        }
+      }
+
       await db.approvalWorkflow.update({
         where: { workflow_id: workflowId },
         data: {
@@ -43,6 +92,8 @@ export async function reviewExamByChair(
           prog_chair_review_status: status as any,
           prog_chair_comments: comments || null,
           prog_chair_action_timestamp: new Date(),
+          reviewed_by_chair_id: targetDeptChairId,
+          chair_review_status: action === "Approve" ? "Pending" : currentWorkflow.chair_review_status,
         },
       });
 
