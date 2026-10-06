@@ -1017,66 +1017,7 @@ export function ChairDashboardClient({
                         </button>
                       </div>
 
-
-
-                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
-                        <label className="text-xs font-bold text-slate-700 mb-2 block">General Review Comments</label>
-                        <textarea
-                          value={reviewComments[approval.workflow_id] || ""}
-                          onChange={(e) => setReviewComments({...reviewComments, [approval.workflow_id]: e.target.value})}
-                          className="w-full bg-white border border-slate-200 rounded-lg p-3 text-sm text-slate-800 placeholder:text-slate-400 focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all outline-none"
-                          rows={3}
-                          placeholder="Add your general feedback or required changes here..."
-                        />
-                      </div>
-                      
-                      {/* Itemized Question Feedback Panel */}
-                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-4">
-                        {(() => {
-                          const qStatuses = questionStatuses[approval.workflow_id] || {};
-                          const totalQuestions = approval.exam.questionBank?.length || 0;
-                          const approvedCount = approval.exam.questionBank?.filter(q => (qStatuses[q.question_id] || "Approved") === "Approved").length || 0;
-                          const revisionCount = totalQuestions - approvedCount;
-                          const percentApproved = totalQuestions > 0 ? Math.round((approvedCount / totalQuestions) * 100) : 100;
-                          
-                          return (
-                            <>
-                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-3">
-                                <div>
-                                  <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">
-                                    Granular Question Review
-                                  </h4>
-                                  <p className="text-[10px] text-slate-400 font-semibold uppercase mt-0.5">
-                                    Set individual item status and write specific corrections.
-                                  </p>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <div className="text-right">
-                                    <span className="text-[10px] font-extrabold text-slate-600 block">
-                                      {approvedCount} / {totalQuestions} Approved
-                                    </span>
-                                    {revisionCount > 0 && (
-                                      <span className="text-[9px] font-bold text-rose-600">
-                                        {revisionCount} require revision
-                                      </span>
-                                    )}
-                                  </div>
-                                  <div className="w-16 bg-slate-200 h-2 rounded-full overflow-hidden shrink-0">
-                                    <div 
-                                      className={`h-full rounded-full transition-all duration-300 ${
-                                        percentApproved === 100 ? "bg-emerald-500" : percentApproved > 50 ? "bg-amber-500" : "bg-rose-500"
-                                      }`}
-                                      style={{ width: `${percentApproved}%` }}
-                                    />
-                                  </div>
-                                </div>
-                              </div>
-                              {renderOfficialExamPaperReviewer(approval)}
-                            </>
-                            );
-                          })()}
-                        </div>
-                      </div>
+                    </div>
 
                     <div className="flex flex-row lg:flex-col gap-3 w-full lg:w-48 pt-2">
                       <button
