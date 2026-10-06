@@ -76,6 +76,9 @@ interface ChairDashboardClientProps {
     };
   }>;
   departmentExams: Array<any>;
+  chairExaminations?: Array<any>;
+  programs?: Array<any>;
+  assignedCourses?: Array<any>;
   courses?: Array<{ course_id: number; course_code: string; course_title: string }>;
 }
 

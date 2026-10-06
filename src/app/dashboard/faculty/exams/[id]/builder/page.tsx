@@ -34,12 +34,15 @@ export default async function ExamBuilderPage({ params }: PageProps) {
   const role = user.user_metadata?.role;
   const institutionalId = user.user_metadata?.institutional_id;
 
-  if (role !== "Faculty") {
+  const isChairUser = role === "Chair" || role === "ProgramChair";
+  const defaultDashboard = isChairUser ? "/dashboard/chair" : "/dashboard/faculty";
+
+  if (role !== "Faculty" && !isChairUser) {
     redirect("/");
   }
 
-  // Fetch faculty details
-  const dbUser = await db.user.findUnique({
+  // Fetch faculty / chair details
+  let dbUser = await db.user.findUnique({
     where: { institutional_id: institutionalId },
     include: {
       faculty: {
@@ -47,12 +50,39 @@ export default async function ExamBuilderPage({ params }: PageProps) {
           department: true,
         },
       },
+      chair: {
+        include: {
+          department: true,
+          program: true,
+        },
+      },
     },
   });
 
-  const faculty = dbUser?.faculty;
+  if (!dbUser) {
+    redirect("/");
+  }
+
+  let faculty = dbUser?.faculty;
+  if (!faculty && dbUser?.chair) {
+    const chairDeptId = dbUser.chair.department_id || (await db.department.findFirst())?.department_id || 1;
+    faculty = await db.faculty.upsert({
+      where: { faculty_id: dbUser.user_id },
+      update: { department_id: chairDeptId },
+      create: {
+        faculty_id: dbUser.user_id,
+        first_name: isChairUser ? "Chairperson" : "Faculty",
+        last_name: dbUser.chair.department?.department_name || "Instructor",
+        department_id: chairDeptId,
+      },
+      include: {
+        department: true,
+      },
+    });
+  }
+
   if (!faculty) {
-    redirect("/dashboard/faculty");
+    redirect(defaultDashboard);
   }
 
   // Fetch examination with course, question bank, and targets
@@ -70,20 +100,20 @@ export default async function ExamBuilderPage({ params }: PageProps) {
     },
   });
 
-  // Verify examination exists and belongs to this faculty
-  if (!exam || exam.faculty_id !== faculty.faculty_id) {
-    redirect("/dashboard/faculty");
+  // Verify examination exists and belongs to this faculty / chair
+  if (!exam || (exam.faculty_id !== faculty.faculty_id && exam.faculty_id !== dbUser.user_id)) {
+    redirect(defaultDashboard);
   }
 
   // Verify status is editable (Draft or Returned)
   if (exam.current_status !== "Draft" && exam.current_status !== "Returned") {
-    redirect("/dashboard/faculty");
+    redirect(defaultDashboard);
   }
 
   // Fetch all courses for fallback using cached query
   const courses = await getCoursesCached();
 
-  // 1. Fetch official assigned courses for this faculty
+  // 1. Fetch official assigned courses for this faculty/chair
   const facultyAssignedCourseRecords = await db.facultyCourse.findMany({
     where: { faculty_id: faculty.faculty_id },
     include: { course: true },
@@ -91,6 +121,11 @@ export default async function ExamBuilderPage({ params }: PageProps) {
   });
 
   let assignedSubjects: typeof courses = facultyAssignedCourseRecords.map((fc) => fc.course);
+
+  // If chair user and no specifically assigned courses, default to all courses or department courses
+  if (assignedSubjects.length === 0) {
+    assignedSubjects = courses;
+  }
 
   // Preserve current exam course if already initialized so existing draft doesn't break
   if (exam.course && !assignedSubjects.some((c) => c.course_id === exam.course_id)) {
@@ -121,18 +156,23 @@ export default async function ExamBuilderPage({ params }: PageProps) {
     })),
   };
 
+  const returnUrl = isChairUser ? "/dashboard/chair" : "/dashboard/faculty";
+  const userDisplayName = isChairUser 
+    ? (role === "ProgramChair" ? `Program Chair ${faculty.first_name} ${faculty.last_name}` : `Chairperson ${faculty.first_name} ${faculty.last_name}`)
+    : `Instructor ${faculty.first_name} ${faculty.last_name}`;
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
       {/* Navbar */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-50 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="bg-emerald-600 text-white p-2 rounded-xl">
+            <div className={`${isChairUser ? "bg-amber-600" : "bg-emerald-600"} text-white p-2 rounded-xl`}>
               <BookOpen className="w-6 h-6" />
             </div>
             <div>
               <span className="font-extrabold text-slate-900 tracking-tight">AcadNexus</span>
-              <span className="text-xs text-emerald-600 font-bold ml-2 bg-emerald-50 px-2.5 py-1 rounded-full uppercase tracking-wider">
+              <span className={`text-xs ${isChairUser ? "text-amber-600 bg-amber-50" : "text-emerald-600 bg-emerald-50"} font-bold ml-2 px-2.5 py-1 rounded-full uppercase tracking-wider`}>
                 Exam Builder
               </span>
             </div>
@@ -140,7 +180,7 @@ export default async function ExamBuilderPage({ params }: PageProps) {
           <div className="flex items-center gap-4">
             <div className="hidden sm:block text-right">
               <p className="text-sm font-semibold text-slate-800">
-                Instructor {faculty.first_name} {faculty.last_name}
+                {userDisplayName}
               </p>
               <p className="text-xs text-slate-500">{institutionalId}</p>
             </div>
@@ -159,6 +199,7 @@ export default async function ExamBuilderPage({ params }: PageProps) {
           facultyId={faculty.faculty_id} 
           academicPeriodSettings={academicPeriodSettings}
           initialAssignedStudents={initialAssignedStudents}
+          returnUrl={returnUrl}
         />
       </main>
 

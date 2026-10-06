@@ -73,6 +73,7 @@ interface ExamBuilderWizardProps {
     sem2_end: string;
   };
   initialAssignedStudents?: StudentItem[];
+  returnUrl?: string;
 }
 
 export type TaxonomyLevel = 
@@ -301,7 +302,8 @@ export function ExamBuilderWizard({
   assignedSubjects = [], 
   facultyId,
   academicPeriodSettings,
-  initialAssignedStudents = []
+  initialAssignedStudents = [],
+  returnUrl
 }: ExamBuilderWizardProps) {
   const router = useRouter();
 
@@ -1668,7 +1670,7 @@ export function ExamBuilderWizard({
     setSaveStatus({ type: "success", message: "Examination successfully submitted to Department Chair for review!" });
     setIsSubmitting(false);
     setTimeout(() => {
-      router.push("/dashboard/faculty");
+      router.push(returnUrl || "/dashboard/faculty");
       router.refresh();
     }, 2000);
   };
@@ -1680,7 +1682,7 @@ export function ExamBuilderWizard({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white/70 backdrop-blur-md border border-slate-200/80 p-5 rounded-3xl shadow-sm">
         <div className="flex items-center gap-3">
           <button 
-            onClick={() => router.push("/dashboard/faculty")}
+            onClick={() => router.push(returnUrl || "/dashboard/faculty")}
             className="p-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-500 hover:text-slate-800 transition-all shadow-sm"
           >
             <ArrowLeft className="w-5 h-5" />

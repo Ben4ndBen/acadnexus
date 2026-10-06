@@ -131,36 +131,74 @@ export async function updateExamStatus(examId: number, status: ExamStatus, userI
           });
         }
 
-        if (!deptChair) {
-          return { error: "No department chair found for your department. Cannot submit exam for review." };
+        // Determine submission reviewer states
+        const globalHoldSetting = await tx.systemSetting.findUnique({
+          where: { key: "global_administrative_hold" },
+        });
+        const isGlobalHoldActive = globalHoldSetting?.value === "true";
+
+        const isAuthorProgChair = progChair && progChair.chair_id === userId;
+        const isAuthorDeptChair = deptChair && deptChair.chair_id === userId;
+
+        let progChairStatus = progChair ? "Pending" : null;
+        let progChairComments: string | null = null;
+        let progChairTimestamp: Date | null = null;
+        let chairReviewStatus = "Pending";
+        let chairComments: string | null = null;
+        let chairTimestamp: Date | null = null;
+        let diReviewStatus = "Hold";
+
+        if (isAuthorProgChair) {
+          progChairStatus = "Approved";
+          progChairComments = "Authored and recommended by Program Chairperson.";
+          progChairTimestamp = new Date();
+          status = "Pending_Chair";
+        } else if (progChair) {
+          status = "Pending_Program_Chair";
+        } else {
+          status = "Pending_Chair";
         }
 
-        if (progChair) {
-          status = "Pending_Program_Chair";
+        if (isAuthorDeptChair) {
+          chairReviewStatus = "Approved";
+          chairComments = "Authored and verified by Department Chairperson.";
+          chairTimestamp = new Date();
+          if (isGlobalHoldActive) {
+            status = "Pending_DI";
+            diReviewStatus = "Hold";
+          } else {
+            status = "Approved";
+            diReviewStatus = "Pass_Through_Approved";
+          }
         }
 
         await tx.approvalWorkflow.upsert({
           where: { exam_id: examId },
           update: {
             reviewed_by_prog_chair_id: progChair ? progChair.chair_id : null,
-            prog_chair_review_status: progChair ? "Pending" : null,
-            prog_chair_comments: null,
-            prog_chair_action_timestamp: null,
+            prog_chair_review_status: progChairStatus as any,
+            prog_chair_comments: progChairComments,
+            prog_chair_action_timestamp: progChairTimestamp,
             reviewed_by_chair_id: deptChair.chair_id,
-            chair_review_status: "Pending",
-            chair_comments: null,
-            chair_action_timestamp: null,
-            di_review_status: "Hold",
-            di_action_timestamp: null,
+            chair_review_status: chairReviewStatus as any,
+            chair_comments: chairComments,
+            chair_action_timestamp: chairTimestamp,
+            di_review_status: diReviewStatus as any,
+            di_action_timestamp: isAuthorDeptChair && !isGlobalHoldActive ? new Date() : null,
             reviewed_by_di_id: null,
           },
           create: {
             exam_id: examId,
             reviewed_by_prog_chair_id: progChair ? progChair.chair_id : null,
-            prog_chair_review_status: progChair ? "Pending" : null,
+            prog_chair_review_status: progChairStatus as any,
+            prog_chair_comments: progChairComments,
+            prog_chair_action_timestamp: progChairTimestamp,
             reviewed_by_chair_id: deptChair.chair_id,
-            chair_review_status: "Pending",
-            di_review_status: "Hold",
+            chair_review_status: chairReviewStatus as any,
+            chair_comments: chairComments,
+            chair_action_timestamp: chairTimestamp,
+            di_review_status: diReviewStatus as any,
+            di_action_timestamp: isAuthorDeptChair && !isGlobalHoldActive ? new Date() : null,
           },
         });
       }
@@ -181,6 +219,9 @@ export async function updateExamStatus(examId: number, status: ExamStatus, userI
       });
 
       revalidatePath("/dashboard/faculty");
+      revalidatePath("/dashboard/chair");
+      revalidatePath("/dashboard/director");
+      revalidatePath("/dashboard/faculty/exams");
       return { success: true };
     });
   } catch (err: any) {
@@ -201,7 +242,31 @@ export async function createExamDraft(facultyId: number, courseId?: number) {
       if (assignedFc) {
         targetCourseId = assignedFc.course_id;
       } else {
-        return { error: "No teaching subjects assigned to your account yet by the Campus Director. Please contact your Campus Director to assign your teaching load." };
+        // Find courses in faculty's department or any available course
+        const facultyRecord = await db.faculty.findUnique({
+          where: { faculty_id: facultyId },
+          include: { department: true },
+        });
+
+        if (facultyRecord?.department) {
+          const deptCourse = await db.course.findFirst({
+            orderBy: { course_code: "asc" },
+          });
+          if (deptCourse) {
+            targetCourseId = deptCourse.course_id;
+          }
+        }
+
+        if (!targetCourseId) {
+          const fallbackCourse = await db.course.findFirst({
+            orderBy: { course_code: "asc" },
+          });
+          if (fallbackCourse) {
+            targetCourseId = fallbackCourse.course_id;
+          } else {
+            return { error: "No courses found in the curriculum. Please create courses first." };
+          }
+        }
       }
     }
 
@@ -227,6 +292,8 @@ export async function createExamDraft(facultyId: number, courseId?: number) {
     });
 
     revalidatePath("/dashboard/faculty");
+    revalidatePath("/dashboard/chair");
+    revalidatePath("/dashboard/faculty/exams");
     return { success: true, exam_id: newExam.exam_id };
   } catch (err: any) {
     console.error("Error in createExamDraft:", err);

@@ -9,6 +9,7 @@ import { ChairDashboardClient } from "@/app/components/ChairDashboardClient";
 import { getCoursesCached } from "@/lib/cache";
 import { ensureChairsAndDepartmentsExist } from "@/lib/chairServer";
 import { ensureBsitCoursesExist } from "@/lib/bsitCurriculumServer";
+import { filterCoursesForDepartment } from "@/lib/courseDepartmentMapping";
 
 export const dynamic = "force-dynamic";
 
@@ -212,14 +213,58 @@ export default async function ChairDashboard() {
     }
   }
 
+  // Ensure chair user has an underlying faculty record for exam creation
+  await db.faculty.upsert({
+    where: { faculty_id: dbUser.user_id },
+    update: { department_id: department.department_id },
+    create: {
+      faculty_id: dbUser.user_id,
+      first_name: isProgChair ? "Program Chairperson" : "Department Chairperson",
+      last_name: cleanDeptName || "Chair",
+      department_id: department.department_id,
+    },
+  });
+
   // Extract all department exams
   const departmentExams = allFaculty.flatMap(f => f.examinations);
+
+  // Fetch examinations authored by this chair
+  const chairExaminations = await db.examination.findMany({
+    where: { faculty_id: dbUser.user_id },
+    include: {
+      course: true,
+      questionBank: true,
+      examTargets: true,
+      approvalWorkflow: true,
+      _count: {
+        select: { questionBank: true },
+      },
+    },
+    orderBy: { exam_id: "desc" },
+  });
+
+  // Fetch academic programs for scheduling modal
+  const programs = await db.academicProgram.findMany({
+    orderBy: { program_code: "asc" },
+  });
 
   // Ensure all curriculum subjects exist in database
   await ensureBsitCoursesExist();
 
   // Fetch courses for assignment using cached query
   const courses = await getCoursesCached();
+
+  // Fetch assigned courses for this chair
+  const chairAssignedCourseRecords = await db.facultyCourse.findMany({
+    where: { faculty_id: dbUser.user_id },
+    include: { course: true },
+    orderBy: { course: { course_code: "asc" } },
+  });
+
+  let chairAssignedCourses = chairAssignedCourseRecords.map((fc) => fc.course);
+  if (chairAssignedCourses.length === 0) {
+    chairAssignedCourses = filterCoursesForDepartment(courses, department.department_id);
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
@@ -260,7 +305,7 @@ export default async function ChairDashboard() {
               Welcome back, {chairTitle}!
             </h1>
             <p className="text-amber-100 max-w-xl text-sm leading-relaxed">
-              Verify drafted syllabi, evaluate examination formats and Table of Specifications (TOS), and oversee academic compliance.
+              Verify drafted syllabi, evaluate examination formats and Table of Specifications (TOS), draft and manage examinations, and oversee academic compliance.
             </p>
           </div>
         </div>
@@ -276,6 +321,9 @@ export default async function ChairDashboard() {
           facultyMembers={formattedFaculty as any}
           pendingApprovals={formattedApprovals as any}
           departmentExams={departmentExams as any}
+          chairExaminations={chairExaminations as any}
+          programs={programs as any}
+          assignedCourses={chairAssignedCourses as any}
           courses={courses}
         />
       </main>

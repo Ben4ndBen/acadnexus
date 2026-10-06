@@ -228,6 +228,21 @@ export async function ensureChairsAndDepartmentsExist(force = false) {
           is_program_chair: true,
         },
       });
+
+      if (deptId) {
+        await db.faculty.upsert({
+          where: { faculty_id: user.user_id },
+          update: {
+            department_id: deptId,
+          },
+          create: {
+            faculty_id: user.user_id,
+            first_name: "Program Chair",
+            last_name: pc.programCode,
+            department_id: deptId,
+          },
+        });
+      }
     }
 
     // 5. Create / Update Department Chairs
@@ -276,6 +291,21 @@ export async function ensureChairsAndDepartmentsExist(force = false) {
           is_program_chair: false,
         },
       });
+
+      if (deptId) {
+        await db.faculty.upsert({
+          where: { faculty_id: user.user_id },
+          update: {
+            department_id: deptId,
+          },
+          create: {
+            faculty_id: user.user_id,
+            first_name: "Department Chair",
+            last_name: dc.deptName.replace(" Department", ""),
+            department_id: deptId,
+          },
+        });
+      }
     }
 
     // 5. Ensure sample Faculty exist for each department
