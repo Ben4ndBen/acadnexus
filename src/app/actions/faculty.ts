@@ -989,6 +989,7 @@ export async function getMissedStudentsForExam(facultyId: number, examId: number
     const exam = await db.examination.findUnique({
       where: { exam_id: examId },
       include: {
+        course: true,
         examTargets: true,
         studentOverrides: {
           where: { is_active: true }
@@ -1004,8 +1005,32 @@ export async function getMissedStudentsForExam(facultyId: number, examId: number
     const students: any[] = [];
     const seenStudentIds = new Set<number>();
 
+    // 1. Always include all students who TOOK or attempted this specific exam
+    const examTakers = await db.studentExam.findMany({
+      where: { exam_id: examId },
+      include: {
+        student: {
+          include: {
+            user: true,
+            studentExams: {
+              where: { exam_id: examId }
+            },
+            studentOverrides: {
+              where: { exam_id: examId, is_active: true }
+            }
+          }
+        }
+      }
+    });
+    for (const record of examTakers) {
+      if (record.student && !seenStudentIds.has(record.student.student_id)) {
+        seenStudentIds.add(record.student.student_id);
+        students.push(record.student);
+      }
+    }
+
+    // 2. Include students explicitly assigned via selected_student_ids
     if (selectedIds.length > 0) {
-      // Load the exact students assigned to take the exam during creation
       const assignedStudents = await db.student.findMany({
         where: {
           student_id: { in: selectedIds }
@@ -1026,14 +1051,69 @@ export async function getMissedStudentsForExam(facultyId: number, examId: number
           students.push(s);
         }
       }
-    } else {
-      // Fallback if no explicit selected student list is set
-      for (const target of exam.examTargets) {
-        const studentListForTarget = await db.student.findMany({
-          where: {
-            program_id: target.program_id,
-            year_level: target.year_level,
+    }
+
+    // 3. Include students enrolled in this specific course
+    if (exam.course_id) {
+      const courseEnrollees = await db.studentCourse.findMany({
+        where: { course_id: exam.course_id },
+        include: {
+          student: {
+            include: {
+              user: true,
+              studentExams: {
+                where: { exam_id: examId }
+              },
+              studentOverrides: {
+                where: { exam_id: examId, is_active: true }
+              }
+            }
+          }
+        }
+      });
+      for (const record of courseEnrollees) {
+        if (record.student && !seenStudentIds.has(record.student.student_id)) {
+          seenStudentIds.add(record.student.student_id);
+          students.push(record.student);
+        }
+      }
+    }
+
+    // 4. Include students matching exam targets
+    for (const target of exam.examTargets) {
+      const targetFilter: any = {
+        program_id: target.program_id,
+        year_level: target.year_level,
+      };
+      if (target.section && target.section !== "All Sections") {
+        targetFilter.section = target.section;
+      }
+      const studentListForTarget = await db.student.findMany({
+        where: targetFilter,
+        include: {
+          user: true,
+          studentExams: {
+            where: { exam_id: examId }
           },
+          studentOverrides: {
+            where: { exam_id: examId, is_active: true }
+          }
+        }
+      });
+      
+      for (const s of studentListForTarget) {
+        if (!seenStudentIds.has(s.student_id)) {
+          seenStudentIds.add(s.student_id);
+          students.push(s);
+        }
+      }
+    }
+
+    // 5. Include students with active overrides
+    for (const override of exam.studentOverrides) {
+      if (!seenStudentIds.has(override.student_id)) {
+        const studentRecord = await db.student.findUnique({
+          where: { student_id: override.student_id },
           include: {
             user: true,
             studentExams: {
@@ -1044,32 +1124,30 @@ export async function getMissedStudentsForExam(facultyId: number, examId: number
             }
           }
         });
-        
-        for (const s of studentListForTarget) {
-          if (!seenStudentIds.has(s.student_id)) {
-            seenStudentIds.add(s.student_id);
-            students.push(s);
-          }
+        if (studentRecord && !seenStudentIds.has(studentRecord.student_id)) {
+          seenStudentIds.add(studentRecord.student_id);
+          students.push(studentRecord);
         }
       }
     }
 
     const studentList = students.map(s => {
-      const attempt = s.studentExams[0] || null;
-      const override = s.studentOverrides[0] || null;
+      const attempt = s.studentExams?.[0] || null;
+      const override = s.studentOverrides?.[0] || null;
       return {
         student_id: s.student_id,
         first_name: s.first_name,
         middle_name: s.middle_name,
         last_name: s.last_name,
-        institutional_email: s.user.institutional_email,
-        institutional_id: s.user.institutional_id,
+        institutional_email: s.user?.institutional_email,
+        institutional_id: s.user?.institutional_id,
+        has_taken: !!attempt,
         attempt: attempt ? {
           student_exam_id: attempt.student_exam_id,
           started_at: attempt.started_at.toISOString(),
           submitted_at: attempt.submitted_at ? attempt.submitted_at.toISOString() : null,
           submission_trigger: attempt.submission_trigger,
-          total_score: attempt.total_score
+          total_score: attempt.total_score !== null && attempt.total_score !== undefined ? Number(attempt.total_score) : null
         } : null,
         override: override ? {
           override_id: override.override_id,
@@ -1080,6 +1158,13 @@ export async function getMissedStudentsForExam(facultyId: number, examId: number
       };
     });
 
+    // Sort students alphabetically by last name, then first name
+    studentList.sort((a, b) => {
+      const ln = (a.last_name || "").localeCompare(b.last_name || "");
+      if (ln !== 0) return ln;
+      return (a.first_name || "").localeCompare(b.first_name || "");
+    });
+
     const firstTarget = exam.examTargets[0];
     const officialDateIso = exam.exam_date
       ? exam.exam_date.toISOString()
@@ -1088,6 +1173,11 @@ export async function getMissedStudentsForExam(facultyId: number, examId: number
     return {
       success: true,
       examTitle: exam.title,
+      course: exam.course ? {
+        course_id: exam.course.course_id,
+        course_code: exam.course.course_code,
+        course_title: exam.course.course_title,
+      } : null,
       officialDateIso,
       officialTargetSchedule: firstTarget ? {
         scheduled_date: firstTarget.scheduled_date.toISOString(),
@@ -1118,10 +1208,17 @@ export async function grantStudentOverride(
       return { error: "Examination not found or unauthorized." };
     }
 
-    // Verify if student is explicitly assigned when selected_student_ids is set
+    // Ensure student is added to selected_student_ids if restricted list is active
     if (exam.selected_student_ids && exam.selected_student_ids.length > 0) {
       if (!exam.selected_student_ids.includes(studentId)) {
-        return { error: "Selected student is not assigned to this examination." };
+        await db.examination.update({
+          where: { exam_id: examId },
+          data: {
+            selected_student_ids: {
+              push: studentId
+            }
+          }
+        });
       }
     }
 

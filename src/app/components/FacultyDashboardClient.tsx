@@ -491,10 +491,13 @@ export function FacultyDashboardClient({
   const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
   const [selectedExamForSchedule, setSelectedExamForSchedule] = useState<{exam_id: number, title: string} | null>(null);
 
-  // States for Student Access Resets
+  // States for Student Access Resets & Reschedule Overrides
+  const [selectedOverrideCourseId, setSelectedOverrideCourseId] = useState<number | null>(null);
   const [selectedOverrideExamId, setSelectedOverrideExamId] = useState<number | null>(null);
   const [missedStudents, setMissedStudents] = useState<any[]>([]);
   const [isLoadingMissedStudents, setIsLoadingMissedStudents] = useState(false);
+  const [studentStatusFilter, setStudentStatusFilter] = useState<"ALL" | "TAKERS" | "MISSED" | "OVERRIDE">("ALL");
+  const [popupStudentFilter, setPopupStudentFilter] = useState<"ALL" | "TAKERS" | "MISSED">("ALL");
   
   const [overrideModalOpen, setOverrideModalOpen] = useState(false);
   const [selectedOverrideStudentIds, setSelectedOverrideStudentIds] = useState<number[]>([]);
@@ -510,6 +513,36 @@ export function FacultyDashboardClient({
   });
   const [isSavingOverride, setIsSavingOverride] = useState(false);
 
+  // Memoized courses available to faculty
+  const availableFacultyCourses = useMemo(() => {
+    const map = new Map<number, { course_id: number; course_code: string; course_title: string }>();
+    if (assignedCourses && assignedCourses.length > 0) {
+      assignedCourses.forEach(c => map.set(c.course_id, { course_id: c.course_id, course_code: c.course_code, course_title: c.course_title }));
+    }
+    faculty.examinations.forEach(e => {
+      const cId = (e as any).course_id || (e.course as any)?.course_id;
+      if (cId && e.course) {
+        if (!map.has(cId)) {
+          map.set(cId, { course_id: cId, course_code: e.course.course_code, course_title: e.course.course_title });
+        }
+      }
+    });
+    if (map.size === 0 && courses && courses.length > 0) {
+      courses.forEach(c => map.set(c.course_id, { course_id: c.course_id, course_code: c.course_code, course_title: c.course_title }));
+    }
+    return Array.from(map.values()).sort((a, b) => a.course_code.localeCompare(b.course_code));
+  }, [assignedCourses, faculty.examinations, courses]);
+
+  // Approved exams filtered by selected course (or all if none selected)
+  const overrideFilteredExams = useMemo(() => {
+    const approved = faculty.examinations.filter(exam => exam.current_status === "Approved");
+    if (!selectedOverrideCourseId) return approved;
+    return approved.filter(exam => {
+      const cId = (exam as any).course_id || (exam.course as any)?.course_id;
+      return cId === selectedOverrideCourseId;
+    });
+  }, [faculty.examinations, selectedOverrideCourseId]);
+
   const fetchMissedStudents = async (examId: number) => {
     setIsLoadingMissedStudents(true);
     const { getMissedStudentsForExam } = await import("@/app/actions/faculty");
@@ -519,6 +552,9 @@ export function FacultyDashboardClient({
       alert(res.error);
     } else {
       setMissedStudents(res.students || []);
+      if (res.course?.course_id && !selectedOverrideCourseId) {
+        setSelectedOverrideCourseId(res.course.course_id);
+      }
       if (res.officialDateIso) {
         setOfficialExamScheduleText(
           new Date(res.officialDateIso).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" })
@@ -532,6 +568,8 @@ export function FacultyDashboardClient({
   useEffect(() => {
     if (selectedOverrideExamId) {
       fetchMissedStudents(selectedOverrideExamId);
+      setStudentStatusFilter("ALL");
+      setStudentSearchTerm("");
     } else {
       setMissedStudents([]);
       setOfficialExamScheduleText("");
@@ -1812,14 +1850,30 @@ export function FacultyDashboardClient({
         <div className="space-y-8 animate-in fade-in duration-300">
           {/* Section 1: Schedules Override Engine */}
           <div className="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-sm space-y-6">
-            <div>
-              <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-                <span className="w-1.5 h-6 bg-emerald-600 rounded-full" />
-                Schedules Override Engine
-              </h2>
-              <p className="text-slate-500 text-xs mt-1">
-                View approved examinations and override testing schedules, windows, or dates to fix scheduling conflicts.
-              </p>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                  <span className="w-1.5 h-6 bg-emerald-600 rounded-full" />
+                  Schedules Override Engine
+                </h2>
+                <p className="text-slate-500 text-xs mt-1">
+                  View approved examinations and override testing schedules, windows, or dates to fix scheduling conflicts.
+                </p>
+              </div>
+              <div className="sm:w-72">
+                <select
+                  value={selectedOverrideCourseId || ""}
+                  onChange={e => setSelectedOverrideCourseId(e.target.value ? Number(e.target.value) : null)}
+                  className="w-full bg-slate-50 border border-slate-200 text-xs font-bold text-slate-800 px-3.5 py-2.5 rounded-xl transition-all shadow-sm focus:outline-none focus:border-emerald-600 cursor-pointer"
+                >
+                  <option value="">Filter by Course (All Courses)</option>
+                  {availableFacultyCourses.map(c => (
+                    <option key={c.course_id} value={c.course_id}>
+                      {c.course_code} - {c.course_title}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             <div className="overflow-x-auto">
@@ -1836,6 +1890,11 @@ export function FacultyDashboardClient({
                 <tbody className="divide-y divide-slate-100 bg-white">
                   {faculty.examinations
                     .filter(exam => exam.current_status === "Approved")
+                    .filter(exam => {
+                      if (!selectedOverrideCourseId) return true;
+                      const cId = (exam as any).course_id || (exam.course as any)?.course_id;
+                      return cId === selectedOverrideCourseId;
+                    })
                     .map(exam => {
                       const target = exam.examTargets?.[0];
                       const programName = programs.find(p => p.program_id === target?.program_id)?.program_code || "N/A";
@@ -1878,10 +1937,16 @@ export function FacultyDashboardClient({
                         </tr>
                       );
                     })}
-                  {faculty.examinations.filter(exam => exam.current_status === "Approved").length === 0 && (
+                  {faculty.examinations
+                    .filter(exam => exam.current_status === "Approved")
+                    .filter(exam => {
+                      if (!selectedOverrideCourseId) return true;
+                      const cId = (exam as any).course_id || (exam.course as any)?.course_id;
+                      return cId === selectedOverrideCourseId;
+                    }).length === 0 && (
                     <tr>
                       <td colSpan={5} className="text-center py-8 text-slate-400 italic">
-                        No approved examinations available to override.
+                        No approved examinations available to override{selectedOverrideCourseId ? " for this course" : ""}.
                       </td>
                     </tr>
                   )}
@@ -1890,163 +1955,318 @@ export function FacultyDashboardClient({
             </div>
           </div>
 
-          {/* Section 2: Student Access Resets */}
+          {/* Section 2: Student Access Resets & Reschedule Overrides */}
           <div className="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-sm space-y-6">
             <div>
               <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
                 <span className="w-1.5 h-6 bg-amber-600 rounded-full" />
-                Administrative Access Resets
+                Individual Student Reschedule & Override Controls
               </h2>
               <p className="text-slate-500 text-xs mt-1">
-                Grant individual student overrides to extend or reset access for students who completely missed the testing window or experienced locking issues.
+                Choose a specific course and the examination allotted to it. Select among students who took or missed the exam, searchable by name, to reschedule or extend their testing window.
               </p>
             </div>
 
-            <div className="max-w-md space-y-2">
-              <label className="text-xs font-bold text-slate-700 block">Select Examination to Manage</label>
-              <select
-                value={selectedOverrideExamId || ""}
-                onChange={e => setSelectedOverrideExamId(e.target.value ? Number(e.target.value) : null)}
-                className="w-full bg-slate-50 border border-slate-200 text-sm font-medium text-slate-800 px-4 py-2.5 rounded-xl transition-all"
-              >
-                <option value="">-- Choose Approved Exam --</option>
-                {faculty.examinations
-                  .filter(exam => exam.current_status === "Approved")
-                  .map(exam => (
+            {/* Step 1 & 2: Course & Examination Selector */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 border border-slate-200/80 p-4 rounded-2xl">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                  <BookOpen className="w-3.5 h-3.5 text-emerald-600" />
+                  1. Choose Course Assigned to You
+                </label>
+                <select
+                  value={selectedOverrideCourseId || ""}
+                  onChange={e => {
+                    const cId = e.target.value ? Number(e.target.value) : null;
+                    setSelectedOverrideCourseId(cId);
+                    if (cId && selectedOverrideExamId) {
+                      const cur = faculty.examinations.find(ex => ex.exam_id === selectedOverrideExamId);
+                      const curCId = (cur as any)?.course_id || (cur?.course as any)?.course_id;
+                      if (curCId !== cId) {
+                        setSelectedOverrideExamId(null);
+                      }
+                    }
+                  }}
+                  className="w-full bg-white border border-slate-200 text-xs font-bold text-slate-800 px-3.5 py-2.5 rounded-xl transition-all shadow-sm focus:outline-none focus:border-emerald-600"
+                >
+                  <option value="">-- All Assigned Courses --</option>
+                  {availableFacultyCourses.map(c => {
+                    const examCount = faculty.examinations.filter(ex => {
+                      const cId = (ex as any).course_id || (ex.course as any)?.course_id;
+                      return ex.current_status === "Approved" && cId === c.course_id;
+                    }).length;
+                    return (
+                      <option key={c.course_id} value={c.course_id}>
+                        {c.course_code} - {c.course_title} ({examCount} approved exam{examCount === 1 ? "" : "s"})
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5 text-amber-600" />
+                  2. Choose Specific Examination Allotted
+                </label>
+                <select
+                  value={selectedOverrideExamId || ""}
+                  onChange={e => {
+                    const exId = e.target.value ? Number(e.target.value) : null;
+                    setSelectedOverrideExamId(exId);
+                    if (exId) {
+                      const foundExam = faculty.examinations.find(ex => ex.exam_id === exId);
+                      if (foundExam) {
+                        const cId = (foundExam as any).course_id || (foundExam.course as any)?.course_id;
+                        if (cId && cId !== selectedOverrideCourseId) {
+                          setSelectedOverrideCourseId(cId);
+                        }
+                      }
+                    }
+                  }}
+                  className="w-full bg-white border border-slate-200 text-xs font-bold text-slate-800 px-3.5 py-2.5 rounded-xl transition-all shadow-sm focus:outline-none focus:border-amber-600"
+                >
+                  <option value="">-- Choose Approved Examination --</option>
+                  {overrideFilteredExams.map(exam => (
                     <option key={exam.exam_id} value={exam.exam_id}>
                       {exam.title} ({exam.course.course_code})
                     </option>
                   ))}
-              </select>
+                </select>
+              </div>
             </div>
 
             {selectedOverrideExamId && (
               <div className="space-y-5 pt-2 animate-in fade-in duration-300">
                 {/* Official Exam Schedule Preserved Banner */}
                 <div className="bg-blue-50/80 border border-blue-200/80 rounded-2xl p-4 text-xs space-y-1.5 shadow-sm">
-                  <div className="flex items-center gap-1.5 text-blue-900 font-bold uppercase tracking-wider text-[10px]">
-                    <Calendar className="w-4 h-4 text-blue-600" />
-                    Official Examination Schedule & Date (Preserved in TOS)
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 text-blue-900 font-bold uppercase tracking-wider text-[10px]">
+                      <Calendar className="w-4 h-4 text-blue-600" />
+                      Official Examination Schedule & Date (Preserved in TOS)
+                    </div>
+                    {(() => {
+                      const exam = faculty.examinations.find(e => e.exam_id === selectedOverrideExamId);
+                      return exam ? (
+                        <span className="text-[11px] font-bold text-blue-800 bg-blue-100/80 px-2 py-0.5 rounded-md border border-blue-200">
+                          {exam.course.course_code} • {exam.title}
+                        </span>
+                      ) : null;
+                    })()}
                   </div>
                   <p className="text-slate-900 font-extrabold text-sm">
                     {officialExamScheduleText || "Official Examination Schedule"}
                   </p>
                   <p className="text-[11px] text-slate-600 leading-relaxed pt-0.5">
-                    ✓ Reopening an examination creates an individual attempt window <strong>exclusively for the selected assigned student</strong>. Reopening will <strong>not alter</strong> the official exam schedule date or TOS records.
+                    ✓ Reopening an examination creates an individual attempt window <strong>exclusively for the chosen selected student(s)</strong>. The official exam schedule and Table of Specifications (TOS) remain strictly preserved.
                   </p>
                 </div>
 
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div>
-                    <h3 className="text-sm font-bold text-slate-900">Assigned Students & Reopen Controls</h3>
-                    <p className="text-xs text-slate-500">Only students assigned to take this examination are eligible for an individual reopened attempt.</p>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
-                    <button
-                      onClick={() => {
-                        setSelectedOverrideStudentIds([]);
-                        setPopupStudentSearchInput("");
-                        setPopupStudentSearchTerm("");
-                        setOverrideModalOpen(true);
-                      }}
-                      className="inline-flex items-center gap-1.5 bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-[11px] px-3.5 py-1.5 rounded-lg shadow-sm transition-all cursor-pointer"
-                    >
-                      <Clock className="w-3.5 h-3.5" />
-                      Override Schedule & Assign Retake
-                    </button>
-                    {missedStudents && missedStudents.length > 0 && (
+                {/* Controls Bar: Search & Status Filters */}
+                <div className="space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-900">
+                        Students Assigned & Exam Takers
+                      </h3>
+                      <p className="text-xs text-slate-500">
+                        Search student by name or filter by exam attempt status to grant a reschedule/retake window.
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
                       <button
                         onClick={() => {
-                          const targetExam = faculty.examinations.find(e => e.exam_id === selectedOverrideExamId);
-                          exportMissedStudentsToExcel(targetExam ? targetExam.title : "Exam", missedStudents);
-                        }}
-                        className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[11px] px-3 py-1.5 rounded-lg shadow-sm transition-all cursor-pointer"
-                      >
-                        <Download className="w-3.5 h-3.5" />
-                        Export Student List Excel
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {/* Interactive Student Search & Select Bar */}
-                <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between bg-slate-50 border border-slate-200/80 p-3 rounded-2xl">
-                  <div className="relative flex-1">
-                    <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
-                    <input
-                      type="text"
-                      placeholder="Search assigned student by name or ID..."
-                      value={studentSearchTerm}
-                      onChange={e => setStudentSearchTerm(e.target.value)}
-                      className="w-full bg-white border border-slate-200 text-xs font-medium text-slate-800 pl-9 pr-4 py-2.5 rounded-xl transition-all shadow-sm focus:outline-none focus:border-amber-500"
-                    />
-                  </div>
-                  <div className="sm:w-72">
-                    <select
-                      onChange={e => {
-                        const sId = Number(e.target.value);
-                        if (sId) {
-                          setSelectedOverrideStudentIds([sId]);
                           setPopupStudentSearchInput("");
                           setPopupStudentSearchTerm("");
-                          const found = missedStudents.find(s => s.student_id === sId);
-                          if (found && found.override && found.override.is_active) {
-                            setOverrideForm({
-                              start_date: found.override.new_start_time.split("T")[0],
-                              start_time: found.override.new_start_time.split("T")[1]?.slice(0, 5) || "09:00",
-                              end_date: found.override.new_end_time.split("T")[0],
-                              end_time: found.override.new_end_time.split("T")[1]?.slice(0, 5) || "09:00",
-                            });
-                          } else {
-                            setOverrideForm({
-                              start_date: new Date().toISOString().split("T")[0],
-                              start_time: "09:00",
-                              end_date: new Date(Date.now() + 86400000).toISOString().split("T")[0],
-                              end_time: "09:00",
-                            });
-                          }
+                          setPopupStudentFilter("ALL");
                           setOverrideModalOpen(true);
-                        }
-                      }}
-                      value=""
-                      className="w-full bg-white border border-slate-200 text-xs font-bold text-amber-800 bg-amber-50/50 px-3 py-2.5 rounded-xl cursor-pointer"
+                        }}
+                        className="inline-flex items-center gap-1.5 bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-[11px] px-3.5 py-2 rounded-xl shadow-sm transition-all cursor-pointer"
+                      >
+                        <Clock className="w-3.5 h-3.5" />
+                        Override Schedule & Assign Retake {selectedOverrideStudentIds.length > 0 ? `(${selectedOverrideStudentIds.length} Selected)` : ""}
+                      </button>
+                      {missedStudents && missedStudents.length > 0 && (
+                        <button
+                          onClick={() => {
+                            const targetExam = faculty.examinations.find(e => e.exam_id === selectedOverrideExamId);
+                            exportMissedStudentsToExcel(targetExam ? targetExam.title : "Exam", missedStudents);
+                          }}
+                          className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[11px] px-3 py-2 rounded-xl shadow-sm transition-all cursor-pointer"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          Export Excel
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Status Filter Badges */}
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setStudentStatusFilter("ALL")}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        studentStatusFilter === "ALL"
+                          ? "bg-slate-900 text-white shadow-sm"
+                          : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                      }`}
                     >
-                      <option value="">-- Choose Student to Reopen --</option>
-                      {missedStudents.map(s => (
-                        <option key={s.student_id} value={s.student_id}>
-                          {s.first_name} {s.middle_name ? `${s.middle_name.trim().charAt(0).toUpperCase()}. ` : ""}{s.last_name} ({s.institutional_id})
-                        </option>
-                      ))}
-                    </select>
+                      All Students ({missedStudents.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setStudentStatusFilter("TAKERS")}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                        studentStatusFilter === "TAKERS"
+                          ? "bg-emerald-600 text-white shadow-sm"
+                          : "bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200/60"
+                      }`}
+                    >
+                      <CheckCircle className="w-3.5 h-3.5" />
+                      Took Exam ({missedStudents.filter(s => !!s.attempt).length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setStudentStatusFilter("MISSED")}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                        studentStatusFilter === "MISSED"
+                          ? "bg-rose-600 text-white shadow-sm"
+                          : "bg-rose-50 text-rose-800 hover:bg-rose-100 border border-rose-200/60"
+                      }`}
+                    >
+                      <AlertCircle className="w-3.5 h-3.5" />
+                      Missed / Not Taken ({missedStudents.filter(s => !s.attempt).length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setStudentStatusFilter("OVERRIDE")}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                        studentStatusFilter === "OVERRIDE"
+                          ? "bg-amber-600 text-white shadow-sm"
+                          : "bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200/60"
+                      }`}
+                    >
+                      <Clock className="w-3.5 h-3.5" />
+                      Active Overrides ({missedStudents.filter(s => s.override && s.override.is_active).length})
+                    </button>
+                  </div>
+
+                  {/* Searchable Student Bar (Search by Name or ID) */}
+                  <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between bg-slate-50 border border-slate-200/80 p-3 rounded-2xl">
+                    <div className="relative flex-1">
+                      <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+                      <input
+                        type="text"
+                        placeholder="Search student by name or ID in real-time..."
+                        value={studentSearchTerm}
+                        onChange={e => setStudentSearchTerm(e.target.value)}
+                        className="w-full bg-white border border-slate-200 text-xs font-semibold text-slate-800 pl-9 pr-8 py-2.5 rounded-xl transition-all shadow-sm focus:outline-none focus:border-amber-500"
+                      />
+                      {studentSearchTerm && (
+                        <button
+                          type="button"
+                          onClick={() => setStudentSearchTerm("")}
+                          className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 text-xs"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                    <div className="sm:w-80">
+                      <select
+                        onChange={e => {
+                          const sId = Number(e.target.value);
+                          if (sId) {
+                            setSelectedOverrideStudentIds([sId]);
+                            setPopupStudentSearchInput("");
+                            setPopupStudentSearchTerm("");
+                            const found = missedStudents.find(s => s.student_id === sId);
+                            if (found && found.override && found.override.is_active) {
+                              setOverrideForm({
+                                start_date: found.override.new_start_time.split("T")[0],
+                                start_time: found.override.new_start_time.split("T")[1]?.slice(0, 5) || "09:00",
+                                end_date: found.override.new_end_time.split("T")[0],
+                                end_time: found.override.new_end_time.split("T")[1]?.slice(0, 5) || "09:00",
+                              });
+                            } else {
+                              setOverrideForm({
+                                start_date: new Date().toISOString().split("T")[0],
+                                start_time: "09:00",
+                                end_date: new Date(Date.now() + 86400000).toISOString().split("T")[0],
+                                end_time: "09:00",
+                              });
+                            }
+                            setOverrideModalOpen(true);
+                          }
+                        }}
+                        value=""
+                        className="w-full bg-white border border-slate-200 text-xs font-bold text-amber-900 bg-amber-50/50 px-3 py-2.5 rounded-xl cursor-pointer"
+                      >
+                        <option value="">-- Quick Pick Student to Reopen --</option>
+                        {missedStudents.map(s => (
+                          <option key={s.student_id} value={s.student_id}>
+                            {s.attempt ? "[Took Exam]" : "[Missed]"} {s.first_name} {s.middle_name ? `${s.middle_name.trim().charAt(0).toUpperCase()}. ` : ""}{s.last_name} ({s.institutional_id})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
                 </div>
 
                 {isLoadingMissedStudents ? (
                   <div className="flex items-center gap-2 text-xs text-slate-500 py-6">
                     <Loader2 className="w-4 h-4 animate-spin text-amber-600" />
-                    <span>Loading assigned student records...</span>
+                    <span>Loading student records for this examination...</span>
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-slate-100 text-left text-xs text-slate-600 font-semibold">
                       <thead className="bg-slate-50 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
                         <tr>
-                          <th className="px-6 py-3">Assigned Student</th>
-                          <th className="px-6 py-3">ID / Email</th>
+                          <th className="px-4 py-3 w-10 text-center">
+                            <input
+                              type="checkbox"
+                              checked={
+                                missedStudents.length > 0 &&
+                                missedStudents.every(s => selectedOverrideStudentIds.includes(s.student_id))
+                              }
+                              onChange={e => {
+                                if (e.target.checked) {
+                                  setSelectedOverrideStudentIds(missedStudents.map(s => s.student_id));
+                                } else {
+                                  setSelectedOverrideStudentIds([]);
+                                }
+                              }}
+                              className="w-3.5 h-3.5 text-amber-600 rounded border-slate-300 focus:ring-amber-500 cursor-pointer"
+                              title="Select All Students"
+                            />
+                          </th>
+                          <th className="px-6 py-3">Student Name</th>
+                          <th className="px-6 py-3">ID / Institutional Email</th>
                           <th className="px-6 py-3">Attempt / Reopen Status</th>
                           <th className="px-6 py-3 text-right">Override Actions</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 bg-white">
                         {missedStudents
-                          .filter(student =>
-                            `${student.first_name} ${student.last_name} ${student.institutional_id}`
-                              .toLowerCase()
-                              .includes(studentSearchTerm.toLowerCase())
-                          )
+                          .filter(student => {
+                            if (studentStatusFilter === "TAKERS" && !student.attempt) return false;
+                            if (studentStatusFilter === "MISSED" && student.attempt) return false;
+                            if (studentStatusFilter === "OVERRIDE" && (!student.override || !student.override.is_active)) return false;
+
+                            if (!studentSearchTerm.trim()) return true;
+                            const q = studentSearchTerm.toLowerCase().trim();
+                            const fullName = `${student.first_name} ${student.middle_name || ""} ${student.last_name}`.toLowerCase();
+                            const revName = `${student.last_name}, ${student.first_name}`.toLowerCase();
+                            const id = (student.institutional_id || "").toLowerCase();
+                            const email = (student.institutional_email || "").toLowerCase();
+                            return fullName.includes(q) || revName.includes(q) || id.includes(q) || email.includes(q);
+                          })
                           .map(student => {
                             const attempt = student.attempt;
                             const override = student.override;
+                            const isChecked = selectedOverrideStudentIds.includes(student.student_id);
                             
                             let statusNode = (
                               <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase bg-rose-50 text-rose-700 border border-rose-100">
@@ -2068,23 +2288,52 @@ export function FacultyDashboardClient({
                             } else if (attempt) {
                               if (attempt.submitted_at) {
                                 statusNode = (
-                                  <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase bg-emerald-50 text-emerald-700 border border-emerald-100">
-                                    Completed ({attempt.total_score} pts)
-                                  </span>
+                                  <div className="space-y-0.5">
+                                    <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase bg-emerald-50 text-emerald-700 border border-emerald-100">
+                                      Took Exam • Completed ({attempt.total_score !== null ? `${attempt.total_score} pts` : "Submitted"})
+                                    </span>
+                                    <p className="text-[10px] text-slate-500">
+                                      Submitted: {new Date(attempt.submitted_at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                    </p>
+                                  </div>
                                 );
                               } else {
                                 statusNode = (
-                                  <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase bg-amber-50 text-amber-700 border border-amber-100">
-                                    Ongoing / Active
-                                  </span>
+                                  <div className="space-y-0.5">
+                                    <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase bg-amber-50 text-amber-700 border border-amber-100">
+                                      Took Exam • In Progress
+                                    </span>
+                                    <p className="text-[10px] text-slate-500">
+                                      Started: {new Date(attempt.started_at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                    </p>
+                                  </div>
                                 );
                               }
                             }
 
                             return (
-                              <tr key={student.student_id} className="hover:bg-slate-50/50 transition-colors">
+                              <tr key={student.student_id} className={`hover:bg-slate-50/50 transition-colors ${isChecked ? "bg-amber-50/30" : ""}`}>
+                                <td className="px-4 py-4 text-center">
+                                  <input
+                                    type="checkbox"
+                                    checked={isChecked}
+                                    onChange={() => {
+                                      if (isChecked) {
+                                        setSelectedOverrideStudentIds(prev => prev.filter(id => id !== student.student_id));
+                                      } else {
+                                        setSelectedOverrideStudentIds(prev => [...prev, student.student_id]);
+                                      }
+                                    }}
+                                    className="w-3.5 h-3.5 text-amber-600 rounded border-slate-300 focus:ring-amber-500 cursor-pointer"
+                                  />
+                                </td>
                                 <td className="px-6 py-4 font-bold text-slate-800">
                                   {student.first_name} {student.middle_name ? `${student.middle_name.trim().charAt(0).toUpperCase()}. ` : ""}{student.last_name}
+                                  {attempt && (
+                                    <span className="ml-2 text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100">
+                                      Took Exam
+                                    </span>
+                                  )}
                                 </td>
                                 <td className="px-6 py-4">
                                   <div className="space-y-0.5 text-slate-500">
@@ -2117,14 +2366,14 @@ export function FacultyDashboardClient({
                                         }
                                         setOverrideModalOpen(true);
                                       }}
-                                      className="px-3 py-1.5 text-[11px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg shadow-sm transition-all"
+                                      className="px-3 py-1.5 text-[11px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg shadow-sm transition-all cursor-pointer"
                                     >
-                                      {override && override.is_active ? "Modify Reopened Window" : "Reopen Examination"}
+                                      {override && override.is_active ? "Modify Reopened Window" : "Reopen / Reschedule Exam"}
                                     </button>
                                     {override && override.is_active && (
                                       <button
                                         onClick={() => handleRevokeOverride(student.student_id)}
-                                        className="px-2.5 py-1.5 text-[11px] font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-all"
+                                        className="px-2.5 py-1.5 text-[11px] font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-all cursor-pointer"
                                         title="Revoke Reopened Window"
                                       >
                                         Revoke
@@ -2137,11 +2386,31 @@ export function FacultyDashboardClient({
                           })}
                         {missedStudents.length === 0 && (
                           <tr>
-                            <td colSpan={4} className="text-center py-8 text-slate-400 italic">
-                              No assigned students found for this examination.
+                            <td colSpan={5} className="text-center py-8 text-slate-400 italic">
+                              No students found for this examination or course.
                             </td>
                           </tr>
                         )}
+                        {missedStudents.length > 0 &&
+                          missedStudents.filter(student => {
+                            if (studentStatusFilter === "TAKERS" && !student.attempt) return false;
+                            if (studentStatusFilter === "MISSED" && student.attempt) return false;
+                            if (studentStatusFilter === "OVERRIDE" && (!student.override || !student.override.is_active)) return false;
+
+                            if (!studentSearchTerm.trim()) return true;
+                            const q = studentSearchTerm.toLowerCase().trim();
+                            const fullName = `${student.first_name} ${student.middle_name || ""} ${student.last_name}`.toLowerCase();
+                            const revName = `${student.last_name}, ${student.first_name}`.toLowerCase();
+                            const id = (student.institutional_id || "").toLowerCase();
+                            const email = (student.institutional_email || "").toLowerCase();
+                            return fullName.includes(q) || revName.includes(q) || id.includes(q) || email.includes(q);
+                          }).length === 0 && (
+                            <tr>
+                              <td colSpan={5} className="text-center py-8 text-slate-400 italic">
+                                No students match the search query "{studentSearchTerm}".
+                              </td>
+                            </tr>
+                          )}
                       </tbody>
                     </table>
                   </div>
@@ -2161,12 +2430,12 @@ export function FacultyDashboardClient({
                       <Clock className="w-5 h-5 text-amber-600" /> Override Schedule & Assign Retake
                     </h3>
                     <p className="text-xs text-slate-500 mt-1">
-                      Faculty can search and select assigned student(s) allowed to retake this examination.
+                      Choose among students that took or missed this examination to reschedule/reopen their testing window.
                     </p>
                   </div>
                   <button
                     onClick={() => setOverrideModalOpen(false)}
-                    className="text-slate-400 hover:text-slate-600 p-1"
+                    className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
                   >
                     <span className="text-2xl leading-none">&times;</span>
                   </button>
@@ -2183,40 +2452,70 @@ export function FacultyDashboardClient({
                       {officialExamScheduleText || "Original schedule from Examination Record / TOS"}
                     </p>
                     <p className="text-[10px] text-slate-500 leading-relaxed pt-0.5">
-                      ✓ Reopening this exam applies <strong>strictly to chosen selected student(s)</strong>. It does not alter the official exam schedule date or TOS record for other students.
+                      ✓ Reopening applies <strong>strictly to chosen selected student(s)</strong>. The official exam schedule date and Table of Specifications remain untouched for all other students.
                     </p>
                   </div>
 
-                  {/* Student Search Box with Search Button inside Modal */}
+                  {/* Student Search Box (Real-time by Name or ID) */}
                   <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-700 block">
-                      Search & Assign Student(s) Allowed to Retake
-                    </label>
-                    <div className="flex gap-2">
-                      <div className="relative flex-1">
-                        <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-                        <input
-                          type="text"
-                          placeholder="Search student by name or ID..."
-                          value={popupStudentSearchInput}
-                          onChange={e => setPopupStudentSearchInput(e.target.value)}
-                          onKeyDown={e => {
-                            if (e.key === "Enter") {
-                              e.preventDefault();
-                              setPopupStudentSearchTerm(popupStudentSearchInput);
-                            }
-                          }}
-                          className="w-full bg-slate-50 border border-slate-200 text-xs font-medium text-slate-800 pl-9 pr-3 py-2.5 rounded-xl transition-all focus:outline-none focus:border-amber-500 focus:bg-white"
-                        />
+                    <div className="flex justify-between items-center">
+                      <label className="text-xs font-bold text-slate-700 block">
+                        Search & Select Student(s) Allowed to Retake
+                      </label>
+                      <div className="flex gap-1.5 text-[10px]">
+                        <button
+                          type="button"
+                          onClick={() => setPopupStudentFilter("ALL")}
+                          className={`px-2 py-0.5 rounded-lg font-bold transition-all cursor-pointer ${
+                            popupStudentFilter === "ALL" ? "bg-slate-800 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                          }`}
+                        >
+                          All ({missedStudents.length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPopupStudentFilter("TAKERS")}
+                          className={`px-2 py-0.5 rounded-lg font-bold transition-all cursor-pointer ${
+                            popupStudentFilter === "TAKERS" ? "bg-emerald-700 text-white" : "bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+                          }`}
+                        >
+                          Took ({missedStudents.filter(s => !!s.attempt).length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPopupStudentFilter("MISSED")}
+                          className={`px-2 py-0.5 rounded-lg font-bold transition-all cursor-pointer ${
+                            popupStudentFilter === "MISSED" ? "bg-rose-700 text-white" : "bg-rose-50 text-rose-800 hover:bg-rose-100"
+                          }`}
+                        >
+                          Missed ({missedStudents.filter(s => !s.attempt).length})
+                        </button>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => setPopupStudentSearchTerm(popupStudentSearchInput)}
-                        className="px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl transition-all shadow-sm flex items-center gap-1.5 shrink-0 cursor-pointer"
-                      >
-                        <Search className="w-3.5 h-3.5" />
-                        Search Name
-                      </button>
+                    </div>
+                    <div className="relative">
+                      <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                      <input
+                        type="text"
+                        placeholder="Search student by name or ID in real-time..."
+                        value={popupStudentSearchInput}
+                        onChange={e => {
+                          setPopupStudentSearchInput(e.target.value);
+                          setPopupStudentSearchTerm(e.target.value);
+                        }}
+                        className="w-full bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-800 pl-9 pr-8 py-2.5 rounded-xl transition-all focus:outline-none focus:border-amber-500 focus:bg-white"
+                      />
+                      {popupStudentSearchInput && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPopupStudentSearchInput("");
+                            setPopupStudentSearchTerm("");
+                          }}
+                          className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 text-xs cursor-pointer"
+                        >
+                          ✕
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -2230,16 +2529,21 @@ export function FacultyDashboardClient({
                         <button
                           type="button"
                           onClick={() => {
+                            const term = (popupStudentSearchInput || popupStudentSearchTerm).toLowerCase().trim();
                             const filteredIds = missedStudents
-                              .filter(s =>
-                                `${s.first_name} ${s.last_name} ${s.institutional_id}`
-                                  .toLowerCase()
-                                  .includes(popupStudentSearchTerm.toLowerCase())
-                              )
+                              .filter(s => {
+                                if (popupStudentFilter === "TAKERS" && !s.attempt) return false;
+                                if (popupStudentFilter === "MISSED" && s.attempt) return false;
+                                if (!term) return true;
+                                const fn = `${s.first_name} ${s.middle_name || ""} ${s.last_name}`.toLowerCase();
+                                const rn = `${s.last_name}, ${s.first_name}`.toLowerCase();
+                                const id = (s.institutional_id || "").toLowerCase();
+                                return fn.includes(term) || rn.includes(term) || id.includes(term);
+                              })
                               .map(s => s.student_id);
                             setSelectedOverrideStudentIds(Array.from(new Set([...selectedOverrideStudentIds, ...filteredIds])));
                           }}
-                          className="text-amber-700 font-bold hover:underline"
+                          className="text-amber-700 font-bold hover:underline cursor-pointer"
                         >
                           Select All Filtered
                         </button>
@@ -2247,19 +2551,25 @@ export function FacultyDashboardClient({
                         <button
                           type="button"
                           onClick={() => setSelectedOverrideStudentIds([])}
-                          className="text-slate-500 font-bold hover:underline"
+                          className="text-slate-500 font-bold hover:underline cursor-pointer"
                         >
-                          Clear All
+                          Clear Selection
                         </button>
                       </div>
                     </div>
 
                     {missedStudents
-                      .filter(student =>
-                        `${student.first_name} ${student.last_name} ${student.institutional_id}`
-                          .toLowerCase()
-                          .includes(popupStudentSearchTerm.toLowerCase())
-                      )
+                      .filter(student => {
+                        if (popupStudentFilter === "TAKERS" && !student.attempt) return false;
+                        if (popupStudentFilter === "MISSED" && student.attempt) return false;
+
+                        const term = (popupStudentSearchInput || popupStudentSearchTerm).toLowerCase().trim();
+                        if (!term) return true;
+                        const fullName = `${student.first_name} ${student.middle_name || ""} ${student.last_name}`.toLowerCase();
+                        const revName = `${student.last_name}, ${student.first_name}`.toLowerCase();
+                        const id = (student.institutional_id || "").toLowerCase();
+                        return fullName.includes(term) || revName.includes(term) || id.includes(term);
+                      })
                       .map(student => {
                         const isChecked = selectedOverrideStudentIds.includes(student.student_id);
                         const override = student.override;
@@ -2300,24 +2610,34 @@ export function FacultyDashboardClient({
                               </span>
                             ) : student.attempt?.submitted_at ? (
                               <span className="px-2 py-0.5 rounded-md text-[9px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                                Completed ({student.attempt.total_score} pts)
+                                Took Exam • Completed ({student.attempt.total_score !== null ? `${student.attempt.total_score} pts` : "Submitted"})
+                              </span>
+                            ) : student.attempt ? (
+                              <span className="px-2 py-0.5 rounded-md text-[9px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                                Took Exam • In Progress
                               </span>
                             ) : (
                               <span className="px-2 py-0.5 rounded-md text-[9px] font-bold bg-rose-100 text-rose-800 border border-rose-200">
-                                Not Taken / Missed
+                                Missed / Not Taken
                               </span>
                             )}
                           </label>
                         );
                       })}
 
-                    {missedStudents.filter(student =>
-                      `${student.first_name} ${student.last_name} ${student.institutional_id}`
-                        .toLowerCase()
-                        .includes(popupStudentSearchTerm.toLowerCase())
-                    ).length === 0 && (
+                    {missedStudents.filter(student => {
+                      if (popupStudentFilter === "TAKERS" && !student.attempt) return false;
+                      if (popupStudentFilter === "MISSED" && student.attempt) return false;
+
+                      const term = (popupStudentSearchInput || popupStudentSearchTerm).toLowerCase().trim();
+                      if (!term) return true;
+                      const fullName = `${student.first_name} ${student.middle_name || ""} ${student.last_name}`.toLowerCase();
+                      const revName = `${student.last_name}, ${student.first_name}`.toLowerCase();
+                      const id = (student.institutional_id || "").toLowerCase();
+                      return fullName.includes(term) || revName.includes(term) || id.includes(term);
+                    }).length === 0 && (
                       <p className="text-center text-xs text-slate-400 py-4 italic">
-                        No matching assigned students found.
+                        No matching students found for the current search filter.
                       </p>
                     )}
                   </div>
@@ -2325,7 +2645,7 @@ export function FacultyDashboardClient({
                   {/* Override Form Inputs */}
                   <form onSubmit={handleOverrideSubmit} className="space-y-4 pt-1">
                     <div className="bg-amber-50 border border-amber-100 rounded-xl p-3 text-xs text-amber-900 font-medium">
-                      ⚠️ Reopening will reset any previous incomplete attempt for the selected student(s) to allow a clean retake during the specified reopened window.
+                      ⚠️ Reopening will reset any previous attempt for the selected student(s) to allow a clean retake during the specified reopened window.
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
@@ -2378,7 +2698,7 @@ export function FacultyDashboardClient({
                       <button
                         type="button"
                         onClick={() => setOverrideModalOpen(false)}
-                        className="px-5 py-2.5 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all"
+                        className="px-5 py-2.5 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all cursor-pointer"
                       >
                         Cancel
                       </button>
