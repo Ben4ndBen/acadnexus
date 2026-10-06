@@ -135,158 +135,212 @@ export function BSCTableOfSpecificationsView({
   const totalEvaluating = topics.reduce((sum, t) => sum + getTax(t).eva, 0);
   const totalCreating = topics.reduce((sum, t) => sum + getTax(t).cre, 0);
 
+  const safeTotalItems = totalAssignedItems > 0 ? totalAssignedItems : 1;
+  const remPerc = Math.round((totalRemembering / safeTotalItems) * 100);
+  const undPerc = Math.round((totalUnderstanding / safeTotalItems) * 100);
+  const appPerc = Math.round((totalApplying / safeTotalItems) * 100);
+  const anaPerc = Math.round((totalAnalyzing / safeTotalItems) * 100);
+  const evaPerc = Math.round((totalEvaluating / safeTotalItems) * 100);
+  const crePerc = Math.max(0, 100 - (remPerc + undPerc + appPerc + anaPerc + evaPerc));
+
+  let runningItemStart = 1;
+
   return (
-    <div className="bg-white text-slate-900 border border-slate-300 rounded-2xl shadow-xl p-4 sm:p-8 font-sans print:shadow-none print:border-none print:p-0 space-y-6">
+    <div className="bg-white text-black border border-slate-300 rounded-2xl shadow-xl p-4 sm:p-8 font-sans print:shadow-none print:border-none print:p-0 space-y-4">
       
-      {/* OFFICIAL BSC HEADER IMAGE */}
-      <div className="w-full border-b border-slate-200 pb-2">
+      {/* BSC OFFICIAL HEADER IMAGE */}
+      <div className="w-full border-b border-black pb-2 relative">
+        <div className="absolute top-1 right-2 sm:top-2 sm:right-4 z-10 print:top-0 print:right-0">
+          <span className="font-sans font-black text-[11px] sm:text-xs text-black bg-white border border-black px-2 py-0.5 rounded shadow-2xs uppercase tracking-wider">
+            {documentReference || "BSC-ODI-F-121"}
+          </span>
+        </div>
         <img
-          src="/bsc_header.png"
+          src="/bsc-header.png"
           alt="Batanes State College Header"
-          className="w-full h-auto object-contain block rounded-t-xl"
+          className="w-full h-auto object-contain mx-auto max-h-[160px] print:max-h-none"
         />
       </div>
 
-      {/* Department Banner & Exam Metadata */}
-      <div className="border border-slate-300 rounded-xl overflow-hidden shadow-2xs">
-        <div className="bg-slate-100 border-b border-slate-300 text-center py-2.5 px-4">
-          <h2 className="text-xs sm:text-sm font-black tracking-wider uppercase text-slate-900 font-serif">
-            {resolvedDeptName}
-          </h2>
-          <h3 className="text-sm sm:text-base font-black tracking-widest uppercase text-[#500e12] mt-0.5">
-            TABLE OF SPECIFICATIONS
-          </h3>
-          <p className="text-xs font-bold text-[#E2A123] mt-0.5">
-            {term.toUpperCase()} EXAMINATION
-          </p>
-          <p className="text-[11px] text-slate-600 font-medium">
-            {semester}, Academic Year {academicYear}
-          </p>
-        </div>
+      {/* DYNAMIC DEPARTMENT NAME */}
+      <div className="text-center pt-0.5">
+        <h3 className="font-sans font-bold text-sm sm:text-base text-black uppercase tracking-wider">
+          {resolvedDeptName}
+        </h3>
+      </div>
 
-        {/* Course Details Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 p-3.5 bg-white text-xs font-semibold text-slate-800">
-          <div className="flex items-center gap-2">
-            <span className="font-extrabold text-slate-950 shrink-0">COURSE CODE:</span>
-            <span className="border-b border-slate-400 flex-1 font-mono font-bold px-1 text-slate-900">{courseCode || "—"}</span>
+      {/* TOS TITLE & TERM */}
+      <div className="text-center space-y-0.5 py-1">
+        <h2 className="text-base sm:text-lg font-black font-sans text-black tracking-wide uppercase">
+          TABLE OF SPECIFICATIONS
+        </h2>
+        <p className="text-xs sm:text-sm font-bold text-black uppercase">
+          <span className="font-black">[{term.toUpperCase()}] EXAMINATION</span>
+        </p>
+        <p className="text-xs font-bold text-black">
+          <span className="underline">{semester}</span>
+        </p>
+      </div>
+
+      {/* COURSE & EXAMINATION METADATA GRID MATCHING PDF */}
+      <div className="space-y-2 text-xs font-bold text-black uppercase pt-1 pb-2">
+        <div className="flex flex-col sm:flex-row items-baseline justify-between gap-4">
+          <div className="flex items-baseline gap-2 flex-1 w-full">
+            <span className="shrink-0 font-extrabold text-[11px]">COURSE CODE:</span>
+            <span className="border-b-2 border-black flex-1 font-mono font-black text-black px-1 text-[11px]">
+              {courseCode || ""}
+            </span>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="font-extrabold text-slate-950 shrink-0">DATE OF EXAMINATION:</span>
-            <span className="border-b border-slate-400 flex-1 font-mono font-bold px-1 text-slate-900">{examDate || "—"}</span>
+          <div className="flex items-baseline gap-2 flex-1 w-full">
+            <span className="shrink-0 font-extrabold text-[11px]">DATE OF EXAMINATION:</span>
+            <span className="border-b-2 border-black flex-1 font-mono font-black text-black px-1 text-[11px]">
+              {examDate || ""}
+            </span>
           </div>
-          <div className="flex items-center gap-2 sm:col-span-2">
-            <span className="font-extrabold text-slate-950 shrink-0">COURSE TITLE:</span>
-            <span className="border-b border-slate-400 flex-1 font-bold px-1 text-slate-900">{courseTitle || "—"}</span>
-          </div>
+        </div>
+        <div className="flex items-baseline gap-2 w-full">
+          <span className="shrink-0 font-extrabold text-[11px]">COURSE TITLE:</span>
+          <span className="border-b-2 border-black flex-1 font-extrabold text-black px-1 text-[11px]">
+            {courseTitle || ""}
+          </span>
         </div>
       </div>
 
-      {/* TOS Matrix Table */}
-      <div className="w-full overflow-visible border border-slate-900 rounded-xl shadow-2xs">
-        <table className="w-full text-left border-collapse text-xs">
+      {/* BSC-ODI-F-121 OFFICIAL TABLE FORMAT MATCHING FACULTY PREVIEW */}
+      <div className="w-full max-w-full overflow-hidden rounded-none border border-black shadow-2xs print:overflow-visible">
+        <table className="w-full text-left border-collapse text-[9.5px] print:text-[9px] table-fixed border-black font-sans">
           <thead>
-            {/* Main Header Row */}
-            <tr className="bg-[#500e12] text-white font-extrabold text-center text-[11px] divide-x divide-slate-800">
-              <th className="p-2.5 border border-slate-900 w-1/4" rowSpan={2}>LESSON / TOPIC</th>
-              <th className="p-2.5 border border-slate-900 w-1/5" rowSpan={2}>LEARNING OUTCOMES</th>
-              <th className="p-2 border border-slate-900 w-16" rowSpan={2}>NO. OF HOURS TAUGHT</th>
-              <th className="p-2 border border-slate-900 w-16" rowSpan={2}>% WEIGHT / ALLOC.</th>
-              <th className="p-2 border border-slate-900 w-16" rowSpan={2}>NO. OF ITEMS</th>
-              <th className="p-2 border border-slate-900" colSpan={7}>ITEM SPECIFICATION PER TAXONOMY OF LEARNING</th>
-              <th className="p-2.5 border border-slate-900 w-24" rowSpan={2}>ITEM PLACEMENT</th>
+            <tr className="bg-white text-black font-black uppercase text-center border-b border-black">
+              <th rowSpan={3} className="py-2 px-1 border-r border-black w-[15%] text-left font-black align-middle text-[8.5px] leading-tight">LESSON / TOPIC</th>
+              <th rowSpan={3} className="py-2 px-1 border-r border-black w-[20%] text-left font-black align-middle text-[8.5px] leading-tight">LEARNING OUTCOMES</th>
+              <th rowSpan={3} className="py-2 px-0.5 border-r border-black w-[6%] font-black text-center align-middle text-[7.5px] leading-tight">NO. OF TEACHING HOURS</th>
+              <th rowSpan={3} className="py-2 px-0.5 border-r border-black w-[6%] font-black text-center align-middle text-[7.5px] leading-tight">% OF ALLOCATION</th>
+              <th rowSpan={3} className="py-2 px-0.5 border-r border-black w-[6%] font-black text-center align-middle text-[7.5px] leading-tight">NO. OF ITEMS</th>
+              <th colSpan={7} className="py-1.5 px-0.5 border-r border-b border-black bg-white text-black font-black text-center text-[8.5px] tracking-tight">
+                ITEM SPECIFICATION PER TAXONOMY OF LEARNING
+              </th>
+              <th rowSpan={3} className="py-2 px-1 border-black w-[9%] font-black text-center align-middle text-[7.5px] leading-tight">ITEM PLACEMENT</th>
             </tr>
-            {/* Taxonomy Sub-header Row */}
-            <tr className="bg-[#7A151A] text-white font-bold text-[10px] text-center divide-x divide-slate-800">
-              <th className="p-1 border border-slate-900">Remembering</th>
-              <th className="p-1 border border-slate-900">Understanding</th>
-              <th className="p-1 border border-slate-900">Applying</th>
-              <th className="p-1 border border-slate-900">Analyzing</th>
-              <th className="p-1 border border-slate-900">Evaluating</th>
-              <th className="p-1 border border-slate-900">Creating</th>
-              <th className="p-1 border border-slate-900 font-black bg-[#500e12]">TOTAL</th>
+            <tr className="bg-white text-black font-black text-[7px] uppercase text-center border-b border-black">
+              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-normal text-center overflow-hidden">
+                REMEMBERING /<br />KNOWLEDGE
+              </th>
+              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-normal text-center overflow-hidden">
+                UNDERSTANDING /<br />COMPREHENSION
+              </th>
+              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-normal text-center overflow-hidden">
+                APPLYING /<br />APPLICATION
+              </th>
+              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-normal text-center overflow-hidden">
+                ANALYZING /<br />ANALYSIS
+              </th>
+              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-normal text-center overflow-hidden">
+                EVALUATING /<br />SYNTHESIS
+              </th>
+              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-normal text-center overflow-hidden">
+                CREATING /<br />EVALUATION
+              </th>
+              <th rowSpan={2} className="py-2 px-0.5 border-r border-black bg-white font-black text-black text-[8.5px] text-center align-middle">TOTAL</th>
+            </tr>
+            <tr className="bg-white text-black font-black text-[8.5px] uppercase text-center border-b border-black">
+              <th className="py-1 px-0.5 border-r border-black font-black text-center underline">
+                {remPerc}%
+              </th>
+              <th className="py-1 px-0.5 border-r border-black font-black text-center underline">
+                {undPerc}%
+              </th>
+              <th className="py-1 px-0.5 border-r border-black font-black text-center underline">
+                {appPerc}%
+              </th>
+              <th className="py-1 px-0.5 border-r border-black font-black text-center underline">
+                {anaPerc}%
+              </th>
+              <th className="py-1 px-0.5 border-r border-black font-black text-center underline">
+                {evaPerc}%
+              </th>
+              <th className="py-1 px-0.5 border-r border-black font-black text-center underline">
+                {crePerc}%
+              </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-300 text-slate-900 text-[11px]">
+          <tbody className="divide-y divide-black font-medium text-black bg-white">
             {topics.length === 0 ? (
               <tr>
-                <td colSpan={13} className="p-6 text-center text-slate-400 italic">
+                <td colSpan={13} className="p-6 text-center text-black italic">
                   No TOS topics configured yet.
                 </td>
               </tr>
             ) : (
               topics.map((t, idx) => {
-                const rem = t.taxonomy?.remembering ?? Math.round(t.assignedItems * 0.3);
-                const und = t.taxonomy?.understanding ?? Math.round(t.assignedItems * 0.3);
-                const app = t.taxonomy?.applying ?? Math.round(t.assignedItems * 0.2);
-                const ana = t.taxonomy?.analyzing ?? Math.round(t.assignedItems * 0.1);
-                const eva = t.taxonomy?.evaluating ?? Math.round(t.assignedItems * 0.05);
-                const cre = t.taxonomy?.creating ?? (t.assignedItems - (rem + und + app + ana + eva));
+                const tax = getTax(t);
+                const count = Number(t.assignedItems) || 0;
+                const startItem = runningItemStart;
+                const endItem = startItem + count - 1;
+                const calculatedPlacement = t.itemPlacement || (count > 0 ? (count === 1 ? `Item ${startItem}` : `Items ${startItem}–${endItem}`) : "—");
+                runningItemStart += count;
 
                 return (
-                  <tr key={t.id || idx} className={idx % 2 === 0 ? "bg-white" : "bg-slate-50/70"}>
-                    {/* Lesson / Topic */}
-                    <td className="p-2.5 border border-slate-900 font-bold text-slate-950 align-top">
+                  <tr key={t.id || idx} className="bg-white border-b border-black">
+                    <td className="py-2 px-2 font-bold text-black border-r border-black align-top">
                       {t.topic_name || `Topic ${idx + 1}`}
                     </td>
-
-                    {/* Learning Outcomes */}
-                    <td className="p-2.5 border border-slate-900 text-slate-700 align-top leading-tight text-[10px]">
-                      {t.learning_outcomes || "• Demonstrate comprehensive knowledge of core topic competencies and application principles."}
+                    <td className="py-1 px-1.5 text-black border-r border-black text-[8.5px] align-top whitespace-pre-wrap break-words leading-snug">
+                      {t.learning_outcomes || `Demonstrates competency and learning outcomes for ${(t.topic_name || "").toLowerCase()}.`}
                     </td>
-
-                    {/* Hours Taught */}
-                    <td className="p-2 text-center border border-slate-900 font-bold font-mono align-middle">
-                      {t.hours}
+                    <td className="py-2 px-1 text-center font-bold text-black border-r border-black align-top">
+                      {t.hours > 0 ? t.hours : "0"}
                     </td>
-
-                    {/* % Weight */}
-                    <td className="p-2 text-center border border-slate-900 font-bold font-mono align-middle">
+                    <td className="py-2 px-1 text-center font-extrabold text-black border-r border-black align-top">
                       {t.weightPercentage}%
                     </td>
-
-                    {/* No. of Items */}
-                    <td className="p-2 text-center border border-slate-900 font-black font-mono text-[#500e12] align-middle bg-amber-50/40">
+                    <td className="py-2 px-1 text-center font-extrabold text-black border-r border-black align-top">
                       {t.assignedItems}
                     </td>
-
-                    {/* Taxonomy Breakdown */}
-                    <td className="p-1 text-center border border-slate-900 font-mono align-middle">{rem || "—"}</td>
-                    <td className="p-1 text-center border border-slate-900 font-mono align-middle">{und || "—"}</td>
-                    <td className="p-1 text-center border border-slate-900 font-mono align-middle">{app || "—"}</td>
-                    <td className="p-1 text-center border border-slate-900 font-mono align-middle">{ana || "—"}</td>
-                    <td className="p-1 text-center border border-slate-900 font-mono align-middle">{eva || "—"}</td>
-                    <td className="p-1 text-center border border-slate-900 font-mono align-middle">{cre > 0 ? cre : "—"}</td>
-                    <td className="p-1 text-center border border-slate-900 font-black font-mono bg-amber-100/50 align-middle">
+                    <td className="py-2 px-0.5 text-center border-r border-black font-bold text-black align-top">
+                      {tax.rem}
+                    </td>
+                    <td className="py-2 px-0.5 text-center border-r border-black font-bold text-black align-top">
+                      {tax.und}
+                    </td>
+                    <td className="py-2 px-0.5 text-center border-r border-black font-bold text-black align-top">
+                      {tax.app}
+                    </td>
+                    <td className="py-2 px-0.5 text-center border-r border-black font-bold text-black align-top">
+                      {tax.ana}
+                    </td>
+                    <td className="py-2 px-0.5 text-center border-r border-black font-bold text-black align-top">
+                      {tax.eva}
+                    </td>
+                    <td className="py-2 px-0.5 text-center border-r border-black font-bold text-black align-top">
+                      {tax.cre}
+                    </td>
+                    <td className="py-2 px-0.5 text-center border-r border-black font-black text-black bg-white align-top">
                       {t.assignedItems}
                     </td>
-
-                    {/* Item Placement (Not generated yet per user instructions) */}
-                    <td className="p-2 text-center border border-slate-900 font-bold font-mono text-slate-400 align-middle">
-                      —
+                    <td className="py-2 px-1.5 font-mono font-bold text-black text-[9px] align-top">
+                      {calculatedPlacement}
                     </td>
                   </tr>
                 );
               })
             )}
           </tbody>
-
-          {/* TOTAL FOOTER ROW */}
           <tfoot>
-            <tr className="bg-[#7A151A] text-white font-black text-center text-xs divide-x divide-slate-900">
-              <td className="p-2.5 border border-slate-900 text-left font-serif uppercase tracking-wider" colSpan={2}>
+            <tr className="bg-white text-black font-black text-[9px] uppercase text-center border-t-2 border-black">
+              <td colSpan={2} className="py-2 px-2 border-r border-black text-left font-black">
                 TOTAL
               </td>
-              <td className="p-2 border border-slate-900 font-mono">{totalHours} hrs</td>
-              <td className="p-2 border border-slate-900 font-mono">{totalWeight}%</td>
-              <td className="p-2 border border-slate-900 font-mono bg-[#500e12]">{totalAssignedItems}</td>
-              <td className="p-1 border border-slate-900 font-mono">{totalRemembering || "—"}</td>
-              <td className="p-1 border border-slate-900 font-mono">{totalUnderstanding || "—"}</td>
-              <td className="p-1 border border-slate-900 font-mono">{totalApplying || "—"}</td>
-              <td className="p-1 border border-slate-900 font-mono">{totalAnalyzing || "—"}</td>
-              <td className="p-1 border border-slate-900 font-mono">{totalEvaluating || "—"}</td>
-              <td className="p-1 border border-slate-900 font-mono">{totalCreating || "—"}</td>
-              <td className="p-1 border border-slate-900 font-mono bg-[#500e12]">{totalAssignedItems}</td>
-              <td className="p-2 border border-slate-900 font-mono text-slate-300">
+              <td className="py-2 px-1 border-r border-black font-black">{totalHours}</td>
+              <td className="py-2 px-1 border-r border-black font-black">{totalWeight}%</td>
+              <td className="py-2 px-1 border-r border-black font-black">{totalAssignedItems}</td>
+              <td className="py-2 px-0.5 border-r border-black font-black">{totalRemembering}</td>
+              <td className="py-2 px-0.5 border-r border-black font-black">{totalUnderstanding}</td>
+              <td className="py-2 px-0.5 border-r border-black font-black">{totalApplying}</td>
+              <td className="py-2 px-0.5 border-r border-black font-black">{totalAnalyzing}</td>
+              <td className="py-2 px-0.5 border-r border-black font-black">{totalEvaluating}</td>
+              <td className="py-2 px-0.5 border-r border-black font-black">{totalCreating}</td>
+              <td className="py-2 px-0.5 border-r border-black font-black">{totalAssignedItems}</td>
+              <td className="py-2 px-1 font-mono font-bold text-black">
                 —
               </td>
             </tr>
@@ -294,58 +348,58 @@ export function BSCTableOfSpecificationsView({
         </table>
       </div>
 
-      {/* SIGNATURES / APPROVAL WORKFLOW BLOCK */}
+      {/* SIGNATURES / APPROVAL WORKFLOW BLOCK MATCHING FACULTY PREVIEW */}
       {(() => {
         const cCode = (courseCode || "").trim().toUpperCase();
         const dName = (resolvedDeptName || "").toUpperCase();
         const isSingleTier = dName.includes("AGRICULTURE") || dName.includes("HOSPITALITY") || cCode.startsWith("AGRI") || cCode.startsWith("HPC") || cCode.startsWith("TPC") || cCode.startsWith("BSA") || cCode.startsWith("BSHM") || cCode.startsWith("BSTM");
         
         return (
-          <div className="pt-6 border-t border-slate-300">
-            <div className={`grid grid-cols-1 ${isSingleTier ? "sm:grid-cols-3" : "sm:grid-cols-4"} gap-6 text-xs text-slate-900`}>
+          <div className="pt-6 border-t border-black">
+            <div className={`grid grid-cols-1 ${isSingleTier ? "sm:grid-cols-3" : "sm:grid-cols-4"} gap-6 text-xs text-black font-sans`}>
               {/* Prepared by */}
               <div className="space-y-8">
-                <p className="font-extrabold text-slate-950 uppercase tracking-wider text-[11px]">Prepared by:</p>
+                <p className="font-extrabold text-black uppercase tracking-wider text-[11px]">Prepared by:</p>
                 <div>
-                  <p className="font-bold text-slate-900 border-b border-slate-400 pb-1 uppercase tracking-wide">
+                  <p className="font-bold text-black border-b border-black pb-1 uppercase tracking-wide">
                     {facultyName || "FACULTY INSTRUCTOR"}
                   </p>
-                  <p className="text-[11px] text-slate-500 font-semibold mt-1">{facultyRank || "Faculty Instructor"}</p>
+                  <p className="text-[11px] text-black font-semibold mt-1">{facultyRank || "Faculty Instructor"}</p>
                 </div>
               </div>
 
               {/* Reviewed by (Program Chair) - Only for ICT, IT, TED */}
               {!isSingleTier && (
                 <div className="space-y-8">
-                  <p className="font-extrabold text-slate-950 uppercase tracking-wider text-[11px]">Reviewed by:</p>
+                  <p className="font-extrabold text-black uppercase tracking-wider text-[11px]">Reviewed by:</p>
                   <div>
-                    <p className="font-bold text-slate-900 border-b border-slate-400 pb-1 uppercase tracking-wide">
+                    <p className="font-bold text-black border-b border-black pb-1 uppercase tracking-wide">
                       {programChairName || "PROGRAM CHAIRPERSON"}
                     </p>
-                    <p className="text-[11px] text-slate-500 font-semibold mt-1">Program Chairperson</p>
+                    <p className="text-[11px] text-black font-semibold mt-1">Program Chairperson</p>
                   </div>
                 </div>
               )}
 
               {/* Recommended by (Department Chair) */}
               <div className="space-y-8">
-                <p className="font-extrabold text-slate-950 uppercase tracking-wider text-[11px]">Recommended by:</p>
+                <p className="font-extrabold text-black uppercase tracking-wider text-[11px]">Recommended by:</p>
                 <div>
-                  <p className="font-bold text-slate-900 border-b border-slate-400 pb-1 uppercase tracking-wide">
+                  <p className="font-bold text-black border-b border-black pb-1 uppercase tracking-wide">
                     {deptChairName || "DEPARTMENT CHAIRPERSON"}
                   </p>
-                  <p className="text-[11px] text-slate-500 font-semibold mt-1">Department Chairperson</p>
+                  <p className="text-[11px] text-black font-semibold mt-1">Department Chairperson</p>
                 </div>
               </div>
 
               {/* Approved by (DI) */}
               <div className="space-y-8">
-                <p className="font-extrabold text-slate-950 uppercase tracking-wider text-[11px]">Approved by:</p>
+                <p className="font-extrabold text-black uppercase tracking-wider text-[11px]">Approved by:</p>
                 <div>
-                  <p className="font-bold text-slate-900 border-b border-slate-400 pb-1 uppercase tracking-wide">
+                  <p className="font-bold text-black border-b border-black pb-1 uppercase tracking-wide">
                     {directorInstructionName || "DIRECTOR FOR INSTRUCTION"}
                   </p>
-                  <p className="text-[11px] text-slate-500 font-semibold mt-1">Director for Instruction</p>
+                  <p className="text-[11px] text-black font-semibold mt-1">Director for Instruction</p>
                 </div>
               </div>
             </div>
@@ -354,9 +408,9 @@ export function BSCTableOfSpecificationsView({
       })()}
 
       {/* OFFICIAL BSC FOOTER IMAGE */}
-      <div className="w-full mt-6 border-t border-slate-200 pt-2">
+      <div className="w-full mt-6 border-t border-black pt-2">
         <img
-          src="/bsc_footer.png"
+          src="/bsc-footer.png"
           alt="Batanes State College Footer"
           className="w-full h-auto object-contain block rounded-b-xl"
         />
