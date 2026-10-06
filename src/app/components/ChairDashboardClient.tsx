@@ -207,14 +207,7 @@ export function ChairDashboardClient({
       return;
     }
 
-    // Enforce TOS Alignment Checklist before approving
-    if (action === "Approve") {
-      const checklist = tosChecklist[workflowId] || { topicWeighting: false, cognitiveLevels: false, itemPoints: false };
-      if (!checklist.topicWeighting || !checklist.cognitiveLevels || !checklist.itemPoints) {
-        alert("Before approving this examination, you must complete all items in the TOS Alignment Checklist.");
-        return;
-      }
-    }
+
 
     // Enforce warning when approving but revisions are requested
     if (action === "Approve" && hasRevisionRequested) {
@@ -265,83 +258,7 @@ export function ChairDashboardClient({
     }
   };
 
-  const renderTosChecklist = (workflowId: number) => {
-    const current = tosChecklist[workflowId] || { topicWeighting: false, cognitiveLevels: false, itemPoints: false };
-    const isComplete = current.topicWeighting && current.cognitiveLevels && current.itemPoints;
 
-    return (
-      <div className={`border rounded-xl p-4 space-y-3 transition-all ${
-        isComplete 
-          ? "bg-emerald-50/50 border-emerald-200" 
-          : "bg-amber-50/50 border-amber-200"
-      }`}>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <FileText className={`w-4 h-4 ${isComplete ? "text-emerald-700" : "text-amber-700"}`} />
-            <h4 className={`text-xs font-black uppercase tracking-wider ${isComplete ? "text-emerald-900" : "text-amber-900"}`}>
-              TOS Alignment Checklist <span className="text-rose-600">*</span>
-            </h4>
-          </div>
-          {isComplete ? (
-            <span className="text-[10px] bg-emerald-600 text-white font-extrabold px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-sm">
-              <Check className="w-3 h-3" /> All Verified
-            </span>
-          ) : (
-            <span className="text-[10px] bg-amber-200/80 text-amber-900 font-bold px-2 py-0.5 rounded-full">
-              Required for approval
-            </span>
-          )}
-        </div>
-
-        <div className="space-y-2 pt-1">
-          <label className="flex items-start gap-2.5 text-xs text-slate-700 font-semibold cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={current.topicWeighting}
-              onChange={(e) => {
-                setTosChecklist({
-                  ...tosChecklist,
-                  [workflowId]: { ...current, topicWeighting: e.target.checked }
-                });
-              }}
-              className="mt-0.5 rounded border-slate-300 text-amber-600 focus:ring-amber-600 shrink-0 w-4 h-4 cursor-pointer"
-            />
-            <span>Topic weighting matches test question distribution</span>
-          </label>
-
-          <label className="flex items-start gap-2.5 text-xs text-slate-700 font-semibold cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={current.cognitiveLevels}
-              onChange={(e) => {
-                setTosChecklist({
-                  ...tosChecklist,
-                  [workflowId]: { ...current, cognitiveLevels: e.target.checked }
-                });
-              }}
-              className="mt-0.5 rounded border-slate-300 text-amber-600 focus:ring-amber-600 shrink-0 w-4 h-4 cursor-pointer"
-            />
-            <span>Cognitive levels (Remembering, Applying, etc.) match item breakdown</span>
-          </label>
-
-          <label className="flex items-start gap-2.5 text-xs text-slate-700 font-semibold cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={current.itemPoints}
-              onChange={(e) => {
-                setTosChecklist({
-                  ...tosChecklist,
-                  [workflowId]: { ...current, itemPoints: e.target.checked }
-                });
-              }}
-              className="mt-0.5 rounded border-slate-300 text-amber-600 focus:ring-amber-600 shrink-0 w-4 h-4 cursor-pointer"
-            />
-            <span>Total test items & point allocation match TOS specification</span>
-          </label>
-        </div>
-      </div>
-    );
-  };
 
   const [isCreatingExam, setIsCreatingExam] = useState(false);
 
@@ -678,8 +595,7 @@ export function ChairDashboardClient({
                         </button>
                       </div>
 
-                      {/* TOS Alignment Checklist */}
-                      {renderTosChecklist(approval.workflow_id)}
+
 
                       <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
                         <label className="text-xs font-bold text-slate-700 mb-2 block">General Review Comments</label>
@@ -1186,8 +1102,7 @@ export function ChairDashboardClient({
 
                 {/* Questions Panel Body */}
                 <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                  {/* TOS Alignment Checklist */}
-                  {renderTosChecklist(activeSplitApproval.workflow_id)}
+
 
                   {/* General Review Comments */}
                   <div className="bg-amber-50/50 border border-amber-200/60 rounded-xl p-3.5 space-y-2">
