@@ -21,6 +21,37 @@ import { getExpectedYearAndSemForCourse } from "@/lib/bsitCurriculum";
 import { FacultyDashboardClient } from "@/app/components/FacultyDashboardClient";
 import { BSCTableOfSpecificationsView } from "@/app/components/BSCTableOfSpecificationsView";
 
+const formatCorrectAnswer = (answerStr: string) => {
+  if (!answerStr) return "";
+  const trimmed = answerStr.trim();
+  if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) {
+        return parsed.map((item) => (typeof item === "object" ? item.answer || item.text || JSON.stringify(item) : String(item))).join(", ");
+      }
+      if (parsed.blanks) {
+        if (Array.isArray(parsed.blanks)) {
+          return parsed.blanks.map((b: any, idx: number) => `[Blank ${idx + 1}]: ${b.answer || b.text || "N/A"}`).join(" • ");
+        }
+        if (typeof parsed.blanks === "object") {
+          return Object.entries(parsed.blanks).map(([key, val]) => `[Blank ${key}]: ${val}`).join(" • ");
+        }
+      }
+      if (parsed.pairs && Array.isArray(parsed.pairs)) {
+        return parsed.pairs.map((p: any) => `${p.premise || ""} → ${p.answer || ""}`).join(" • ");
+      }
+      if (parsed.answer !== undefined) {
+        return String(parsed.answer);
+      }
+      if (parsed.text !== undefined) {
+        return String(parsed.text);
+      }
+    } catch {}
+  }
+  return answerStr;
+};
+
 interface ChairDashboardClientProps {
   chairUserId: number;
   departmentId?: number;
@@ -776,7 +807,7 @@ export function ChairDashboardClient({
 
                                               {!parsed?.options && q.correct_answer && (
                                                 <div className="text-[11px] text-slate-500 font-semibold pl-2">
-                                                  <span className="font-bold text-slate-400">Correct Answer:</span> <strong className="text-slate-700">{q.correct_answer}</strong>
+                                                  <span className="font-bold text-slate-400">Correct Answer:</span> <strong className="text-slate-700">{formatCorrectAnswer(q.correct_answer)}</strong>
                                                 </div>
                                               )}
                                             </div>
@@ -1300,7 +1331,7 @@ export function ChairDashboardClient({
 
                               {!parsed?.options && q.correct_answer && (
                                 <div className="text-[11px] text-slate-500 pt-1 border-t border-slate-100">
-                                  <span className="font-bold text-slate-400">Answer:</span> <strong className="text-slate-700">{q.correct_answer}</strong>
+                                  <span className="font-bold text-slate-400">Answer:</span> <strong className="text-slate-700">{formatCorrectAnswer(q.correct_answer)}</strong>
                                 </div>
                               )}
                             </div>
