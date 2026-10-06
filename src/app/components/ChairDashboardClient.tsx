@@ -653,8 +653,8 @@ export function ChairDashboardClient({
                                 <FileText className="w-3 h-3" /> TOS File Attached
                               </span>
                             ) : (
-                              <span className="inline-flex items-center gap-1 text-[11px] bg-rose-50 text-rose-700 border border-rose-200 font-extrabold px-2.5 py-0.5 rounded-md">
-                                <AlertCircle className="w-3 h-3 text-rose-500" /> No TOS File Uploaded
+                              <span className="inline-flex items-center gap-1 text-[11px] bg-emerald-50 text-emerald-700 border border-emerald-200 font-extrabold px-2.5 py-0.5 rounded-md">
+                                <Layers className="w-3 h-3 text-emerald-600" /> TOS Matrix Active
                               </span>
                             )}
                           </div>
@@ -1062,8 +1062,8 @@ export function ChairDashboardClient({
                       </a>
                     </div>
                   ) : (
-                    <span className="text-xs font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30 px-2.5 py-1 rounded-lg">
-                      No TOS File Uploaded
+                    <span className="text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2.5 py-1 rounded-lg">
+                      Auto-Generated TOS Matrix
                     </span>
                   )}
                 </div>

@@ -1543,9 +1543,9 @@ export function ExamBuilderWizard({
   // Step 1 Validation
   const isConfigValid = title.trim() !== "" && courseId > 0 && timeLimit > 0 && examDate.trim() !== "";
 
-  // Submission validation: requires valid config, questions > 0, not submitting, AND TOS PDF uploaded
+  // Submission validation: requires valid config, questions > 0, not submitting
   const hasTosUploaded = Boolean(tosFilePath && tosFilePath.trim() !== "");
-  const isSubmitAllowed = isConfigValid && questions.length > 0 && !isSubmitting && hasTosUploaded;
+  const isSubmitAllowed = isConfigValid && questions.length > 0 && !isSubmitting;
 
   // TOS File Upload Handler (Enforces PDF format & 10MB maximum file size limit)
   const handleTosFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -2010,19 +2010,6 @@ export function ExamBuilderWizard({
         message: "Your examination contains incomplete questions or unassigned answer keys. Please complete all required fields before submitting.",
         details: validation.issues.slice(0, 8),
         confirmText: "Review & Fix Questions"
-      });
-      return;
-    }
-
-    // 2. Strict TOS PDF upload check
-    if (!hasTosUploaded) {
-      setPopupModal({
-        isOpen: true,
-        type: "warning",
-        title: "TOS PDF File Required",
-        message: "Strict Requirement: A Table of Specifications (TOS) PDF file must be uploaded before submitting your examination to the Chairperson.",
-        details: ["Please upload your TOS PDF file in Step 3 before submitting."],
-        confirmText: "Upload TOS File"
       });
       return;
     }
