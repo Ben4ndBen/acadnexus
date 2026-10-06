@@ -8,74 +8,97 @@ export async function reviewExamByChair(
   examId: number,
   action: "Approve" | "Return",
   comments: string,
-  userId: number
+  userId: number,
+  isProgramChairReview: boolean = false
 ) {
   try {
-    // 1. Get the current workflow state to check for individual manual holds
+    const user = await db.user.findUnique({
+      where: { user_id: userId },
+      include: { chair: true },
+    });
+
+    const isProgChair =
+      isProgramChairReview ||
+      user?.role === "ProgramChair" ||
+      !!user?.chair?.is_program_chair;
+
     const currentWorkflow = await db.approvalWorkflow.findUnique({
       where: { workflow_id: workflowId },
+      include: { exam: { include: { course: true } } },
     });
 
-    // Check if the Director has manually placed an individual hold on this exam.
-    // A manual hold is indicated by di_review_status = "Hold" and reviewed_by_di_id is set.
-    const isIndividualHoldActive =
-      currentWorkflow?.di_review_status === "Hold" &&
-      currentWorkflow?.reviewed_by_di_id !== null;
+    if (!currentWorkflow) {
+      return { error: "Approval workflow not found." };
+    }
 
-    // 2. Check if a global administrative hold is active in the system settings
-    const globalHoldSetting = await db.systemSetting.findUnique({
-      where: { key: "global_administrative_hold" },
-    });
-    const isGlobalHoldActive = globalHoldSetting?.value === "true";
+    if (isProgChair) {
+      // Program Chair Review step ("Reviewed by")
+      const status = action === "Approve" ? "Approved" : "Returned";
+      const nextExamStatus = action === "Approve" ? "Pending_Chair" : "Returned";
 
-    const isHoldActive = isGlobalHoldActive || isIndividualHoldActive;
+      await db.approvalWorkflow.update({
+        where: { workflow_id: workflowId },
+        data: {
+          reviewed_by_prog_chair_id: user?.chair?.chair_id || userId,
+          prog_chair_review_status: status as any,
+          prog_chair_comments: comments || null,
+          prog_chair_action_timestamp: new Date(),
+        },
+      });
 
-    // Determine target statuses
-    const chairReviewStatus = action === "Approve" ? "Approved" : "Returned";
-    
-    // Pass-through clearance: if approved and no hold is active, it goes live instantly ("Approved").
-    // Otherwise, if approved but a hold is active, it goes to "Pending_DI".
-    const examStatus =
-      action === "Approve"
-        ? isHoldActive
-          ? "Pending_DI"
-          : "Approved"
-        : "Returned";
+      await db.examination.update({
+        where: { exam_id: examId },
+        data: { current_status: nextExamStatus as any },
+      });
 
-    const diReviewStatus =
-      action === "Approve"
-        ? isHoldActive
-          ? "Hold"
-          : "Pass_Through_Approved"
-        : "Hold";
+      await db.auditLog.create({
+        data: {
+          user_id: userId,
+          action_performed: `Program Chairperson ${action} examination ${examId}: ${currentWorkflow.exam.title} (Reviewed by Program Chair). Forwarded to Department Chairperson.`,
+          ip_address: "127.0.0.1",
+        },
+      });
+    } else {
+      // Department Chair Review step ("Recommending Approval" for programs with Prog Chair, or "Reviewed by" for programs without)
+      const globalHoldSetting = await db.systemSetting.findUnique({
+        where: { key: "global_administrative_hold" },
+      });
+      const isGlobalHoldActive = globalHoldSetting?.value === "true";
+      const isIndividualHoldActive =
+        currentWorkflow?.di_review_status === "Hold" &&
+        currentWorkflow?.reviewed_by_di_id !== null;
+      const isHoldActive = isGlobalHoldActive || isIndividualHoldActive;
 
-    // 3. Update the approval workflow
-    await db.approvalWorkflow.update({
-      where: { workflow_id: workflowId },
-      data: {
-        chair_review_status: chairReviewStatus,
-        chair_comments: comments || null,
-        chair_action_timestamp: new Date(),
-        di_review_status: diReviewStatus,
-      },
-    });
+      const chairReviewStatus = action === "Approve" ? "Approved" : "Returned";
+      const examStatus = action === "Approve" ? (isHoldActive ? "Pending_DI" : "Approved") : "Returned";
+      const diReviewStatus = action === "Approve" ? (isHoldActive ? "Hold" : "Pass_Through_Approved") : "Hold";
 
-    // 4. Update the examination status
-    const exam = await db.examination.update({
-      where: { exam_id: examId },
-      data: { current_status: examStatus },
-    });
+      await db.approvalWorkflow.update({
+        where: { workflow_id: workflowId },
+        data: {
+          reviewed_by_chair_id: user?.chair?.chair_id || userId,
+          chair_review_status: chairReviewStatus as any,
+          chair_comments: comments || null,
+          chair_action_timestamp: new Date(),
+          di_review_status: diReviewStatus as any,
+        },
+      });
 
-    // 5. Log the audit event
-    await db.auditLog.create({
-      data: {
-        user_id: userId,
-        action_performed: `Chair ${action} examination ${examId}: ${exam.title}. Pass-through: ${
-          action === "Approve" && !isHoldActive ? "Yes" : "No"
-        } (Global Hold: ${isGlobalHoldActive}, Individual Hold: ${isIndividualHoldActive})`,
-        ip_address: "127.0.0.1",
-      },
-    });
+      await db.examination.update({
+        where: { exam_id: examId },
+        data: { current_status: examStatus as any },
+      });
+
+      await db.auditLog.create({
+        data: {
+          user_id: userId,
+          action_performed: `Department Chairperson ${action} examination ${examId}: ${currentWorkflow.exam.title} (Recommending Approval / Department Review). Pass-through: ${
+            action === "Approve" && !isHoldActive ? "Yes" : "No"
+          }`,
+          ip_address: "127.0.0.1",
+        },
+      });
+    }
 
     revalidatePath("/dashboard/chair");
     revalidatePath("/dashboard/director");
@@ -92,9 +115,6 @@ export async function verifySyllabusAndTOS(
   userId: number
 ) {
   try {
-    // In a full implementation, this might toggle a 'verified' flag in the DB.
-    // Here we'll simply log the verification event.
-    
     const exam = await db.examination.findUnique({
       where: { exam_id: examId },
       include: { course: true },
@@ -102,11 +122,10 @@ export async function verifySyllabusAndTOS(
 
     if (!exam) return { error: "Examination not found." };
 
-    // Log the audit event
     await db.auditLog.create({
       data: {
         user_id: userId,
-        action_performed: `Chair verified TOS alignment for course ${exam.course.course_code} (Exam: ${exam.title})`,
+        action_performed: `Chairperson verified TOS alignment for course ${exam.course.course_code} (Exam: ${exam.title})`,
         ip_address: "127.0.0.1",
       },
     });

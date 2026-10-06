@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import db from "@/lib/db";
 import { getSystemSettingCached, getCoursesCached } from "@/lib/cache";
+import { ensureBsitCoursesExist } from "@/lib/bsitCurriculumServer";
 import { LogoutButton } from "@/app/components/LogoutButton";
 import { NotificationBell } from "@/app/components/NotificationBell";
 import { ShieldCheck } from "lucide-react";
@@ -135,6 +136,9 @@ export default async function DirectorDashboard() {
   // Fetch active academic period configured by DI
   const { getActiveAcademicPeriod } = await import("@/app/actions/director");
   const academicPeriod = await getActiveAcademicPeriod();
+
+  // Ensure all curriculum subjects exist in database
+  await ensureBsitCoursesExist();
 
   // Fetch all courses for assignment by DI using cached query
   const courses = await getCoursesCached();

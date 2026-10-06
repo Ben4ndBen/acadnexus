@@ -22,7 +22,7 @@ role             Role
 is_active        Boolean     @default(true)
 supabase_uid     String?     @unique
 username         String?     @unique @db.VarChar(50)
-require_password_update Boolean @default(true)
+require_password_update Boolean @default(false)
 
 // Inheritance relationships
 student          Student?
@@ -37,105 +37,111 @@ notifications    Notification[]
 }
 
 enum Role {
-Student
-Faculty
-Chair
-Director
+  Student
+  Faculty
+  Chair
+  ProgramChair
+  Director
 }
 
 model Student {
-student_id Int      @id // FK to User
-user       User     @relation(fields: [student_id], references: [user_id], onDelete: Cascade)
-first_name String   @db.VarChar(100)
-middle_name String?  @db.VarChar(100)
-last_name  String   @db.VarChar(100)
-program_id Int
-program    AcademicProgram @relation(fields: [program_id], references: [program_id])
-year_level Int
-section    String   @db.VarChar(100)
+  student_id Int      @id // FK to User
+  user       User     @relation(fields: [student_id], references: [user_id], onDelete: Cascade)
+  first_name String   @db.VarChar(100)
+  middle_name String?  @db.VarChar(100)
+  last_name  String   @db.VarChar(100)
+  program_id Int
+  program    AcademicProgram @relation(fields: [program_id], references: [program_id])
+  year_level Int
+  section    String   @db.VarChar(100)
 
-studentExams     StudentExam[]
-studentOverrides StudentOverride[]
-studentCourses   StudentCourse[]
+  studentExams     StudentExam[]
+  studentOverrides StudentOverride[]
+  studentCourses   StudentCourse[]
 
-@@map("STUDENTS")
+  @@map("STUDENTS")
 }
 
 model Faculty {
-faculty_id    Int      @id // FK to User
-user          User     @relation(fields: [faculty_id], references: [user_id], onDelete: Cascade)
-first_name    String   @db.VarChar(100)
-middle_name   String?  @db.VarChar(100)
-last_name     String   @db.VarChar(100)
-institutional_email String? @db.VarChar(255)
-profile_image String?  @db.VarChar(255)
-department_id Int
-department    Department @relation(fields: [department_id], references: [department_id])
+  faculty_id    Int      @id // FK to User
+  user          User     @relation(fields: [faculty_id], references: [user_id], onDelete: Cascade)
+  first_name    String   @db.VarChar(100)
+  middle_name   String?  @db.VarChar(100)
+  last_name     String   @db.VarChar(100)
+  institutional_email String? @db.VarChar(255)
+  profile_image String?  @db.VarChar(255)
+  department_id Int
+  department    Department @relation(fields: [department_id], references: [department_id])
 
-examinations      Examination[]
-facultyPortfolios FacultyPortfolio[]
-has_seen_course_assignment Boolean @default(false)
-facultyCourses    FacultyCourse[]
+  examinations      Examination[]
+  facultyPortfolios FacultyPortfolio[]
+  has_seen_course_assignment Boolean @default(false)
+  facultyCourses    FacultyCourse[]
 
-@@map("FACULTY")
+  @@map("FACULTY")
 }
 
 model Chair {
-chair_id      Int        @id // FK to User
-user          User       @relation(fields: [chair_id], references: [user_id], onDelete: Cascade)
-department_id Int        @unique
-department    Department @relation(fields: [department_id], references: [department_id])
+  chair_id         Int              @id // FK to User
+  user             User             @relation(fields: [chair_id], references: [user_id], onDelete: Cascade)
+  department_id    Int?             
+  department       Department?      @relation(fields: [department_id], references: [department_id])
+  program_id       Int?             @unique
+  program          AcademicProgram? @relation(fields: [program_id], references: [program_id])
+  is_program_chair Boolean          @default(false)
 
-approvals     ApprovalWorkflow[]
+  approvals     ApprovalWorkflow[] @relation("ChairApprovals")
+  progApprovals ApprovalWorkflow[] @relation("ProgramChairApprovals")
 
-@@map("CHAIRS")
+  @@map("CHAIRS")
 }
 
 model Director {
-director_id Int      @id // FK to User
-user        User     @relation(fields: [director_id], references: [user_id], onDelete: Cascade)
+  director_id Int      @id // FK to User
+  user        User     @relation(fields: [director_id], references: [user_id], onDelete: Cascade)
 
-approvals   ApprovalWorkflow[]
+  approvals   ApprovalWorkflow[]
 
-@@map("DIRECTORS")
+  @@map("DIRECTORS")
 }
 
 // --- 2. Academic Hierarchy ---
 
 model Department {
-department_id   Int               @id @default(autoincrement())
-department_name String            @db.VarChar(150)
-academicPrograms AcademicProgram[]
-faculty         Faculty[]
-chair           Chair?
+  department_id   Int               @id @default(autoincrement())
+  department_name String            @db.VarChar(150)
+  academicPrograms AcademicProgram[]
+  faculty         Faculty[]
+  chair           Chair[]
 
-@@map("DEPARTMENTS")
+  @@map("DEPARTMENTS")
 }
 
 model AcademicProgram {
-program_id    Int        @id @default(autoincrement())
-program_code  String     @unique @db.VarChar(20)
-program_name  String     @db.VarChar(150)
-department_id Int
-department    Department @relation(fields: [department_id], references: [department_id])
+  program_id    Int        @id @default(autoincrement())
+  program_code  String     @unique @db.VarChar(20)
+  program_name  String     @db.VarChar(150)
+  department_id Int
+  department    Department @relation(fields: [department_id], references: [department_id])
+  chair         Chair?
 
-students      Student[]
-examTargets   ExamTarget[]
+  students      Student[]
+  examTargets   ExamTarget[]
 
-@@map("ACADEMIC_PROGRAMS")
+  @@map("ACADEMIC_PROGRAMS")
 }
 
 model Course {
-course_id          Int           @id @default(autoincrement())
-course_code        String        @unique @db.VarChar(20)
-course_title       String        @db.VarChar(150)
-syllabus_file_path String?       @db.VarChar(255)
-examinations       Examination[]
-questionBank       QuestionBank[]
-studentCourses     StudentCourse[]
-facultyCourses     FacultyCourse[]
+  course_id          Int           @id @default(autoincrement())
+  course_code        String        @unique @db.VarChar(20)
+  course_title       String        @db.VarChar(150)
+  syllabus_file_path String?       @db.VarChar(255)
+  examinations       Examination[]
+  questionBank       QuestionBank[]
+  studentCourses     StudentCourse[]
+  facultyCourses     FacultyCourse[]
 
-@@map("COURSES")
+  @@map("COURSES")
 }
 
 model StudentCourse {
@@ -163,74 +169,75 @@ model FacultyCourse {
 // --- 3. Examination Engine ---
 
 model Examination {
-exam_id            Int              @id @default(autoincrement())
-title              String           @db.VarChar(150)
-course_id          Int
-course             Course           @relation(fields: [course_id], references: [course_id])
-faculty_id         Int
-faculty            Faculty          @relation(fields: [faculty_id], references: [faculty_id])
-tos_file_path      String           @db.VarChar(255)
-time_limit_minutes Int
-randomize_items    Boolean          @default(true)
-current_status     ExamStatus
-time_penalty_seconds Int            @default(60)
-score_penalty_points Int            @default(2)
-academic_year      String?          @db.VarChar(20)
-term               String?          @db.VarChar(50)
-exam_date          DateTime?        @db.Date
-semester           String?          @db.VarChar(50)
-document_reference String?          @db.VarChar(100)
-selected_student_ids Int[]          @default([])
-is_archived        Boolean          @default(false)
+  exam_id            Int              @id @default(autoincrement())
+  title              String           @db.VarChar(150)
+  course_id          Int
+  course             Course           @relation(fields: [course_id], references: [course_id])
+  faculty_id         Int
+  faculty            Faculty          @relation(fields: [faculty_id], references: [faculty_id])
+  tos_file_path      String           @db.VarChar(255)
+  time_limit_minutes Int
+  randomize_items    Boolean          @default(true)
+  current_status     ExamStatus
+  time_penalty_seconds Int            @default(60)
+  score_penalty_points Int            @default(2)
+  academic_year      String?          @db.VarChar(20)
+  term               String?          @db.VarChar(50)
+  exam_date          DateTime?        @db.Date
+  semester           String?          @db.VarChar(50)
+  document_reference String?          @db.VarChar(100)
+  selected_student_ids Int[]          @default([])
+  is_archived        Boolean          @default(false)
 
-examTargets        ExamTarget[]
-questionBank       QuestionBank[]
-approvalWorkflow   ApprovalWorkflow?
-studentExams       StudentExam[]
-studentOverrides   StudentOverride[]
+  examTargets        ExamTarget[]
+  questionBank       QuestionBank[]
+  approvalWorkflow   ApprovalWorkflow?
+  studentExams       StudentExam[]
+  studentOverrides   StudentOverride[]
 
-@@map("EXAMINATIONS")
+  @@map("EXAMINATIONS")
 }
 
 enum ExamStatus {
-Draft
-Pending_Chair
-Pending_DI
-Approved
-Returned
+  Draft
+  Pending_Program_Chair
+  Pending_Chair
+  Pending_DI
+  Approved
+  Returned
 }
 
 model ExamTarget {
-target_id      Int             @id @default(autoincrement())
-exam_id        Int
-exam           Examination     @relation(fields: [exam_id], references: [exam_id])
-program_id     Int
-program        AcademicProgram @relation(fields: [program_id], references: [program_id])
-year_level     Int
-section        String          @db.VarChar(100)
-scheduled_date DateTime        @db.Date
-start_time     DateTime        @db.Time
-end_time       DateTime        @db.Time
+  target_id      Int             @id @default(autoincrement())
+  exam_id        Int
+  exam           Examination     @relation(fields: [exam_id], references: [exam_id])
+  program_id     Int
+  program        AcademicProgram @relation(fields: [program_id], references: [program_id])
+  year_level     Int
+  section        String          @db.VarChar(100)
+  scheduled_date DateTime        @db.Date
+  start_time     DateTime        @db.Time
+  end_time       DateTime        @db.Time
 
-@@map("EXAM_TARGETS")
+  @@map("EXAM_TARGETS")
 }
 
 model QuestionBank {
-question_id      Int          @id @default(autoincrement())
-exam_id          Int?
-exam             Examination? @relation(fields: [exam_id], references: [exam_id], onDelete: Cascade)
-question_text    String       @db.Text
-question_type    QuestionType
-correct_answer   String       @db.Text
-points           Int
-course_id        Int?
-course           Course?      @relation(fields: [course_id], references: [course_id], onDelete: SetNull)
-topic            String?      @db.VarChar(150)
-year_level       Int?
+  question_id      Int          @id @default(autoincrement())
+  exam_id          Int?
+  exam             Examination? @relation(fields: [exam_id], references: [exam_id], onDelete: Cascade)
+  question_text    String       @db.Text
+  question_type    QuestionType
+  correct_answer   String       @db.Text
+  points           Int
+  course_id        Int?
+  course           Course?      @relation(fields: [course_id], references: [course_id], onDelete: SetNull)
+  topic            String?      @db.VarChar(150)
+  year_level       Int?
 
-studentAnswers   StudentAnswer[]
+  studentAnswers   StudentAnswer[]
 
-@@map("QUESTION_BANK")
+  @@map("QUESTION_BANK")
 }
 
 enum QuestionType {
@@ -245,21 +252,29 @@ enum QuestionType {
 // --- 4. Workflows and Performance ---
 
 model ApprovalWorkflow {
-workflow_id            Int           @id @default(autoincrement())
-exam_id                Int           @unique
-exam                   Examination   @relation(fields: [exam_id], references: [exam_id])
-reviewed_by_chair_id   Int
-chair                  Chair         @relation(fields: [reviewed_by_chair_id], references: [chair_id])
-chair_review_status    ReviewStatus
-chair_comments         String?       @db.Text
-chair_action_timestamp DateTime?     @db.Timestamp
-reviewed_by_di_id      Int?
-director               Director?     @relation(fields: [reviewed_by_di_id], references: [director_id])
-di_review_status       DIStatus
-di_action_timestamp    DateTime?     @db.Timestamp
-di_comments            String?       @db.Text
+  workflow_id            Int           @id @default(autoincrement())
+  exam_id                Int           @unique
+  exam                   Examination   @relation(fields: [exam_id], references: [exam_id], onDelete: Cascade)
 
-@@map("APPROVAL_WORKFLOWS")
+  reviewed_by_prog_chair_id Int?
+  progChair              Chair?        @relation("ProgramChairApprovals", fields: [reviewed_by_prog_chair_id], references: [chair_id])
+  prog_chair_review_status  ReviewStatus? @default(Pending)
+  prog_chair_comments       String?      @db.Text
+  prog_chair_action_timestamp DateTime?  @db.Timestamp
+
+  reviewed_by_chair_id   Int?
+  chair                  Chair?        @relation("ChairApprovals", fields: [reviewed_by_chair_id], references: [chair_id])
+  chair_review_status    ReviewStatus  @default(Pending)
+  chair_comments         String?       @db.Text
+  chair_action_timestamp DateTime?     @db.Timestamp
+
+  reviewed_by_di_id      Int?
+  director               Director?     @relation(fields: [reviewed_by_di_id], references: [director_id])
+  di_review_status       DIStatus      @default(Hold)
+  di_action_timestamp    DateTime?     @db.Timestamp
+  di_comments            String?       @db.Text
+
+  @@map("APPROVAL_WORKFLOWS")
 }
 
 enum ReviewStatus {

@@ -126,8 +126,8 @@ export async function toggleIndividualHold(userId: number, examId: number, place
         where: { faculty_id: exam.faculty_id },
       });
       if (faculty) {
-        const chair = await db.chair.findUnique({
-          where: { department_id: faculty.department_id },
+        const chair = await db.chair.findFirst({
+          where: { department_id: faculty.department_id, is_program_chair: false },
         });
         if (chair) {
           chairId = chair.chair_id;

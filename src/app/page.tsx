@@ -15,7 +15,7 @@ export default async function LoginPage() {
     const role = user.user_metadata?.role;
     if (role === "Student") redirect("/dashboard/student");
     if (role === "Faculty") redirect("/dashboard/faculty");
-    if (role === "Chair") redirect("/dashboard/chair");
+    if (role === "Chair" || role === "ProgramChair") redirect("/dashboard/chair");
     if (role === "Director") redirect("/dashboard/director");
   }
 
