@@ -249,6 +249,26 @@ export function FacultyDashboardClient({
   const [academicYearInput, setAcademicYearInput] = useState("");
   const [isArchiving, setIsArchiving] = useState(false);
 
+  const getExamDisplayTitle = (
+    exam: {
+      exam_id?: number;
+      title: string;
+      term?: string | null;
+      semester?: string | null;
+      course?: { course_code: string; course_title: string } | null;
+    },
+    fallbackIndex?: number
+  ): string => {
+    if (exam.title && exam.title !== "New Examination Draft") {
+      return exam.title;
+    }
+    const termStr = exam.term || "Midterm";
+    const courseTitleStr = exam.course?.course_title || exam.course?.course_code || "";
+    const courseStr = courseTitleStr ? ` in ${courseTitleStr}` : "";
+    const suffix = fallbackIndex !== undefined ? ` (Draft #${fallbackIndex + 1})` : " (Draft)";
+    return `${termStr} Examination${courseStr}${suffix}`;
+  };
+
   // --- Enrolled Students & Grades Roster Modal State ---
   const [rosterModalOpen, setRosterModalOpen] = useState(false);
   const [rosterStudents, setRosterStudents] = useState<any[]>([]);
@@ -1359,10 +1379,10 @@ export function FacultyDashboardClient({
 
             {faculty.examinations && faculty.examinations.length > 0 ? (
               <div className="divide-y divide-slate-100">
-                {faculty.examinations.slice(0, 5).map((exam) => (
+                {faculty.examinations.slice(0, 5).map((exam, idx) => (
                   <div key={exam.exam_id} className="py-4 flex justify-between items-center first:pt-0 last:pb-0 gap-4">
                     <div className="space-y-1 min-w-0 flex-1">
-                      <p className="text-sm font-extrabold text-slate-800 truncate">{exam.title}</p>
+                      <p className="text-xs sm:text-sm font-extrabold text-slate-800 leading-snug break-words">{getExamDisplayTitle(exam, faculty.examinations.length - 1 - idx)}</p>
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-400 font-medium">
                         <span>{exam.course.course_code} - {exam.course.course_title}</span>
                         <span>•</span>
@@ -1474,7 +1494,7 @@ export function FacultyDashboardClient({
                     <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-100 pb-4">
                       <div>
                         <div className="flex flex-wrap items-center gap-3">
-                          <h3 className="text-base font-bold text-slate-900">{exam.title}</h3>
+                          <h3 className="text-base font-bold text-slate-900">{getExamDisplayTitle(exam)}</h3>
                           {renderStatusBadge(exam.current_status)}
                           <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200/80 px-2 py-0.5 rounded-full shadow-sm" title="TOS Matrix Enabled">
                             <Layers className="w-3 h-3 text-emerald-600" /> TOS Matrix Active
@@ -2069,7 +2089,7 @@ export function FacultyDashboardClient({
                       
                       return (
                         <tr key={exam.exam_id} className="hover:bg-slate-50/50 transition-colors">
-                          <td className="px-6 py-4 font-bold text-slate-900">{exam.title}</td>
+                          <td className="px-6 py-4 font-bold text-slate-900">{getExamDisplayTitle(exam)}</td>
                           <td className="px-6 py-4">{exam.course.course_code} - {exam.course.course_title}</td>
                           <td className="px-6 py-4">
                             {target ? (
@@ -3337,7 +3357,7 @@ export function FacultyDashboardClient({
                         {exam._count?.questionBank ?? 0} Items
                       </span>
                     </div>
-                    <h3 className="font-extrabold text-slate-850 text-sm leading-snug">{exam.title}</h3>
+                    <h3 className="font-extrabold text-slate-850 text-sm leading-snug">{getExamDisplayTitle(exam)}</h3>
                     <p className="text-xs text-emerald-700 font-semibold leading-normal">
                       {exam.course.course_code} - {exam.course.course_title}
                     </p>

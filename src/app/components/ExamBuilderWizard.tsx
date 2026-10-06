@@ -337,7 +337,7 @@ export function ExamBuilderWizard({
   const [title, setTitle] = useState<string>(
     exam.title && exam.title !== "New Examination Draft"
       ? exam.title
-      : `${term} Examination in ${selectedCourse.course_title || selectedCourse.course_code}`
+      : `${term} Examination - ${selectedCourse.course_code || selectedCourse.course_title} (Draft)`
   );
   const [timeLimit, setTimeLimit] = useState<number>(exam.time_limit_minutes);
   const [randomizeItems, setRandomizeItems] = useState<boolean>(exam.randomize_items);
@@ -364,19 +364,49 @@ export function ExamBuilderWizard({
     return Array.from(new Set(assignedStudents.map(s => s.program_code).filter(Boolean)));
   }, [assignedStudents]);
 
+  const isBSEdProgram = useMemo(() => {
+    return availableStudentPrograms.some(p => {
+      const code = p.toUpperCase();
+      return code.includes("BSED") || code.includes("TED");
+    });
+  }, [availableStudentPrograms]);
+
+  const isIndustrialTechProgram = useMemo(() => {
+    return availableStudentPrograms.some(p => {
+      const code = p.toUpperCase();
+      if (code === "BSINFOTECH" || code === "BS-INFOTECH") return false;
+      return code.includes("INDTECH") || code.includes("BIT") || code.includes("INDUSTRIAL") || code === "BSIT";
+    });
+  }, [availableStudentPrograms]);
+
+  const hasMajors = isBSEdProgram || isIndustrialTechProgram;
+
   const availableStudentMajors = useMemo(() => {
-    const defaultMajors = [
-      "AUTOMOTIVE TECHNOLOGY",
-      "ELECTRONICS TECHNOLOGY",
-      "ARCHITECTURE TECHNOLOGY",
-      "SCIENCE",
-      "ENGLISH",
-      "MATH"
-    ];
+    let baseMajors: string[] = [];
+    if (isBSEdProgram) {
+      baseMajors = [
+        "ENGLISH",
+        "FILIPINO",
+        "MATHEMATICS",
+        "SCIENCE",
+        "SOCIAL STUDIES",
+        "VALUES EDUCATION"
+      ];
+    } else if (isIndustrialTechProgram) {
+      baseMajors = [
+        "ARCHITECTURE TECHNOLOGY",
+        "AUTOMOTIVE TECHNOLOGY",
+        "DRAFTSMANSHIP",
+        "ELECTRICAL TECHNOLOGY",
+        "ELECTRONICS TECHNOLOGY",
+        "FOOD TECHNOLOGY",
+        "MECHANICAL TECHNOLOGY"
+      ];
+    }
     const presentMajors = assignedStudents.map(s => s.section).filter(Boolean);
-    const set = new Set([...defaultMajors, ...presentMajors]);
+    const set = new Set([...baseMajors, ...presentMajors]);
     return Array.from(set).sort();
-  }, [assignedStudents]);
+  }, [assignedStudents, isBSEdProgram, isIndustrialTechProgram]);
 
   const availableStudentYears = useMemo(() => {
     const defaultYears = [1, 2, 3, 4];
@@ -385,11 +415,24 @@ export function ExamBuilderWizard({
     return Array.from(set).sort((a, b) => a - b);
   }, [assignedStudents]);
 
+  const programLabel = useMemo(() => {
+    if (availableStudentPrograms.length === 0) return "Program: N/A";
+    if (availableStudentPrograms.length === 1) return `Program: ${availableStudentPrograms[0]}`;
+    return `Program: ${availableStudentPrograms.join(", ")}`;
+  }, [availableStudentPrograms]);
+
+  const yearLabel = useMemo(() => {
+    const presentYears = Array.from(new Set(assignedStudents.map(s => s.year_level).filter(Boolean))).sort((a, b) => a - b);
+    if (presentYears.length === 0) return "Year: N/A";
+    if (presentYears.length === 1) return `Year: Year ${presentYears[0]}`;
+    return `Year: Years ${presentYears.join(", ")}`;
+  }, [assignedStudents]);
+
   const filteredAndSortedStudents = useMemo(() => {
     return assignedStudents
       .filter(s => {
         if (studentProgramFilter !== "ALL" && s.program_code !== studentProgramFilter) return false;
-        if (studentMajorFilter !== "ALL" && (s.section || "General") !== studentMajorFilter) return false;
+        if (hasMajors && studentMajorFilter !== "ALL" && (s.section || "General") !== studentMajorFilter) return false;
         if (studentYearFilter !== "ALL" && String(s.year_level) !== studentYearFilter) return false;
         if (studentSearch.trim()) {
           const q = studentSearch.toLowerCase();
@@ -426,7 +469,7 @@ export function ExamBuilderWizard({
         }
         return 0;
       });
-  }, [assignedStudents, studentSearch, studentProgramFilter, studentMajorFilter, studentYearFilter, studentSortBy]);
+  }, [assignedStudents, studentSearch, studentProgramFilter, studentMajorFilter, studentYearFilter, studentSortBy, hasMajors]);
 
   // Automatically determine applicable semester based on exam date and active academic period configured by DI
   const defaultPeriodSettings = {
@@ -1939,7 +1982,7 @@ export function ExamBuilderWizard({
                 {/* Sort & Filter Controls Toolbar for Assigned Students */}
                 {assignedStudents.length > 0 && (
                   <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-3.5 space-y-3">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
+                    <div className={`grid grid-cols-1 sm:grid-cols-2 ${hasMajors ? "lg:grid-cols-5" : "lg:grid-cols-4"} gap-2.5`}>
                       {/* Search */}
                       <div className="relative sm:col-span-1">
                         <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
@@ -1966,50 +2009,50 @@ export function ExamBuilderWizard({
                           <option value="yearAsc">Sort by Year Level (1 to 4)</option>
                           <option value="yearDesc">Sort by Year Level (4 to 1)</option>
                           <option value="programAsc">Sort by Program Code</option>
-                          <option value="majorAsc">Sort by Major (A-Z)</option>
-                          <option value="majorDesc">Sort by Major (Z-A)</option>
+                          {hasMajors && (
+                            <>
+                              <option value="majorAsc">Sort by Major (A-Z)</option>
+                              <option value="majorDesc">Sort by Major (Z-A)</option>
+                            </>
+                          )}
                         </select>
                       </div>
 
-                      {/* Filter by Program */}
+                      {/* Locked Program (Uneditable) */}
                       <div className="sm:col-span-1">
                         <select
-                          value={studentProgramFilter}
-                          onChange={(e) => setStudentProgramFilter(e.target.value)}
-                          className="w-full bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                          disabled
+                          value="LOCKED"
+                          className="w-full bg-slate-100 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-500 cursor-not-allowed opacity-80"
                         >
-                          <option value="ALL">Program: All Programs</option>
-                          {availableStudentPrograms.map(prog => (
-                            <option key={prog} value={prog}>{prog}</option>
-                          ))}
+                          <option value="LOCKED">{programLabel}</option>
                         </select>
                       </div>
 
-                      {/* Filter by Major / Specialization */}
-                      <div className="sm:col-span-1">
-                        <select
-                          value={studentMajorFilter}
-                          onChange={(e) => setStudentMajorFilter(e.target.value)}
-                          className="w-full bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                        >
-                          <option value="ALL">Major: All Majors</option>
-                          {availableStudentMajors.map(maj => (
-                            <option key={maj} value={maj}>{maj}</option>
-                          ))}
-                        </select>
-                      </div>
+                      {/* Filter by Major / Specialization (Only rendered if program has majors: BSEd or Industrial Tech) */}
+                      {hasMajors && (
+                        <div className="sm:col-span-1">
+                          <select
+                            value={studentMajorFilter}
+                            onChange={(e) => setStudentMajorFilter(e.target.value)}
+                            className="w-full bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                          >
+                            <option value="ALL">Major: All Majors</option>
+                            {availableStudentMajors.map(maj => (
+                              <option key={maj} value={maj}>{maj}</option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
 
-                      {/* Filter by Year Level */}
+                      {/* Locked Year Level (Uneditable) */}
                       <div className="sm:col-span-1">
                         <select
-                          value={studentYearFilter}
-                          onChange={(e) => setStudentYearFilter(e.target.value)}
-                          className="w-full bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                          disabled
+                          value="LOCKED"
+                          className="w-full bg-slate-100 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-500 cursor-not-allowed opacity-80"
                         >
-                          <option value="ALL">Year: All Years</option>
-                          {availableStudentYears.map(yr => (
-                            <option key={yr} value={String(yr)}>Year Level {yr}</option>
-                          ))}
+                          <option value="LOCKED">{yearLabel}</option>
                         </select>
                       </div>
                     </div>

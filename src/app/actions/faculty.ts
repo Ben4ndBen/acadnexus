@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { ExamStatus } from "@prisma/client";
 import { getExpectedYearLevelForCourse, getExpectedYearAndSemForCourse } from "@/lib/bsitCurriculum";
 import { getProgramsForDepartment } from "@/lib/courseDepartmentMapping";
+import { getActiveAcademicPeriodCached } from "@/lib/cache";
 
 export async function updateFacultyProfile(facultyId: number, firstName: string, lastName: string, middleName?: string) {
   if (!firstName || !lastName) {
@@ -205,11 +206,40 @@ export async function createExamDraft(facultyId: number, courseId?: number) {
       }
     }
 
+    // Fetch target course details
+    const course = await db.course.findUnique({
+      where: { course_id: targetCourseId },
+      select: { course_code: true, course_title: true },
+    });
+
+    // Retrieve active academic period settings
+    const activePeriod = await getActiveAcademicPeriodCached();
+    const activeTerm = activePeriod.active_term || "Midterm";
+    const activeSemester = activePeriod.active_semester || "1st Semester";
+    const activeAY = activePeriod.active_academic_year || "2026-2027";
+
+    // Count existing exams for this faculty, course, and term to generate a draft sequence number
+    const existingCount = await db.examination.count({
+      where: {
+        faculty_id: facultyId,
+        course_id: targetCourseId,
+        term: activeTerm,
+      },
+    });
+
+    const draftNum = existingCount + 1;
+    const courseTitleStr = course?.course_title || course?.course_code || "";
+    const courseStr = courseTitleStr ? ` in ${courseTitleStr}` : "";
+    const generatedTitle = `${activeTerm} Examination${courseStr} (Draft #${draftNum})`;
+
     const newExam = await db.examination.create({
       data: {
-        title: "New Examination Draft",
+        title: generatedTitle,
         course_id: targetCourseId,
         faculty_id: facultyId,
+        term: activeTerm,
+        semester: activeSemester,
+        academic_year: activeAY,
         tos_file_path: "", // starts empty
         time_limit_minutes: 60, // default time limit
         randomize_items: true,
