@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { ExamStatus } from "@prisma/client";
 import { getExpectedYearLevelForCourse, getExpectedYearAndSemForCourse } from "@/lib/bsitCurriculum";
 import { getProgramsForDepartment } from "@/lib/courseDepartmentMapping";
+import { getActiveAcademicPeriodCached } from "@/lib/cache";
 
 export async function updateFacultyProfile(facultyId: number, firstName: string, lastName: string, middleName?: string) {
   if (!firstName || !lastName) {
@@ -58,10 +59,6 @@ export async function updateExamStatus(examId: number, status: ExamStatus, userI
       // Allow submission for Chair review with integrated TOS matrix
       // Add or update ApprovalWorkflow record if needed
       if (status === "Pending_Chair") {
-        if (!exam.tos_file_path || exam.tos_file_path.trim() === "") {
-          return { error: "Submission Failed: Uploading a TOS PDF file (max 10MB) is required before submitting to the Department Chair." };
-        }
-
         // Find a Chair to assign (e.g. for the faculty's department)
         const faculty = await tx.faculty.findUnique({
           where: { faculty_id: userId },
@@ -80,28 +77,84 @@ export async function updateExamStatus(examId: number, status: ExamStatus, userI
           },
         });
 
-        const targetProgramIds = examWithTargets?.examTargets?.map((t) => t.program_id) || [];
-        let targetProgramId = targetProgramIds.length > 0 ? targetProgramIds[0] : null;
+        let targetProgramId: number | null = null;
+        let targetProgramCode: string | null = null;
 
-        // Fallback: If no target program ID explicitly set in examTargets, find program by course code
-        if (!targetProgramId && examWithTargets?.course) {
+        // 1. Check course code & course title for explicit program mapping
+        if (examWithTargets?.course) {
           const courseCode = examWithTargets.course.course_code.trim().toUpperCase();
-          if (courseCode.startsWith("ITC") || courseCode.startsWith("ITE") || courseCode.startsWith("ITM") || courseCode.startsWith("ITD") || courseCode === "ENT 403" || courseCode.includes("INFOTECH")) {
-            const prog = await tx.academicProgram.findUnique({ where: { program_code: "BSInfoTech" } });
-            if (prog) targetProgramId = prog.program_id;
-          } else if (courseCode.startsWith("IND") || courseCode.startsWith("IT")) {
-            const prog = await tx.academicProgram.findUnique({ where: { program_code: "BSIT" } });
-            if (prog) targetProgramId = prog.program_id;
+          const courseTitle = examWithTargets.course.course_title.trim().toUpperCase();
+
+          if (courseCode.startsWith("ITC") || courseCode.startsWith("ITE") || courseCode.startsWith("ITM") || courseCode.startsWith("ITD") || courseCode === "ENT 403" || courseCode.includes("INFOTECH") || courseTitle.includes("INFORMATION TECHNOLOGY")) {
+            targetProgramCode = "BSInfoTech";
+          } else if (courseCode.startsWith("IND") || (courseCode.startsWith("IT") && !courseCode.startsWith("ITC") && !courseCode.startsWith("ITE") && !courseCode.startsWith("ITM") && !courseCode.startsWith("ITD")) || courseTitle.includes("INDUSTRIAL")) {
+            targetProgramCode = "BSIT";
+          } else if (courseCode.startsWith("BEED") || courseTitle.includes("ELEMENTARY")) {
+            targetProgramCode = "BEED";
+          } else if (courseCode.startsWith("BSED") || courseTitle.includes("SECONDARY")) {
+            targetProgramCode = "BSED";
           } else if (courseCode.startsWith("EDUC")) {
-            const prog = await tx.academicProgram.findFirst({ where: { program_code: { in: ["BEED", "BSED"] } } });
-            if (prog) targetProgramId = prog.program_id;
+            const isSec = courseTitle.includes("SEC") || courseTitle.includes("SECONDARY") || courseTitle.includes("HIGH SCHOOL");
+            targetProgramCode = isSec ? "BSED" : "BEED";
+          } else if (courseCode.startsWith("BSA") || courseCode.startsWith("AGRI")) {
+            targetProgramCode = "BSA";
+          } else if (courseCode.startsWith("HPC") || courseCode.startsWith("HMPE") || courseCode.startsWith("BSHM")) {
+            targetProgramCode = "BSHM";
+          } else if (courseCode.startsWith("TPC") || courseCode.startsWith("TPE") || courseCode.startsWith("BSTM")) {
+            targetProgramCode = "BSTM";
           }
         }
 
-        // Find Program Chair for this program (if any)
-        let progChair = targetProgramId ? await tx.chair.findFirst({
-          where: { program_id: targetProgramId, is_program_chair: true },
-        }) : null;
+        // 2. Check selected_student_ids on the exam if course prefix was generic or unmapped
+        if (!targetProgramCode && examWithTargets?.selected_student_ids && (examWithTargets.selected_student_ids as number[]).length > 0) {
+          const studentIds = examWithTargets.selected_student_ids as number[];
+          const studentSample = await tx.student.findFirst({
+            where: { student_id: { in: studentIds } },
+            include: { program: true },
+          });
+          if (studentSample) {
+            targetProgramId = studentSample.program_id;
+            targetProgramCode = studentSample.program.program_code;
+          }
+        }
+
+        // 3. Fallback to examTargets
+        if (!targetProgramId && !targetProgramCode && examWithTargets?.examTargets && examWithTargets.examTargets.length > 0) {
+          const t = examWithTargets.examTargets[0];
+          targetProgramId = t.program_id;
+          if (t.program) {
+            targetProgramCode = t.program.program_code;
+          }
+        }
+
+        // Find Program Chair for this program (search by program_id or program_code)
+        let progChair: any = null;
+        if (targetProgramId) {
+          progChair = await tx.chair.findFirst({
+            where: { program_id: targetProgramId, is_program_chair: true },
+          });
+        }
+
+        if (!progChair && targetProgramCode) {
+          progChair = await tx.chair.findFirst({
+            where: {
+              is_program_chair: true,
+              program: { program_code: { equals: targetProgramCode } },
+            },
+          });
+        }
+
+        if (!progChair && targetProgramCode) {
+          // Case-insensitive fallback lookup for program
+          const prog = await tx.academicProgram.findFirst({
+            where: { program_code: { equals: targetProgramCode } },
+          });
+          if (prog) {
+            progChair = await tx.chair.findFirst({
+              where: { program_id: prog.program_id, is_program_chair: true },
+            });
+          }
+        }
 
         // Find Department Chair for this department (e.g. CITD for ICT/IT, TED for BEED/BSED, HTM, AGRI)
         let deptChair: any = null;
@@ -129,6 +182,10 @@ export async function updateExamStatus(examId: number, status: ExamStatus, userI
           }) || await tx.chair.findFirst({
             where: { department_id: faculty.department_id },
           });
+        }
+
+        if (!deptChair && !progChair) {
+          return { error: "No chairperson found for your department/program. Cannot submit exam for review." };
         }
 
         // Determine submission reviewer states
@@ -179,7 +236,7 @@ export async function updateExamStatus(examId: number, status: ExamStatus, userI
             prog_chair_review_status: progChairStatus as any,
             prog_chair_comments: progChairComments,
             prog_chair_action_timestamp: progChairTimestamp,
-            reviewed_by_chair_id: deptChair.chair_id,
+            reviewed_by_chair_id: deptChair ? deptChair.chair_id : (progChair ? progChair.chair_id : null),
             chair_review_status: chairReviewStatus as any,
             chair_comments: chairComments,
             chair_action_timestamp: chairTimestamp,
@@ -193,7 +250,7 @@ export async function updateExamStatus(examId: number, status: ExamStatus, userI
             prog_chair_review_status: progChairStatus as any,
             prog_chair_comments: progChairComments,
             prog_chair_action_timestamp: progChairTimestamp,
-            reviewed_by_chair_id: deptChair.chair_id,
+            reviewed_by_chair_id: deptChair ? deptChair.chair_id : (progChair ? progChair.chair_id : null),
             chair_review_status: chairReviewStatus as any,
             chair_comments: chairComments,
             chair_action_timestamp: chairTimestamp,
@@ -232,6 +289,25 @@ export async function updateExamStatus(examId: number, status: ExamStatus, userI
 
 export async function createExamDraft(facultyId: number, courseId?: number) {
   try {
+    // Ensure faculty record exists in DB for facultyId (especially for Program/Department Chair accounts)
+    let facultyRecord = await db.faculty.findUnique({
+      where: { faculty_id: facultyId },
+      select: { faculty_id: true, department_id: true },
+    });
+
+    if (!facultyRecord) {
+      const user = await db.user.findUnique({ where: { user_id: facultyId } });
+      const defaultDept = await db.department.findFirst({ select: { department_id: true } });
+      facultyRecord = await db.faculty.create({
+        data: {
+          faculty_id: facultyId,
+          first_name: user?.username || "Chair",
+          last_name: "Faculty",
+          department_id: defaultDept?.department_id || 1,
+        },
+        select: { faculty_id: true, department_id: true },
+      });
+    }
     // If courseId is not provided, check faculty's assigned courses first
     let targetCourseId = courseId;
     if (!targetCourseId) {
@@ -270,11 +346,40 @@ export async function createExamDraft(facultyId: number, courseId?: number) {
       }
     }
 
+    // Fetch target course details
+    const course = await db.course.findUnique({
+      where: { course_id: targetCourseId },
+      select: { course_code: true, course_title: true },
+    });
+
+    // Retrieve active academic period settings
+    const activePeriod = await getActiveAcademicPeriodCached();
+    const activeTerm = activePeriod.active_term || "Midterm";
+    const activeSemester = activePeriod.active_semester || "1st Semester";
+    const activeAY = activePeriod.active_academic_year || "2026-2027";
+
+    // Count existing exams for this faculty, course, and term to generate a draft sequence number
+    const existingCount = await db.examination.count({
+      where: {
+        faculty_id: facultyId,
+        course_id: targetCourseId,
+        term: activeTerm,
+      },
+    });
+
+    const draftNum = existingCount + 1;
+    const courseTitleStr = course?.course_title || course?.course_code || "";
+    const courseStr = courseTitleStr ? ` in ${courseTitleStr}` : "";
+    const generatedTitle = `${activeTerm} Examination${courseStr} (Draft #${draftNum})`;
+
     const newExam = await db.examination.create({
       data: {
-        title: "New Examination Draft",
+        title: generatedTitle,
         course_id: targetCourseId,
         faculty_id: facultyId,
+        term: activeTerm,
+        semester: activeSemester,
+        academic_year: activeAY,
         tos_file_path: "", // starts empty
         time_limit_minutes: 60, // default time limit
         randomize_items: true,
@@ -351,7 +456,7 @@ export async function saveExamConfig(formData: FormData) {
     let tosFilePath = exam.tos_file_path; // Default to existing path
 
     const tosDataJson = formData.get("tosDataJson") as string | null;
-    if (tosDataJson && tosDataJson.trim() !== "") {
+    if (tosDataJson && tosDataJson.trim() !== "" && (!tosFilePath || !tosFilePath.startsWith("/uploads/"))) {
       tosFilePath = tosDataJson;
     }
 
@@ -387,9 +492,33 @@ export async function saveExamConfig(formData: FormData) {
       },
     });
 
+    if (tosDataJson && tosDataJson.trim() !== "") {
+      try {
+        const parsedTos = JSON.parse(tosDataJson);
+        await db.tableOfSpecifications.upsert({
+          where: { exam_id: examId },
+          update: {
+            target_total_items: Number(parsedTos.targetTotalItems) || 50,
+            topic_plans_json: JSON.stringify(parsedTos.topicPlans || []),
+            learning_outcomes_json: JSON.stringify(parsedTos.learningOutcomes || {}),
+            tos_file_url: tosFilePath?.startsWith("/uploads/") ? tosFilePath : null,
+          },
+          create: {
+            exam_id: examId,
+            target_total_items: Number(parsedTos.targetTotalItems) || 50,
+            topic_plans_json: JSON.stringify(parsedTos.topicPlans || []),
+            learning_outcomes_json: JSON.stringify(parsedTos.learningOutcomes || {}),
+            tos_file_url: tosFilePath?.startsWith("/uploads/") ? tosFilePath : null,
+          },
+        });
+      } catch (e) {
+        console.error("Failed to sync TableOfSpecifications record:", e);
+      }
+    }
+
     // Automatically sync ExamTarget if examDate is provided
     if (parsedExamDate) {
-      let programId = 1;
+      let programId: number | null = null;
       let yearLevel = 1;
       let section = "All Sections";
 
@@ -402,6 +531,36 @@ export async function saveExamConfig(formData: FormData) {
           yearLevel = studentSample.year_level;
           section = studentSample.section || "All Sections";
         }
+      }
+
+      if (!programId && courseId) {
+        const courseObj = await db.course.findUnique({ where: { course_id: courseId } });
+        if (courseObj) {
+          const cCode = courseObj.course_code.trim().toUpperCase();
+          const cTitle = courseObj.course_title.trim().toUpperCase();
+          if (cCode.startsWith("ITC") || cCode.startsWith("ITE") || cCode.startsWith("ITM") || cCode.startsWith("ITD") || cCode === "ENT 403" || cCode.includes("INFOTECH") || cTitle.includes("INFORMATION TECHNOLOGY")) {
+            const prog = await db.academicProgram.findUnique({ where: { program_code: "BSInfoTech" } });
+            if (prog) programId = prog.program_id;
+          } else if (cCode.startsWith("IND") || cCode.startsWith("IT") || cTitle.includes("INDUSTRIAL")) {
+            const prog = await db.academicProgram.findUnique({ where: { program_code: "BSIT" } });
+            if (prog) programId = prog.program_id;
+          } else if (cCode.startsWith("BEED")) {
+            const prog = await db.academicProgram.findUnique({ where: { program_code: "BEED" } });
+            if (prog) programId = prog.program_id;
+          } else if (cCode.startsWith("BSED")) {
+            const prog = await db.academicProgram.findUnique({ where: { program_code: "BSED" } });
+            if (prog) programId = prog.program_id;
+          } else if (cCode.startsWith("EDUC")) {
+            const isSec = cTitle.includes("SEC") || cTitle.includes("SECONDARY");
+            const targetCode = isSec ? "BSED" : "BEED";
+            const prog = await db.academicProgram.findFirst({ where: { program_code: targetCode } });
+            if (prog) programId = prog.program_id;
+          }
+        }
+      }
+
+      if (!programId) {
+        programId = 1;
       }
 
       const existingTarget = await db.examTarget.findFirst({

@@ -34,10 +34,11 @@ export default async function ExamBuilderPage({ params }: PageProps) {
   const role = user.user_metadata?.role;
   const institutionalId = user.user_metadata?.institutional_id;
 
-  const isChairUser = role === "Chair" || role === "ProgramChair";
+  const isChairUser = role === "Chair" || role === "ProgramChair" || role === "Program Chair" || role === "Department Chair";
   const defaultDashboard = isChairUser ? "/dashboard/chair" : "/dashboard/faculty";
 
-  if (role !== "Faculty" && !isChairUser) {
+  const allowedRoles = ["Faculty", "Chair", "ProgramChair", "Program Chair", "Department Chair"];
+  if (!role || !allowedRoles.includes(role)) {
     redirect("/");
   }
 
@@ -121,6 +122,9 @@ export default async function ExamBuilderPage({ params }: PageProps) {
   });
 
   let assignedSubjects: typeof courses = facultyAssignedCourseRecords.map((fc) => fc.course);
+  if (assignedSubjects.length === 0) {
+    assignedSubjects = courses;
+  }
 
   // If chair user and no specifically assigned courses, default to all courses or department courses
   if (assignedSubjects.length === 0) {
@@ -184,7 +188,7 @@ export default async function ExamBuilderPage({ params }: PageProps) {
               </p>
               <p className="text-xs text-slate-500">{institutionalId}</p>
             </div>
-            <NotificationBell userId={dbUser.user_id} />
+            <NotificationBell userId={dbUser?.user_id || faculty.faculty_id} />
             <LogoutButton />
           </div>
         </div>
@@ -200,6 +204,7 @@ export default async function ExamBuilderPage({ params }: PageProps) {
           academicPeriodSettings={academicPeriodSettings}
           initialAssignedStudents={initialAssignedStudents}
           returnUrl={returnUrl}
+          facultyDepartment={faculty.department?.department_name}
         />
       </main>
 

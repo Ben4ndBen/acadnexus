@@ -94,8 +94,8 @@ interface DirectorDashboardClientProps {
     first_name: string;
     middle_name?: string | null;
     last_name: string;
-    department?: { department_name: string } | null;
-    user?: { institutional_id: string; username?: string | null; is_active: boolean };
+    department?: { department_id?: number; department_name: string } | null;
+    user?: { institutional_id: string; username?: string | null; is_active: boolean; role?: string };
     facultyCourses?: Array<{ course: { course_id: number; course_code: string; course_title: string } }>;
   }>;
 }
@@ -623,45 +623,6 @@ export function DirectorDashboardClient({
             </div>
           </div>
 
-          {/* Global Hold / Pass-Through clearance card */}
-          <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6">
-            <div className="space-y-1">
-              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <ShieldCheck className="w-5 h-5 text-indigo-700" />
-                Pass-Through Clearance Optimization
-              </h3>
-              <p className="text-xs text-slate-500 max-w-2xl leading-relaxed">
-                When enabled, examinations approved by Department Chairs bypass manual Director review and go live instantly.
-                Disable this to enforce manual Director approval on all examinations.
-              </p>
-            </div>
-            <div className="flex items-center gap-3">
-              <span className={`text-xs font-extrabold px-2.5 py-1 rounded-full border ${
-                !globalHoldActive
-                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                  : "bg-amber-50 text-amber-700 border-amber-200"
-              }`}>
-                {!globalHoldActive ? "Pass-Through Active (Auto-Live)" : "Global Hold Active (Manual Review)"}
-              </span>
-              <button
-                disabled={isTogglingGlobalHold}
-                onClick={handleToggleGlobalHold}
-                className={`text-xs font-bold px-4 py-2.5 rounded-xl shadow-sm transition-all disabled:opacity-50 flex items-center gap-2 ${
-                  !globalHoldActive
-                    ? "bg-amber-600 hover:bg-amber-700 text-white"
-                    : "bg-emerald-600 hover:bg-emerald-700 text-white"
-                }`}
-              >
-                {isTogglingGlobalHold ? (
-                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                ) : !globalHoldActive ? (
-                  "Enforce Manual Review"
-                ) : (
-                  "Enable Auto-Live"
-                )}
-              </button>
-            </div>
-          </div>
 
           {/* Action Panel */}
           <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-6">
@@ -1218,10 +1179,10 @@ export function DirectorDashboardClient({
               All Categories ({facultyMembers.length})
             </button>
             {departmentsList
-              .filter((d) => d.department_name !== "CITD")
+              .filter((d) => d.department_name !== "ICT Department" && d.department_name !== "IT Department" && d.department_name !== "ICT" && d.department_name !== "ITD")
               .map((d) => {
               const count = facultyMembers.filter(
-                (f) => f.department?.department_name === d.department_name
+                (f) => resolveDepartmentKey(null, f.department?.department_name) === resolveDepartmentKey(d.department_id, d.department_name)
               ).length;
               return (
                 <button
@@ -1243,10 +1204,12 @@ export function DirectorDashboardClient({
           {/* Category / Department Grouped Sections */}
           <div className="space-y-8 pt-2">
             {departmentsList
-              .filter((d) => d.department_name !== "CITD")
+              .filter((d) => d.department_name !== "ICT Department" && d.department_name !== "IT Department" && d.department_name !== "ICT" && d.department_name !== "ITD")
               .map((dept) => {
                 const members = facultyMembers.filter((f) => {
-                  if (f.department?.department_name !== dept.department_name) return false;
+                  const fKey = resolveDepartmentKey(null, f.department?.department_name);
+                  const dKey = resolveDepartmentKey(dept.department_id, dept.department_name);
+                  if (fKey !== dKey) return false;
                   if (facultySearchQuery.trim()) {
                     const q = facultySearchQuery.toLowerCase();
                     const fullName = `${f.first_name} ${f.last_name}`.toLowerCase();
@@ -1282,7 +1245,7 @@ export function DirectorDashboardClient({
                       </h3>
                     </div>
                     <span className="text-[11px] font-extrabold text-slate-600 bg-white border border-slate-200 px-2.5 py-0.5 rounded-full shadow-2xs">
-                      {group.members.length} {group.members.length === 1 ? "Faculty Member" : "Faculty Members"}
+                      {group.members.length} {group.members.length === 1 ? "Member" : "Members"}
                     </span>
                   </div>
 
@@ -1290,6 +1253,7 @@ export function DirectorDashboardClient({
                   <div className="space-y-3">
                     {group.members.map((faculty) => {
                       const assigned = faculty.facultyCourses?.map((fc: any) => fc.course) || [];
+                      const role = faculty.user?.role;
 
                       return (
                         <div
@@ -1305,6 +1269,19 @@ export function DirectorDashboardClient({
                               <div>
                                 <h4 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
                                   {faculty.first_name} {faculty.middle_name ? `${faculty.middle_name.charAt(0)}. ` : ""}{faculty.last_name}
+                                  {role === "ProgramChair" ? (
+                                    <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200">
+                                      Program Chair
+                                    </span>
+                                  ) : role === "Chair" ? (
+                                    <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-200">
+                                      Department Chair
+                                    </span>
+                                  ) : (
+                                    <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200">
+                                      Faculty
+                                    </span>
+                                  )}
                                 </h4>
                                 <div className="flex items-center gap-2 mt-0.5 text-[11px]">
                                   <span className="font-mono text-slate-500 font-semibold">

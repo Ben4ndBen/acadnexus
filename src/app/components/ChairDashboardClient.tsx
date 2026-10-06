@@ -6,10 +6,10 @@ import {
   Activity, Users, ClipboardCheck, CheckCircle, 
   XCircle, Send, AlertCircle, RefreshCw, FileText, Check, X,
   Columns, ExternalLink, Download, Loader2, Eye, EyeOff,
-  Tag, Layers, BookOpen, Search
+  Tag, Layers, BookOpen, Search, Plus
 } from "lucide-react";
 import { reviewExamByChair } from "@/app/actions/chair";
-import { assignCoursesToFacultyAction } from "@/app/actions/faculty";
+import { assignCoursesToFacultyAction, createExamDraft } from "@/app/actions/faculty";
 import { Latex } from "@/app/components/Latex";
 import { getDepartmentTheme } from "@/lib/departmentThemes";
 import { DepartmentBadge } from "@/app/components/DepartmentBadge";
@@ -18,10 +18,130 @@ import {
   filterCoursesForDepartment 
 } from "@/lib/courseDepartmentMapping";
 import { getExpectedYearAndSemForCourse } from "@/lib/bsitCurriculum";
+import { FacultyDashboardClient } from "@/app/components/FacultyDashboardClient";
 import { BSCTableOfSpecificationsView } from "@/app/components/BSCTableOfSpecificationsView";
 
-// State for Register Instructor Modal inside component:
+function toRomanNumeral(num: number): string {
+  const romanMap: [number, string][] = [
+    [1000, "M"], [900, "CM"], [500, "D"], [400, "CD"],
+    [100, "C"], [90, "XC"], [50, "L"], [40, "XL"],
+    [10, "X"], [9, "IX"], [5, "V"], [4, "IV"], [1, "I"]
+  ];
+  let result = "";
+  let val = num;
+  for (const [limit, letter] of romanMap) {
+    while (val >= limit) {
+      result += letter;
+      val -= limit;
+    }
+  }
+  return result || String(num);
+}
 
+const QUESTION_TYPE_ORDER: Record<string, number> = {
+  Multiple_Choice: 1,
+  Identification: 2,
+  True_False: 3,
+  Fill_In_The_Blanks: 4,
+  Matching_Type: 5,
+  Essay: 6,
+};
+
+const QUESTION_TYPE_HEADER_LABELS: Record<string, string> = {
+  Multiple_Choice: "MULTIPLE CHOICE",
+  Identification: "IDENTIFICATION",
+  True_False: "TRUE OR FALSE",
+  Fill_In_The_Blanks: "FILL IN THE BLANKS",
+  Matching_Type: "MATCHING TYPE",
+  Essay: "ESSAY",
+};
+
+const QUESTION_TYPE_INSTRUCTIONS: Record<string, string> = {
+  Multiple_Choice: "Read each question carefully and select the letter corresponding to the correct answer.",
+  Identification: "Identify the concept, term, or statement described in each item. Write your answer clearly.",
+  True_False: "Read each statement carefully. Write True if the statement is correct; otherwise write False.",
+  Fill_In_The_Blanks: "Fill in the blank space(s) with the correct word or phrase to complete the statement.",
+  Matching_Type: "Match the premises in Column A with the corresponding correct options in Column B.",
+  Essay: "Answer each question concisely and thoroughly in the space provided.",
+};
+
+const parseQuestionData = (q: any) => {
+  let text = q.question_text || "";
+  let image_url = "";
+  let options: string[] = [];
+  let premises: string[] = [];
+  let matches: Array<{ premise: string; choice: string }> = [];
+  let blanks: Array<{ id: number; answer: string; points: number }> = [];
+  let min_words: number | undefined = undefined;
+
+  if (text.trim().startsWith("{")) {
+    try {
+      const parsed = JSON.parse(text);
+      text = parsed.text || text;
+      image_url = parsed.image_url || "";
+      options = parsed.options || [];
+      premises = parsed.premises || [];
+      matches = parsed.matches || [];
+      blanks = parsed.blanks || [];
+      min_words = parsed.min_words;
+    } catch {}
+  }
+
+  let correctAnswerStr = q.correct_answer || "";
+  if (correctAnswerStr.trim().startsWith("{") || correctAnswerStr.trim().startsWith("[")) {
+    try {
+      const parsedAns = JSON.parse(correctAnswerStr);
+      if (parsedAns.blanks && Array.isArray(parsedAns.blanks) && blanks.length === 0) {
+        blanks = parsedAns.blanks;
+      }
+      if (parsedAns.matches && Array.isArray(parsedAns.matches) && matches.length === 0) {
+        matches = parsedAns.matches;
+      }
+    } catch {}
+  }
+
+  return {
+    text,
+    image_url,
+    options,
+    premises,
+    matches,
+    blanks,
+    min_words,
+    correctAnswerStr,
+  };
+};
+
+const formatCorrectAnswer = (answerStr: string) => {
+  if (!answerStr) return "";
+  const trimmed = answerStr.trim();
+  if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) {
+        return parsed.map((item) => (typeof item === "object" ? item.answer || item.text || JSON.stringify(item) : String(item))).join(", ");
+      }
+      if (parsed.blanks) {
+        if (Array.isArray(parsed.blanks)) {
+          return parsed.blanks.map((b: any, idx: number) => `[Blank ${idx + 1}]: ${b.answer || b.text || "N/A"}`).join(" • ");
+        }
+        if (typeof parsed.blanks === "object") {
+          return Object.entries(parsed.blanks).map(([key, val]) => `[Blank ${key}]: ${val}`).join(" • ");
+        }
+      }
+      if (parsed.pairs && Array.isArray(parsed.pairs)) {
+        return parsed.pairs.map((p: any) => `${p.premise || ""} → ${p.answer || ""}`).join(" • ");
+      }
+      if (parsed.answer !== undefined) {
+        return String(parsed.answer);
+      }
+      if (parsed.text !== undefined) {
+        return String(parsed.text);
+      }
+    } catch {}
+  }
+  return answerStr;
+};
 
 interface ChairDashboardClientProps {
   chairUserId: number;
@@ -77,9 +197,15 @@ interface ChairDashboardClientProps {
   }>;
   departmentExams: Array<any>;
   chairExaminations?: Array<any>;
+  courses?: Array<{ course_id: number; course_code: string; course_title: string }>;
+  faculty?: any;
+  institutionalId?: string;
   programs?: Array<any>;
   assignedCourses?: Array<any>;
-  courses?: Array<{ course_id: number; course_code: string; course_title: string }>;
+  hasSeenCourseAssignment?: boolean;
+  requirePasswordUpdate?: boolean;
+  username?: string;
+  studentExams?: any[];
 }
 
 export function ChairDashboardClient({ 
@@ -92,10 +218,18 @@ export function ChairDashboardClient({
   facultyMembers, 
   pendingApprovals,
   departmentExams,
-  courses = []
+  courses = [],
+  faculty,
+  institutionalId = "",
+  programs = [],
+  assignedCourses = [],
+  hasSeenCourseAssignment = false,
+  requirePasswordUpdate = false,
+  username,
+  studentExams = []
 }: ChairDashboardClientProps) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<"overview" | "faculty" | "queue">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "faculty" | "queue" | "my_teaching">("overview");
   const deptTheme = getDepartmentTheme(departmentName);
 
   // State for Review Queue
@@ -196,14 +330,7 @@ export function ChairDashboardClient({
       return;
     }
 
-    // Enforce TOS Alignment Checklist before approving
-    if (action === "Approve") {
-      const checklist = tosChecklist[workflowId] || { topicWeighting: false, cognitiveLevels: false, itemPoints: false };
-      if (!checklist.topicWeighting || !checklist.cognitiveLevels || !checklist.itemPoints) {
-        alert("Before approving this examination, you must complete all items in the TOS Alignment Checklist.");
-        return;
-      }
-    }
+
 
     // Enforce warning when approving but revisions are requested
     if (action === "Approve" && hasRevisionRequested) {
@@ -254,88 +381,341 @@ export function ChairDashboardClient({
     }
   };
 
-  const renderTosChecklist = (workflowId: number) => {
-    const current = tosChecklist[workflowId] || { topicWeighting: false, cognitiveLevels: false, itemPoints: false };
-    const isComplete = current.topicWeighting && current.cognitiveLevels && current.itemPoints;
+
+
+  const [isCreatingExam, setIsCreatingExam] = useState(false);
+
+  const effectiveFaculty = useMemo(() => {
+    if (faculty) return faculty;
+    return {
+      faculty_id: chairUserId,
+      first_name: chairTitle,
+      last_name: "Chairperson",
+      department_id: departmentId || 1,
+      examinations: [],
+      facultyPortfolios: [],
+      facultyCourses: [],
+      has_seen_course_assignment: true,
+    };
+  }, [faculty, chairUserId, chairTitle, departmentId]);
+
+  const renderOfficialExamPaperReviewer = (approval: any) => {
+    const qBank = approval.exam?.questionBank || [];
+    if (qBank.length === 0) {
+      return (
+        <div className="bg-slate-50 border border-slate-200 rounded-xl p-8 text-center text-slate-500 text-xs">
+          No questions found in this examination draft.
+        </div>
+      );
+    }
+
+    const groupsMap: Record<string, any[]> = {};
+    qBank.forEach((q: any) => {
+      const type = q.question_type || "Multiple_Choice";
+      if (!groupsMap[type]) groupsMap[type] = [];
+      groupsMap[type].push(q);
+    });
+
+    const sortedTypes = Object.keys(groupsMap).sort((a, b) => {
+      const orderA = QUESTION_TYPE_ORDER[a] || 99;
+      const orderB = QUESTION_TYPE_ORDER[b] || 99;
+      return orderA - orderB;
+    });
+
+    const totalPoints = qBank.reduce((sum: number, q: any) => sum + (q.points || 1), 0);
+    const term = approval.exam?.term || "Midterm";
+    const semester = approval.exam?.semester || "1st Semester";
+    const courseCode = approval.exam?.course?.course_code || "";
+    const courseTitle = approval.exam?.course?.course_title || "";
+    const deptName = approval.exam?.course?.department?.department_name || departmentName || "Department of Information Technology";
+    const examDate = approval.exam?.exam_date ? String(approval.exam.exam_date).split("T")[0] : "TBA";
+    const timeLimit = approval.exam?.time_limit || 60;
+
+    let itemCounter = 0;
 
     return (
-      <div className={`border rounded-xl p-4 space-y-3 transition-all ${
-        isComplete 
-          ? "bg-emerald-50/50 border-emerald-200" 
-          : "bg-amber-50/50 border-amber-200"
-      }`}>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <FileText className={`w-4 h-4 ${isComplete ? "text-emerald-700" : "text-amber-700"}`} />
-            <h4 className={`text-xs font-black uppercase tracking-wider ${isComplete ? "text-emerald-900" : "text-amber-900"}`}>
-              TOS Alignment Checklist <span className="text-rose-600">*</span>
-            </h4>
-          </div>
-          {isComplete ? (
-            <span className="text-[10px] bg-emerald-600 text-white font-extrabold px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-sm">
-              <Check className="w-3 h-3" /> All Verified
-            </span>
-          ) : (
-            <span className="text-[10px] bg-amber-200/80 text-amber-900 font-bold px-2 py-0.5 rounded-full">
-              Required for approval
-            </span>
-          )}
+      <div className="bg-white border border-slate-300 rounded-2xl shadow-xl p-6 sm:p-8 space-y-6 text-slate-900 font-sans">
+        {/* BSC OFFICIAL HEADER IMAGE */}
+        <div className="w-full border-b border-slate-200 pb-3">
+          <img
+            src="/bsc-header.png"
+            alt="Batanes State College Header"
+            className="w-full h-auto object-contain mx-auto max-h-[140px]"
+          />
         </div>
 
-        <div className="space-y-2 pt-1">
-          <label className="flex items-start gap-2.5 text-xs text-slate-700 font-semibold cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={current.topicWeighting}
-              onChange={(e) => {
-                setTosChecklist({
-                  ...tosChecklist,
-                  [workflowId]: { ...current, topicWeighting: e.target.checked }
-                });
-              }}
-              className="mt-0.5 rounded border-slate-300 text-amber-600 focus:ring-amber-600 shrink-0 w-4 h-4 cursor-pointer"
-            />
-            <span>Topic weighting matches test question distribution</span>
-          </label>
+        {/* EXAMINATION METADATA HEADER */}
+        <div className="text-center space-y-1 py-1 border-b border-slate-200">
+          <h3 className="font-sans font-bold text-xs sm:text-sm text-slate-800 uppercase tracking-wider pb-0.5">
+            {deptName}
+          </h3>
+          <h2 className="text-base sm:text-lg font-black font-sans text-slate-900 tracking-wide uppercase">
+            OFFICIAL EXAMINATION PAPER
+          </h2>
+          <p className="text-xs font-bold text-slate-800 uppercase">
+            <span className="underline font-black">[{term.toUpperCase()}] EXAMINATION</span>
+          </p>
+          <p className="text-xs font-semibold text-slate-700">
+            <span className="underline font-bold">{semester}</span>
+          </p>
+        </div>
 
-          <label className="flex items-start gap-2.5 text-xs text-slate-700 font-semibold cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={current.cognitiveLevels}
-              onChange={(e) => {
-                setTosChecklist({
-                  ...tosChecklist,
-                  [workflowId]: { ...current, cognitiveLevels: e.target.checked }
-                });
-              }}
-              className="mt-0.5 rounded border-slate-300 text-amber-600 focus:ring-amber-600 shrink-0 w-4 h-4 cursor-pointer"
-            />
-            <span>Cognitive levels (Remembering, Applying, etc.) match item breakdown</span>
-          </label>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-xs font-bold border-b border-slate-200 pb-3">
+          <div className="flex items-center gap-2">
+            <span className="text-slate-500 font-bold uppercase min-w-[100px]">COURSE:</span>
+            <span className="font-mono font-black text-slate-900 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded">
+              {courseCode} {courseTitle ? `— ${courseTitle}` : ""}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-slate-500 font-bold uppercase min-w-[110px]">DATE:</span>
+            <span className="font-mono font-black text-slate-900 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded">{examDate}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-slate-500 font-bold uppercase min-w-[100px]">TIME LIMIT:</span>
+            <span className="font-black text-slate-900">{timeLimit} Minutes</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-slate-500 font-bold uppercase min-w-[110px]">TOTAL ITEMS:</span>
+            <span className="font-black text-slate-900">{qBank.length} Items ({totalPoints} Pts)</span>
+          </div>
+        </div>
 
-          <label className="flex items-start gap-2.5 text-xs text-slate-700 font-semibold cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={current.itemPoints}
-              onChange={(e) => {
-                setTosChecklist({
-                  ...tosChecklist,
-                  [workflowId]: { ...current, itemPoints: e.target.checked }
-                });
-              }}
-              className="mt-0.5 rounded border-slate-300 text-amber-600 focus:ring-amber-600 shrink-0 w-4 h-4 cursor-pointer"
-            />
-            <span>Total test items & point allocation match TOS specification</span>
-          </label>
+        {/* GENERAL INSTRUCTIONS */}
+        <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs space-y-1">
+          <p className="font-black text-slate-900 uppercase tracking-wider text-[10px]">General Instructions:</p>
+          <p className="text-slate-700 font-medium text-[11px] leading-relaxed">
+            Read each item carefully before answering. Ensure your responses are clear and legibly written. Manage your time wisely across all test parts ({timeLimit} minutes).
+          </p>
+        </div>
+
+        {/* TEST PARTS */}
+        <div className="space-y-6 pt-2">
+          {sortedTypes.map((qType, typeIdx) => {
+            const items = groupsMap[qType];
+            const groupPoints = items.reduce((sum, q) => sum + (q.points || 1), 0);
+            const headerLabel = QUESTION_TYPE_HEADER_LABELS[qType] || qType.toUpperCase();
+            const instruction = QUESTION_TYPE_INSTRUCTIONS[qType] || "Answer the items as instructed.";
+
+            return (
+              <div key={qType} className="space-y-4">
+                {/* TEST PART HEADER */}
+                <div className="pt-3 pb-2 border-b-2 border-slate-900">
+                  <div className="flex items-baseline justify-between">
+                    <h4 className="font-extrabold text-xs sm:text-sm text-slate-900 tracking-wide uppercase font-sans">
+                      TEST {toRomanNumeral(typeIdx + 1)}. {headerLabel}
+                    </h4>
+                    <span className="text-xs font-extrabold text-slate-900 font-sans tracking-tight">
+                      ({groupPoints} {groupPoints === 1 ? "Point" : "Points"})
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-700 italic font-sans mt-0.5 leading-tight">
+                    <span className="font-bold not-italic">Directions: </span>{instruction}
+                  </p>
+                </div>
+
+                {/* QUESTION ITEMS */}
+                <div className="space-y-4">
+                  {items.map((q: any) => {
+                    itemCounter += 1;
+                    const itemNum = itemCounter;
+                    const parsed = parseQuestionData(q);
+                    const currentStatus = questionStatuses[approval.workflow_id]?.[q.question_id] || "Approved";
+
+                    return (
+                      <div
+                        key={q.question_id}
+                        className={`border rounded-xl p-4 space-y-3 transition-all ${
+                          currentStatus === "Revision"
+                            ? "bg-rose-50/50 border-rose-300 ring-1 ring-rose-300"
+                            : "bg-white border-slate-200 hover:border-slate-300"
+                        }`}
+                      >
+                        {/* ITEM HEADER & QUESTION PROMPT */}
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-start gap-2.5 flex-1">
+                            <span className="font-black text-slate-900 bg-slate-100 border border-slate-300 px-2 py-0.5 rounded text-xs shrink-0">
+                              Item {itemNum}.
+                            </span>
+                            <div className="font-bold text-slate-900 leading-relaxed text-xs pt-0.5">
+                              <Latex text={parsed.text || "(Question prompt empty)"} />
+                            </div>
+                          </div>
+                          <span className="text-[10px] font-extrabold bg-slate-100 border border-slate-300 text-slate-700 px-2 py-0.5 rounded shrink-0 uppercase tracking-tight">
+                            {q.taxonomy_level || "KNOWLEDGE"} • {q.points || 1} pt(s)
+                          </span>
+                        </div>
+
+                        {/* PROMPT IMAGE */}
+                        {parsed.image_url && (
+                          <div className="pl-7">
+                            <img
+                              src={parsed.image_url}
+                              alt={`Item ${itemNum}`}
+                              className="max-h-40 rounded-lg border border-slate-300 object-contain"
+                            />
+                          </div>
+                        )}
+
+                        {/* OPTIONS / PREMISES / MATCHES */}
+                        {parsed.options && parsed.options.length > 0 && (
+                          <div className="pl-7 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-semibold text-slate-800">
+                            {parsed.options.map((opt: string, optIdx: number) => {
+                              const letter = String.fromCharCode(65 + optIdx);
+                              return (
+                                <div key={optIdx} className="flex items-start gap-2 bg-slate-50 border border-slate-200 rounded-lg p-2">
+                                  <span className="font-black text-slate-700">{letter}.</span>
+                                  <span><Latex text={opt} /></span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+
+                        {parsed.premises && parsed.premises.length > 0 && (
+                          <div className="pl-7 space-y-1.5 text-xs text-slate-700">
+                            <p className="font-extrabold text-[10px] text-slate-500 uppercase tracking-wider">Premises:</p>
+                            {parsed.premises.map((prem: string, pIdx: number) => (
+                              <div key={pIdx} className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg p-2">
+                                <span className="w-2 h-2 rounded-full bg-slate-400" />
+                                <span><Latex text={prem} /></span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* ANSWER KEY FOR CHAIR REVIEW */}
+                        <div className="pl-7">
+                          <div className="bg-emerald-50/80 border border-emerald-200/80 rounded-lg p-2.5 text-xs flex items-center gap-2 text-emerald-950 font-medium">
+                            <span className="font-black text-emerald-800 shrink-0 uppercase text-[10px] tracking-wider bg-emerald-100 px-2 py-0.5 rounded border border-emerald-300">
+                              Answer Key
+                            </span>
+                            <span className="font-extrabold font-mono text-emerald-900">
+                              {formatCorrectAnswer(q.correct_answer)}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* CHAIR ITEM REVIEW CONTROL & COMMENT TEXTAREA */}
+                        <div className="pt-2 border-t border-slate-200/80 space-y-2">
+                          <div className="flex items-center justify-between flex-wrap gap-2">
+                            <span className="text-[11px] font-extrabold text-slate-700 uppercase tracking-wider">
+                              Item Review Status:
+                            </span>
+
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const currentWorkflowStatuses = questionStatuses[approval.workflow_id] || {};
+                                  setQuestionStatuses({
+                                    ...questionStatuses,
+                                    [approval.workflow_id]: {
+                                      ...currentWorkflowStatuses,
+                                      [q.question_id]: "Approved",
+                                    },
+                                  });
+                                }}
+                                className={`px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                                  currentStatus === "Approved"
+                                    ? "bg-emerald-600 text-white shadow-sm font-extrabold"
+                                    : "bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200"
+                                }`}
+                              >
+                                <Check className="w-3.5 h-3.5" />
+                                Approve
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const currentWorkflowStatuses = questionStatuses[approval.workflow_id] || {};
+                                  setQuestionStatuses({
+                                    ...questionStatuses,
+                                    [approval.workflow_id]: {
+                                      ...currentWorkflowStatuses,
+                                      [q.question_id]: "Revision",
+                                    },
+                                  });
+                                }}
+                                className={`px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                                  currentStatus === "Revision"
+                                    ? "bg-rose-600 text-white shadow-sm font-extrabold"
+                                    : "bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200"
+                                }`}
+                              >
+                                <X className="w-3.5 h-3.5" />
+                                Request Revision
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* PER-QUESTION COMMENT TEXTAREA */}
+                          <div>
+                            <textarea
+                              value={questionComments[approval.workflow_id]?.[q.question_id] || ""}
+                              onChange={(e) => {
+                                const currentWorkflowComments = questionComments[approval.workflow_id] || {};
+                                setQuestionComments({
+                                  ...questionComments,
+                                  [approval.workflow_id]: {
+                                    ...currentWorkflowComments,
+                                    [q.question_id]: e.target.value,
+                                  },
+                                });
+                              }}
+                              placeholder={
+                                currentStatus === "Revision"
+                                  ? "Specify correction needed for Item " + itemNum + " (e.g. rewrite options, change correct key, etc.)..."
+                                  : "Item feedback comment (optional)..."
+                              }
+                              rows={2}
+                              className={`w-full bg-slate-50 border rounded-lg p-2.5 text-xs text-slate-800 placeholder:text-slate-400 focus:bg-white focus:outline-none transition-all ${
+                                currentStatus === "Revision"
+                                  ? "border-rose-300 focus:border-rose-500 focus:ring-1 focus:ring-rose-500/20"
+                                  : "border-slate-200 focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20"
+                              }`}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* BSC FOOTER */}
+        <div className="pt-6 border-t border-slate-300">
+          <img
+            src="/bsc-footer.png"
+            alt="Batanes State College Footer"
+            className="w-full h-auto object-contain mx-auto max-h-[100px]"
+          />
         </div>
       </div>
     );
   };
 
+  const handleCreateExamDirect = async () => {
+    setIsCreatingExam(true);
+    const defaultCourseId = (assignedCourses && assignedCourses.length > 0) ? assignedCourses[0].course_id : (courses && courses.length > 0 ? courses[0].course_id : undefined);
+    const res = await createExamDraft(chairUserId, defaultCourseId);
+    setIsCreatingExam(false);
+
+    if (res.error) {
+      alert(res.error);
+    } else if (res.exam_id) {
+      router.push(`/dashboard/faculty/exams/${res.exam_id}/builder`);
+    }
+  };
+
   return (
     <div className="space-y-8">
       {/* Dashboard Sub-navigation Tabs */}
-      <div className="flex flex-wrap border-b border-slate-200 bg-white p-2 rounded-2xl shadow-sm gap-2">
+      <div className="flex flex-wrap items-center border-b border-slate-200 bg-white p-2 rounded-2xl shadow-sm gap-2">
         <button
           onClick={() => setActiveTab("overview")}
           className={`flex items-center gap-2 px-4 py-2.5 text-sm font-bold rounded-xl transition-all duration-300 ${
@@ -368,10 +748,53 @@ export function ChairDashboardClient({
         >
           <ClipboardCheck className="w-4 h-4" />
           Pending Review Queue
+          {pendingApprovals.length > 0 && (
+            <span className="bg-amber-100 text-amber-900 text-xs px-2 py-0.5 rounded-full font-extrabold ml-1">
+              {pendingApprovals.length}
+            </span>
+          )}
+        </button>
+        <button
+          onClick={() => setActiveTab("my_teaching")}
+          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-bold rounded-xl transition-all duration-300 ${
+            activeTab === "my_teaching"
+              ? "bg-indigo-700 text-white shadow-md shadow-indigo-700/20"
+              : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+          }`}
+        >
+          <BookOpen className="w-4 h-4" />
+          My Teaching Portal & Exams
         </button>
 
-
+        {/* Direct Create Exam Button */}
+        <button
+          disabled={isCreatingExam}
+          onClick={handleCreateExamDirect}
+          className="ml-auto bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold px-4 py-2.5 rounded-xl shadow-md transition-all hover:scale-105 duration-300 flex items-center gap-2 disabled:opacity-50"
+        >
+          {isCreatingExam ? (
+            <RefreshCw className="w-4 h-4 animate-spin" />
+          ) : (
+            <Plus className="w-4 h-4" />
+          )}
+          Create Exam
+        </button>
       </div>
+
+      {/* MY TEACHING & EXAMS TAB */}
+      {activeTab === "my_teaching" && (
+        <FacultyDashboardClient
+          faculty={effectiveFaculty}
+          institutionalId={institutionalId || ""}
+          programs={programs}
+          courses={courses}
+          assignedCourses={assignedCourses}
+          hasSeenCourseAssignment={hasSeenCourseAssignment}
+          requirePasswordUpdate={requirePasswordUpdate}
+          username={username}
+          studentExams={studentExams}
+        />
+      )}
 
       {/* OVERVIEW TAB */}
       {activeTab === "overview" && (
@@ -570,8 +993,8 @@ export function ChairDashboardClient({
                                 <FileText className="w-3 h-3" /> TOS File Attached
                               </span>
                             ) : (
-                              <span className="inline-flex items-center gap-1 text-[11px] bg-rose-50 text-rose-700 border border-rose-200 font-extrabold px-2.5 py-0.5 rounded-md">
-                                <AlertCircle className="w-3 h-3 text-rose-500" /> No TOS File Uploaded
+                              <span className="inline-flex items-center gap-1 text-[11px] bg-emerald-50 text-emerald-700 border border-emerald-200 font-extrabold px-2.5 py-0.5 rounded-md">
+                                <Layers className="w-3 h-3 text-emerald-600" /> TOS Matrix Active
                               </span>
                             )}
                           </div>
@@ -595,241 +1018,6 @@ export function ChairDashboardClient({
                         </button>
                       </div>
 
-                      {/* TOS Alignment Checklist */}
-                      {renderTosChecklist(approval.workflow_id)}
-
-                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
-                        <label className="text-xs font-bold text-slate-700 mb-2 block">General Review Comments</label>
-                        <textarea
-                          value={reviewComments[approval.workflow_id] || ""}
-                          onChange={(e) => setReviewComments({...reviewComments, [approval.workflow_id]: e.target.value})}
-                          className="w-full bg-white border border-slate-200 rounded-lg p-3 text-sm text-slate-800 placeholder:text-slate-400 focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all outline-none"
-                          rows={3}
-                          placeholder="Add your general feedback or required changes here..."
-                        />
-                      </div>
-                      
-                      {/* Itemized Question Feedback Panel */}
-                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-4">
-                        {(() => {
-                          const qStatuses = questionStatuses[approval.workflow_id] || {};
-                          const totalQuestions = approval.exam.questionBank?.length || 0;
-                          const approvedCount = approval.exam.questionBank?.filter(q => (qStatuses[q.question_id] || "Approved") === "Approved").length || 0;
-                          const revisionCount = totalQuestions - approvedCount;
-                          const percentApproved = totalQuestions > 0 ? Math.round((approvedCount / totalQuestions) * 100) : 100;
-                          
-                          return (
-                            <>
-                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-3">
-                                <div>
-                                  <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">
-                                    Granular Question Review
-                                  </h4>
-                                  <p className="text-[10px] text-slate-400 font-semibold uppercase mt-0.5">
-                                    Set individual item status and write specific corrections.
-                                  </p>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <div className="text-right">
-                                    <span className="text-[10px] font-extrabold text-slate-600 block">
-                                      {approvedCount} / {totalQuestions} Approved
-                                    </span>
-                                    {revisionCount > 0 && (
-                                      <span className="text-[9px] font-bold text-rose-600">
-                                        {revisionCount} require revision
-                                      </span>
-                                    )}
-                                  </div>
-                                  <div className="w-16 bg-slate-200 h-2 rounded-full overflow-hidden shrink-0">
-                                    <div 
-                                      className={`h-full rounded-full transition-all duration-300 ${
-                                        percentApproved === 100 ? "bg-emerald-500" : percentApproved > 50 ? "bg-amber-500" : "bg-rose-500"
-                                      }`}
-                                      style={{ width: `${percentApproved}%` }}
-                                    />
-                                  </div>
-                                </div>
-                              </div>
-
-                              <div className="space-y-3 max-h-[350px] overflow-y-auto pr-1">
-                                {approval.exam.questionBank && approval.exam.questionBank.length > 0 ? (
-                                  approval.exam.questionBank.map((q, idx) => {
-                                    const currentStatus = qStatuses[q.question_id] || "Approved";
-                                    return (
-                                      <div key={q.question_id} className={`bg-white border rounded-xl p-4.5 space-y-3 transition-all duration-200 shadow-sm ${
-                                        currentStatus === "Approved" 
-                                          ? "border-slate-100 hover:border-slate-200" 
-                                          : "border-rose-200 ring-2 ring-rose-500/5 bg-rose-50/5"
-                                      }`}>
-                                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-                                          <div className="flex items-center gap-2">
-                                            <span className="font-extrabold text-slate-800 bg-slate-100 px-2 py-0.5 rounded text-[10px]">
-                                              Item #{idx + 1}
-                                            </span>
-                                            <span className="bg-amber-50 text-amber-800 px-2 py-0.5 rounded border border-amber-100 font-semibold text-[9px] uppercase tracking-wider">
-                                              {q.question_type.replace("_", " ")}
-                                            </span>
-                                            <span className="text-[10px] font-bold text-slate-400">
-                                              {q.points} {q.points === 1 ? "pt" : "pts"}
-                                            </span>
-                                          </div>
-
-                                          {/* Status Toggle Buttons */}
-                                          <div className="flex border border-slate-200 rounded-lg p-0.5 bg-slate-50 shrink-0 text-[10px] font-bold">
-                                            <button
-                                              type="button"
-                                              onClick={() => {
-                                                const currentWfStatuses = questionStatuses[approval.workflow_id] || {};
-                                                setQuestionStatuses({
-                                                  ...questionStatuses,
-                                                  [approval.workflow_id]: {
-                                                    ...currentWfStatuses,
-                                                    [q.question_id]: "Approved"
-                                                  }
-                                                });
-                                              }}
-                                              className={`px-2.5 py-1 rounded-md transition-all cursor-pointer flex items-center gap-1 ${
-                                                currentStatus === "Approved"
-                                                  ? "bg-emerald-600 text-white shadow-sm font-black"
-                                                  : "text-slate-500 hover:text-slate-700"
-                                              }`}
-                                            >
-                                              <Check className="w-3.5 h-3.5" />
-                                              <span>Approve</span>
-                                            </button>
-                                            <button
-                                              type="button"
-                                              onClick={() => {
-                                                const currentWfStatuses = questionStatuses[approval.workflow_id] || {};
-                                                setQuestionStatuses({
-                                                  ...questionStatuses,
-                                                  [approval.workflow_id]: {
-                                                    ...currentWfStatuses,
-                                                    [q.question_id]: "Revision"
-                                                  }
-                                                });
-                                              }}
-                                              className={`px-2.5 py-1 rounded-md transition-all cursor-pointer flex items-center gap-1 ${
-                                                currentStatus === "Revision"
-                                                  ? "bg-rose-600 text-white shadow-sm font-black"
-                                                  : "text-slate-500 hover:text-slate-700"
-                                              }`}
-                                            >
-                                              <X className="w-3.5 h-3.5" />
-                                              <span>Requires Revision</span>
-                                            </button>
-                                          </div>
-                                        </div>
-
-                                        {(() => {
-                                          let parsed: { text: string; image_url?: string; options?: string[]; premises?: string[] } | null = null;
-                                          if (q.question_text.trim().startsWith("{")) {
-                                            try {
-                                              parsed = JSON.parse(q.question_text);
-                                            } catch (e) {
-                                              // fallback
-                                            }
-                                          }
-
-                                          const textToRender = parsed ? parsed.text : q.question_text;
-
-                                          return (
-                                            <div className="bg-slate-50/50 p-3.5 rounded-xl border border-slate-100 space-y-3">
-                                              <div className="text-xs text-slate-700 font-semibold leading-relaxed whitespace-pre-wrap">
-                                                <Latex text={textToRender} />
-                                              </div>
-
-                                              {parsed?.image_url && (
-                                                <div className="max-w-md border border-slate-200/60 rounded-xl overflow-hidden p-1 bg-white">
-                                                  <img 
-                                                    src={parsed.image_url} 
-                                                    alt="Question attachment" 
-                                                    className="w-full h-auto max-h-[180px] object-contain rounded-lg"
-                                                  />
-                                                </div>
-                                              )}
-
-                                              {/* Render choices/options for math & completeness */}
-                                              {parsed?.options && parsed.options.length > 0 && (
-                                                <div className="text-[11px] text-slate-500 font-semibold space-y-1 pl-2">
-                                                  <p className="font-extrabold text-[10px] text-slate-400 uppercase tracking-wider">Choices:</p>
-                                                  {parsed.options.map((opt, oIdx) => (
-                                                    <div key={oIdx} className="flex gap-1.5 items-center">
-                                                      <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
-                                                      <span><Latex text={opt} /></span>
-                                                      {opt === q.correct_answer && <span className="text-[9px] bg-emerald-50 text-emerald-700 border border-emerald-100 px-1 py-0.2 rounded font-extrabold uppercase ml-2">Correct</span>}
-                                                    </div>
-                                                  ))}
-                                                </div>
-                                              )}
-
-                                              {parsed?.premises && parsed.premises.length > 0 && (
-                                                <div className="text-[11px] text-slate-500 font-semibold space-y-1 pl-2">
-                                                  <p className="font-extrabold text-[10px] text-slate-400 uppercase tracking-wider">Premises:</p>
-                                                  {parsed.premises.map((prem, pIdx) => (
-                                                    <div key={pIdx} className="flex gap-1.5 items-center">
-                                                      <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
-                                                      <span><Latex text={prem} /></span>
-                                                    </div>
-                                                  ))}
-                                                </div>
-                                              )}
-
-                                              {!parsed?.options && q.correct_answer && (
-                                                <div className="text-[11px] text-slate-500 font-semibold pl-2">
-                                                  <span className="font-bold text-slate-400">Correct Answer:</span> <strong className="text-slate-700">{q.correct_answer}</strong>
-                                                </div>
-                                              )}
-                                            </div>
-                                          );
-                                        })()}
-
-                                        {/* Feedback text area */}
-                                        <div className="space-y-1">
-                                          <div className="flex justify-between items-center text-[10px]">
-                                            <span className="font-bold text-slate-500">Feedback Comments:</span>
-                                            {currentStatus === "Revision" && (
-                                              <span className="text-rose-600 font-extrabold uppercase tracking-wider text-[8px]">
-                                                * Required for revisions
-                                              </span>
-                                            )}
-                                          </div>
-                                          <textarea
-                                            value={questionComments[approval.workflow_id]?.[q.question_id] || ""}
-                                            onChange={(e) => {
-                                              const currentWorkflowComments = questionComments[approval.workflow_id] || {};
-                                              setQuestionComments({
-                                                ...questionComments,
-                                                [approval.workflow_id]: {
-                                                  ...currentWorkflowComments,
-                                                  [q.question_id]: e.target.value
-                                                }
-                                              });
-                                            }}
-                                            placeholder={
-                                              currentStatus === "Revision"
-                                                ? "Describe the correction needed for this item (e.g. rewrite options, change correct key, etc.)..."
-                                                : "Add suggestions or comments (optional)..."
-                                            }
-                                            rows={2}
-                                            className={`w-full bg-slate-50/50 border rounded-lg p-2 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:bg-white transition-all duration-200 ${
-                                              currentStatus === "Revision"
-                                                ? "border-rose-200 focus:border-rose-500 focus:ring-1 focus:ring-rose-500/20"
-                                                : "border-slate-200 focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20"
-                                            }`}
-                                          />
-                                        </div>
-                                      </div>
-                                    );
-                                  })
-                                ) : (
-                                  <p className="text-xs text-slate-400 italic">No questions found in this examination draft.</p>
-                                )}
-                              </div>
-                            </>
-                          );
-                        })()}
-                      </div>
                     </div>
 
                     <div className="flex flex-row lg:flex-col gap-3 w-full lg:w-48 pt-2">
@@ -979,8 +1167,8 @@ export function ChairDashboardClient({
                       </a>
                     </div>
                   ) : (
-                    <span className="text-xs font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30 px-2.5 py-1 rounded-lg">
-                      No TOS File Uploaded
+                    <span className="text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2.5 py-1 rounded-lg">
+                      Auto-Generated TOS Matrix
                     </span>
                   )}
                 </div>
@@ -1103,9 +1291,6 @@ export function ChairDashboardClient({
 
                 {/* Questions Panel Body */}
                 <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                  {/* TOS Alignment Checklist */}
-                  {renderTosChecklist(activeSplitApproval.workflow_id)}
-
                   {/* General Review Comments */}
                   <div className="bg-amber-50/50 border border-amber-200/60 rounded-xl p-3.5 space-y-2">
                     <label className="text-xs font-extrabold text-amber-900 block uppercase tracking-wider">
@@ -1120,225 +1305,8 @@ export function ChairDashboardClient({
                     />
                   </div>
 
-                  {/* Chapter & Topic Breakdown Card for Chair Review */}
-                  {(() => {
-                    const qb = activeSplitApproval.exam.questionBank || [];
-                    if (qb.length === 0) return null;
-
-                    const map: Record<string, { itemNumbers: number[]; totalPoints: number }> = {};
-                    const totalExamPoints = qb.reduce((sum: number, q: any) => sum + (q.points || 1), 0);
-
-                    qb.forEach((q: any, idx: number) => {
-                      const topicName = (q.topic && q.topic.trim() !== "") ? q.topic.trim() : "Unassigned Topic";
-                      if (!map[topicName]) {
-                        map[topicName] = { itemNumbers: [], totalPoints: 0 };
-                      }
-                      map[topicName].itemNumbers.push(idx + 1);
-                      map[topicName].totalPoints += (q.points || 1);
-                    });
-
-                    const chapters = Object.entries(map).map(([topic, data]) => {
-                      const count = data.itemNumbers.length;
-                      const start = data.itemNumbers[0];
-                      const end = data.itemNumbers[data.itemNumbers.length - 1];
-                      const rangeStr = count === 1 ? `Item ${start}` : `Items ${start}–${end}`;
-                      const weightPercentage = totalExamPoints > 0 ? Math.round((data.totalPoints / totalExamPoints) * 100) : 0;
-                      return { topic, count, rangeStr, totalPoints: data.totalPoints, weightPercentage };
-                    });
-
-                    return (
-                      <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 space-y-3">
-                        <div className="flex items-center justify-between border-b border-slate-200/60 pb-2.5">
-                          <div className="flex items-center gap-2">
-                            <Layers className="w-4 h-4 text-indigo-600" />
-                            <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">
-                              Chapter & Topic Coverage (TOS Matrix)
-                            </h4>
-                          </div>
-                          <span className="text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-100 px-2 py-0.5 rounded-full">
-                            {chapters.length} Chapter{chapters.length !== 1 && "s"}
-                          </span>
-                        </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          {chapters.map((c, cIdx) => (
-                            <div key={cIdx} className="bg-white border border-slate-200/70 p-2.5 rounded-xl space-y-1">
-                              <div className="flex items-center justify-between gap-1 text-[10px]">
-                                <span className="font-extrabold text-indigo-900 line-clamp-1">{c.topic}</span>
-                                <span className="font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">{c.weightPercentage}%</span>
-                              </div>
-                              <div className="flex items-center justify-between text-[10px] text-slate-500 font-medium">
-                                <span className="font-bold text-slate-700">{c.rangeStr}</span>
-                                <span>{c.count} items ({c.totalPoints} pts)</span>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  })()}
-
-                  {/* Granular Questions List */}
-                  <div className="space-y-3">
-                    <h4 className="text-xs font-black text-slate-700 uppercase tracking-wider">
-                      Question Item Review
-                    </h4>
-                    {activeSplitApproval.exam.questionBank && activeSplitApproval.exam.questionBank.length > 0 ? (
-                      activeSplitApproval.exam.questionBank.map((q: any, idx: number) => {
-                        const qStatuses = questionStatuses[activeSplitApproval.workflow_id] || {};
-                        const currentStatus = qStatuses[q.question_id] || "Approved";
-
-                        let parsed: { text: string; image_url?: string; options?: string[]; premises?: string[] } | null = null;
-                        if (q.question_text?.trim().startsWith("{")) {
-                          try {
-                            parsed = JSON.parse(q.question_text);
-                          } catch (e) {}
-                        }
-                        const textToRender = parsed ? parsed.text : q.question_text;
-
-                        return (
-                          <div
-                            key={q.question_id}
-                            className={`border rounded-xl p-3.5 space-y-3 transition-all ${
-                              currentStatus === "Approved"
-                                ? "border-slate-200 bg-slate-50/50"
-                                : "border-rose-200 bg-rose-50/30"
-                            }`}
-                          >
-                            <div className="flex items-center justify-between gap-2">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <span className="font-extrabold text-slate-800 bg-slate-200 px-2 py-0.5 rounded text-[10px]">
-                                  Item #{idx + 1}
-                                </span>
-                                <span className="bg-amber-100 text-amber-800 px-2 py-0.5 rounded font-semibold text-[9px] uppercase tracking-wider border border-amber-200">
-                                  {q.question_type?.replace("_", " ")}
-                                </span>
-                                <span className="text-[9px] font-extrabold text-indigo-700 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-full flex items-center gap-1">
-                                  <Tag className="w-2.5 h-2.5 text-indigo-500" />
-                                  {q.topic?.trim() || "Unassigned Topic"}
-                                </span>
-                                <span className="text-[10px] font-bold text-slate-500">
-                                  {q.points} {q.points === 1 ? "pt" : "pts"}
-                                </span>
-                              </div>
-
-                              {/* Toggle item status */}
-                              <div className="flex border border-slate-200 rounded-lg p-0.5 bg-white text-[10px] font-bold">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const currentWfStatuses = questionStatuses[activeSplitApproval.workflow_id] || {};
-                                    setQuestionStatuses({
-                                      ...questionStatuses,
-                                      [activeSplitApproval.workflow_id]: {
-                                        ...currentWfStatuses,
-                                        [q.question_id]: "Approved"
-                                      }
-                                    });
-                                  }}
-                                  className={`px-2 py-1 rounded transition-all cursor-pointer flex items-center gap-1 ${
-                                    currentStatus === "Approved"
-                                      ? "bg-emerald-600 text-white font-black shadow-sm"
-                                      : "text-slate-500 hover:text-slate-800"
-                                  }`}
-                                >
-                                  <Check className="w-3 h-3" /> Approve
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const currentWfStatuses = questionStatuses[activeSplitApproval.workflow_id] || {};
-                                    setQuestionStatuses({
-                                      ...questionStatuses,
-                                      [activeSplitApproval.workflow_id]: {
-                                        ...currentWfStatuses,
-                                        [q.question_id]: "Revision"
-                                      }
-                                    });
-                                  }}
-                                  className={`px-2 py-1 rounded transition-all cursor-pointer flex items-center gap-1 ${
-                                    currentStatus === "Revision"
-                                      ? "bg-rose-600 text-white shadow-sm font-black"
-                                      : "text-slate-500 hover:text-slate-800"
-                                  }`}
-                                >
-                                  <X className="w-3 h-3" /> Revision
-                                </button>
-                              </div>
-                            </div>
-
-                            {/* Question text content */}
-                            <div className="bg-white p-3 rounded-lg border border-slate-200 space-y-2 text-xs text-slate-800">
-                              <div className="font-medium whitespace-pre-wrap leading-relaxed">
-                                <Latex text={textToRender} />
-                              </div>
-
-                              {parsed?.image_url && (
-                                <div className="max-w-xs border border-slate-200 rounded-lg overflow-hidden p-1 bg-white">
-                                  <img
-                                    src={parsed.image_url}
-                                    alt="Question attachment"
-                                    className="w-full h-auto max-h-[140px] object-contain rounded"
-                                  />
-                                </div>
-                              )}
-
-                              {parsed?.options && parsed.options.length > 0 && (
-                                <div className="text-[11px] space-y-1 pl-1 text-slate-600 font-medium pt-1 border-t border-slate-100">
-                                  <p className="font-extrabold text-[9px] text-slate-400 uppercase">Options:</p>
-                                  {parsed.options.map((opt: string, oIdx: number) => (
-                                    <div key={oIdx} className="flex gap-1.5 items-center">
-                                      <span className="w-1.5 h-1.5 rounded-full bg-slate-300 shrink-0" />
-                                      <span><Latex text={opt} /></span>
-                                      {opt === q.correct_answer && (
-                                        <span className="text-[9px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-1 py-0.2 rounded font-extrabold uppercase ml-2">
-                                          Correct
-                                        </span>
-                                      )}
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-
-                              {!parsed?.options && q.correct_answer && (
-                                <div className="text-[11px] text-slate-500 pt-1 border-t border-slate-100">
-                                  <span className="font-bold text-slate-400">Answer:</span> <strong className="text-slate-700">{q.correct_answer}</strong>
-                                </div>
-                              )}
-                            </div>
-
-                            {/* Question comment area */}
-                            <textarea
-                              value={questionComments[activeSplitApproval.workflow_id]?.[q.question_id] || ""}
-                              onChange={(e) => {
-                                const currentWorkflowComments = questionComments[activeSplitApproval.workflow_id] || {};
-                                setQuestionComments({
-                                  ...questionComments,
-                                  [activeSplitApproval.workflow_id]: {
-                                    ...currentWorkflowComments,
-                                    [q.question_id]: e.target.value
-                                  }
-                                });
-                              }}
-                              placeholder={
-                                currentStatus === "Revision"
-                                  ? "Specify correction needed for this item (e.g. rewrite options, change correct key, etc.)..."
-                                  : "Item feedback (optional)..."
-                              }
-                              rows={1}
-                              className={`w-full bg-white border rounded-lg p-2 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none transition-all ${
-                                currentStatus === "Revision"
-                                  ? "border-rose-300 focus:border-rose-500"
-                                  : "border-slate-200 focus:border-amber-500"
-                              }`}
-                            />
-                          </div>
-                        );
-                      })
-                    ) : (
-                      <p className="text-xs text-slate-400 italic">No questions found for this exam.</p>
-                    )}
-                  </div>
+                  {/* Official Examination Test Paper with Question Comments */}
+                  {renderOfficialExamPaperReviewer(activeSplitApproval)}
                 </div>
 
                 {/* Questions Panel Footer / Action Bar */}

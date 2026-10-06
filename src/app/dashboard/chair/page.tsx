@@ -183,17 +183,21 @@ export default async function ChairDashboard() {
   }));
 
   // Selected Pending Approvals depending on whether Program Chair or Dept Chair
-  let formattedApprovals = isProgChair ? chair.progApprovals : chair.approvals;
-
-  // If CITD Department Chair, also fetch any Pending_Chair approvals assigned to CITD chair
-  if (!isProgChair && department.department_name === "CITD") {
-    const extraApprovals = await db.approvalWorkflow.findMany({
+  let formattedApprovals: any[] = [];
+  if (isProgChair) {
+    formattedApprovals = chair.progApprovals;
+  } else {
+    const deptFacultyIds = allFaculty.map((f) => f.faculty_id);
+    formattedApprovals = await db.approvalWorkflow.findMany({
       where: {
-        reviewed_by_chair_id: chair.chair_id,
         chair_review_status: "Pending",
         exam: {
           current_status: "Pending_Chair",
         },
+        OR: [
+          { reviewed_by_chair_id: chair.chair_id },
+          { exam: { faculty_id: { in: deptFacultyIds } } },
+        ],
       },
       include: {
         exam: {
@@ -205,12 +209,6 @@ export default async function ChairDashboard() {
         },
       },
     });
-    const seenWorkflows = new Set(formattedApprovals.map((a) => a.workflow_id));
-    for (const exApp of extraApprovals) {
-      if (!seenWorkflows.has(exApp.workflow_id)) {
-        formattedApprovals.push(exApp as any);
-      }
-    }
   }
 
   // Ensure chair user has an underlying faculty record for exam creation
@@ -228,24 +226,96 @@ export default async function ChairDashboard() {
   // Extract all department exams
   const departmentExams = allFaculty.flatMap(f => f.examinations);
 
-  // Fetch examinations authored by this chair
-  const chairExaminations = await db.examination.findMany({
+  // Fetch Chair's own faculty profile for faculty dashboard functions
+  let chairFacultyRecord = await db.faculty.findUnique({
     where: { faculty_id: dbUser.user_id },
     include: {
-      course: true,
-      questionBank: true,
-      examTargets: true,
-      approvalWorkflow: true,
-      _count: {
-        select: { questionBank: true },
+      department: true,
+      examinations: {
+        include: {
+          course: true,
+          approvalWorkflow: true,
+          questionBank: true,
+          examTargets: true,
+        },
+        orderBy: { exam_id: "desc" },
+      },
+      facultyPortfolios: {
+        orderBy: { academic_year: "desc" },
+      },
+      facultyCourses: {
+        include: { course: true },
       },
     },
-    orderBy: { exam_id: "desc" },
   });
 
-  // Fetch academic programs for scheduling modal
+  if (!chairFacultyRecord) {
+    await db.faculty.upsert({
+      where: { faculty_id: dbUser.user_id },
+      update: {
+        department_id: department.department_id,
+      },
+      create: {
+        faculty_id: dbUser.user_id,
+        first_name: dbUser.username || (isProgChair ? "Program" : "Department"),
+        last_name: "Chairperson",
+        department_id: department.department_id,
+      },
+    });
+
+    chairFacultyRecord = await db.faculty.findUnique({
+      where: { faculty_id: dbUser.user_id },
+      include: {
+        department: true,
+        examinations: {
+          include: {
+            course: true,
+            approvalWorkflow: true,
+            questionBank: true,
+            examTargets: true,
+          },
+          orderBy: { exam_id: "desc" },
+        },
+        facultyPortfolios: {
+          orderBy: { academic_year: "desc" },
+        },
+        facultyCourses: {
+          include: { course: true },
+        },
+      },
+    });
+  }
+
+  const sanitizedChairFaculty = chairFacultyRecord ? {
+    ...chairFacultyRecord,
+    facultyPortfolios: chairFacultyRecord.facultyPortfolios.map(p => ({
+      ...p,
+      compliance_percentage: p.compliance_percentage.toString(),
+    })),
+  } : null;
+
+  const chairExaminations = chairFacultyRecord?.examinations || [];
+
+  // Fetch academic programs for student roster enrollment & scheduling
   const programs = await db.academicProgram.findMany({
+    include: { department: true },
     orderBy: { program_code: "asc" },
+  });
+
+  // Fetch student exam attempts for grading & submissions tab
+  const studentExams = await db.studentExam.findMany({
+    include: {
+      student: {
+        include: { user: true, program: true },
+      },
+      exam: {
+        include: { course: true },
+      },
+      studentAnswers: {
+        include: { question: true },
+      },
+    },
+    orderBy: { started_at: "desc" },
   });
 
   // Ensure all curriculum subjects exist in database
@@ -254,16 +324,9 @@ export default async function ChairDashboard() {
   // Fetch courses for assignment using cached query
   const courses = await getCoursesCached();
 
-  // Fetch assigned courses for this chair
-  const chairAssignedCourseRecords = await db.facultyCourse.findMany({
-    where: { faculty_id: dbUser.user_id },
-    include: { course: true },
-    orderBy: { course: { course_code: "asc" } },
-  });
-
-  let chairAssignedCourses = chairAssignedCourseRecords.map((fc) => fc.course);
-  if (chairAssignedCourses.length === 0) {
-    chairAssignedCourses = filterCoursesForDepartment(courses, department.department_id);
+  let assignedCourses = chairFacultyRecord?.facultyCourses.map(fc => fc.course) || [];
+  if (assignedCourses.length === 0) {
+    assignedCourses = filterCoursesForDepartment(courses, department.department_id);
   }
 
   return (
@@ -305,7 +368,7 @@ export default async function ChairDashboard() {
               Welcome back, {chairTitle}!
             </h1>
             <p className="text-amber-100 max-w-xl text-sm leading-relaxed">
-              Verify drafted syllabi, evaluate examination formats and Table of Specifications (TOS), draft and manage examinations, and oversee academic compliance.
+              Verify drafted syllabi, evaluate examination formats and Table of Specifications (TOS), draft and manage examinations, oversee academic compliance, and manage your teaching load.
             </p>
           </div>
         </div>
@@ -323,8 +386,14 @@ export default async function ChairDashboard() {
           departmentExams={departmentExams as any}
           chairExaminations={chairExaminations as any}
           programs={programs as any}
-          assignedCourses={chairAssignedCourses as any}
+          assignedCourses={assignedCourses as any}
           courses={courses}
+          faculty={sanitizedChairFaculty as any}
+          institutionalId={institutionalId}
+          hasSeenCourseAssignment={chairFacultyRecord?.has_seen_course_assignment || false}
+          requirePasswordUpdate={dbUser.require_password_update || false}
+          username={dbUser.username || undefined}
+          studentExams={studentExams as any}
         />
       </main>
 

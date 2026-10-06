@@ -175,7 +175,7 @@ model Examination {
   course             Course           @relation(fields: [course_id], references: [course_id])
   faculty_id         Int
   faculty            Faculty          @relation(fields: [faculty_id], references: [faculty_id])
-  tos_file_path      String           @db.VarChar(255)
+  tos_file_path      String           @db.Text
   time_limit_minutes Int
   randomize_items    Boolean          @default(true)
   current_status     ExamStatus
@@ -194,8 +194,23 @@ model Examination {
   approvalWorkflow   ApprovalWorkflow?
   studentExams       StudentExam[]
   studentOverrides   StudentOverride[]
+  tableOfSpecifications TableOfSpecifications?
 
   @@map("EXAMINATIONS")
+}
+
+model TableOfSpecifications {
+  tos_id                 Int         @id @default(autoincrement())
+  exam_id                Int         @unique
+  exam                   Examination @relation(fields: [exam_id], references: [exam_id], onDelete: Cascade)
+  target_total_items     Int         @default(50)
+  topic_plans_json       String      @db.Text
+  learning_outcomes_json String?     @db.Text
+  tos_file_url           String?     @db.Text
+  created_at             DateTime    @default(now()) @db.Timestamp
+  updated_at             DateTime    @updatedAt @db.Timestamp
+
+  @@map("TABLE_OF_SPECIFICATIONS")
 }
 
 enum ExamStatus {
@@ -345,7 +360,7 @@ model AuditLog {
 log_id           BigInt   @id @default(autoincrement())
 user_id          Int
 user             User     @relation(fields: [user_id], references: [user_id])
-action_performed String   @db.VarChar(255)
+action_performed String   @db.Text
 ip_address       String   @db.VarChar(45)
 timestamp        DateTime @default(now()) @db.Timestamp
 
