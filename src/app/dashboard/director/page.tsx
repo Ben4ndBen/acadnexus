@@ -137,6 +137,10 @@ export default async function DirectorDashboard() {
   const { getActiveAcademicPeriod } = await import("@/app/actions/director");
   const academicPeriod = await getActiveAcademicPeriod();
 
+  // Ensure all department chairs and program chairs exist and have faculty records
+  const { ensureChairsAndDepartmentsExist } = await import("@/lib/chairServer");
+  await ensureChairsAndDepartmentsExist();
+
   // Ensure all curriculum subjects exist in database
   await ensureBsitCoursesExist();
 
@@ -151,6 +155,7 @@ export default async function DirectorDashboard() {
           institutional_id: true,
           username: true,
           is_active: true,
+          role: true,
         },
       },
       department: true,
@@ -237,7 +242,9 @@ export default async function DirectorDashboard() {
           }}
           pendingApprovals={pendingApprovals as any}
           departmentsData={departmentsData as any}
-          departmentsList={rawDepartments.map(d => ({ department_id: d.department_id, department_name: d.department_name }))}
+          departmentsList={rawDepartments
+            .filter((d) => d.department_name !== "ICT Department" && d.department_name !== "IT Department" && d.department_name !== "ICT" && d.department_name !== "ITD")
+            .map(d => ({ department_id: d.department_id, department_name: d.department_name }))}
           auditLogs={serializedLogs as any}
           allExaminations={allExaminations as any}
           globalHoldActive={globalHoldActive}

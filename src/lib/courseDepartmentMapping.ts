@@ -10,17 +10,23 @@ export interface DepartmentProgramInfo {
 }
 
 export const DEPARTMENT_PROGRAMS_MAP: Record<string, DepartmentProgramInfo[]> = {
-  ICT: [
+  CITD: [
     { code: "BSInfoTech", name: "Bachelor of Science in Information Technology" },
-  ],
-  ITD: [
     { 
       code: "BSIT", 
       name: "Bachelor of Science in Industrial Technology",
       majors: ["ARCHITECTURE TECHNOLOGY", "AUTOMOTIVE TECHNOLOGY", "ELECTRONICS TECHNOLOGY"] 
     },
   ],
-  CITD: [
+  ICT: [
+    { code: "BSInfoTech", name: "Bachelor of Science in Information Technology" },
+    { 
+      code: "BSIT", 
+      name: "Bachelor of Science in Industrial Technology",
+      majors: ["ARCHITECTURE TECHNOLOGY", "AUTOMOTIVE TECHNOLOGY", "ELECTRONICS TECHNOLOGY"] 
+    },
+  ],
+  ITD: [
     { code: "BSInfoTech", name: "Bachelor of Science in Information Technology" },
     { 
       code: "BSIT", 
@@ -67,8 +73,7 @@ export type DeptKey = "ICT" | "ITD" | "CITD" | "AGRI" | "HTM" | "TED" | "ALL";
  */
 export function getDepartmentKeyForProgram(programCode: string): DeptKey {
   const code = (programCode || "").trim().toUpperCase();
-  if (code === "BSINFOTECH") return "ICT";
-  if (code === "BSIT") return "ITD";
+  if (code === "BSINFOTECH" || code === "BSIT") return "CITD";
   if (code === "BEED" || code === "BSED") return "TED";
   if (code === "BSA") return "AGRI";
   if (code === "BSHM" || code === "BSTM") return "HTM";
@@ -85,9 +90,20 @@ export function resolveDepartmentKey(departmentIdOrName?: number | string | null
 
   const str = `${departmentIdOrName || ""} ${departmentName || ""}`.trim().toLowerCase();
 
-  if (str.includes("citd") || str.includes("college of information")) return "CITD";
-  if (str.includes("ict") || str.includes("bsinfotech") || (str.includes("information technology") && !str.includes("industrial"))) return "ICT";
-  if (str.includes("industrial") || str.includes("bsit") || str.includes("indtech") || (str.includes("it department") && !str.includes("ict")) || (/\b(itd|it)\b/.test(str) && !str.includes("citd") && !str.includes("ict"))) return "ITD";
+  if (
+    str.includes("citd") ||
+    str.includes("computing") ||
+    str.includes("ict") ||
+    str.includes("information technology") ||
+    str.includes("industrial") ||
+    str.includes("bsinfotech") ||
+    str.includes("bsit") ||
+    str.includes("itd") ||
+    str.includes("indtech")
+  ) {
+    return "CITD";
+  }
+
   if (str.includes("hospitality") || str.includes("tourism") || str.includes("htm")) return "HTM";
   if (str.includes("agriculture") || str.includes("agri")) return "AGRI";
   if (str.includes("teacher") || str.includes("education") || str.includes("ted")) return "TED";
@@ -95,9 +111,7 @@ export function resolveDepartmentKey(departmentIdOrName?: number | string | null
   // Numeric ID checks matching database autoincrement IDs
   const numId = Number(departmentIdOrName);
   if (!isNaN(numId) && numId > 0) {
-    if (numId === 1) return "CITD";
-    if (numId === 2) return "ICT";
-    if (numId === 3) return "ITD";
+    if (numId === 1 || numId === 2 || numId === 3) return "CITD";
     if (numId === 4) return "TED";
     if (numId === 5) return "AGRI";
     if (numId === 6) return "HTM";

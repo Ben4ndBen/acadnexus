@@ -49,12 +49,6 @@ async function main() {
   const citdDept = await prisma.department.create({
     data: { department_name: "CITD" },
   });
-  const ictDept = await prisma.department.create({
-    data: { department_name: "ICT Department" },
-  });
-  const itdDept = await prisma.department.create({
-    data: { department_name: "IT Department" },
-  });
   const tedDept = await prisma.department.create({
     data: { department_name: "Teacher Education Department" },
   });
@@ -71,14 +65,14 @@ async function main() {
     data: {
       program_code: "BSInfoTech",
       program_name: "Bachelor of Science in Information Technology",
-      department_id: ictDept.department_id,
+      department_id: citdDept.department_id,
     },
   });
   const bsitProg = await prisma.academicProgram.create({
     data: {
       program_code: "BSIT",
       program_name: "Bachelor of Science in Industrial Technology",
-      department_id: itdDept.department_id,
+      department_id: citdDept.department_id,
     },
   });
   const beedProg = await prisma.academicProgram.create({
@@ -150,38 +144,12 @@ async function main() {
       is_program_chair: false,
     },
   });
-
-  // ICT Department Chair
-  const ictChairUser = await prisma.user.create({
+  await prisma.faculty.create({
     data: {
-      institutional_id: "CHAIR-ICT",
-      username: "chair_ict",
-      password_hash: passwordHash,
-      role: "Chair",
-    },
-  });
-  await prisma.chair.create({
-    data: {
-      chair_id: ictChairUser.user_id,
-      department_id: ictDept.department_id,
-      is_program_chair: false,
-    },
-  });
-
-  // ITD Department Chair
-  const itdChairUser = await prisma.user.create({
-    data: {
-      institutional_id: "CHAIR-ITD",
-      username: "chair_itd",
-      password_hash: passwordHash,
-      role: "Chair",
-    },
-  });
-  await prisma.chair.create({
-    data: {
-      chair_id: itdChairUser.user_id,
-      department_id: itdDept.department_id,
-      is_program_chair: false,
+      faculty_id: citdChairUser.user_id,
+      first_name: "CITD",
+      last_name: "Department Chairperson",
+      department_id: citdDept.department_id,
     },
   });
 
@@ -201,6 +169,14 @@ async function main() {
       is_program_chair: false,
     },
   });
+  await prisma.faculty.create({
+    data: {
+      faculty_id: tedChairUser.user_id,
+      first_name: "TED",
+      last_name: "Department Chairperson",
+      department_id: tedDept.department_id,
+    },
+  });
 
   // Agriculture Department Chair
   const agriChairUser = await prisma.user.create({
@@ -216,6 +192,14 @@ async function main() {
       chair_id: agriChairUser.user_id,
       department_id: agriDept.department_id,
       is_program_chair: false,
+    },
+  });
+  await prisma.faculty.create({
+    data: {
+      faculty_id: agriChairUser.user_id,
+      first_name: "Agri",
+      last_name: "Department Chairperson",
+      department_id: agriDept.department_id,
     },
   });
 
@@ -235,10 +219,18 @@ async function main() {
       is_program_chair: false,
     },
   });
+  await prisma.faculty.create({
+    data: {
+      faculty_id: htmChairUser.user_id,
+      first_name: "HTM",
+      last_name: "Department Chairperson",
+      department_id: htmDept.department_id,
+    },
+  });
 
   // C. Program Chairpersons
   console.log("Seeding Program Chairpersons...");
-  // BSInfoTech Program Chair (ICT Department)
+  // BSInfoTech Program Chair (CITD Department)
   const ictProgChairUser = await prisma.user.create({
     data: {
       institutional_id: "PC-ICT",
@@ -250,13 +242,21 @@ async function main() {
   const ictProgChair = await prisma.chair.create({
     data: {
       chair_id: ictProgChairUser.user_id,
-      department_id: ictDept.department_id,
+      department_id: citdDept.department_id,
       program_id: bsinfotechProg.program_id,
       is_program_chair: true,
     },
   });
+  await prisma.faculty.create({
+    data: {
+      faculty_id: ictProgChairUser.user_id,
+      first_name: "BSInfoTech",
+      last_name: "Program Chairperson",
+      department_id: citdDept.department_id,
+    },
+  });
 
-  // BSIT Program Chair (IT Department / Industrial Tech)
+  // BSIT Program Chair (CITD Department)
   const itdProgChairUser = await prisma.user.create({
     data: {
       institutional_id: "PC-ITD",
@@ -268,9 +268,17 @@ async function main() {
   const itdProgChair = await prisma.chair.create({
     data: {
       chair_id: itdProgChairUser.user_id,
-      department_id: itdDept.department_id,
+      department_id: citdDept.department_id,
       program_id: bsitProg.program_id,
       is_program_chair: true,
+    },
+  });
+  await prisma.faculty.create({
+    data: {
+      faculty_id: itdProgChairUser.user_id,
+      first_name: "BSIT",
+      last_name: "Program Chairperson",
+      department_id: citdDept.department_id,
     },
   });
 
@@ -291,6 +299,14 @@ async function main() {
       is_program_chair: true,
     },
   });
+  await prisma.faculty.create({
+    data: {
+      faculty_id: beedProgChairUser.user_id,
+      first_name: "BEED",
+      last_name: "Program Chairperson",
+      department_id: tedDept.department_id,
+    },
+  });
 
   // BSED Program Chair (Teacher Education)
   const bsedProgChairUser = await prisma.user.create({
@@ -309,6 +325,14 @@ async function main() {
       is_program_chair: true,
     },
   });
+  await prisma.faculty.create({
+    data: {
+      faculty_id: bsedProgChairUser.user_id,
+      first_name: "BSED",
+      last_name: "Program Chairperson",
+      department_id: tedDept.department_id,
+    },
+  });
 
   // D. Faculty Members
   console.log("Seeding Faculty...");
@@ -325,7 +349,7 @@ async function main() {
       faculty_id: ictFacultyUser.user_id,
       first_name: "Mark",
       last_name: "Abad",
-      department_id: ictDept.department_id,
+      department_id: citdDept.department_id,
     },
   });
 
@@ -376,7 +400,7 @@ async function main() {
       faculty_id: itdFacultyUser.user_id,
       first_name: "Elena",
       last_name: "Cruz",
-      department_id: itdDept.department_id,
+      department_id: citdDept.department_id,
     },
   });
 

@@ -188,6 +188,25 @@ export async function updateExamStatus(examId: number, status: ExamStatus, userI
 
 export async function createExamDraft(facultyId: number, courseId?: number) {
   try {
+    // Ensure faculty record exists in DB for facultyId (especially for Program/Department Chair accounts)
+    let facultyRecord = await db.faculty.findUnique({
+      where: { faculty_id: facultyId },
+      select: { faculty_id: true, department_id: true },
+    });
+
+    if (!facultyRecord) {
+      const user = await db.user.findUnique({ where: { user_id: facultyId } });
+      const defaultDept = await db.department.findFirst({ select: { department_id: true } });
+      facultyRecord = await db.faculty.create({
+        data: {
+          faculty_id: facultyId,
+          first_name: user?.username || "Chair",
+          last_name: "Faculty",
+          department_id: defaultDept?.department_id || 1,
+        },
+        select: { faculty_id: true, department_id: true },
+      });
+    }
     // If courseId is not provided, check faculty's assigned courses first
     let targetCourseId = courseId;
     if (!targetCourseId) {
@@ -198,7 +217,15 @@ export async function createExamDraft(facultyId: number, courseId?: number) {
       if (assignedFc) {
         targetCourseId = assignedFc.course_id;
       } else {
-        return { error: "No teaching subjects assigned to your account yet by the Campus Director. Please contact your Campus Director to assign your teaching load." };
+        let fallbackCourse = await db.course.findFirst({
+          select: { course_id: true },
+        });
+
+        if (fallbackCourse) {
+          targetCourseId = fallbackCourse.course_id;
+        } else {
+          return { error: "No curriculum subjects found in the database. Please contact your Campus Director or Administrator." };
+        }
       }
     }
 

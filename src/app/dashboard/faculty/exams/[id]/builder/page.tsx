@@ -34,7 +34,8 @@ export default async function ExamBuilderPage({ params }: PageProps) {
   const role = user.user_metadata?.role;
   const institutionalId = user.user_metadata?.institutional_id;
 
-  if (role !== "Faculty") {
+  const allowedRoles = ["Faculty", "Chair", "ProgramChair", "Program Chair", "Department Chair"];
+  if (!role || !allowedRoles.includes(role)) {
     redirect("/");
   }
 
@@ -50,9 +51,18 @@ export default async function ExamBuilderPage({ params }: PageProps) {
     },
   });
 
-  const faculty = dbUser?.faculty;
+  let faculty = dbUser?.faculty;
+  if (!faculty && dbUser?.user_id) {
+    faculty = (await db.faculty.findUnique({
+      where: { faculty_id: dbUser.user_id },
+      include: { department: true },
+    })) as any;
+  }
+
+  const redirectPath = role === "Faculty" ? "/dashboard/faculty" : "/dashboard/chair";
+
   if (!faculty) {
-    redirect("/dashboard/faculty");
+    redirect(redirectPath);
   }
 
   // Fetch examination with course, question bank, and targets
@@ -72,12 +82,12 @@ export default async function ExamBuilderPage({ params }: PageProps) {
 
   // Verify examination exists and belongs to this faculty
   if (!exam || exam.faculty_id !== faculty.faculty_id) {
-    redirect("/dashboard/faculty");
+    redirect(redirectPath);
   }
 
   // Verify status is editable (Draft or Returned)
   if (exam.current_status !== "Draft" && exam.current_status !== "Returned") {
-    redirect("/dashboard/faculty");
+    redirect(redirectPath);
   }
 
   // Fetch all courses for fallback using cached query
@@ -91,6 +101,9 @@ export default async function ExamBuilderPage({ params }: PageProps) {
   });
 
   let assignedSubjects: typeof courses = facultyAssignedCourseRecords.map((fc) => fc.course);
+  if (assignedSubjects.length === 0) {
+    assignedSubjects = courses;
+  }
 
   // Preserve current exam course if already initialized so existing draft doesn't break
   if (exam.course && !assignedSubjects.some((c) => c.course_id === exam.course_id)) {
@@ -144,7 +157,7 @@ export default async function ExamBuilderPage({ params }: PageProps) {
               </p>
               <p className="text-xs text-slate-500">{institutionalId}</p>
             </div>
-            <NotificationBell userId={dbUser.user_id} />
+            <NotificationBell userId={dbUser?.user_id || faculty.faculty_id} />
             <LogoutButton />
           </div>
         </div>

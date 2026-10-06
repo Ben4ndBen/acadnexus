@@ -851,18 +851,18 @@ export function FacultyDashboardClient({
   };
 
   const handleCreateExam = async () => {
-    if (courses.length === 0 || assignedCourses.length === 0) {
+    if (courses.length === 0 && assignedCourses.length === 0) {
       setUnassignedActionText("creating new examination drafts");
       setUnassignedWarningModalOpen(true);
       return;
     }
     setIsCreatingExam(true);
-    const res = await createExamDraft(faculty.faculty_id);
+    const defaultCourseId = assignedCourses[0]?.course_id || courses[0]?.course_id;
+    const res = await createExamDraft(faculty.faculty_id, defaultCourseId);
     setIsCreatingExam(false);
     
     if (res.error) {
-      setUnassignedActionText("creating new examination drafts");
-      setUnassignedWarningModalOpen(true);
+      alert(res.error);
     } else if (res.exam_id) {
       router.push(`/dashboard/faculty/exams/${res.exam_id}/builder`);
     }

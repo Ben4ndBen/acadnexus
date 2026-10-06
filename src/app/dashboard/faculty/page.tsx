@@ -24,7 +24,9 @@ export default async function FacultyDashboard() {
   const role = user.user_metadata?.role;
   const institutionalId = user.user_metadata?.institutional_id;
 
-  if (role !== "Faculty") {
+  if (role === "Chair" || role === "ProgramChair" || role === "Program Chair" || role === "Department Chair") {
+    redirect("/dashboard/chair");
+  } else if (role !== "Faculty") {
     redirect("/");
   }
 

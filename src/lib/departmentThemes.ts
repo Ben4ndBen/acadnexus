@@ -1,4 +1,4 @@
-export type DepartmentKey = "htm" | "agri" | "itd" | "ted" | "ict" | "indtech" | "it";
+export type DepartmentKey = "htm" | "agri" | "itd" | "ted" | "ict" | "indtech" | "it" | "citd";
 
 export interface DepartmentTheme {
   key: DepartmentKey;
@@ -28,6 +28,32 @@ export interface DepartmentTheme {
 }
 
 export const DEPARTMENT_THEMES: Record<string, DepartmentTheme> = {
+  citd: {
+    key: "citd",
+    shortName: "CITD",
+    fullName: "Computing and Industrial Technology Department (CITD)",
+    themeLabel: "Black and White",
+    colors: {
+      primary: "#18181B",
+      primaryDark: "#000000",
+      accent: "#E4E4E7",
+      bgLight: "#FAFAFA",
+      bgWhite: "#FFFFFF",
+      textDark: "#09090B",
+      badgeBg: "bg-zinc-900",
+      badgeText: "text-white font-bold",
+      badgeBorder: "border-zinc-800",
+      headerGradient: "from-zinc-900 via-black to-zinc-800",
+      headerBg: "bg-zinc-900",
+      headerText: "text-white font-bold",
+      bannerGradient: "from-zinc-900 via-black to-zinc-800",
+      bannerText: "text-white font-bold",
+      cardHeaderBg: "bg-zinc-100 border-zinc-300",
+      activeTabBg: "bg-zinc-200 border-zinc-900 text-zinc-950 font-bold shadow-sm",
+      borderAccent: "border-zinc-900",
+      ringColor: "focus:ring-zinc-900",
+    },
+  },
   htm: {
     key: "htm",
     shortName: "HTM",
@@ -161,15 +187,31 @@ export const DEPARTMENT_THEMES: Record<string, DepartmentTheme> = {
 };
 
 // Aliases for backwards compatibility
-DEPARTMENT_THEMES.indtech = DEPARTMENT_THEMES.itd;
-DEPARTMENT_THEMES.it = DEPARTMENT_THEMES.itd;
+DEPARTMENT_THEMES.indtech = DEPARTMENT_THEMES.citd;
+DEPARTMENT_THEMES.itd = DEPARTMENT_THEMES.citd;
+DEPARTMENT_THEMES.ict = DEPARTMENT_THEMES.citd;
+DEPARTMENT_THEMES.it = DEPARTMENT_THEMES.citd;
 
 /**
  * Resolves department key from any identifier (department name, code, chair ID, program code).
  */
 export function getDepartmentKey(identifier?: string | null): DepartmentKey {
-  if (!identifier) return "ict";
+  if (!identifier) return "citd";
   const str = identifier.trim().toLowerCase();
+
+  if (
+    str.includes("citd") ||
+    str.includes("computing") ||
+    str.includes("ict") ||
+    str.includes("information technology") ||
+    str.includes("industrial") ||
+    str.includes("bsinfotech") ||
+    str.includes("bsit") ||
+    str.includes("itd") ||
+    str.includes("indtech")
+  ) {
+    return "citd";
+  }
 
   if (
     str.includes("htm") ||
@@ -199,39 +241,7 @@ export function getDepartmentKey(identifier?: string | null): DepartmentKey {
     return "ted";
   }
 
-  if (
-    str.includes("ict") ||
-    str.includes("bsinfotech") ||
-    str.includes("information technology") ||
-    str === "chair_ict" ||
-    str === "chair-ict" ||
-    str === "faculty_ict" ||
-    str === "faculty-ict" ||
-    str === "faculty_it" ||
-    str === "faculty-001"
-  ) {
-    return "ict";
-  }
-
-  if (
-    str.includes("industrial") ||
-    str.includes("itd") ||
-    str.includes("indtech") ||
-    str.includes("bsindtech") ||
-    str === "bsit" ||
-    str.includes("it department") ||
-    str.includes("itd department") ||
-    str === "chair_indtech" ||
-    str === "chair_itd" ||
-    str === "chair-itd" ||
-    str === "faculty-indtech" ||
-    str === "faculty_itd" ||
-    str === "faculty-itd"
-  ) {
-    return "itd";
-  }
-
-  return "ict";
+  return "citd";
 }
 
 /**
@@ -239,16 +249,15 @@ export function getDepartmentKey(identifier?: string | null): DepartmentKey {
  */
 export function getDepartmentTheme(identifier?: string | null): DepartmentTheme {
   const key = getDepartmentKey(identifier);
-  return DEPARTMENT_THEMES[key] || DEPARTMENT_THEMES.ict;
+  return DEPARTMENT_THEMES[key] || DEPARTMENT_THEMES.citd;
 }
 
 /**
  * List of all department portal themes.
  */
 export const ALL_DEPARTMENT_THEMES = [
-  DEPARTMENT_THEMES.htm,
-  DEPARTMENT_THEMES.agri,
-  DEPARTMENT_THEMES.itd,
+  DEPARTMENT_THEMES.citd,
   DEPARTMENT_THEMES.ted,
-  DEPARTMENT_THEMES.ict,
+  DEPARTMENT_THEMES.agri,
+  DEPARTMENT_THEMES.htm,
 ];

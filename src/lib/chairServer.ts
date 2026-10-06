@@ -24,8 +24,6 @@ export async function ensureChairsAndDepartmentsExist(force = false) {
     // 1. Ensure basic Departments exist
     const deptsToEnsure = [
       { name: "CITD" },
-      { name: "ICT Department" },
-      { name: "IT Department" },
       { name: "Teacher Education Department" },
       { name: "Agriculture Department" },
       { name: "Hospitality and Tourism Management Department" },
@@ -46,8 +44,8 @@ export async function ensureChairsAndDepartmentsExist(force = false) {
 
     // 2. Ensure Academic Programs exist and map to correct departments
     const programsToEnsure = [
-      { code: "BSInfoTech", name: "Bachelor of Science in Information Technology", deptName: "ICT Department" },
-      { code: "BSIT", name: "Bachelor of Science in Industrial Technology", deptName: "IT Department" },
+      { code: "BSInfoTech", name: "Bachelor of Science in Information Technology", deptName: "CITD" },
+      { code: "BSIT", name: "Bachelor of Science in Industrial Technology", deptName: "CITD" },
       { code: "BEED", name: "Bachelor of Elementary Education", deptName: "Teacher Education Department" },
       { code: "BSED", name: "Bachelor of Secondary Education", deptName: "Teacher Education Department" },
       { code: "BSA", name: "Bachelor of Science in Agriculture", deptName: "Agriculture Department" },
@@ -89,31 +87,29 @@ export async function ensureChairsAndDepartmentsExist(force = false) {
         institutionalId: "CHAIR-CITD",
         username: "chair_citd",
         deptName: "CITD",
-      },
-      {
-        institutionalId: "CHAIR-ICT",
-        username: "chair_ict",
-        deptName: "ICT Department",
-      },
-      {
-        institutionalId: "CHAIR-ITD",
-        username: "chair_itd",
-        deptName: "IT Department",
+        firstName: "CITD",
+        lastName: "Department Chairperson",
       },
       {
         institutionalId: "CHAIR-TED",
         username: "chair_ted",
         deptName: "Teacher Education Department",
+        firstName: "TED",
+        lastName: "Department Chairperson",
       },
       {
         institutionalId: "CHAIR-AGRI",
         username: "chair_agri",
         deptName: "Agriculture Department",
+        firstName: "Agri",
+        lastName: "Department Chairperson",
       },
       {
         institutionalId: "CHAIR-HTM",
         username: "chair_htm",
         deptName: "Hospitality and Tourism Management Department",
+        firstName: "HTM",
+        lastName: "Department Chairperson",
       },
     ];
 
@@ -122,15 +118,19 @@ export async function ensureChairsAndDepartmentsExist(force = false) {
         institutionalId: "PC-ICT",
         username: "progchair_ict",
         role: "ProgramChair" as const,
-        deptName: "ICT Department",
+        deptName: "CITD",
         programCode: "BSInfoTech",
+        firstName: "BSInfoTech",
+        lastName: "Program Chairperson",
       },
       {
         institutionalId: "PC-ITD",
         username: "progchair_itd",
         role: "ProgramChair" as const,
-        deptName: "IT Department",
+        deptName: "CITD",
         programCode: "BSIT",
+        firstName: "BSIT",
+        lastName: "Program Chairperson",
       },
       {
         institutionalId: "PC-BEED",
@@ -138,6 +138,8 @@ export async function ensureChairsAndDepartmentsExist(force = false) {
         role: "ProgramChair" as const,
         deptName: "Teacher Education Department",
         programCode: "BEED",
+        firstName: "BEED",
+        lastName: "Program Chairperson",
       },
       {
         institutionalId: "PC-BSED",
@@ -145,6 +147,8 @@ export async function ensureChairsAndDepartmentsExist(force = false) {
         role: "ProgramChair" as const,
         deptName: "Teacher Education Department",
         programCode: "BSED",
+        firstName: "BSED",
+        lastName: "Program Chairperson",
       },
     ];
 
@@ -228,6 +232,20 @@ export async function ensureChairsAndDepartmentsExist(force = false) {
           is_program_chair: true,
         },
       });
+
+      // Ensure Program Chair also has a Faculty record so DI can assign subjects to them
+      await db.faculty.upsert({
+        where: { faculty_id: user.user_id },
+        update: {
+          department_id: deptId,
+        },
+        create: {
+          faculty_id: user.user_id,
+          first_name: pc.firstName,
+          last_name: pc.lastName,
+          department_id: deptId,
+        },
+      });
     }
 
     // 5. Create / Update Department Chairs
@@ -276,12 +294,26 @@ export async function ensureChairsAndDepartmentsExist(force = false) {
           is_program_chair: false,
         },
       });
+
+      // Ensure Department Chair also has a Faculty record so DI can assign subjects to them
+      await db.faculty.upsert({
+        where: { faculty_id: user.user_id },
+        update: {
+          department_id: deptId,
+        },
+        create: {
+          faculty_id: user.user_id,
+          first_name: dc.firstName,
+          last_name: dc.lastName,
+          department_id: deptId,
+        },
+      });
     }
 
-    // 5. Ensure sample Faculty exist for each department
+    // 6. Ensure sample Faculty exist for each department
     const sampleFaculty = [
-      { facultyId: "FACULTY-ICT", firstName: "Mark", lastName: "Abad", deptName: "ICT Department" },
-      { facultyId: "FACULTY-ITD", firstName: "Elena", lastName: "Cruz", deptName: "IT Department" },
+      { facultyId: "FACULTY-ICT", firstName: "Mark", lastName: "Abad", deptName: "CITD" },
+      { facultyId: "FACULTY-ITD", firstName: "Elena", lastName: "Cruz", deptName: "CITD" },
       { facultyId: "FACULTY-TED", firstName: "Joseph", lastName: "Garcia", deptName: "Teacher Education Department" },
       { facultyId: "FACULTY-AGRI", firstName: "Maria", lastName: "Santos", deptName: "Agriculture Department" },
       { facultyId: "FACULTY-HTM", firstName: "Carlos", lastName: "Reyes", deptName: "Hospitality and Tourism Management Department" },
@@ -316,6 +348,11 @@ export async function ensureChairsAndDepartmentsExist(force = false) {
             last_name: f.lastName,
             department_id: deptId,
           },
+        });
+      } else if (fRecord.department_id !== deptId) {
+        await db.faculty.update({
+          where: { faculty_id: fUser.user_id },
+          data: { department_id: deptId },
         });
       }
     }

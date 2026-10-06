@@ -6,10 +6,10 @@ import {
   Activity, Users, ClipboardCheck, CheckCircle, 
   XCircle, Send, AlertCircle, RefreshCw, FileText, Check, X,
   Columns, ExternalLink, Download, Loader2, Eye, EyeOff,
-  Tag, Layers, BookOpen, Search
+  Tag, Layers, BookOpen, Search, Plus
 } from "lucide-react";
 import { reviewExamByChair } from "@/app/actions/chair";
-import { assignCoursesToFacultyAction } from "@/app/actions/faculty";
+import { assignCoursesToFacultyAction, createExamDraft } from "@/app/actions/faculty";
 import { Latex } from "@/app/components/Latex";
 import { getDepartmentTheme } from "@/lib/departmentThemes";
 import { DepartmentBadge } from "@/app/components/DepartmentBadge";
@@ -18,10 +18,8 @@ import {
   filterCoursesForDepartment 
 } from "@/lib/courseDepartmentMapping";
 import { getExpectedYearAndSemForCourse } from "@/lib/bsitCurriculum";
+import { FacultyDashboardClient } from "@/app/components/FacultyDashboardClient";
 import { BSCTableOfSpecificationsView } from "@/app/components/BSCTableOfSpecificationsView";
-
-// State for Register Instructor Modal inside component:
-
 
 interface ChairDashboardClientProps {
   chairUserId: number;
@@ -77,6 +75,14 @@ interface ChairDashboardClientProps {
   }>;
   departmentExams: Array<any>;
   courses?: Array<{ course_id: number; course_code: string; course_title: string }>;
+  faculty?: any;
+  institutionalId?: string;
+  programs?: Array<any>;
+  assignedCourses?: Array<any>;
+  hasSeenCourseAssignment?: boolean;
+  requirePasswordUpdate?: boolean;
+  username?: string;
+  studentExams?: any[];
 }
 
 export function ChairDashboardClient({ 
@@ -89,10 +95,18 @@ export function ChairDashboardClient({
   facultyMembers, 
   pendingApprovals,
   departmentExams,
-  courses = []
+  courses = [],
+  faculty,
+  institutionalId = "",
+  programs = [],
+  assignedCourses = [],
+  hasSeenCourseAssignment = false,
+  requirePasswordUpdate = false,
+  username,
+  studentExams = []
 }: ChairDashboardClientProps) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<"overview" | "faculty" | "queue">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "faculty" | "queue" | "my_teaching">("overview");
   const deptTheme = getDepartmentTheme(departmentName);
 
   // State for Review Queue
@@ -329,10 +343,39 @@ export function ChairDashboardClient({
     );
   };
 
+  const [isCreatingExam, setIsCreatingExam] = useState(false);
+
+  const effectiveFaculty = useMemo(() => {
+    if (faculty) return faculty;
+    return {
+      faculty_id: chairUserId,
+      first_name: chairTitle,
+      last_name: "Chairperson",
+      department_id: departmentId || 1,
+      examinations: [],
+      facultyPortfolios: [],
+      facultyCourses: [],
+      has_seen_course_assignment: true,
+    };
+  }, [faculty, chairUserId, chairTitle, departmentId]);
+
+  const handleCreateExamDirect = async () => {
+    setIsCreatingExam(true);
+    const defaultCourseId = (assignedCourses && assignedCourses.length > 0) ? assignedCourses[0].course_id : (courses && courses.length > 0 ? courses[0].course_id : undefined);
+    const res = await createExamDraft(chairUserId, defaultCourseId);
+    setIsCreatingExam(false);
+
+    if (res.error) {
+      alert(res.error);
+    } else if (res.exam_id) {
+      router.push(`/dashboard/faculty/exams/${res.exam_id}/builder`);
+    }
+  };
+
   return (
     <div className="space-y-8">
       {/* Dashboard Sub-navigation Tabs */}
-      <div className="flex flex-wrap border-b border-slate-200 bg-white p-2 rounded-2xl shadow-sm gap-2">
+      <div className="flex flex-wrap items-center border-b border-slate-200 bg-white p-2 rounded-2xl shadow-sm gap-2">
         <button
           onClick={() => setActiveTab("overview")}
           className={`flex items-center gap-2 px-4 py-2.5 text-sm font-bold rounded-xl transition-all duration-300 ${
@@ -365,10 +408,53 @@ export function ChairDashboardClient({
         >
           <ClipboardCheck className="w-4 h-4" />
           Pending Review Queue
+          {pendingApprovals.length > 0 && (
+            <span className="bg-amber-100 text-amber-900 text-xs px-2 py-0.5 rounded-full font-extrabold ml-1">
+              {pendingApprovals.length}
+            </span>
+          )}
+        </button>
+        <button
+          onClick={() => setActiveTab("my_teaching")}
+          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-bold rounded-xl transition-all duration-300 ${
+            activeTab === "my_teaching"
+              ? "bg-indigo-700 text-white shadow-md shadow-indigo-700/20"
+              : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+          }`}
+        >
+          <BookOpen className="w-4 h-4" />
+          My Teaching Portal & Exams
         </button>
 
-
+        {/* Direct Create Exam Button */}
+        <button
+          disabled={isCreatingExam}
+          onClick={handleCreateExamDirect}
+          className="ml-auto bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold px-4 py-2.5 rounded-xl shadow-md transition-all hover:scale-105 duration-300 flex items-center gap-2 disabled:opacity-50"
+        >
+          {isCreatingExam ? (
+            <RefreshCw className="w-4 h-4 animate-spin" />
+          ) : (
+            <Plus className="w-4 h-4" />
+          )}
+          Create Exam
+        </button>
       </div>
+
+      {/* MY TEACHING & EXAMS TAB */}
+      {activeTab === "my_teaching" && (
+        <FacultyDashboardClient
+          faculty={effectiveFaculty}
+          institutionalId={institutionalId || ""}
+          programs={programs}
+          courses={courses}
+          assignedCourses={assignedCourses}
+          hasSeenCourseAssignment={hasSeenCourseAssignment}
+          requirePasswordUpdate={requirePasswordUpdate}
+          username={username}
+          studentExams={studentExams}
+        />
+      )}
 
       {/* OVERVIEW TAB */}
       {activeTab === "overview" && (

@@ -215,11 +215,102 @@ export default async function ChairDashboard() {
   // Extract all department exams
   const departmentExams = allFaculty.flatMap(f => f.examinations);
 
+  // Fetch Chair's own faculty profile for faculty dashboard functions
+  let chairFacultyRecord = await db.faculty.findUnique({
+    where: { faculty_id: dbUser.user_id },
+    include: {
+      department: true,
+      examinations: {
+        include: {
+          course: true,
+          approvalWorkflow: true,
+          questionBank: true,
+          examTargets: true,
+        },
+        orderBy: { exam_id: "desc" },
+      },
+      facultyPortfolios: {
+        orderBy: { academic_year: "desc" },
+      },
+      facultyCourses: {
+        include: { course: true },
+      },
+    },
+  });
+
+  if (!chairFacultyRecord) {
+    await db.faculty.upsert({
+      where: { faculty_id: dbUser.user_id },
+      update: {
+        department_id: department.department_id,
+      },
+      create: {
+        faculty_id: dbUser.user_id,
+        first_name: dbUser.username || (isProgChair ? "Program" : "Department"),
+        last_name: "Chairperson",
+        department_id: department.department_id,
+      },
+    });
+
+    chairFacultyRecord = await db.faculty.findUnique({
+      where: { faculty_id: dbUser.user_id },
+      include: {
+        department: true,
+        examinations: {
+          include: {
+            course: true,
+            approvalWorkflow: true,
+            questionBank: true,
+            examTargets: true,
+          },
+          orderBy: { exam_id: "desc" },
+        },
+        facultyPortfolios: {
+          orderBy: { academic_year: "desc" },
+        },
+        facultyCourses: {
+          include: { course: true },
+        },
+      },
+    });
+  }
+
+  const sanitizedChairFaculty = chairFacultyRecord ? {
+    ...chairFacultyRecord,
+    facultyPortfolios: chairFacultyRecord.facultyPortfolios.map(p => ({
+      ...p,
+      compliance_percentage: p.compliance_percentage.toString(),
+    })),
+  } : null;
+
+  // Fetch academic programs for student roster enrollment
+  const programs = await db.academicProgram.findMany({
+    include: { department: true },
+  });
+
+  // Fetch student exam attempts for grading & submissions tab
+  const studentExams = await db.studentExam.findMany({
+    include: {
+      student: {
+        include: { user: true, program: true },
+      },
+      exam: {
+        include: { course: true },
+      },
+      studentAnswers: {
+        include: { question: true },
+      },
+    },
+    orderBy: { started_at: "desc" },
+  });
+
   // Ensure all curriculum subjects exist in database
   await ensureBsitCoursesExist();
 
   // Fetch courses for assignment using cached query
   const courses = await getCoursesCached();
+
+  const assignedCourses = chairFacultyRecord?.facultyCourses.map(fc => fc.course) || [];
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
@@ -260,7 +351,7 @@ export default async function ChairDashboard() {
               Welcome back, {chairTitle}!
             </h1>
             <p className="text-amber-100 max-w-xl text-sm leading-relaxed">
-              Verify drafted syllabi, evaluate examination formats and Table of Specifications (TOS), and oversee academic compliance.
+              Verify drafted syllabi, evaluate examination formats and Table of Specifications (TOS), oversee academic compliance, and manage your teaching load.
             </p>
           </div>
         </div>
@@ -277,6 +368,14 @@ export default async function ChairDashboard() {
           pendingApprovals={formattedApprovals as any}
           departmentExams={departmentExams as any}
           courses={courses}
+          faculty={sanitizedChairFaculty as any}
+          institutionalId={institutionalId}
+          programs={programs as any}
+          assignedCourses={assignedCourses as any}
+          hasSeenCourseAssignment={chairFacultyRecord?.has_seen_course_assignment || false}
+          requirePasswordUpdate={dbUser.require_password_update || false}
+          username={dbUser.username || undefined}
+          studentExams={studentExams as any}
         />
       </main>
 
