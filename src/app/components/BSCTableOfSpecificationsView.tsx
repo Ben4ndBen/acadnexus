@@ -178,7 +178,7 @@ export function BSCTableOfSpecificationsView({
           <span className="font-black">[{term.toUpperCase()}] EXAMINATION</span>
         </p>
         <p className="text-xs font-bold text-black">
-          <span className="underline">{semester}</span>
+          <span className="underline">{semester}{academicYear ? `, AY ${academicYear}` : ""}</span>
         </p>
       </div>
 
@@ -326,20 +326,20 @@ export function BSCTableOfSpecificationsView({
             )}
           </tbody>
           <tfoot>
-            <tr className="bg-white text-black font-black text-[9px] uppercase text-center border-t-2 border-black">
-              <td colSpan={2} className="py-2 px-2 border-r border-black text-left font-black">
+            <tr className="bg-[#E2A123] text-black font-black text-[9.5px] uppercase text-center border-t-2 border-black divide-x divide-black">
+              <td colSpan={2} className="py-2.5 px-3 text-left font-black text-xs tracking-wider">
                 TOTAL
               </td>
-              <td className="py-2 px-1 border-r border-black font-black">{totalHours}</td>
-              <td className="py-2 px-1 border-r border-black font-black">{totalWeight}%</td>
-              <td className="py-2 px-1 border-r border-black font-black">{totalAssignedItems}</td>
-              <td className="py-2 px-0.5 border-r border-black font-black">{totalRemembering}</td>
-              <td className="py-2 px-0.5 border-r border-black font-black">{totalUnderstanding}</td>
-              <td className="py-2 px-0.5 border-r border-black font-black">{totalApplying}</td>
-              <td className="py-2 px-0.5 border-r border-black font-black">{totalAnalyzing}</td>
-              <td className="py-2 px-0.5 border-r border-black font-black">{totalEvaluating}</td>
-              <td className="py-2 px-0.5 border-r border-black font-black">{totalCreating}</td>
-              <td className="py-2 px-0.5 border-r border-black font-black">{totalAssignedItems}</td>
+              <td className="py-2 px-1 font-black">{totalHours}</td>
+              <td className="py-2 px-1 font-black">{totalWeight}%</td>
+              <td className="py-2 px-1 font-black">{totalAssignedItems}</td>
+              <td className="py-2 px-0.5 font-black">{totalRemembering}</td>
+              <td className="py-2 px-0.5 font-black">{totalUnderstanding}</td>
+              <td className="py-2 px-0.5 font-black">{totalApplying}</td>
+              <td className="py-2 px-0.5 font-black">{totalAnalyzing}</td>
+              <td className="py-2 px-0.5 font-black">{totalEvaluating}</td>
+              <td className="py-2 px-0.5 font-black">{totalCreating}</td>
+              <td className="py-2 px-0.5 font-black">{totalAssignedItems}</td>
               <td className="py-2 px-1 font-mono font-bold text-black">
                 —
               </td>
