@@ -82,15 +82,24 @@ export async function proxy(request: NextRequest) {
     }
 
     const role = user.user_metadata?.role;
+    const isChairRole = role === "Chair" || role === "ProgramChair" || role === "Program Chair" || role === "Department Chair";
+    const isFacultyOrChairRole = role === "Faculty" || isChairRole;
 
     // Check specific role routes
     if (path.startsWith("/dashboard/student") && role !== "Student") {
       return redirectUserToDashboard(role, url);
     }
-    if (path.startsWith("/dashboard/faculty") && role !== "Faculty") {
-      return redirectUserToDashboard(role, url);
+    if (path.startsWith("/dashboard/faculty")) {
+      const isExamBuilderRoute = path.startsWith("/dashboard/faculty/exams/");
+      if (isExamBuilderRoute) {
+        if (!isFacultyOrChairRole) {
+          return redirectUserToDashboard(role, url);
+        }
+      } else if (role !== "Faculty") {
+        return redirectUserToDashboard(role, url);
+      }
     }
-    if (path.startsWith("/dashboard/chair") && role !== "Chair" && role !== "ProgramChair") {
+    if (path.startsWith("/dashboard/chair") && !isChairRole) {
       return redirectUserToDashboard(role, url);
     }
     if (path.startsWith("/dashboard/director") && role !== "Director") {
@@ -111,7 +120,7 @@ function redirectUserToDashboard(role: string | undefined, url: URL) {
     url.pathname = "/dashboard/student";
   } else if (role === "Faculty") {
     url.pathname = "/dashboard/faculty";
-  } else if (role === "Chair" || role === "ProgramChair") {
+  } else if (role === "Chair" || role === "ProgramChair" || role === "Program Chair" || role === "Department Chair") {
     url.pathname = "/dashboard/chair";
   } else if (role === "Director") {
     url.pathname = "/dashboard/director";

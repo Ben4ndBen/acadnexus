@@ -194,8 +194,20 @@ export async function updateExamStatus(examId: number, status: ExamStatus, userI
         });
         const isGlobalHoldActive = globalHoldSetting?.value === "true";
 
-        const isAuthorProgChair = progChair && progChair.chair_id === userId;
-        const isAuthorDeptChair = deptChair && deptChair.chair_id === userId;
+        const authorChairRecord = await tx.chair.findFirst({ where: { chair_id: userId } });
+        const authorUserRecord = await tx.user.findUnique({ where: { user_id: userId } });
+
+        const isAuthorProgChair = Boolean(
+          (progChair && progChair.chair_id === userId) ||
+          (authorChairRecord && authorChairRecord.is_program_chair) ||
+          (authorUserRecord && ((authorUserRecord.role as string) === "ProgramChair" || (authorUserRecord.role as string) === "Program Chair"))
+        );
+
+        const isAuthorDeptChair = Boolean(
+          (deptChair && deptChair.chair_id === userId) ||
+          (authorChairRecord && !authorChairRecord.is_program_chair) ||
+          (authorUserRecord && ((authorUserRecord.role as string) === "Chair" || (authorUserRecord.role as string) === "Department Chair"))
+        );
 
         let progChairStatus = progChair ? "Pending" : null;
         let progChairComments: string | null = null;
@@ -232,11 +244,11 @@ export async function updateExamStatus(examId: number, status: ExamStatus, userI
         await tx.approvalWorkflow.upsert({
           where: { exam_id: examId },
           update: {
-            reviewed_by_prog_chair_id: progChair ? progChair.chair_id : null,
+            reviewed_by_prog_chair_id: progChair ? progChair.chair_id : (isAuthorProgChair ? userId : null),
             prog_chair_review_status: progChairStatus as any,
             prog_chair_comments: progChairComments,
             prog_chair_action_timestamp: progChairTimestamp,
-            reviewed_by_chair_id: deptChair ? deptChair.chair_id : (progChair ? progChair.chair_id : null),
+            reviewed_by_chair_id: deptChair ? deptChair.chair_id : null,
             chair_review_status: chairReviewStatus as any,
             chair_comments: chairComments,
             chair_action_timestamp: chairTimestamp,
@@ -246,11 +258,11 @@ export async function updateExamStatus(examId: number, status: ExamStatus, userI
           },
           create: {
             exam_id: examId,
-            reviewed_by_prog_chair_id: progChair ? progChair.chair_id : null,
+            reviewed_by_prog_chair_id: progChair ? progChair.chair_id : (isAuthorProgChair ? userId : null),
             prog_chair_review_status: progChairStatus as any,
             prog_chair_comments: progChairComments,
             prog_chair_action_timestamp: progChairTimestamp,
-            reviewed_by_chair_id: deptChair ? deptChair.chair_id : (progChair ? progChair.chair_id : null),
+            reviewed_by_chair_id: deptChair ? deptChair.chair_id : null,
             chair_review_status: chairReviewStatus as any,
             chair_comments: chairComments,
             chair_action_timestamp: chairTimestamp,
@@ -689,11 +701,8 @@ async function syncAndGetYearLevelEnrolledStudents(courseId: number, facultyId?:
   const targetSemester = expectedInfo?.semester ?? null;
   const targetPrograms = await getTargetProgramsForCourseAndFaculty(courseId, facultyId);
 
-  // Auto-sync students taking this subject (matching expected year level and target department/programs) into studentCourse
+  // Auto-sync students taking this subject (matching target department/programs across ALL year levels) into studentCourse
   const studentWhere: any = {};
-  if (targetYearLevel) {
-    studentWhere.year_level = targetYearLevel;
-  }
   if (targetPrograms.length > 0) {
     studentWhere.program = {
       program_code: { in: targetPrograms },
@@ -730,64 +739,52 @@ async function syncAndGetYearLevelEnrolledStudents(courseId: number, facultyId?:
 
 export async function getAssignedStudentsForCourse(courseId: number, facultyId?: number) {
   try {
-    if (facultyId) {
-      const assignedCount = await db.facultyCourse.count({ where: { faculty_id: facultyId } });
-      if (assignedCount === 0) {
-        return { success: true, students: [] };
-      }
-      const isCourseAssigned = await db.facultyCourse.findFirst({
-        where: { faculty_id: facultyId, course_id: courseId },
-      });
-      if (!isCourseAssigned) {
-        return { success: true, students: [] };
-      }
-    }
-    const { course, targetYearLevel, targetPrograms } = await syncAndGetYearLevelEnrolledStudents(courseId, facultyId);
-
-    const studentFilter: any = {};
-    if (targetYearLevel) {
-      studentFilter.year_level = targetYearLevel;
-    }
-    if (targetPrograms.length > 0) {
-      studentFilter.program = {
-        program_code: { in: targetPrograms },
-      };
-    }
-
-    const whereCondition: any = { course_id: courseId };
-    if (Object.keys(studentFilter).length > 0) {
-      whereCondition.student = studentFilter;
-    }
-
-    const enrolled = await db.studentCourse.findMany({
-      where: whereCondition,
+    // Fetch all students across all programs and year levels
+    const allStudents = await db.student.findMany({
       include: {
-        student: {
-          include: {
-            user: true,
-            program: true,
-          },
-        },
+        user: true,
+        program: true,
       },
-      orderBy: {
-        student: {
-          last_name: "asc",
-        },
-      },
+      orderBy: [
+        { program: { program_code: "asc" } },
+        { year_level: "asc" },
+        { last_name: "asc" },
+      ],
     });
+
+    // Auto-sync all students into studentCourse for this course if missing
+    if (allStudents.length > 0) {
+      const existingEnrollments = await db.studentCourse.findMany({
+        where: { course_id: courseId },
+        select: { student_id: true },
+      });
+
+      const existingSet = new Set(existingEnrollments.map((e) => e.student_id));
+      const missingIds = allStudents.map((s) => s.student_id).filter((id) => !existingSet.has(id));
+
+      if (missingIds.length > 0) {
+        await db.studentCourse.createMany({
+          data: missingIds.map((studentId) => ({
+            student_id: studentId,
+            course_id: courseId,
+          })),
+          skipDuplicates: true,
+        });
+      }
+    }
 
     return {
       success: true,
-      students: enrolled.map((e) => ({
-        student_id: e.student.student_id,
-        institutional_id: e.student.user.institutional_id,
-        first_name: e.student.first_name,
-        middle_name: e.student.middle_name,
-        last_name: e.student.last_name,
-        program_code: e.student.program.program_code,
-        program_name: e.student.program.program_name,
-        year_level: e.student.year_level,
-        section: e.student.section,
+      students: allStudents.map((s) => ({
+        student_id: s.student_id,
+        institutional_id: s.user.institutional_id,
+        first_name: s.first_name,
+        middle_name: s.middle_name,
+        last_name: s.last_name,
+        program_code: s.program.program_code,
+        program_name: s.program.program_name,
+        year_level: s.year_level,
+        section: s.section,
       })),
     };
   } catch (err: any) {
