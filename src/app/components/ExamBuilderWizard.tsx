@@ -75,6 +75,7 @@ interface ExamBuilderWizardProps {
   initialAssignedStudents?: StudentItem[];
   returnUrl?: string;
   facultyDepartment?: string;
+  userRole?: string;
 }
 
 function toRomanNumeral(num: number): string {
@@ -322,7 +323,8 @@ export function ExamBuilderWizard({
   academicPeriodSettings,
   initialAssignedStudents = [],
   returnUrl,
-  facultyDepartment
+  facultyDepartment,
+  userRole
 }: ExamBuilderWizardProps) {
   const router = useRouter();
 
@@ -412,6 +414,10 @@ export function ExamBuilderWizard({
 
     return isICT || isIndustrialTech || isTED;
   }, [selectedCourse]);
+
+  const isProgChairAuthor = useMemo(() => {
+    return userRole === "ProgramChair" || userRole === "Program Chair" || returnUrl === "/dashboard/chair";
+  }, [userRole, returnUrl]);
 
   // Configuration Settings State - Title is auto-populated and not manually edited
   const [title, setTitle] = useState<string>(
@@ -2088,7 +2094,8 @@ export function ExamBuilderWizard({
         return;
       }
 
-      const reviewTarget = hasProgramChair ? "Program Chairperson" : "Department Chairperson";
+      const isProgChairAuthor = userRole === "ProgramChair" || userRole === "Program Chair" || returnUrl === "/dashboard/chair";
+      const reviewTarget = isProgChairAuthor ? "Department Chairperson" : (hasProgramChair ? "Program Chairperson" : "Department Chairperson");
       setSaveStatus({ type: "success", message: `Examination successfully submitted to ${reviewTarget} for review!` });
       setIsSubmitting(false);
 
@@ -2450,14 +2457,17 @@ export function ExamBuilderWizard({
                         </select>
                       </div>
 
-                      {/* Locked Program (Uneditable) */}
+                      {/* Program Code Filter */}
                       <div className="sm:col-span-1">
                         <select
-                          disabled
-                          value="LOCKED"
-                          className="w-full bg-slate-100 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-500 cursor-not-allowed opacity-80"
+                          value={studentProgramFilter}
+                          onChange={(e) => setStudentProgramFilter(e.target.value)}
+                          className="w-full bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500"
                         >
-                          <option value="LOCKED">{programLabel}</option>
+                          <option value="ALL">Program: All Programs</option>
+                          {availableStudentPrograms.map(prog => (
+                            <option key={prog} value={prog}>{prog}</option>
+                          ))}
                         </select>
                       </div>
 
@@ -2477,14 +2487,17 @@ export function ExamBuilderWizard({
                         </div>
                       )}
 
-                      {/* Locked Year Level (Uneditable) */}
+                      {/* Year Level Filter (Selectable across all year levels 1 to 4) */}
                       <div className="sm:col-span-1">
                         <select
-                          disabled
-                          value="LOCKED"
-                          className="w-full bg-slate-100 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-500 cursor-not-allowed opacity-80"
+                          value={studentYearFilter}
+                          onChange={(e) => setStudentYearFilter(e.target.value)}
+                          className="w-full bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500"
                         >
-                          <option value="LOCKED">{yearLabel}</option>
+                          <option value="ALL">Year Level: All Year Levels (1-4)</option>
+                          {availableStudentYears.map(yr => (
+                            <option key={yr} value={String(yr)}>Year {yr}</option>
+                          ))}
                         </select>
                       </div>
                     </div>
@@ -2506,7 +2519,7 @@ export function ExamBuilderWizard({
                     <p className="text-xs font-bold text-slate-500">No students match the selected filter criteria.</p>
                   </div>
                 ) : (
-                  <div className="border border-slate-200/80 rounded-2xl overflow-hidden divide-y divide-slate-100 max-h-64 overflow-y-auto bg-slate-50/40">
+                  <div className="border border-slate-200/80 rounded-2xl overflow-hidden divide-y divide-slate-100 max-h-96 overflow-y-auto bg-slate-50/40">
                     {filteredAndSortedStudents.map((student) => {
                       const isSelected = selectedStudentIds.includes(student.student_id);
                       return (
@@ -2536,9 +2549,12 @@ export function ExamBuilderWizard({
                             </div>
                           </div>
 
-                          <div className="text-right">
-                            <span className="text-[11px] font-bold text-slate-700 block">
+                          <div className="text-right shrink-0">
+                            <span className="text-[11px] font-extrabold text-slate-800 block" title={student.program_name}>
                               {student.program_code} {student.section && student.section !== "General" ? `(${student.section}) ` : ""}— Year {student.year_level}
+                            </span>
+                            <span className="text-[10px] text-slate-500 font-medium block truncate max-w-[220px]" title={student.program_name}>
+                              {student.program_name || student.program_code}
                             </span>
                           </div>
                         </div>
@@ -4119,10 +4135,10 @@ export function ExamBuilderWizard({
                 disabled={isSubmitting || questions.length === 0}
                 onClick={handleSubmitForReview}
                 className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold px-5 py-2.5 rounded-xl transition-all shadow-md hover:shadow-emerald-600/20 disabled:opacity-50 disabled:pointer-events-none cursor-pointer"
-                title={hasProgramChair ? "Final Submit to Program Chairperson" : "Final Submit to Department Chairperson"}
+                title={isProgChairAuthor ? "Submit directly to Department Chairperson" : (hasProgramChair ? "Final Submit to Program Chairperson" : "Final Submit to Department Chairperson")}
               >
                 {isSubmitting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                {hasProgramChair ? "Final Submit to Prog Chair" : "Final Submit to Dept Chair"}
+                {isProgChairAuthor ? "Submit to Chair" : (hasProgramChair ? "Final Submit to Prog Chair" : "Final Submit to Dept Chair")}
               </button>
             </div>
           </div>

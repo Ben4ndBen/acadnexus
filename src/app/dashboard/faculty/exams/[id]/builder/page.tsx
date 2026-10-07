@@ -91,6 +91,7 @@ export default async function ExamBuilderPage({ params }: PageProps) {
     where: { exam_id: examId },
     include: {
       course: true,
+      faculty: true,
       questionBank: {
         orderBy: { question_id: "asc" },
       },
@@ -102,7 +103,14 @@ export default async function ExamBuilderPage({ params }: PageProps) {
   });
 
   // Verify examination exists and belongs to this faculty / chair
-  if (!exam || (exam.faculty_id !== faculty.faculty_id && exam.faculty_id !== dbUser.user_id)) {
+  const isOwner = exam?.faculty_id === faculty.faculty_id || exam?.faculty_id === dbUser.user_id;
+  const isChairOfFaculty = isChairUser && (
+    !exam?.faculty?.department_id || 
+    exam?.faculty?.department_id === faculty.department_id ||
+    exam?.faculty?.department_id === dbUser?.chair?.department_id
+  );
+
+  if (!exam || (!isOwner && !isChairOfFaculty)) {
     redirect(defaultDashboard);
   }
 
@@ -205,6 +213,7 @@ export default async function ExamBuilderPage({ params }: PageProps) {
           initialAssignedStudents={initialAssignedStudents}
           returnUrl={returnUrl}
           facultyDepartment={faculty.department?.department_name}
+          userRole={role}
         />
       </main>
 
