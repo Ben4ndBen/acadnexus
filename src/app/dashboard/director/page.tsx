@@ -35,21 +35,34 @@ export default async function DirectorDashboard() {
     redirect("/");
   }
 
+  // Ensure all department chairs and program chairs exist and have faculty records
+  const { ensureChairsAndDepartmentsExist } = await import("@/lib/chairServer");
+  await ensureChairsAndDepartmentsExist();
+
+  // Ensure all curriculum subjects exist in database
+  await ensureBsitCoursesExist();
+
+  const ALLOWED_DEPARTMENT_NAMES = [
+    "CITD",
+    "Teacher Education Department",
+    "Agriculture Department",
+    "Hospitality and Tourism Management Department",
+  ];
+
   // Fetch all overview details concurrently in parallel
   const [
     totalStudents,
     totalFaculty,
-    totalDepartments,
     totalExams,
     pendingApprovals,
     allExaminations,
     globalHoldSetting,
     rawDepartments,
     auditLogs,
+    courses,
   ] = await Promise.all([
     db.student.count(),
     db.faculty.count(),
-    db.department.count(),
     db.examination.count(),
     db.approvalWorkflow.findMany({
       where: {
@@ -77,6 +90,11 @@ export default async function DirectorDashboard() {
     }),
     getSystemSettingCached("global_administrative_hold"),
     db.department.findMany({
+      where: {
+        department_name: {
+          in: ALLOWED_DEPARTMENT_NAMES,
+        },
+      },
       include: {
         faculty: {
           include: {
@@ -87,6 +105,9 @@ export default async function DirectorDashboard() {
             },
           },
         },
+      },
+      orderBy: {
+        department_id: "asc",
       },
     }),
     db.auditLog.findMany({
@@ -101,9 +122,11 @@ export default async function DirectorDashboard() {
         },
       },
     }),
+    getCoursesCached(),
   ]);
 
   const globalHoldActive = globalHoldSetting?.value === "true";
+  const totalDepartments = rawDepartments.length;
 
   const departmentsData = rawDepartments.map(dept => {
     let totalScore = 0;
@@ -136,16 +159,6 @@ export default async function DirectorDashboard() {
   // Fetch active academic period configured by DI
   const { getActiveAcademicPeriod } = await import("@/app/actions/director");
   const academicPeriod = await getActiveAcademicPeriod();
-
-  // Ensure all department chairs and program chairs exist and have faculty records
-  const { ensureChairsAndDepartmentsExist } = await import("@/lib/chairServer");
-  await ensureChairsAndDepartmentsExist();
-
-  // Ensure all curriculum subjects exist in database
-  await ensureBsitCoursesExist();
-
-  // Fetch all courses for assignment by DI using cached query
-  const courses = await getCoursesCached();
 
   // Fetch all faculty members with assigned courses and compliance
   const facultyMembers = await db.faculty.findMany({

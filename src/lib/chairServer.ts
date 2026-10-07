@@ -42,6 +42,32 @@ export async function ensureChairsAndDepartmentsExist(force = false) {
       deptMap[d.name] = dept.department_id;
     }
 
+    // Clean up any legacy departments (ICT Department, IT Department, ICT, ITD)
+    const citdDeptId = deptMap["CITD"];
+    if (citdDeptId) {
+      const legacyDepts = await db.department.findMany({
+        where: {
+          department_name: {
+            in: ["ICT Department", "IT Department", "ICT", "ITD"],
+          },
+        },
+      });
+      const legacyIds = legacyDepts.map((d) => d.department_id);
+      if (legacyIds.length > 0) {
+        await db.faculty.updateMany({
+          where: { department_id: { in: legacyIds } },
+          data: { department_id: citdDeptId },
+        });
+        await db.chair.updateMany({
+          where: { department_id: { in: legacyIds } },
+          data: { department_id: citdDeptId },
+        });
+        await db.department.deleteMany({
+          where: { department_id: { in: legacyIds } },
+        });
+      }
+    }
+
     // 2. Ensure Academic Programs exist and map to correct departments
     const programsToEnsure = [
       { code: "BSInfoTech", name: "Bachelor of Science in Information Technology", deptName: "CITD" },
