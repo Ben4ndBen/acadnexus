@@ -895,7 +895,7 @@ export function DirectorDashboardClient({
                     <h3 className="font-bold text-slate-800 text-base">{dept.department_name}</h3>
                     <div className="mt-1 flex flex-wrap items-center gap-1.5">
                       <DepartmentBadge department={dept.department_name} size="sm" />
-                      {getProgramsForDepartment(dept.department_id || dept.department_name).map(p => (
+                      {getProgramsForDepartment(dept.department_id, dept.department_name).map(p => (
                         <span key={p.code} className="text-[10px] font-extrabold px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-100">
                           {p.code}
                         </span>
