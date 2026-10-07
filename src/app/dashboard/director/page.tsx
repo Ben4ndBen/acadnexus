@@ -29,11 +29,27 @@ export default async function DirectorDashboard() {
 
   const dbUser = await db.user.findUnique({
     where: { institutional_id: institutionalId },
+    include: {
+      director: true,
+    },
   });
 
   if (!dbUser) {
     redirect("/");
   }
+
+  const directorProfile = dbUser.director;
+  const directorFullName = [
+    directorProfile?.title,
+    directorProfile?.first_name,
+    directorProfile?.middle_name,
+    directorProfile?.last_name,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .trim();
+
+  const directorDisplayName = directorFullName || "Director Office";
 
   // Ensure all department chairs and program chairs exist and have faculty records
   const { ensureChairsAndDepartmentsExist } = await import("@/lib/chairServer");
@@ -220,7 +236,7 @@ export default async function DirectorDashboard() {
           </div>
           <div className="flex items-center gap-4">
             <div className="hidden sm:block text-right">
-              <p className="text-sm font-semibold text-slate-800">Director Office</p>
+              <p className="text-sm font-semibold text-slate-800">{directorDisplayName}</p>
               <p className="text-xs text-slate-500">{institutionalId}</p>
             </div>
             <NotificationBell userId={dbUser.user_id} />
@@ -236,7 +252,7 @@ export default async function DirectorDashboard() {
           <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff03_1px,transparent_1px),linear-gradient(to_bottom,#ffffff03_1px,transparent_1px)] bg-[size:16px_16px]" />
           <div className="relative z-10 space-y-4">
             <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
-              Welcome, Director!
+              Welcome, {directorFullName || "Director"}!
             </h1>
             <p className="text-indigo-100 max-w-xl text-sm leading-relaxed">
               Verify institution-wide compliance charts, approve final-round examinations, monitor system audit logs, configure academic periods, and oversee college-wide parameters.
@@ -247,6 +263,12 @@ export default async function DirectorDashboard() {
         {/* Render interactive client dashboard */}
         <DirectorDashboardClient
           directorUserId={dbUser.user_id}
+          initialDirectorProfile={{
+            firstName: directorProfile?.first_name || "",
+            middleName: directorProfile?.middle_name || "",
+            lastName: directorProfile?.last_name || "",
+            title: directorProfile?.title || "",
+          }}
           stats={{
             totalStudents,
             totalFaculty,

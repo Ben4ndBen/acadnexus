@@ -188,3 +188,70 @@ export async function verifySyllabusAndTOS(
     return { error: err.message || "Failed to verify alignment." };
   }
 }
+
+export async function updateChairNameAction(
+  userId: number,
+  data: {
+    firstName: string;
+    middleName?: string | null;
+    lastName: string;
+  }
+) {
+  try {
+    const user = await db.user.findUnique({
+      where: { user_id: userId },
+      include: { chair: true, faculty: true },
+    });
+
+    if (!user || (user.role !== "Chair" && user.role !== "ProgramChair")) {
+      return { error: "Unauthorized. Only a Chairperson can perform this action." };
+    }
+
+    if (!data.firstName?.trim() || !data.lastName?.trim()) {
+      return { error: "First Name and Last Name are required." };
+    }
+
+    const trimmedFirstName = data.firstName.trim();
+    const trimmedMiddleName = data.middleName?.trim() || null;
+    const trimmedLastName = data.lastName.trim();
+
+    // Chair names are stored in their underlying FACULTY record
+    if (user.faculty) {
+      await db.faculty.update({
+        where: { faculty_id: userId },
+        data: {
+          first_name: trimmedFirstName,
+          middle_name: trimmedMiddleName,
+          last_name: trimmedLastName,
+        },
+      });
+    } else {
+      const deptId = user.chair?.department_id || (await db.department.findFirst())?.department_id || 1;
+      await db.faculty.create({
+        data: {
+          faculty_id: userId,
+          first_name: trimmedFirstName,
+          middle_name: trimmedMiddleName,
+          last_name: trimmedLastName,
+          department_id: deptId,
+        },
+      });
+    }
+
+    await db.auditLog.create({
+      data: {
+        user_id: userId,
+        action_performed: `${user.role === "ProgramChair" ? "Program" : "Department"} Chairperson updated name details to: ${trimmedFirstName} ${trimmedMiddleName ? trimmedMiddleName + " " : ""}${trimmedLastName}`,
+        ip_address: "127.0.0.1",
+      },
+    });
+
+    revalidatePath("/dashboard/chair");
+    revalidatePath("/dashboard/director");
+    return { success: true };
+  } catch (err: any) {
+    console.error("Error updating chair name:", err);
+    return { error: err.message || "Failed to update Chairperson name." };
+  }
+}
+

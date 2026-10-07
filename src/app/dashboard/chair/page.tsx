@@ -329,6 +329,17 @@ export default async function ChairDashboard() {
     assignedCourses = filterCoursesForDepartment(courses, department.department_id);
   }
 
+  const chairFullName = [
+    chairFacultyRecord?.first_name,
+    chairFacultyRecord?.middle_name,
+    chairFacultyRecord?.last_name,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .trim();
+
+  const chairDisplayName = chairFullName || chairTitle;
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
       {/* Navbar */}
@@ -348,9 +359,9 @@ export default async function ChairDashboard() {
           <div className="flex items-center gap-4">
             <div className="hidden sm:block text-right">
               <p className="text-sm font-semibold text-slate-800">
-                {chairTitle} ({dbUser?.institutional_id})
+                {chairDisplayName}
               </p>
-              <p className="text-xs text-slate-500">{institutionalId}</p>
+              <p className="text-xs text-slate-500">{chairTitle} &bull; {institutionalId}</p>
             </div>
             <NotificationBell userId={dbUser.user_id} />
             <LogoutButton />
@@ -365,7 +376,7 @@ export default async function ChairDashboard() {
           <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff03_1px,transparent_1px),linear-gradient(to_bottom,#ffffff03_1px,transparent_1px)] bg-[size:16px_16px]" />
           <div className="relative z-10 space-y-4">
             <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
-              Welcome back, {chairTitle}!
+              Welcome back, {chairDisplayName}!
             </h1>
             <p className="text-amber-100 max-w-xl text-sm leading-relaxed">
               Verify drafted syllabi, evaluate examination formats and Table of Specifications (TOS), draft and manage examinations, oversee academic compliance, and manage your teaching load.

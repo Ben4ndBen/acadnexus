@@ -6,9 +6,9 @@ import {
   Activity, Users, ClipboardCheck, CheckCircle, 
   XCircle, Send, AlertCircle, RefreshCw, FileText, Check, X,
   Columns, ExternalLink, Download, Loader2, Eye, EyeOff,
-  Tag, Layers, BookOpen, Search, Plus
+  Tag, Layers, BookOpen, Search, Plus, UserCog
 } from "lucide-react";
-import { reviewExamByChair } from "@/app/actions/chair";
+import { reviewExamByChair, updateChairNameAction } from "@/app/actions/chair";
 import { assignCoursesToFacultyAction, createExamDraft } from "@/app/actions/faculty";
 import { Latex } from "@/app/components/Latex";
 import { getDepartmentTheme } from "@/lib/departmentThemes";
@@ -260,6 +260,39 @@ export function ChairDashboardClient({
   const [editCourseSearchQuery, setEditCourseSearchQuery] = useState("");
   const [isSavingAssignedCourses, setIsSavingAssignedCourses] = useState(false);
   const [assignMessage, setAssignMessage] = useState<string | null>(null);
+
+  // State for Editing Chairperson's Personal Profile Name
+  const [chairProfileModalOpen, setChairProfileModalOpen] = useState(false);
+  const [chairFirstName, setChairFirstName] = useState(faculty?.first_name || "");
+  const [chairMiddleName, setChairMiddleName] = useState(faculty?.middle_name || "");
+  const [chairLastName, setChairLastName] = useState(faculty?.last_name || "");
+  const [isSavingChairName, setIsSavingChairName] = useState(false);
+  const [chairNameMsg, setChairNameMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  const handleSaveChairProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!chairFirstName.trim() || !chairLastName.trim()) {
+      setChairNameMsg({ type: "error", text: "First Name and Last Name are required." });
+      return;
+    }
+    setIsSavingChairName(true);
+    setChairNameMsg(null);
+    const res = await updateChairNameAction(chairUserId, {
+      firstName: chairFirstName,
+      middleName: chairMiddleName,
+      lastName: chairLastName,
+    });
+    setIsSavingChairName(false);
+    if (res.error) {
+      setChairNameMsg({ type: "error", text: res.error });
+    } else {
+      setChairNameMsg({ type: "success", text: "Chairperson name updated successfully!" });
+      setTimeout(() => {
+        setChairProfileModalOpen(false);
+        router.refresh();
+      }, 700);
+    }
+  };
 
   // Filtered courses for Assign / Edit Modal based on Chair's Department, Program, Year & Sem
   const availableChairEditCourses = useMemo(() => {
@@ -766,19 +799,34 @@ export function ChairDashboardClient({
           My Teaching Portal & Exams
         </button>
 
-        {/* Direct Create Exam Button */}
-        <button
-          disabled={isCreatingExam}
-          onClick={handleCreateExamDirect}
-          className="ml-auto bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold px-4 py-2.5 rounded-xl shadow-md transition-all hover:scale-105 duration-300 flex items-center gap-2 disabled:opacity-50"
-        >
-          {isCreatingExam ? (
-            <RefreshCw className="w-4 h-4 animate-spin" />
-          ) : (
-            <Plus className="w-4 h-4" />
-          )}
-          Create Exam
-        </button>
+        {/* Action Buttons */}
+        <div className="flex items-center gap-2 ml-auto">
+          <button
+            onClick={() => {
+              setChairNameMsg(null);
+              setChairFirstName(faculty?.first_name || "");
+              setChairMiddleName(faculty?.middle_name || "");
+              setChairLastName(faculty?.last_name || "");
+              setChairProfileModalOpen(true);
+            }}
+            className="flex items-center gap-2 px-3.5 py-2.5 text-xs font-bold rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 shadow-sm transition-all duration-300 cursor-pointer"
+          >
+            <UserCog className="w-4 h-4 text-amber-600" />
+            Edit Profile / Name
+          </button>
+          <button
+            disabled={isCreatingExam}
+            onClick={handleCreateExamDirect}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold px-4 py-2.5 rounded-xl shadow-md transition-all hover:scale-105 duration-300 flex items-center gap-2 disabled:opacity-50 cursor-pointer"
+          >
+            {isCreatingExam ? (
+              <RefreshCw className="w-4 h-4 animate-spin" />
+            ) : (
+              <Plus className="w-4 h-4" />
+            )}
+            Create Exam
+          </button>
+        </div>
       </div>
 
       {/* MY TEACHING & EXAMS TAB */}
@@ -1567,6 +1615,119 @@ export function ChairDashboardClient({
                 )}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT CHAIRPERSON PROFILE / NAME MODAL */}
+      {chairProfileModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl border border-slate-100 space-y-6 animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="bg-amber-50 text-amber-700 p-2.5 rounded-2xl border border-amber-100">
+                  <UserCog className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-extrabold text-slate-900">Chairperson Profile Name</h3>
+                  <p className="text-xs text-slate-500 font-medium">Update your official name displayed across portals and signatures</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setChairProfileModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 p-2 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {chairNameMsg && (
+              <div
+                className={`p-3.5 rounded-2xl text-xs font-bold border flex items-center gap-2 ${
+                  chairNameMsg.type === "success"
+                    ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                    : "bg-rose-50 text-rose-800 border-rose-200"
+                }`}
+              >
+                {chairNameMsg.type === "success" ? (
+                  <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                ) : (
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                )}
+                <span>{chairNameMsg.text}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSaveChairProfile} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1.5">
+                    First Name <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Maria"
+                    value={chairFirstName}
+                    onChange={(e) => setChairFirstName(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-xs font-medium text-slate-800 p-3 rounded-xl outline-none transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1.5">
+                    Middle Name <span className="text-slate-400 font-normal">(Optional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. D."
+                    value={chairMiddleName}
+                    onChange={(e) => setChairMiddleName(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-xs font-medium text-slate-800 p-3 rounded-xl outline-none transition-all"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1.5">
+                  Last Name <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Santos"
+                  value={chairLastName}
+                  onChange={(e) => setChairLastName(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-xs font-medium text-slate-800 p-3 rounded-xl outline-none transition-all"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setChairProfileModalOpen(false)}
+                  className="px-4 py-2.5 text-xs font-bold text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-all cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingChairName}
+                  className="px-5 py-2.5 text-xs font-extrabold text-white bg-amber-600 hover:bg-amber-700 rounded-xl shadow-md shadow-amber-600/20 transition-all flex items-center gap-2 disabled:opacity-50 cursor-pointer"
+                >
+                  {isSavingChairName ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Saving...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle className="w-4 h-4" />
+                      <span>Update Name</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

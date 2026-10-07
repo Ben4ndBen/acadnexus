@@ -6,9 +6,9 @@ import {
   BarChart3, ShieldCheck, Map, List, CheckCircle, 
   XCircle, Clock, AlertCircle, RefreshCw, Search, Building2,
   UserPlus, X, Loader2, Eye, EyeOff, Award, Calendar, Sparkles,
-  Users, BookOpen
+  Users, BookOpen, UserCog
 } from "lucide-react";
-import { reviewExamByDirector, toggleGlobalHold, toggleIndividualHold, saveActiveAcademicPeriod } from "@/app/actions/director";
+import { reviewExamByDirector, toggleGlobalHold, toggleIndividualHold, saveActiveAcademicPeriod, updateDirectorNameAction } from "@/app/actions/director";
 import type { AcademicPeriodSettings } from "@/lib/academicUtils";
 import { registerInstructorByAdminAction } from "@/app/actions/auth";
 import { assignCoursesToFacultyAction } from "@/app/actions/faculty";
@@ -25,6 +25,12 @@ import { getExpectedYearAndSemForCourse } from "@/lib/bsitCurriculum";
 
 interface DirectorDashboardClientProps {
   directorUserId: number;
+  initialDirectorProfile?: {
+    firstName?: string;
+    middleName?: string;
+    lastName?: string;
+    title?: string;
+  };
   stats: {
     totalStudents: number;
     totalFaculty: number;
@@ -102,6 +108,7 @@ interface DirectorDashboardClientProps {
 
 export function DirectorDashboardClient({ 
   directorUserId, 
+  initialDirectorProfile,
   stats, 
   pendingApprovals, 
   departmentsData,
@@ -115,6 +122,41 @@ export function DirectorDashboardClient({
 }: DirectorDashboardClientProps) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<"overview" | "compliance" | "logs" | "exams" | "period" | "faculty">("overview");
+
+  // State for Editing Director's Personal Profile Name
+  const [profileModalOpen, setProfileModalOpen] = useState(false);
+  const [dirTitle, setDirTitle] = useState(initialDirectorProfile?.title || "");
+  const [dirFirstName, setDirFirstName] = useState(initialDirectorProfile?.firstName || "");
+  const [dirMiddleName, setDirMiddleName] = useState(initialDirectorProfile?.middleName || "");
+  const [dirLastName, setDirLastName] = useState(initialDirectorProfile?.lastName || "");
+  const [isSavingDirectorName, setIsSavingDirectorName] = useState(false);
+  const [directorNameMsg, setDirectorNameMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  const handleSaveDirectorProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!dirFirstName.trim() || !dirLastName.trim()) {
+      setDirectorNameMsg({ type: "error", text: "First Name and Last Name are required." });
+      return;
+    }
+    setIsSavingDirectorName(true);
+    setDirectorNameMsg(null);
+    const res = await updateDirectorNameAction(directorUserId, {
+      title: dirTitle,
+      firstName: dirFirstName,
+      middleName: dirMiddleName,
+      lastName: dirLastName,
+    });
+    setIsSavingDirectorName(false);
+    if (res.error) {
+      setDirectorNameMsg({ type: "error", text: res.error });
+    } else {
+      setDirectorNameMsg({ type: "success", text: "Director profile name updated successfully!" });
+      setTimeout(() => {
+        setProfileModalOpen(false);
+        router.refresh();
+      }, 700);
+    }
+  };
 
   // State for Academic Period Configuration (Configured by DI)
   const [periodAY, setPeriodAY] = useState(academicPeriodSettings?.active_academic_year || "2026-2027");
@@ -564,28 +606,44 @@ export function DirectorDashboardClient({
           Faculty & Assigned Courses
         </button>
 
-        <button
-          onClick={() => {
-            setRegError(null);
-            setRegSuccess(null);
-            setInstId("");
-            setFirstName("");
-            setMiddleName("");
-            setLastName("");
-            setSelectedCourseIds([]);
-            setCourseSearchQuery("");
-            setDeptId("");
-            setRegProgramCode("");
-            setRegIncludeGE(false);
-            setPassword("");
-            setConfirmPassword("");
-            setRegisterModalOpen(true);
-          }}
-          className="flex items-center gap-2 px-4 py-2.5 text-sm font-bold rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-md transition-all duration-300 ml-auto"
-        >
-          <UserPlus className="w-4 h-4" />
-          Register New Instructor
-        </button>
+        <div className="flex items-center gap-2 ml-auto">
+          <button
+            onClick={() => {
+              setDirectorNameMsg(null);
+              setDirTitle(initialDirectorProfile?.title || "");
+              setDirFirstName(initialDirectorProfile?.firstName || "");
+              setDirMiddleName(initialDirectorProfile?.middleName || "");
+              setDirLastName(initialDirectorProfile?.lastName || "");
+              setProfileModalOpen(true);
+            }}
+            className="flex items-center gap-2 px-4 py-2.5 text-sm font-bold rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 shadow-sm transition-all duration-300 cursor-pointer"
+          >
+            <UserCog className="w-4 h-4 text-indigo-700" />
+            Edit Profile / Name
+          </button>
+          <button
+            onClick={() => {
+              setRegError(null);
+              setRegSuccess(null);
+              setInstId("");
+              setFirstName("");
+              setMiddleName("");
+              setLastName("");
+              setSelectedCourseIds([]);
+              setCourseSearchQuery("");
+              setDeptId("");
+              setRegProgramCode("");
+              setRegIncludeGE(false);
+              setPassword("");
+              setConfirmPassword("");
+              setRegisterModalOpen(true);
+            }}
+            className="flex items-center gap-2 px-4 py-2.5 text-sm font-bold rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-md transition-all duration-300 cursor-pointer"
+          >
+            <UserPlus className="w-4 h-4" />
+            Register New Instructor
+          </button>
+        </div>
       </div>
 
       {/* OVERVIEW & APPROVALS TAB */}
@@ -2058,6 +2116,132 @@ export function DirectorDashboardClient({
                 )}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT DIRECTOR PROFILE / NAME MODAL */}
+      {profileModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl border border-slate-100 space-y-6 animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="bg-indigo-50 text-indigo-700 p-2.5 rounded-2xl border border-indigo-100">
+                  <UserCog className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-extrabold text-slate-900">Director Profile Name</h3>
+                  <p className="text-xs text-slate-500 font-medium">Update your official name and academic prefix/title</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setProfileModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 p-2 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {directorNameMsg && (
+              <div
+                className={`p-3.5 rounded-2xl text-xs font-bold border flex items-center gap-2 ${
+                  directorNameMsg.type === "success"
+                    ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                    : "bg-rose-50 text-rose-800 border-rose-200"
+                }`}
+              >
+                {directorNameMsg.type === "success" ? (
+                  <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                ) : (
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                )}
+                <span>{directorNameMsg.text}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSaveDirectorProfile} className="space-y-4">
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1.5">
+                  Academic Title / Prefix <span className="text-slate-400 font-normal">(Optional)</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Dr., Prof., Engr., Director"
+                  value={dirTitle}
+                  onChange={(e) => setDirTitle(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-xs font-medium text-slate-800 p-3 rounded-xl outline-none transition-all"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1.5">
+                    First Name <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Juan"
+                    value={dirFirstName}
+                    onChange={(e) => setDirFirstName(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-xs font-medium text-slate-800 p-3 rounded-xl outline-none transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1.5">
+                    Middle Name <span className="text-slate-400 font-normal">(Optional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. D."
+                    value={dirMiddleName}
+                    onChange={(e) => setDirMiddleName(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-xs font-medium text-slate-800 p-3 rounded-xl outline-none transition-all"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1.5">
+                  Last Name <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Dela Cruz"
+                  value={dirLastName}
+                  onChange={(e) => setDirLastName(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-xs font-medium text-slate-800 p-3 rounded-xl outline-none transition-all"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setProfileModalOpen(false)}
+                  className="px-4 py-2.5 text-xs font-bold text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-all cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingDirectorName}
+                  className="px-5 py-2.5 text-xs font-extrabold text-white bg-indigo-700 hover:bg-indigo-800 rounded-xl shadow-md shadow-indigo-700/20 transition-all flex items-center gap-2 disabled:opacity-50 cursor-pointer"
+                >
+                  {isSavingDirectorName ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Saving...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle className="w-4 h-4" />
+                      <span>Update Name</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

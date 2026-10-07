@@ -274,6 +274,67 @@ export async function saveActiveAcademicPeriod(
   }
 }
 
+export async function updateDirectorNameAction(
+  userId: number,
+  data: {
+    firstName: string;
+    middleName?: string | null;
+    lastName: string;
+    title?: string | null;
+  }
+) {
+  try {
+    const user = await db.user.findUnique({
+      where: { user_id: userId },
+      include: { director: true },
+    });
+
+    if (!user || user.role !== "Director") {
+      return { error: "Unauthorized. Only the Director can perform this action." };
+    }
+
+    if (!data.firstName?.trim() || !data.lastName?.trim()) {
+      return { error: "First Name and Last Name are required." };
+    }
+
+    const trimmedFirstName = data.firstName.trim();
+    const trimmedMiddleName = data.middleName?.trim() || null;
+    const trimmedLastName = data.lastName.trim();
+    const trimmedTitle = data.title?.trim() || null;
+
+    await db.director.upsert({
+      where: { director_id: userId },
+      update: {
+        first_name: trimmedFirstName,
+        middle_name: trimmedMiddleName,
+        last_name: trimmedLastName,
+        title: trimmedTitle,
+      },
+      create: {
+        director_id: userId,
+        first_name: trimmedFirstName,
+        middle_name: trimmedMiddleName,
+        last_name: trimmedLastName,
+        title: trimmedTitle,
+      },
+    });
+
+    await db.auditLog.create({
+      data: {
+        user_id: userId,
+        action_performed: `Director updated personal name details to: ${trimmedTitle ? trimmedTitle + " " : ""}${trimmedFirstName} ${trimmedMiddleName ? trimmedMiddleName + " " : ""}${trimmedLastName}`,
+        ip_address: "127.0.0.1",
+      },
+    });
+
+    revalidatePath("/dashboard/director");
+    return { success: true };
+  } catch (err: any) {
+    console.error("Error updating director name:", err);
+    return { error: err.message || "Failed to update Director name." };
+  }
+}
+
 
 
 
