@@ -183,6 +183,23 @@ export function DirectorDashboardClient({
     }
   };
 
+  const ayBounds = useMemo(() => {
+    const numbers = periodAY.match(/\d{4}/g);
+    if (numbers && numbers.length >= 1) {
+      const startYear = parseInt(numbers[0], 10);
+      const endYear = numbers.length >= 2 ? parseInt(numbers[1], 10) : startYear + 1;
+      const maxYear = endYear + 1; // Allow the year AFTER the second semester (e.g. 2028 for 2026-2027)
+      return {
+        startYear,
+        endYear,
+        maxYear,
+        minDate: `${startYear}-01-01`,
+        maxDate: `${maxYear}-12-31`,
+      };
+    }
+    return { startYear: 2026, endYear: 2027, maxYear: 2028, minDate: "2026-01-01", maxDate: "2028-12-31" };
+  }, [periodAY]);
+
   // Validate semester date ranges before saving
   const semesterRangeValidation = useMemo(() => {
     if (!periodAY.trim() || !/\d{4}/.test(periodAY)) {
@@ -208,8 +225,26 @@ export function DirectorDashboardClient({
     if (d1End >= d2Start) {
       return { isValid: false, message: "1st Semester end date must be before 2nd Semester start date." };
     }
+
+    const y1Start = new Date(sem1Start).getFullYear();
+    const y1End = new Date(sem1End).getFullYear();
+    const y2Start = new Date(sem2Start).getFullYear();
+    const y2End = new Date(sem2End).getFullYear();
+
+    if (
+      y1Start < ayBounds.startYear || y1Start > ayBounds.maxYear ||
+      y1End < ayBounds.startYear || y1End > ayBounds.maxYear ||
+      y2Start < ayBounds.startYear || y2Start > ayBounds.maxYear ||
+      y2End < ayBounds.startYear || y2End > ayBounds.maxYear
+    ) {
+      return {
+        isValid: false,
+        message: `Semester dates must fall within the Academic Year range (${ayBounds.startYear}–${ayBounds.maxYear}).`
+      };
+    }
+
     return { isValid: true, message: "" };
-  }, [periodAY, sem1Start, sem1End, sem2Start, sem2End]);
+  }, [periodAY, sem1Start, sem1End, sem2Start, sem2End, ayBounds]);
 
   const handleSaveAcademicPeriod = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1021,10 +1056,10 @@ export function DirectorDashboardClient({
             <div>
               <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
                 <span className="w-1.5 h-6 bg-indigo-700 rounded-full" />
-                Active Academic Period & Semester Scheduling
+                Academic Period & Semester Setup
               </h2>
               <p className="text-slate-500 text-xs mt-1">
-                Configure the institutional academic calendar. Examination dates set by faculty will automatically compute and bind to the correct semester and academic year based on these active boundaries.
+                Set the active academic year and semester dates. Faculty exam dates match these period boundaries.
               </p>
             </div>
             <div className="bg-indigo-50 border border-indigo-200/80 px-3.5 py-1.5 rounded-2xl flex items-center gap-2 shrink-0">
@@ -1048,10 +1083,10 @@ export function DirectorDashboardClient({
 
           <form onSubmit={handleSaveAcademicPeriod} className="space-y-6">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-              {/* Active Academic Year */}
+              {/* Academic Year */}
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-slate-700 block">
-                  Active Academic Year <span className="text-rose-500">*</span>
+                  Academic Year <span className="text-rose-500">*</span>
                 </label>
                 <input
                   type="text"
@@ -1061,13 +1096,12 @@ export function DirectorDashboardClient({
                   placeholder="e.g. 2026-2027"
                   className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 text-sm font-bold text-slate-800 px-4 py-2.5 rounded-xl transition-all"
                 />
-                <p className="text-[11px] text-slate-400">Editing auto-generates 1st & 2nd semester date ranges</p>
               </div>
 
               {/* Active Semester */}
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-slate-700 block">
-                  Active Semester Status <span className="text-rose-500">*</span>
+                  Active Semester <span className="text-rose-500">*</span>
                 </label>
                 <select
                   value={periodSem}
@@ -1078,53 +1112,53 @@ export function DirectorDashboardClient({
                   <option value="2nd Semester">2nd Semester</option>
                   <option value="Midyear / Summer">Midyear / Summer</option>
                 </select>
-                <p className="text-[11px] text-slate-400">Current officially active collegiate term</p>
               </div>
             </div>
 
-            {/* Examination Term Status (Disabled for DI - Selected by Faculty during Exam Creation) */}
+            {/* Examination Term Info Box */}
             <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-2xl flex items-center justify-between text-xs">
               <div className="flex items-center gap-2.5">
-                <div className="p-2 bg-slate-200 text-slate-600 rounded-xl">
+                <div className="p-2 bg-indigo-50 text-indigo-700 rounded-xl border border-indigo-100">
                   <Calendar className="w-4 h-4" />
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className="font-extrabold text-slate-800">Examination Term Field</span>
-                    <span className="text-[10px] bg-indigo-50 text-indigo-700 border border-indigo-200 font-extrabold px-2 py-0.5 rounded-full">
-                      Faculty Responsiblity
+                    <span className="font-extrabold text-slate-800">Examination Term</span>
+                    <span className="text-[10px] bg-indigo-50 text-indigo-700 border border-indigo-200 font-bold px-2 py-0.5 rounded-full">
+                      Selected by Faculty
                     </span>
                   </div>
                   <p className="text-slate-500 text-[11px] mt-0.5">
-                    The examination term (Midterm, Final, Prelim) is selected directly by Faculty when creating an examination.
+                    Instructors choose the exam term (Prelim, Midterm, or Final) when creating an exam.
                   </p>
                 </div>
               </div>
-              <span className="text-[11px] font-bold text-slate-400 italic shrink-0">DI Configuration Disabled</span>
             </div>
 
             {/* Semester Date Ranges */}
             <div className="border border-slate-100 rounded-2xl p-5 bg-slate-50/50 space-y-4">
               <h3 className="text-sm font-black text-slate-800 flex items-center gap-2">
                 <Calendar className="w-4 h-4 text-indigo-700" />
-                Semester Date Windows (For Automatic Determination)
+                Semester Date Ranges
               </h3>
               <p className="text-xs text-slate-500">
-                When faculty pick an exam date, the system evaluates these date windows to automatically determine whether the examination belongs to the 1st or 2nd Semester.
+                Faculty exam dates are matched to these semester date ranges.
               </p>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
                 {/* 1st Semester Range */}
                 <div className="bg-white border border-slate-200 p-4 rounded-xl space-y-3">
-                  <h4 className="text-xs font-black uppercase text-indigo-900 tracking-wider">1st Semester Range</h4>
+                  <h4 className="text-xs font-black text-indigo-900 tracking-wider">1st Semester Range</h4>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Start Date</label>
                       <input
                         type="date"
                         value={sem1Start}
+                        min={ayBounds.minDate}
+                        max={ayBounds.maxDate}
                         onChange={(e) => setSem1Start(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 text-xs font-medium text-slate-800 p-2 rounded-lg"
+                        className="w-full bg-slate-50 border border-slate-200 text-xs font-medium text-slate-800 p-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 transition-all"
                       />
                     </div>
                     <div>
@@ -1132,8 +1166,10 @@ export function DirectorDashboardClient({
                       <input
                         type="date"
                         value={sem1End}
+                        min={ayBounds.minDate}
+                        max={ayBounds.maxDate}
                         onChange={(e) => setSem1End(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 text-xs font-medium text-slate-800 p-2 rounded-lg"
+                        className="w-full bg-slate-50 border border-slate-200 text-xs font-medium text-slate-800 p-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 transition-all"
                       />
                     </div>
                   </div>
@@ -1141,15 +1177,17 @@ export function DirectorDashboardClient({
 
                 {/* 2nd Semester Range */}
                 <div className="bg-white border border-slate-200 p-4 rounded-xl space-y-3">
-                  <h4 className="text-xs font-black uppercase text-indigo-900 tracking-wider">2nd Semester Range</h4>
+                  <h4 className="text-xs font-black text-indigo-900 tracking-wider">2nd Semester Range</h4>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Start Date</label>
                       <input
                         type="date"
                         value={sem2Start}
+                        min={ayBounds.minDate}
+                        max={ayBounds.maxDate}
                         onChange={(e) => setSem2Start(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 text-xs font-medium text-slate-800 p-2 rounded-lg"
+                        className="w-full bg-slate-50 border border-slate-200 text-xs font-medium text-slate-800 p-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 transition-all"
                       />
                     </div>
                     <div>
@@ -1157,8 +1195,10 @@ export function DirectorDashboardClient({
                       <input
                         type="date"
                         value={sem2End}
+                        min={ayBounds.minDate}
+                        max={ayBounds.maxDate}
                         onChange={(e) => setSem2End(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 text-xs font-medium text-slate-800 p-2 rounded-lg"
+                        className="w-full bg-slate-50 border border-slate-200 text-xs font-medium text-slate-800 p-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 transition-all"
                       />
                     </div>
                   </div>
@@ -1178,7 +1218,7 @@ export function DirectorDashboardClient({
               <button
                 type="submit"
                 disabled={!semesterRangeValidation.isValid || isSavingPeriod}
-                className="bg-indigo-700 hover:bg-indigo-800 text-white text-xs font-black px-6 py-3 rounded-xl shadow-md transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="bg-indigo-700 hover:bg-indigo-800 text-white text-xs font-black px-6 py-3 rounded-xl shadow-md transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
               >
                 {isSavingPeriod ? (
                   <>
@@ -1188,7 +1228,7 @@ export function DirectorDashboardClient({
                 ) : (
                   <>
                     <CheckCircle className="w-4 h-4" />
-                    <span>Save Academic Period Policy</span>
+                    <span>Save Academic Period</span>
                   </>
                 )}
               </button>

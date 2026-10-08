@@ -97,4 +97,26 @@ body {
   transform: scale(1.08) translateY(-4px);
 }
 
+/* Remove native blue selection and focus background highlights on date input subfields (month, day, year) */
+input[type="date"]::-webkit-datetime-edit-month-field,
+input[type="date"]::-webkit-datetime-edit-day-field,
+input[type="date"]::-webkit-datetime-edit-year-field {
+  background-color: transparent !important;
+  color: inherit !important;
+  outline: none !important;
+}
 
+input[type="date"]::-webkit-datetime-edit-month-field:focus,
+input[type="date"]::-webkit-datetime-edit-day-field:focus,
+input[type="date"]::-webkit-datetime-edit-year-field:focus {
+  background-color: transparent !important;
+  color: inherit !important;
+  outline: none !important;
+}
+
+input[type="date"]::-webkit-datetime-edit-month-field::selection,
+input[type="date"]::-webkit-datetime-edit-day-field::selection,
+input[type="date"]::-webkit-datetime-edit-year-field::selection {
+  background-color: transparent !important;
+  color: inherit !important;
+}
