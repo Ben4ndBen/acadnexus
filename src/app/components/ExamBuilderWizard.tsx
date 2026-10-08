@@ -7,8 +7,7 @@ import {
   Upload, Trash2, Plus, Check, Eye, Trash, ArrowUp, ArrowDown, FileText, 
   Shuffle, AlertCircle, RefreshCw, FileUp, Sparkles, CheckCircle, Search, X,
   Tag, Layers, Sliders, Hash, ListFilter, Calendar, GraduationCap, Users,
-  CheckSquare, Square, ChevronDown, ChevronUp, ChevronRight, Printer
-} from "lucide-react";
+  CheckSquare, Square, ChevronDown, ChevronUp, ChevronRight, Printer, HelpCircle, LogOut, Edit3 } from "lucide-react";
 import { saveExamConfig, saveExamQuestions, updateExamStatus, uploadQuestionAttachment, uploadTosFileAction, getQuestionBankQuestions, importQuestionsToExam, getAssignedStudentsForCourse } from "@/app/actions/faculty";
 import { determineSemesterFromDate, formatStudentName } from "@/lib/academicUtils";
 import { Latex } from "@/app/components/Latex";
@@ -233,6 +232,44 @@ function deserializeQuestions(dbQuestions: any[]): QuestionState[] {
       } catch {}
     }
 
+    // Clean any sample text or item prefixes
+    if (text && text.match(/^\[Item \d+\]\s*(Multiple Choice Question for.*)?$/i)) {
+      text = "";
+    } else if (text && text.startsWith("[Item ")) {
+      text = text.replace(/^\[Item \d+\]\s*/i, "");
+    } else if (
+      text === "Discuss in detail your analysis of the topic below." ||
+      text === "The capital of Batanes is [blank] and it is located in the [blank] region of the Philippines." ||
+      text === "The core concept of [blank] is applied in [blank]."
+    ) {
+      text = "";
+    }
+
+    // Clean sample options if they are default dummy strings
+    if (options && options.length > 0) {
+      if (options.every((opt, idx) => !opt || opt === `Option ${String.fromCharCode(65 + idx)}` || opt.startsWith("Option "))) {
+        options = ["", "", "", ""];
+      }
+    }
+
+    // Clean sample matches if they are default dummy strings
+    if (matches && matches.length > 0) {
+      matches = matches.map(m => ({
+        premise: (m.premise && m.premise.startsWith("Premise ")) ? "" : m.premise,
+        choice: (m.choice && (m.choice.startsWith("Match ") || m.choice.startsWith("Choice "))) ? "" : m.choice
+      }));
+    }
+
+    // Clean sample blanks if they are default dummy strings
+    if (blanks && blanks.length > 0) {
+      blanks = blanks.map(b => ({
+        ...b,
+        answer: (b.answer && (b.answer.startsWith("Answer ") || b.answer === "Basco" || b.answer === "northern")) ? "" : b.answer
+      }));
+    }
+
+    const cleanCorrectAnswer = (correctAnswer && (correctAnswer.startsWith("Option ") || correctAnswer === "Option A")) ? "" : correctAnswer;
+
     return {
       question_id: q.question_id,
       text,
@@ -242,7 +279,7 @@ function deserializeQuestions(dbQuestions: any[]): QuestionState[] {
       matches,
       blanks,
       min_words,
-      correctAnswer,
+      correctAnswer: cleanCorrectAnswer,
       points: q.points,
       image_url,
       topic: q.topic || "",
@@ -739,9 +776,21 @@ export function ExamBuilderWizard({
   };
 
   // Question Bank State - Automatically sorted by Question Type order
-  const [questions, setQuestions] = useState<QuestionState[]>(() =>
-    sortQuestionsByType(deserializeQuestions(exam.questionBank))
-  );
+  const [questions, setQuestions] = useState<QuestionState[]>(() => {
+    const loaded = sortQuestionsByType(deserializeQuestions(exam.questionBank));
+    return loaded.map(q => {
+      let cleanText = q.text || "";
+      if (cleanText.match(/^\[Item \d+\]\s*(Multiple Choice Question for.*)?$/i)) {
+        cleanText = "";
+      } else if (cleanText.startsWith("[Item ")) {
+        cleanText = cleanText.replace(/^\[Item \d+\]\s*/i, "");
+      }
+      return {
+        ...q,
+        text: cleanText,
+      };
+    });
+  });
   const [activeQuestionIdx, setActiveQuestionIdx] = useState<number>(
     exam.questionBank.length > 0 ? 0 : -1
   );
@@ -975,7 +1024,10 @@ export function ExamBuilderWizard({
 
   const [tosTopicPlans, setTosTopicPlans] = useState<Array<{ id: string; topic: string; hours: number }>>(() => {
     if (parsedTosData?.topicPlans && Array.isArray(parsedTosData.topicPlans) && parsedTosData.topicPlans.length > 0) {
-      return parsedTosData.topicPlans;
+      return parsedTosData.topicPlans.map((p: any) => ({
+        ...p,
+        hours: Math.max(1, Math.round(p.hours || 1))
+      }));
     }
     const uniqueFromQuestions = Array.from(new Set(exam.questionBank.map(q => q.topic?.trim()).filter(Boolean))) as string[];
     if (uniqueFromQuestions.length > 0) {
@@ -1374,7 +1426,7 @@ export function ExamBuilderWizard({
   }, [tosTopicPlans, tosTargetTotalItems]);
 
   const totalTosHours = useMemo(() => {
-    return tosTopicPlans.reduce((sum, t) => sum + (t.hours || 0), 0);
+    return Math.round(tosTopicPlans.reduce((sum, t) => sum + (t.hours || 0), 0));
   }, [tosTopicPlans]);
 
   const totalCalculatedTosItems = useMemo(() => {
@@ -1470,11 +1522,11 @@ export function ExamBuilderWizard({
 
   const handleAddTosTopic = () => {
     if (!newTopicName.trim()) return;
-    const hrs = parseFloat(newTopicHours) || 1;
+    const hrs = Math.max(1, Math.round(parseFloat(newTopicHours) || 1));
     const newEntry = {
       id: Date.now().toString(),
       topic: newTopicName.trim(),
-      hours: Math.max(0.5, hrs),
+      hours: hrs,
     };
     const updatedPlans = [...tosTopicPlans, newEntry];
     setTosTopicPlans(updatedPlans);
@@ -1486,7 +1538,8 @@ export function ExamBuilderWizard({
   };
 
   const handleUpdateTosTopic = (id: string, updatedName: string, updatedHours: number) => {
-    const updatedPlans = tosTopicPlans.map(t => (t.id === id ? { ...t, topic: updatedName, hours: Math.max(0.1, updatedHours) } : t));
+    const cleanHours = Math.max(1, Math.round(updatedHours));
+    const updatedPlans = tosTopicPlans.map(t => (t.id === id ? { ...t, topic: updatedName, hours: cleanHours } : t));
     setTosTopicPlans(updatedPlans);
     autoSaveExamData(questions, updatedPlans);
   };
@@ -1517,16 +1570,24 @@ export function ExamBuilderWizard({
 
       for (let i = 0; i < targetCount; i++) {
         if (i < existingForThisTopic.length) {
+          const existingQ = existingForThisTopic[i];
+          let cleanText = existingQ.text || "";
+          if (cleanText.match(/^\[Item \d+\]\s*(Multiple Choice Question for.*)?$/i)) {
+            cleanText = "";
+          } else if (cleanText.startsWith("[Item ")) {
+            cleanText = cleanText.replace(/^\[Item \d+\]\s*/i, "");
+          }
           newQuestionList.push({
-            ...existingForThisTopic[i],
+            ...existingQ,
+            text: cleanText,
             topic: topicName,
           });
         } else {
           newQuestionList.push({
-            text: `[Item ${globalItemNum}] Multiple Choice Question for ${topicName}`,
+            text: "",
             question_type: "Multiple_Choice",
-            options: ["Option A", "Option B", "Option C", "Option D"],
-            correctAnswer: "Option A",
+            options: ["", "", "", ""],
+            correctAnswer: "",
             premises: [],
             matches: [],
             blanks: [],
@@ -1568,10 +1629,10 @@ export function ExamBuilderWizard({
 
     if (newType === "Multiple_Choice") {
       if (!q.options || q.options.length === 0) {
-        q.options = ["Option A", "Option B", "Option C", "Option D"];
+        q.options = ["", "", "", ""];
       }
-      if (!q.correctAnswer || !q.options.includes(q.correctAnswer)) {
-        q.correctAnswer = q.options[0] || "Option A";
+      if (!q.correctAnswer) {
+        q.correctAnswer = "";
       }
     } else if (newType === "True_False") {
       if (q.correctAnswer !== "True" && q.correctAnswer !== "False") {
@@ -1582,24 +1643,26 @@ export function ExamBuilderWizard({
     } else if (newType === "Matching_Type") {
       if (!q.matches || q.matches.length === 0) {
         q.matches = [
-          { premise: "Premise 1", choice: "Match 1" },
-          { premise: "Premise 2", choice: "Match 2" },
+          { premise: "", choice: "" },
+          { premise: "", choice: "" },
         ];
       }
     } else if (newType === "Essay") {
       if (!q.min_words) q.min_words = 50;
-      if (!q.text || q.text.startsWith("[Item ")) {
-        q.text = "Discuss in detail your analysis of the topic below.";
+      if (q.text && (q.text.startsWith("[Item ") || q.text.includes("Discuss in detail"))) {
+        q.text = "";
       }
       if (q.points === 1) q.points = 5;
     } else if (newType === "Fill_In_The_Blanks") {
       if (!q.blanks || q.blanks.length === 0) {
-        q.text = "The core concept of [blank] is applied in [blank].";
         q.blanks = [
-          { id: 1, answer: "Answer 1", points: 2 },
-          { id: 2, answer: "Answer 2", points: 2 },
+          { id: 1, answer: "", points: 1 },
+          { id: 2, answer: "", points: 1 },
         ];
-        q.points = 4;
+        q.points = 2;
+      }
+      if (q.text && (q.text.startsWith("[Item ") || q.text.includes("The core concept"))) {
+        q.text = "";
       }
     }
 
@@ -1745,28 +1808,28 @@ export function ExamBuilderWizard({
     };
 
     if (type === "Multiple_Choice") {
-      newQ.options = ["Option A", "Option B", "Option C", "Option D"];
-      newQ.correctAnswer = "Option A";
+      newQ.options = ["", "", "", ""];
+      newQ.correctAnswer = "";
     } else if (type === "True_False") {
       newQ.correctAnswer = "True";
     } else if (type === "Identification") {
       newQ.correctAnswer = "";
     } else if (type === "Matching_Type") {
       newQ.matches = [
-        { premise: "Premise 1", choice: "Match 1" },
-        { premise: "Premise 2", choice: "Match 2" },
+        { premise: "", choice: "" },
+        { premise: "", choice: "" },
       ];
     } else if (type === "Essay") {
-      newQ.text = "Discuss in detail your analysis of the topic below.";
+      newQ.text = "";
       newQ.min_words = 50;
-      newQ.points = 10;
+      newQ.points = 5;
     } else if (type === "Fill_In_The_Blanks") {
-      newQ.text = "The capital of Batanes is [blank] and it is located in the [blank] region of the Philippines.";
+      newQ.text = "";
       newQ.blanks = [
-        { id: 1, answer: "Basco", points: 2 },
-        { id: 2, answer: "northern", points: 2 },
+        { id: 1, answer: "", points: 1 },
+        { id: 2, answer: "", points: 1 },
       ];
-      newQ.points = 4;
+      newQ.points = 2;
     }
 
     // Group existing questions by type
@@ -1941,7 +2004,7 @@ export function ExamBuilderWizard({
     // If the changed option was the correct answer, update the correct answer reference too
     const oldVal = q.options[optionIdx];
     q.options[optionIdx] = val;
-    if (q.correctAnswer === oldVal) {
+    if (q.correctAnswer === oldVal || !q.correctAnswer || q.correctAnswer.startsWith("__OPT_")) {
       q.correctAnswer = val;
     }
     
@@ -2536,15 +2599,14 @@ export function ExamBuilderWizard({
                         </select>
                       </div>
 
-                      {/* Automated Program Display (Read-Only - Choice of choosing program removed) */}
-                      <div className="sm:col-span-1 bg-white border border-slate-200 rounded-xl px-3 py-1 rounded-lg flex items-center justify-between gap-2 shadow-2xs">
+                      {/* Automated Program Display (Read-Only) */}
+                      <div className="sm:col-span-1 bg-white border border-slate-200 rounded-xl px-3 py-1 flex items-center justify-between gap-2 shadow-2xs">
                         <div className="truncate">
-                          <span className="text-[9px] font-black text-emerald-700 uppercase tracking-wider block">Auto Program</span>
+                          <span className="text-[9px] font-black text-emerald-700 uppercase tracking-wider block">Program</span>
                           <span className="text-xs font-extrabold text-slate-800 truncate block" title={`${determinedProgramInfo.code} — ${determinedProgramInfo.name}`}>
                             {determinedProgramInfo.code}
                           </span>
                         </div>
-                        <GraduationCap className="w-4 h-4 text-emerald-600 shrink-0" />
                       </div>
 
                       {/* Major / Specialization Dropdown (Disabled if program has no majors, shows only connected majors when available) */}
@@ -2820,11 +2882,20 @@ export function ExamBuilderWizard({
                   <div className="relative">
                     <input
                       type="number"
-                      min="0.5"
-                      step="0.5"
+                      min="1"
+                      step="1"
                       placeholder="e.g. 6"
                       value={newTopicHours}
-                      onChange={(e) => setNewTopicHours(e.target.value)}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === "") {
+                          setNewTopicHours("");
+                          return;
+                        }
+                        const parsed = parseFloat(val);
+                        const num = isNaN(parsed) ? 1 : Math.max(1, Math.round(parsed));
+                        setNewTopicHours(String(num));
+                      }}
                       onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleAddTosTopic())}
                       className="w-full bg-white border border-slate-200 rounded-xl pl-3 pr-8 py-2 text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     />
@@ -2882,10 +2953,14 @@ export function ExamBuilderWizard({
                             <div className="inline-flex items-center gap-1 justify-center">
                               <input
                                 type="number"
-                                min="0.1"
-                                step="0.5"
-                                value={item.hours}
-                                onChange={(e) => handleUpdateTosTopic(item.id, item.topic, parseFloat(e.target.value) || 0)}
+                                min="1"
+                                step="1"
+                                value={Math.round(item.hours)}
+                                onChange={(e) => {
+                                  const parsed = parseFloat(e.target.value);
+                                  const num = isNaN(parsed) ? 1 : Math.max(1, Math.round(parsed));
+                                  handleUpdateTosTopic(item.id, item.topic, num);
+                                }}
                                 className="w-16 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-center font-bold text-xs text-slate-800 focus:ring-1 focus:ring-emerald-500 focus:outline-none"
                               />
                               <span className="text-[10px] font-extrabold text-slate-400">hrs</span>
@@ -3174,11 +3249,32 @@ export function ExamBuilderWizard({
                                     <label className="text-xs font-extrabold text-slate-700 block">Question Prompt / Text</label>
                                     <textarea
                                       rows={2}
-                                      placeholder="Enter the question details here..."
+                                      placeholder={
+                                        q.question_type === "Fill_In_The_Blanks"
+                                          ? "e.g. The capital of Batanes is [blank] and it is located in [blank] region."
+                                          : "Enter the question details here..."
+                                      }
                                       value={q.text}
                                       onChange={(e) => updateQuestionText(e.target.value, globalIdx)}
                                       className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 text-xs font-medium text-slate-800 placeholder:text-slate-400 p-3 rounded-xl transition-all duration-300 outline-none"
                                     />
+
+                                    {/* Fill in the Blanks Guidance & Example Box */}
+                                    {q.question_type === "Fill_In_The_Blanks" && (
+                                      <div className="bg-teal-50/90 border border-teal-200/90 rounded-xl p-3 flex items-start gap-2.5 text-xs text-teal-950 shadow-2xs mt-1.5">
+                                        <HelpCircle className="w-4 h-4 text-teal-600 shrink-0 mt-0.5" />
+                                        <div className="space-y-1">
+                                          <span className="font-extrabold text-teal-900 block">How to type Fill in the Blanks:</span>
+                                          <p className="text-teal-800 font-medium text-[11px]">
+                                            Type <code className="bg-teal-100/80 text-teal-950 px-1.5 py-0.5 rounded border border-teal-300 font-bold">[blank]</code> in your question text prompt wherever a blank space should appear.
+                                          </p>
+                                          <div className="bg-white/90 border border-teal-200 rounded-lg p-2 text-[11px] text-slate-700">
+                                            <span className="font-bold text-teal-900 block mb-0.5">Example Prompt:</span>
+                                            &quot;The capital of the Philippines is <span className="font-bold text-teal-800 bg-teal-100 px-1 py-0.5 rounded border border-teal-200">[blank]</span> and it is located in <span className="font-bold text-teal-800 bg-teal-100 px-1 py-0.5 rounded border border-teal-200">[blank]</span>.&quot;
+                                          </div>
+                                        </div>
+                                      </div>
+                                    )}
                                   </div>
 
                                   {/* Option to Upload PNG or Photo */}
@@ -3243,12 +3339,12 @@ export function ExamBuilderWizard({
                                   <label className="text-xs font-extrabold text-slate-600 block">Configure Multiple Choice Options (Mark correct answer):</label>
                                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                     {q.options.map((option, opIdx) => {
-                                      const isCorrect = q.correctAnswer === option;
+                                      const isCorrect = (q.correctAnswer === option && option !== "") || (q.correctAnswer === `__OPT_${opIdx}__`) || (!q.correctAnswer && opIdx === 0);
                                       return (
                                         <div key={opIdx} className="flex items-center gap-2 bg-slate-50 p-2 rounded-xl border border-slate-200">
                                           <button
                                             type="button"
-                                            onClick={() => setMcCorrectAnswer(option, globalIdx)}
+                                            onClick={() => setMcCorrectAnswer(option || `__OPT_${opIdx}__`, globalIdx)}
                                             className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 transition-all ${
                                               isCorrect 
                                                 ? "border-emerald-500 bg-emerald-500 text-white" 
@@ -3382,8 +3478,10 @@ export function ExamBuilderWizard({
                               {/* FILL IN THE BLANKS EDITOR */}
                               {q.question_type === "Fill_In_The_Blanks" && (
                                 <div className="space-y-3 pt-1">
-                                  <div className="flex items-center justify-between">
-                                    <label className="text-xs font-extrabold text-slate-600">Blanks & Answer Keys:</label>
+                                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 bg-teal-50/70 border border-teal-200/80 p-2.5 rounded-xl">
+                                    <div className="text-[11px] font-semibold text-teal-950">
+                                      Set the expected correct answer key for each <code className="bg-teal-100/90 text-teal-900 px-1 py-0.5 rounded border border-teal-300 font-bold">[blank]</code> in order:
+                                    </div>
                                     <button
                                       type="button"
                                       onClick={() => addBlankItem(globalIdx)}
@@ -4203,14 +4301,7 @@ export function ExamBuilderWizard({
 
         {/* Right Side Action Buttons */}
         <div className="flex items-center gap-2.5">
-          <button
-            type="button"
-            onClick={handleSaveDraft}
-            className="hidden sm:inline-flex items-center gap-2 bg-slate-100 hover:bg-slate-200 border border-slate-300/60 text-slate-700 text-xs font-bold px-4 py-2.5 rounded-xl transition-all shadow-2xs cursor-pointer"
-          >
-            <Save className="w-4 h-4 text-slate-600" />
-            <span>Save Draft</span>
-          </button>
+
 
           {step === 1 ? (
             <button
@@ -4295,24 +4386,54 @@ export function ExamBuilderWizard({
             )}
 
             {/* Action Footer */}
-            <div className="p-4 bg-white flex justify-end gap-3">
-              <button
-                onClick={() => {
-                  if (popupModal.onConfirm) {
-                    popupModal.onConfirm();
-                  }
-                  setPopupModal(null);
-                }}
-                className={`w-full py-2.5 px-4 rounded-xl text-xs font-extrabold shadow-sm transition-all text-white cursor-pointer ${
-                  popupModal.type === "success" || popupModal.type === "save_draft"
-                    ? "bg-emerald-600 hover:bg-emerald-700 hover:shadow-emerald-600/20"
-                    : popupModal.type === "warning"
-                    ? "bg-amber-600 hover:bg-amber-700 text-white"
-                    : "bg-slate-900 hover:bg-slate-800"
-                }`}
-              >
-                {popupModal.confirmText || (popupModal.type === "success" ? "Got it!" : "Close")}
-              </button>
+            <div className="p-4 bg-white border-t border-slate-100">
+              {popupModal.type === "save_draft" ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPopupModal(null);
+                      router.push(returnUrl || "/dashboard/faculty");
+                    }}
+                    className="w-full inline-flex justify-center items-center gap-2 bg-slate-100 hover:bg-slate-200 border border-slate-300/80 text-slate-700 text-xs font-bold py-2.5 px-3 rounded-xl transition-all cursor-pointer shadow-2xs"
+                  >
+                    <LogOut className="w-4 h-4 text-slate-600 shrink-0" />
+                    <span>Exit Exam Builder</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (popupModal.onConfirm) {
+                        popupModal.onConfirm();
+                      }
+                      setPopupModal(null);
+                    }}
+                    className="w-full inline-flex justify-center items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold py-2.5 px-3 rounded-xl shadow-md hover:shadow-emerald-600/20 transition-all cursor-pointer"
+                  >
+                    <Edit3 className="w-4 h-4 shrink-0" />
+                    <span>Continue Editing</span>
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (popupModal.onConfirm) {
+                      popupModal.onConfirm();
+                    }
+                    setPopupModal(null);
+                  }}
+                  className={`w-full py-2.5 px-4 rounded-xl text-xs font-extrabold shadow-sm transition-all text-white cursor-pointer ${
+                    popupModal.type === "success"
+                      ? "bg-emerald-600 hover:bg-emerald-700 hover:shadow-emerald-600/20"
+                      : popupModal.type === "warning"
+                      ? "bg-amber-600 hover:bg-amber-700 text-white"
+                      : "bg-slate-900 hover:bg-slate-800"
+                  }`}
+                >
+                  {popupModal.confirmText || (popupModal.type === "success" ? "Got it!" : "Close")}
+                </button>
+              )}
             </div>
           </div>
         </div>
