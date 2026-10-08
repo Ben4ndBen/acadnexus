@@ -479,9 +479,6 @@ export function ChairDashboardClient({
 
         {/* EXAMINATION METADATA HEADER */}
         <div className="text-center space-y-1 py-1 border-b border-slate-200">
-          <h3 className="font-sans font-bold text-xs sm:text-sm text-slate-800 uppercase tracking-wider pb-0.5">
-            {deptName}
-          </h3>
           <h2 className="text-base sm:text-lg font-black font-sans text-slate-900 tracking-wide uppercase">
             OFFICIAL EXAMINATION PAPER
           </h2>

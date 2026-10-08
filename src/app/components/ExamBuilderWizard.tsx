@@ -471,6 +471,15 @@ export function ExamBuilderWizard({
   const [timePenalty, setTimePenalty] = useState<number>(exam.time_penalty_seconds ?? 60);
   const [scorePenalty, setScorePenalty] = useState<number>(exam.score_penalty_points ?? 2);
 
+  // Signatory State for TOS Preview
+  const initialFacName = (exam as any).faculty ? `${(exam as any).faculty.first_name || ""} ${(exam as any).faculty.last_name || ""}`.trim() : "";
+  const [signatoryFacultyName, setSignatoryFacultyName] = useState<string>(initialFacName || "NAME OF FACULTY MEMBER");
+  const [signatoryFacultyRank, setSignatoryFacultyRank] = useState<string>("Academic Rank/Designation");
+  const [signatoryProgChairName, setSignatoryProgChairName] = useState<string>("NAME OF PROGRAM CHAIRPERSON");
+  const [signatoryDeptChairName, setSignatoryDeptChairName] = useState<string>("NAME OF DEPARTMENT CHAIRPERSON");
+  const [signatoryDirectorName, setSignatoryDirectorName] = useState<string>("NAME OF DIRECTOR FOR INSTRUCTION");
+  const [signatoryLayoutMode, setSignatoryLayoutMode] = useState<"WITH_PC" | "WITHOUT_PC" | "PREPARED_BY_PC">("WITH_PC");
+
   // 3. Assigned Students Selection with Sort & Filter
   const [assignedStudents, setAssignedStudents] = useState<StudentItem[]>(initialAssignedStudents);
   const [selectedStudentIds, setSelectedStudentIds] = useState<number[]>([]);
@@ -870,7 +879,6 @@ export function ExamBuilderWizard({
   const [previewTab, setPreviewTab] = useState<"exam" | "tos">("exam");
   const [previewViewMode, setPreviewViewMode] = useState<"paper" | "grouped">("paper");
   const [previewTopicFilter, setPreviewTopicFilter] = useState<string>("ALL");
-  const [showAnswerKey, setShowAnswerKey] = useState<boolean>(true);
   const [printMode, setPrintMode] = useState<"all" | "tos" | "exam">("all");
 
   const handlePrintTos = () => {
@@ -3554,40 +3562,6 @@ export function ExamBuilderWizard({
       {/* STEP 3: REVIEW & LIVE PREVIEW */}
       {step === 3 && (
         <div className="space-y-8">
-          
-          {/* Info Card Summary */}
-          <div className="bg-gradient-to-tr from-slate-900 to-slate-800 border border-slate-950 text-white rounded-3xl p-6 shadow-md relative overflow-hidden">
-            <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff03_1px,transparent_1px),linear-gradient(to_bottom,#ffffff03_1px,transparent_1px)] bg-[size:24px_24px]" />
-            <div className="relative z-10 grid grid-cols-2 md:grid-cols-5 gap-4 sm:gap-6 text-sm">
-              <div>
-                <p className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest">Selected Course</p>
-                <p className="font-extrabold text-slate-200 mt-1">
-                  {courses.find(c => c.course_id === courseId)?.course_code} - {courses.find(c => c.course_id === courseId)?.course_title}
-                </p>
-              </div>
-              <div>
-                <p className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest">Assigned Students</p>
-                <p className="font-extrabold text-emerald-400 mt-1 flex items-center gap-1.5">
-                  <Users className="w-4 h-4 text-emerald-400" />
-                  <span>{selectedStudentIds.length} / {assignedStudents.length} Students</span>
-                </p>
-              </div>
-              <div>
-                <p className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest">Time Limit</p>
-                <p className="font-extrabold text-slate-200 mt-1">{timeLimit} Minutes</p>
-              </div>
-              <div>
-                <p className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest">Question Bank Size</p>
-                <p className="font-extrabold text-slate-200 mt-1">{questions.length} Items ({questions.reduce((sum, q) => sum + q.points, 0)} points)</p>
-              </div>
-              <div>
-                <p className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest">Item Randomization</p>
-                <p className={`font-extrabold mt-1 ${randomizeItems ? "text-emerald-400" : "text-amber-400"}`}>
-                  {randomizeItems ? "Enabled (Shuffle on)" : "Disabled (Sequential)"}
-                </p>
-              </div>
-            </div>
-          </div>
 
           {/* STEP 3 VERTICALLY STACKED PREVIEW CONTAINER */}
           <div className="space-y-8 font-sans">
@@ -3620,7 +3594,7 @@ export function ExamBuilderWizard({
 
                   <div
                     style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}
-                    className="tos-container w-full max-w-[1123px] mx-auto bg-white border-2 border-slate-300 rounded-3xl p-6 sm:p-10 shadow-xl space-y-4 select-text relative min-h-[790px] flex flex-col justify-between overflow-hidden print:max-w-none print:min-h-0 print:shadow-none print:border-none print:p-0 print:m-0 print:rounded-none print:break-after-page"
+                    className="tos-container w-full max-w-[1123px] mx-auto bg-white border-none rounded-none shadow-md font-sans select-text relative min-h-[794px] flex flex-col justify-between overflow-hidden print:max-w-none print:min-h-0 print:shadow-none print:border-none print:p-0 print:m-0 print:rounded-none print:break-after-page"
                   >
                     <style>{`
                       .tos-container, .tos-container *, .tq-container, .tq-container * {
@@ -3630,16 +3604,16 @@ export function ExamBuilderWizard({
                         ${printMode === "tos" ? `
                           @page {
                             size: landscape;
-                            margin: 8mm;
+                            margin: 0;
                           }
                         ` : printMode === "exam" ? `
                           @page {
                             size: portrait;
-                            margin: 10mm;
+                            margin: 0;
                           }
                         ` : `
                           @page {
-                            margin: 8mm;
+                            margin: 0;
                           }
                         `}
                         body {
@@ -3648,63 +3622,53 @@ export function ExamBuilderWizard({
                       }
                     `}</style>
 
-                    <div className="space-y-3 font-sans">
-                      {/* BSC OFFICIAL HEADER IMAGE */}
-                      <div className="w-full border-b border-black pb-2 relative">
-                        <div className="absolute top-1 right-2 sm:top-2 sm:right-4 z-10 print:top-0 print:right-0">
-                          <span className="font-sans font-black text-[11px] sm:text-xs text-black bg-white border border-black px-2 py-0.5 rounded shadow-2xs uppercase tracking-wider">
-                            BSC-ODI-F-121
-                          </span>
-                        </div>
-                        <img
-                          src="/bsc-header.png"
-                          alt="Batanes State College Header"
-                          className="w-full h-auto object-contain mx-auto max-h-[160px] print:max-h-none"
-                        />
-                      </div>
+                    {/* BSC OFFICIAL HEADER IMAGE */}
+                    <div className="w-full relative overflow-hidden leading-none block shrink-0">
+                      <img
+                        src="/bsc-header.png"
+                        alt="Batanes State College Header"
+                        className="w-full h-auto object-cover block mx-auto print:w-full"
+                      />
+                    </div>
 
-                      {/* DYNAMIC DEPARTMENT NAME */}
-                      <div className="text-center pt-0.5">
-                        <h3 className="font-sans font-bold text-sm sm:text-base text-black uppercase tracking-wider">
-                          {dynamicDepartmentName}
-                        </h3>
-                      </div>
+                    {/* INNER CONTENT BODY WITH PADDING */}
+                    <div className="p-6 sm:p-10 space-y-4 flex-1">
 
                       {/* PAGE 1 ONLY: TOS TITLE & METADATA GRID */}
                       {pageIdx === 0 ? (
                         <>
                           {/* TOS TITLE & TERM */}
                           <div className="text-center space-y-0.5 py-1">
-                            <h2 className="text-base sm:text-lg font-black font-sans text-black tracking-wide uppercase">
+                            <h2 className="text-base sm:text-lg font-black font-sans text-black tracking-wider uppercase">
                               TABLE OF SPECIFICATIONS
                             </h2>
-                            <p className="text-xs sm:text-sm font-bold text-black uppercase">
-                              <span className="font-black">[{term.toUpperCase()}] EXAMINATION</span>
+                            <p className="text-xs sm:text-sm font-black text-black uppercase tracking-wide">
+                              <span>[{term ? term.toUpperCase() : "TERM"}] EXAMINATION</span>
                             </p>
-                            <p className="text-xs font-bold text-black">
-                              <span className="underline">{applicableSemesterLabel}</span>
+                            <p className="text-xs font-bold text-black tracking-wide">
+                              <span className="border-b border-black pb-0.5 px-3">{applicableSemesterLabel}</span>
                             </p>
                           </div>
 
                           {/* COURSE & EXAMINATION METADATA GRID MATCHING PDF */}
-                          <div className="space-y-2 text-xs font-bold text-black uppercase pt-1 pb-2">
+                          <div className="space-y-2 text-xs font-extrabold text-black uppercase pt-1 pb-2">
                             <div className="flex flex-col sm:flex-row items-baseline justify-between gap-4">
                               <div className="flex items-baseline gap-2 flex-1 w-full">
-                                <span className="shrink-0 font-extrabold text-[11px]">COURSE CODE:</span>
-                                <span className="border-b-2 border-black flex-1 font-mono font-black text-black px-1 text-[11px]">
+                                <span className="shrink-0 font-black text-[11px] tracking-wide">COURSE CODE:</span>
+                                <span className="border-b border-black flex-1 font-mono font-bold text-black px-1 text-[11px] min-h-[18px]">
                                   {selectedCourse.course_code || ""}
                                 </span>
                               </div>
                               <div className="flex items-baseline gap-2 flex-1 w-full">
-                                <span className="shrink-0 font-extrabold text-[11px]">DATE OF EXAMINATION:</span>
-                                <span className="border-b-2 border-black flex-1 font-mono font-black text-black px-1 text-[11px]">
+                                <span className="shrink-0 font-black text-[11px] tracking-wide">DATE OF EXAMINATION:</span>
+                                <span className="border-b border-black flex-1 font-mono font-bold text-black px-1 text-[11px] min-h-[18px]">
                                   {examDate}
                                 </span>
                               </div>
                             </div>
                             <div className="flex items-baseline gap-2 w-full">
-                              <span className="shrink-0 font-extrabold text-[11px]">COURSE TITLE:</span>
-                              <span className="border-b-2 border-black flex-1 font-extrabold text-black px-1 text-[11px]">
+                              <span className="shrink-0 font-black text-[11px] tracking-wide">COURSE TITLE:</span>
+                              <span className="border-b border-black flex-1 font-bold text-black px-1 text-[11px] min-h-[18px]">
                                 {selectedCourse.course_title || ""}
                               </span>
                             </div>
@@ -3714,39 +3678,39 @@ export function ExamBuilderWizard({
 
                       {/* BSC-ODI-F-121 OFFICIAL TABLE FORMAT MATCHING PDF */}
                       <div className="w-full max-w-full overflow-hidden rounded-none border border-black shadow-2xs print:overflow-visible">
-                        <table className="w-full text-left border-collapse text-[9.5px] print:text-[9px] table-fixed border-black font-sans">
+                        <table className="w-full text-left border-collapse text-[9px] print:text-[8.5px] table-fixed border-black font-sans">
                           <thead>
                             <tr className="bg-white text-black font-black uppercase text-center border-b border-black">
-                              <th rowSpan={3} className="py-2 px-1 border-r border-black w-[13%] text-left font-black align-middle text-[8.5px] leading-tight">LESSON / TOPIC</th>
-                              <th rowSpan={3} className="py-2 px-1 border-r border-black w-[16%] text-left font-black align-middle text-[8.5px] leading-tight">LEARNING OUTCOMES</th>
-                              <th rowSpan={3} className="py-2 px-0.5 border-r border-black w-[5%] font-black text-center align-middle text-[7.5px] leading-tight">NO. OF TEACHING HOURS</th>
-                              <th rowSpan={3} className="py-2 px-0.5 border-r border-black w-[5%] font-black text-center align-middle text-[7.5px] leading-tight">% OF ALLOCATION</th>
-                              <th rowSpan={3} className="py-2 px-0.5 border-r border-black w-[5%] font-black text-center align-middle text-[7.5px] leading-tight">NO. OF ITEMS</th>
+                              <th rowSpan={3} className="py-2 px-1 border-r border-black w-[14%] text-left font-black align-middle text-[8.5px] leading-tight">LESSON / TOPIC</th>
+                              <th rowSpan={3} className="py-2 px-1.5 border-r border-black w-[24%] text-left font-black align-middle text-[8.5px] leading-tight">LEARNING OUTCOMES</th>
+                              <th rowSpan={3} className="py-2 px-0.5 border-r border-black w-[5.5%] font-black text-center align-middle text-[7.5px] leading-tight">NO. OF TEACHING HOURS</th>
+                              <th rowSpan={3} className="py-2 px-0.5 border-r border-black w-[5.5%] font-black text-center align-middle text-[7.5px] leading-tight">% OF ALLOCATION</th>
+                              <th rowSpan={3} className="py-2 px-0.5 border-r border-black w-[5.5%] font-black text-center align-middle text-[7.5px] leading-tight">NO. OF ITEMS</th>
                               <th colSpan={7} className="py-1.5 px-0.5 border-r border-b border-black bg-white text-black font-black text-center text-[8.5px] tracking-tight">
                                 ITEM SPECIFICATION PER TAXONOMY OF LEARNING
                               </th>
-                              <th rowSpan={3} className="py-2 px-1 border-black w-[6.5%] font-black text-center align-middle text-[7.5px] leading-tight">ITEM PLACEMENT</th>
+                              <th rowSpan={3} className="py-2 px-1 border-black w-[11.7%] font-black text-center align-middle text-[7.5px] leading-tight">ITEM PLACEMENT</th>
                             </tr>
                             <tr className="bg-white text-black font-black text-[7px] uppercase text-center border-b border-black">
-                              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-normal text-center overflow-hidden">
-                                REMEMBERING /<br />KNOWLEDGE
+                              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-normal text-center overflow-hidden w-[4.8%]">
+                                KNOW LEDGE /<br />REMEMBERING
                               </th>
-                              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-normal text-center overflow-hidden">
-                                UNDERSTANDING /<br />COMPREHENSION
+                              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-normal text-center overflow-hidden w-[4.8%]">
+                                COMPRE HENSION /<br />UNDERSTANDING
                               </th>
-                              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-normal text-center overflow-hidden">
-                                APPLYING /<br />APPLICATION
+                              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-normal text-center overflow-hidden w-[4.8%]">
+                                APPLICATION /<br />APPLYING
                               </th>
-                              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-normal text-center overflow-hidden">
-                                ANALYZING /<br />ANALYSIS
+                              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-normal text-center overflow-hidden w-[4.8%]">
+                                ANALYSIS /<br />ANALYZING
                               </th>
-                              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-normal text-center overflow-hidden">
-                                EVALUATING /<br />SYNTHESIS
+                              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-normal text-center overflow-hidden w-[4.8%]">
+                                SYNTHESIS /<br />EVALUATING
                               </th>
-                              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-normal text-center overflow-hidden">
-                                CREATING /<br />EVALUATION
+                              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-normal text-center overflow-hidden w-[4.8%]">
+                                EVALUATION /<br />CREA TING
                               </th>
-                              <th rowSpan={2} className="py-2 px-0.5 border-r border-black bg-white font-black text-black text-[8.5px] text-center align-middle">TOTAL</th>
+                              <th rowSpan={2} className="py-2 px-0.5 border-r border-black bg-white font-black text-black text-[8.5px] text-center align-middle w-[5%]">TOTAL</th>
                             </tr>
                             <tr className="bg-white text-black font-black text-[8.5px] uppercase text-center border-b border-black">
                               <th className="py-1 px-0.5 border-r border-black font-black text-center underline">
@@ -3774,15 +3738,15 @@ export function ExamBuilderWizard({
                               const t = row.taxonomy;
                               return (
                                 <tr key={idx} className="bg-white border-b border-black">
-                                  <td className="py-2 px-2 font-bold text-black border-r border-black align-top">
+                                  <td className="py-2 px-2 font-bold text-black border-r border-black align-top text-[9px] leading-normal break-words">
                                     {row.topic}
                                   </td>
-                                  <td className="py-1 px-1.5 text-black border-r border-black text-[8.5px] align-top whitespace-pre-wrap break-words">
+                                  <td className="py-1.5 px-2 text-black border-r border-black text-[9px] align-top whitespace-pre-wrap break-words leading-normal">
                                     <div
                                       contentEditable
                                       suppressContentEditableWarning
                                       onBlur={(e) => handleUpdateLearningOutcome(row.topic, e.currentTarget.innerText || "")}
-                                      className="w-full min-h-[32px] bg-transparent outline-none font-sans text-[8.5px] leading-snug text-black font-medium focus:bg-amber-50/80 focus:ring-1 focus:ring-amber-300 rounded p-0.5 transition-all cursor-text print:p-0 print:focus:bg-transparent print:focus:ring-0"
+                                      className="w-full min-h-[36px] bg-transparent outline-none font-sans text-[9px] leading-normal text-black font-medium focus:bg-amber-50 focus:ring-1 focus:ring-amber-400 rounded p-1 transition-all cursor-text print:p-0 print:focus:bg-transparent print:focus:ring-0 whitespace-pre-wrap break-words"
                                       title="Faculty: Click to edit learning outcomes for this topic"
                                     >
                                       {learningOutcomes[row.topic] ?? `Demonstrates competency and learning outcomes for ${row.topic.toLowerCase()}.`}
@@ -3818,7 +3782,7 @@ export function ExamBuilderWizard({
                                   <td className="py-2 px-0.5 text-center border-r border-black font-black text-black bg-white align-top">
                                     {row.count}
                                   </td>
-                                  <td className="py-2 px-1.5 font-mono font-bold text-black text-[9px] align-top">
+                                  <td className="py-2 px-1.5 font-sans font-bold text-black text-[9px] align-top text-center whitespace-nowrap">
                                     {row.rangeString}
                                   </td>
                                 </tr>
@@ -3827,58 +3791,252 @@ export function ExamBuilderWizard({
                           </tbody>
                           {pageIdx === tosPages.length - 1 && (
                             <tfoot>
-                              <tr className="bg-[#f4a100] text-black font-black text-xs uppercase border-t-2 border-black">
-                                <td colSpan={2} className="py-2 px-3 border-r border-black text-center font-black bg-[#f4a100]">TOTAL</td>
-                                <td className="py-2 px-1 text-center border-r border-black font-black bg-[#f4a100]">
+                              <tr className="bg-[#F5B000] text-black font-black text-xs uppercase border-t-2 border-black divide-x divide-black">
+                                <td colSpan={2} className="py-2 px-3 border-r border-black text-left font-black bg-[#F5B000]">TOTAL</td>
+                                <td className="py-2 px-1 text-center border-r border-black font-black bg-[#F5B000]">
                                   {tosTopicBreakdown.reduce((sum, r) => sum + r.hoursTaught, 0)}
                                 </td>
-                                <td className="py-2 px-1 text-center border-r border-black font-black bg-[#f4a100]">
+                                <td className="py-2 px-1 text-center border-r border-black font-black bg-[#F5B000]">
                                   {questions.length > 0 ? "100%" : "0%"}
                                 </td>
-                                <td className="py-2 px-1 text-center border-r border-black font-black bg-[#f4a100]">
+                                <td className="py-2 px-1 text-center border-r border-black font-black bg-[#F5B000]">
                                   {questions.length}
                                 </td>
-                                <td className="py-2 px-0.5 text-center border-r border-black font-black bg-[#f4a100]">
+                                <td className="py-2 px-0.5 text-center border-r border-black font-black bg-[#F5B000]">
                                   {tosTopicBreakdown.reduce((sum, r) => sum + r.taxonomy.remembering.count, 0)}
                                 </td>
-                                <td className="py-2 px-0.5 text-center border-r border-black font-black bg-[#f4a100]">
+                                <td className="py-2 px-0.5 text-center border-r border-black font-black bg-[#F5B000]">
                                   {tosTopicBreakdown.reduce((sum, r) => sum + r.taxonomy.understanding.count, 0)}
                                 </td>
-                                <td className="py-2 px-0.5 text-center border-r border-black font-black bg-[#f4a100]">
+                                <td className="py-2 px-0.5 text-center border-r border-black font-black bg-[#F5B000]">
                                   {tosTopicBreakdown.reduce((sum, r) => sum + r.taxonomy.applying.count, 0)}
                                 </td>
-                                <td className="py-2 px-0.5 text-center border-r border-black font-black bg-[#f4a100]">
+                                <td className="py-2 px-0.5 text-center border-r border-black font-black bg-[#F5B000]">
                                   {tosTopicBreakdown.reduce((sum, r) => sum + r.taxonomy.analyzing.count, 0)}
                                 </td>
-                                <td className="py-2 px-0.5 text-center border-r border-black font-black bg-[#f4a100]">
+                                <td className="py-2 px-0.5 text-center border-r border-black font-black bg-[#F5B000]">
                                   {tosTopicBreakdown.reduce((sum, r) => sum + r.taxonomy.evaluating.count, 0)}
                                 </td>
-                                <td className="py-2 px-0.5 text-center border-r border-black font-black bg-[#f4a100]">
+                                <td className="py-2 px-0.5 text-center border-r border-black font-black bg-[#F5B000]">
                                   {tosTopicBreakdown.reduce((sum, r) => sum + r.taxonomy.creating.count, 0)}
                                 </td>
-                                <td className="py-2 px-0.5 text-center border-r border-black font-black bg-[#f4a100]">
+                                <td className="py-2 px-0.5 text-center border-r border-black font-black bg-[#F5B000]">
                                   {questions.length}
                                 </td>
-                                <td className="py-2 px-1.5 text-[9px] font-black bg-[#f4a100]">
+                                <td className="py-2 px-1.5 text-[9px] font-black bg-[#F5B000]">
+                                  —
                                 </td>
                               </tr>
                             </tfoot>
                           )}
                         </table>
                       </div>
-                    </div>
 
-                    {/* BSC FOOTER GRAPHIC */}
-                    <div className="w-full border-t border-slate-300 pt-3 mt-4 flex items-center justify-between">
-                      <img
-                        src="/bsc-footer.png"
-                        alt="Batanes State College Footer"
-                        className="w-full h-auto object-contain mx-auto max-h-[140px] print:max-h-none"
-                      />
+                      {/* EDITABLE SIGNATORIES SECTION FOR EXAM BUILDER TOS PREVIEW */}
+                      {pageIdx === tosPages.length - 1 && (
+                        <div className="pt-6 border-t border-black space-y-6">
+
+
+                          {/* OPTION 1: WITH PROGRAM CHAIR */}
+                          {signatoryLayoutMode === "WITH_PC" && (
+                            <div className="space-y-4">
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-8 gap-x-12 text-xs text-black font-sans pt-1">
+                                <div className="space-y-6">
+                                  <p className="font-extrabold text-black uppercase tracking-wider text-[11px]">Prepared by:</p>
+                                  <div>
+                                    <p
+                                      contentEditable
+                                      suppressContentEditableWarning
+                                      onBlur={(e) => setSignatoryFacultyName(e.currentTarget.innerText || "")}
+                                      className="font-bold text-black border-b border-black pb-0.5 uppercase tracking-wide inline-block w-full outline-none focus:bg-amber-100 rounded px-1 cursor-text print:p-0 print:bg-transparent"
+                                    >
+                                      {signatoryFacultyName || "NAME OF FACULTY MEMBER"}
+                                    </p>
+                                    <p
+                                      contentEditable
+                                      suppressContentEditableWarning
+                                      onBlur={(e) => setSignatoryFacultyRank(e.currentTarget.innerText || "")}
+                                      className="text-[11px] text-black font-semibold mt-1 outline-none focus:bg-amber-100 rounded px-1 cursor-text print:p-0 print:bg-transparent"
+                                    >
+                                      {signatoryFacultyRank || "Academic Rank/Designation"}
+                                    </p>
+                                  </div>
+                                </div>
+
+                                <div className="space-y-6">
+                                  <p className="font-extrabold text-black uppercase tracking-wider text-[11px]">Reviewed by:</p>
+                                  <div>
+                                    <p
+                                      contentEditable
+                                      suppressContentEditableWarning
+                                      onBlur={(e) => setSignatoryProgChairName(e.currentTarget.innerText || "")}
+                                      className="font-bold text-black border-b border-black pb-0.5 uppercase tracking-wide inline-block w-full outline-none focus:bg-amber-100 rounded px-1 cursor-text print:p-0 print:bg-transparent"
+                                    >
+                                      {signatoryProgChairName || "NAME OF PROGRAM CHAIRPERSON"}
+                                    </p>
+                                    <p className="text-[11px] text-black font-semibold mt-1">Program Chairperson</p>
+                                  </div>
+                                </div>
+
+                                <div className="space-y-6">
+                                  <p className="font-extrabold text-black uppercase tracking-wider text-[11px]">Recommending Approval:</p>
+                                  <div>
+                                    <p
+                                      contentEditable
+                                      suppressContentEditableWarning
+                                      onBlur={(e) => setSignatoryDeptChairName(e.currentTarget.innerText || "")}
+                                      className="font-bold text-black border-b border-black pb-0.5 uppercase tracking-wide inline-block w-full outline-none focus:bg-amber-100 rounded px-1 cursor-text print:p-0 print:bg-transparent"
+                                    >
+                                      {signatoryDeptChairName || "NAME OF DEPARTMENT CHAIRPERSON"}
+                                    </p>
+                                    <p className="text-[11px] text-black font-semibold mt-1">Department Chairperson</p>
+                                  </div>
+                                </div>
+
+                                <div className="space-y-6">
+                                  <p className="font-extrabold text-black uppercase tracking-wider text-[11px]">Approved by:</p>
+                                  <div>
+                                    <p
+                                      contentEditable
+                                      suppressContentEditableWarning
+                                      onBlur={(e) => setSignatoryDirectorName(e.currentTarget.innerText || "")}
+                                      className="font-bold text-black border-b border-black pb-0.5 uppercase tracking-wide inline-block w-full outline-none focus:bg-amber-100 rounded px-1 cursor-text print:p-0 print:bg-transparent"
+                                    >
+                                      {signatoryDirectorName || "NAME OF DIRECTOR FOR INSTRUCTION"}
+                                    </p>
+                                    <p className="text-[11px] text-black font-semibold mt-1">Director for Instruction</p>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* OPTION 2: WITHOUT PROGRAM CHAIR */}
+                          {signatoryLayoutMode === "WITHOUT_PC" && (
+                            <div className="space-y-4">
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-8 gap-x-12 text-xs text-black font-sans pt-1">
+                                <div className="space-y-6">
+                                  <p className="font-extrabold text-black uppercase tracking-wider text-[11px]">Prepared by:</p>
+                                  <div>
+                                    <p
+                                      contentEditable
+                                      suppressContentEditableWarning
+                                      onBlur={(e) => setSignatoryFacultyName(e.currentTarget.innerText || "")}
+                                      className="font-bold text-black border-b border-black pb-0.5 uppercase tracking-wide inline-block w-full outline-none focus:bg-amber-100 rounded px-1 cursor-text print:p-0 print:bg-transparent"
+                                    >
+                                      {signatoryFacultyName || "NAME OF FACULTY MEMBER"}
+                                    </p>
+                                    <p
+                                      contentEditable
+                                      suppressContentEditableWarning
+                                      onBlur={(e) => setSignatoryFacultyRank(e.currentTarget.innerText || "")}
+                                      className="text-[11px] text-black font-semibold mt-1 outline-none focus:bg-amber-100 rounded px-1 cursor-text print:p-0 print:bg-transparent"
+                                    >
+                                      {signatoryFacultyRank || "Academic Rank/Designation"}
+                                    </p>
+                                  </div>
+                                </div>
+
+                                <div className="space-y-6">
+                                  <p className="font-extrabold text-black uppercase tracking-wider text-[11px]">Reviewed by:</p>
+                                  <div>
+                                    <p
+                                      contentEditable
+                                      suppressContentEditableWarning
+                                      onBlur={(e) => setSignatoryDeptChairName(e.currentTarget.innerText || "")}
+                                      className="font-bold text-black border-b border-black pb-0.5 uppercase tracking-wide inline-block w-full outline-none focus:bg-amber-100 rounded px-1 cursor-text print:p-0 print:bg-transparent"
+                                    >
+                                      {signatoryDeptChairName || "NAME OF DEPARTMENT CHAIRPERSON"}
+                                    </p>
+                                    <p className="text-[11px] text-black font-semibold mt-1">Department Chairperson</p>
+                                  </div>
+                                </div>
+
+                                <div className="sm:col-span-2 max-w-sm mx-auto w-full space-y-6 pt-2">
+                                  <p className="font-extrabold text-black uppercase tracking-wider text-[11px] text-center">Approved by:</p>
+                                  <div className="text-center">
+                                    <p
+                                      contentEditable
+                                      suppressContentEditableWarning
+                                      onBlur={(e) => setSignatoryDirectorName(e.currentTarget.innerText || "")}
+                                      className="font-bold text-black border-b border-black pb-0.5 uppercase tracking-wide inline-block w-full outline-none focus:bg-amber-100 rounded px-1 cursor-text print:p-0 print:bg-transparent"
+                                    >
+                                      {signatoryDirectorName || "NAME OF DIRECTOR FOR INSTRUCTION"}
+                                    </p>
+                                    <p className="text-[11px] text-black font-semibold mt-1">Director for Instruction</p>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* OPTION 3: PREPARED BY PROGRAM CHAIR */}
+                          {signatoryLayoutMode === "PREPARED_BY_PC" && (
+                            <div className="space-y-4">
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-8 gap-x-12 text-xs text-black font-sans pt-1">
+                                <div className="space-y-6">
+                                  <p className="font-extrabold text-black uppercase tracking-wider text-[11px]">Prepared by:</p>
+                                  <div>
+                                    <p
+                                      contentEditable
+                                      suppressContentEditableWarning
+                                      onBlur={(e) => setSignatoryProgChairName(e.currentTarget.innerText || "")}
+                                      className="font-bold text-black border-b border-black pb-0.5 uppercase tracking-wide inline-block w-full outline-none focus:bg-amber-100 rounded px-1 cursor-text print:p-0 print:bg-transparent"
+                                    >
+                                      {signatoryProgChairName || signatoryFacultyName || "NAME OF PROGRAM CHAIRPERSON"}
+                                    </p>
+                                    <p className="text-[11px] text-black font-semibold mt-1">Program Chairperson</p>
+                                  </div>
+                                </div>
+
+                                <div className="space-y-6">
+                                  <p className="font-extrabold text-black uppercase tracking-wider text-[11px]">Recommending Approval:</p>
+                                  <div>
+                                    <p
+                                      contentEditable
+                                      suppressContentEditableWarning
+                                      onBlur={(e) => setSignatoryDeptChairName(e.currentTarget.innerText || "")}
+                                      className="font-bold text-black border-b border-black pb-0.5 uppercase tracking-wide inline-block w-full outline-none focus:bg-amber-100 rounded px-1 cursor-text print:p-0 print:bg-transparent"
+                                    >
+                                      {signatoryDeptChairName || "NAME OF DEPARTMENT CHAIRPERSON"}
+                                    </p>
+                                    <p className="text-[11px] text-black font-semibold mt-1">Department Chairperson</p>
+                                  </div>
+                                </div>
+
+                                <div className="sm:col-span-2 max-w-sm mx-auto w-full space-y-6 pt-2">
+                                  <p className="font-extrabold text-black uppercase tracking-wider text-[11px] text-center">Approved by:</p>
+                                  <div className="text-center">
+                                    <p
+                                      contentEditable
+                                      suppressContentEditableWarning
+                                      onBlur={(e) => setSignatoryDirectorName(e.currentTarget.innerText || "")}
+                                      className="font-bold text-black border-b border-black pb-0.5 uppercase tracking-wide inline-block w-full outline-none focus:bg-amber-100 rounded px-1 cursor-text print:p-0 print:bg-transparent"
+                                    >
+                                      {signatoryDirectorName || "NAME OF DIRECTOR FOR INSTRUCTION"}
+                                    </p>
+                                    <p className="text-[11px] text-black font-semibold mt-1">Director for Instruction</p>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      </div>
+
+                      {/* BSC OFFICIAL TOS FOOTER IMAGE (BORDERLESS AT BOTTOM EDGE) */}
+                      <div className="w-full mt-auto relative overflow-hidden leading-none block shrink-0">
+                        <img
+                          src="/bsc-tos-footer.png"
+                          alt="Batanes State College TOS Footer"
+                          className="w-full h-auto object-cover block mx-auto print:w-full"
+                        />
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                ))}
             </div>
 
 
@@ -3892,20 +4050,6 @@ export function ExamBuilderWizard({
                     </span>
                   </div>
                   <div className="flex items-center gap-2.5">
-                    <button
-                      type="button"
-                      onClick={() => setShowAnswerKey(!showAnswerKey)}
-                      className={`inline-flex items-center gap-1.5 text-[11px] font-extrabold px-3 py-1 rounded-xl transition-all shadow-2xs border cursor-pointer ${
-                        showAnswerKey
-                          ? "bg-emerald-950 border-emerald-500 text-emerald-300 hover:bg-emerald-900"
-                          : "bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700"
-                      }`}
-                      title="Toggle Answer Key visibility on Test Questionnaire preview"
-                    >
-                      <CheckCircle className={`w-3.5 h-3.5 ${showAnswerKey ? "text-emerald-400" : "text-slate-400"}`} />
-                      <span>{showAnswerKey ? "Answer Key Active" : "Show Answer Key"}</span>
-                    </button>
-
                     <button
                       type="button"
                       onClick={handlePrintExam}
@@ -3925,25 +4069,24 @@ export function ExamBuilderWizard({
                   <div
                     key={pageIdx}
                     style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}
-                    className="tq-container w-full max-w-[850px] mx-auto bg-white border-2 border-slate-300 rounded-3xl p-6 sm:p-10 shadow-xl space-y-4 font-sans select-text relative min-h-[1050px] flex flex-col justify-between print:min-h-0 print:shadow-none print:border-none print:p-0 print:m-0 print:rounded-none"
+                    className="tq-container w-full max-w-[794px] mx-auto bg-white border-none rounded-none shadow-md font-sans select-text relative min-h-[1123px] flex flex-col justify-between overflow-hidden print:max-w-none print:min-h-0 print:shadow-none print:border-none print:p-0 print:m-0 print:rounded-none print:break-after-page"
                   >
-                    <div className="space-y-4">
-                      {/* BSC OFFICIAL HEADER IMAGE FOR EVERY A4 PAGE */}
-                      <div className="w-full border-b border-slate-200 pb-3">
-                        <img
-                          src="/bsc-header.png"
-                          alt="Batanes State College Header"
-                          className="w-full h-auto object-contain mx-auto max-h-[140px] print:max-h-none"
-                        />
-                      </div>
+                    {/* BSC OFFICIAL HEADER IMAGE FOR EVERY A4 PAGE */}
+                    <div className="w-full relative overflow-hidden leading-none block shrink-0">
+                      <img
+                        src="/bsc-header.png"
+                        alt="Batanes State College Header"
+                        className="w-full h-auto object-cover block mx-auto print:w-full"
+                      />
+                    </div>
+
+                    {/* INNER CONTENT BODY WITH PADDING */}
+                    <div className="p-6 sm:p-10 space-y-4 flex-1">
 
                       {/* PAGE 1: FULL EXAMINATION METADATA HEADER */}
                       {pageIdx === 0 ? (
                         <>
                           <div className="text-center space-y-1 py-1 border-b border-slate-200">
-                            <h3 className="font-sans font-bold text-xs sm:text-sm text-slate-800 uppercase tracking-wider pb-0.5">
-                              {dynamicDepartmentName}
-                            </h3>
                             <h2 className="text-base sm:text-lg font-black font-sans text-slate-900 tracking-wide uppercase">
                               OFFICIAL EXAMINATION PAPER
                             </h2>
@@ -4064,44 +4207,19 @@ export function ExamBuilderWizard({
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
                                       {q.options.map((opt: string, optIdx: number) => {
                                         const label = String.fromCharCode(65 + optIdx);
-                                        const isCorrect = (q.correctAnswer === opt) || (q.correctAnswer?.trim().toUpperCase() === label);
                                         return (
                                           <div
                                             key={optIdx}
-                                            className={`flex items-center gap-2 font-medium text-xs px-2.5 py-1.5 rounded-lg border transition-all ${
-                                              showAnswerKey && isCorrect
-                                                ? "bg-emerald-50 border-emerald-400 text-emerald-950 font-extrabold shadow-2xs"
-                                                : "bg-slate-50 border-slate-200/80 text-slate-800"
-                                            }`}
+                                            className="flex items-center gap-2 font-medium text-xs px-2.5 py-1.5 rounded-lg border bg-slate-50 border-slate-200/80 text-slate-800"
                                           >
-                                            <span
-                                              className={`font-bold px-1.5 py-0.5 rounded text-[10px] ${
-                                                showAnswerKey && isCorrect
-                                                  ? "bg-emerald-600 text-white"
-                                                  : "bg-slate-200 text-slate-900"
-                                              }`}
-                                            >
+                                            <span className="font-bold px-1.5 py-0.5 rounded text-[10px] bg-slate-200 text-slate-900">
                                               {label}.
                                             </span>
                                             <span>{opt || `Option ${label}`}</span>
-                                            {showAnswerKey && isCorrect && (
-                                              <span className="ml-auto text-[10px] font-extrabold text-emerald-800 bg-emerald-100 border border-emerald-300 px-1.5 py-0.5 rounded shrink-0 flex items-center gap-1">
-                                                <Check className="w-3 h-3 text-emerald-600 font-black" /> Key
-                                              </span>
-                                            )}
                                           </div>
                                         );
                                       })}
                                     </div>
-                                    {showAnswerKey && (
-                                      <div className="inline-flex items-center gap-1.5 bg-emerald-50/90 border border-emerald-300/80 px-2.5 py-1 rounded-lg text-[11px] font-bold text-emerald-950">
-                                        <Check className="w-3.5 h-3.5 text-emerald-600" />
-                                        <span>Answer Key:</span>
-                                        <span className="font-extrabold text-emerald-950 bg-white border border-emerald-200 px-2 py-0.5 rounded font-mono">
-                                          {formatMcCorrectAnswer(q.options, q.correctAnswer)}
-                                        </span>
-                                      </div>
-                                    )}
                                   </div>
                                 )}
 
@@ -4109,40 +4227,16 @@ export function ExamBuilderWizard({
                                 {q.question_type === "True_False" && (
                                   <div className="pl-6 pt-1 space-y-2">
                                     <div className="flex items-center gap-4 font-semibold text-slate-700">
-                                      {["True", "False"].map((choice) => {
-                                        const isSelected = q.correctAnswer === choice;
-                                        return (
-                                          <div
-                                            key={choice}
-                                            className={`flex items-center gap-1.5 border px-3 py-1 rounded-lg text-xs transition-all ${
-                                              showAnswerKey && isSelected
-                                                ? "bg-emerald-50 border-emerald-400 text-emerald-950 font-extrabold shadow-2xs"
-                                                : "bg-slate-50 border-slate-300 text-slate-700"
-                                            }`}
-                                          >
-                                            <div
-                                              className={`w-3.5 h-3.5 border-2 rounded-sm flex items-center justify-center ${
-                                                showAnswerKey && isSelected
-                                                  ? "border-emerald-600 bg-emerald-600 text-white"
-                                                  : "border-slate-400"
-                                              }`}
-                                            >
-                                              {showAnswerKey && isSelected && <Check className="w-3 h-3 text-white font-black" />}
-                                            </div>
-                                            <span>{choice}</span>
-                                          </div>
-                                        );
-                                      })}
+                                      {["True", "False"].map((choice) => (
+                                        <div
+                                          key={choice}
+                                          className="flex items-center gap-1.5 border px-3 py-1 rounded-lg text-xs bg-slate-50 border-slate-300 text-slate-700"
+                                        >
+                                          <div className="w-3.5 h-3.5 border-2 border-slate-400 rounded-sm flex items-center justify-center" />
+                                          <span>{choice}</span>
+                                        </div>
+                                      ))}
                                     </div>
-                                    {showAnswerKey && (
-                                      <div className="inline-flex items-center gap-1.5 bg-emerald-50/90 border border-emerald-300/80 px-2.5 py-1 rounded-lg text-[11px] font-bold text-emerald-950">
-                                        <Check className="w-3.5 h-3.5 text-emerald-600" />
-                                        <span>Answer Key:</span>
-                                        <span className="font-extrabold text-emerald-950 bg-white border border-emerald-200 px-2 py-0.5 rounded font-mono">
-                                          {q.correctAnswer || "Not specified"}
-                                        </span>
-                                      </div>
-                                    )}
                                   </div>
                                 )}
 
@@ -4152,15 +4246,6 @@ export function ExamBuilderWizard({
                                     <div className="border-b-2 border-dashed border-slate-400 w-full max-w-xs h-6 text-slate-400 font-mono text-[10px] flex items-end">
                                       Answer: _______________________
                                     </div>
-                                    {showAnswerKey && (
-                                      <div className="inline-flex items-center gap-1.5 bg-emerald-50/90 border border-emerald-300/80 px-2.5 py-1 rounded-lg text-[11px] font-bold text-emerald-950">
-                                        <Check className="w-3.5 h-3.5 text-emerald-600" />
-                                        <span>Answer Key:</span>
-                                        <span className="font-extrabold text-emerald-950 bg-white border border-emerald-200 px-2 py-0.5 rounded font-mono">
-                                          {q.correctAnswer || "(Not specified)"}
-                                        </span>
-                                      </div>
-                                    )}
                                   </div>
                                 )}
 
@@ -4174,18 +4259,6 @@ export function ExamBuilderWizard({
                                         </div>
                                       ))}
                                     </div>
-                                    {showAnswerKey && (
-                                      <div className="flex flex-wrap items-center gap-2 bg-emerald-50/90 border border-emerald-300/80 p-2.5 rounded-xl text-[11px] font-bold text-emerald-950">
-                                        <span className="flex items-center gap-1 font-extrabold uppercase text-emerald-950 text-[10px]">
-                                          <Check className="w-3.5 h-3.5 text-emerald-600" /> Answer Keys:
-                                        </span>
-                                        {(q.blanks || []).map((b: any, bIdx: number) => (
-                                          <span key={bIdx} className="bg-white border border-emerald-300 px-2 py-0.5 rounded font-mono text-emerald-950">
-                                            Blank #{bIdx + 1}: <strong className="text-emerald-800">{b.answer || "___"}</strong> ({b.points || 1} pt)
-                                          </span>
-                                        ))}
-                                      </div>
-                                    )}
                                   </div>
                                 )}
 
@@ -4206,18 +4279,6 @@ export function ExamBuilderWizard({
                                         ))}
                                       </div>
                                     </div>
-                                    {showAnswerKey && (
-                                      <div className="flex flex-wrap items-center gap-2 bg-emerald-50/90 border border-emerald-300/80 p-2.5 rounded-xl text-[11px] font-bold text-emerald-950">
-                                        <span className="flex items-center gap-1 font-extrabold uppercase text-emerald-950 text-[10px]">
-                                          <Check className="w-3.5 h-3.5 text-emerald-600" /> Answer Key Mapping:
-                                        </span>
-                                        {q.matches.map((m: any, mIdx: number) => (
-                                          <span key={mIdx} className="bg-white border border-emerald-300 px-2 py-0.5 rounded font-mono text-emerald-950 text-[10px]">
-                                            {mIdx + 1} → Choice {String.fromCharCode(65 + mIdx)} ({m.choice})
-                                          </span>
-                                        ))}
-                                      </div>
-                                    )}
                                   </div>
                                 )}
 
@@ -4227,15 +4288,6 @@ export function ExamBuilderWizard({
                                     <div className="border border-slate-300 rounded-lg p-2.5 h-16 bg-slate-50/50 text-slate-400 text-[10px] italic">
                                       [ Space for student response - Min {q.min_words || 50} words ]
                                     </div>
-                                    {showAnswerKey && (
-                                      <div className="inline-flex items-center gap-1.5 bg-emerald-50/90 border border-emerald-300/80 px-2.5 py-1 rounded-lg text-[11px] font-bold text-emerald-950">
-                                        <Check className="w-3.5 h-3.5 text-emerald-600" />
-                                        <span>Answer Guide / Key Rubric:</span>
-                                        <span className="font-extrabold text-emerald-950 bg-white border border-emerald-200 px-2 py-0.5 rounded font-sans">
-                                          {q.correctAnswer || `Evaluated by faculty. Min ${q.min_words || 50} words required.`}
-                                        </span>
-                                      </div>
-                                    )}
                                   </div>
                                 )}
 
@@ -4248,21 +4300,14 @@ export function ExamBuilderWizard({
                       </div>
                     </div>
 
-                    {/* BSC OFFICIAL FOOTER IMAGE & PAGE BADGE */}
-                    <div className="space-y-2 pt-4">
-                      <div className="w-full border-t border-slate-300 pt-2">
+                      {/* BSC OFFICIAL FOOTER IMAGE */}
+                      <div className="w-full mt-auto relative overflow-hidden leading-none block shrink-0">
                         <img
                           src="/bsc-footer.png"
                           alt="Batanes State College Footer"
-                          className="w-full h-auto object-contain mx-auto max-h-[120px] print:max-h-none"
+                          className="w-full h-auto object-cover block mx-auto print:w-full"
                         />
                       </div>
-                      <div className="text-center print:hidden">
-                        <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
-                          Examination Paper Sheet • Page {pageIdx + 1} of {previewPages.length}
-                        </span>
-                      </div>
-                    </div>
                   </div>
                 ))}
             </div>
