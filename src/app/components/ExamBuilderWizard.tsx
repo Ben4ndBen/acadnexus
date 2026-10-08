@@ -3048,20 +3048,6 @@ export function ExamBuilderWizard({
                     Allocated Sum: <strong className="text-emerald-400 font-black">{totalCalculatedTosItems} / {tosTargetTotalItems} items (100%)</strong>
                   </span>
                 </div>
-
-                <div className="flex items-center gap-3 w-full sm:w-auto">
-                  <button
-                    disabled={!isConfigValid}
-                    onClick={() => {
-                      syncQuestionsWithTos();
-                      setStep(2);
-                    }}
-                    className="w-full sm:w-auto inline-flex justify-center items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black px-5 py-2.5 rounded-xl shadow-md hover:shadow-emerald-600/20 transition-all disabled:opacity-50 cursor-pointer"
-                  >
-                    Proceed to Questions & TOS Setup
-                    <ArrowRight className="w-4 h-4" />
-                  </button>
-                </div>
               </div>
             </div>
           </div>
