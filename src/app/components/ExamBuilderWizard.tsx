@@ -3031,21 +3031,21 @@ export function ExamBuilderWizard({
               </div>
 
               {/* Summary Totals & Actions Footer */}
-              <div className="bg-slate-900 text-white p-4 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="bg-white text-slate-800 p-4 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4">
                 <div className="flex flex-wrap items-center gap-4 text-xs font-bold">
-                  <span className="flex items-center gap-1.5 text-slate-300">
-                    <BookOpen className="w-4 h-4 text-emerald-400" />
-                    Total Teaching Hours: <strong className="text-white font-black">{totalTosHours} hrs</strong>
+                  <span className="flex items-center gap-1.5 text-slate-600">
+                    <BookOpen className="w-4 h-4 text-emerald-600" />
+                    Total Teaching Hours: <strong className="text-slate-900 font-black">{totalTosHours} hrs</strong>
                   </span>
-                  <span className="text-slate-600">&bull;</span>
-                  <span className="flex items-center gap-1.5 text-slate-300">
-                    <Hash className="w-4 h-4 text-[#E2A123]" />
-                    Target Exam Items: <strong className="text-white font-black">{tosTargetTotalItems} items</strong>
+                  <span className="text-slate-300">&bull;</span>
+                  <span className="flex items-center gap-1.5 text-slate-600">
+                    <Hash className="w-4 h-4 text-amber-600" />
+                    Target Exam Items: <strong className="text-slate-900 font-black">{tosTargetTotalItems} items</strong>
                   </span>
-                  <span className="text-slate-600">&bull;</span>
-                  <span className="flex items-center gap-1.5 text-slate-300">
-                    <Layers className="w-4 h-4 text-amber-400" />
-                    Allocated Sum: <strong className="text-emerald-400 font-black">{totalCalculatedTosItems} / {tosTargetTotalItems} items (100%)</strong>
+                  <span className="text-slate-300">&bull;</span>
+                  <span className="flex items-center gap-1.5 text-slate-600">
+                    <Layers className="w-4 h-4 text-amber-600" />
+                    Allocated Sum: <strong className="text-emerald-700 font-black">{totalCalculatedTosItems} / {tosTargetTotalItems} items (100%)</strong>
                   </span>
                 </div>
               </div>
