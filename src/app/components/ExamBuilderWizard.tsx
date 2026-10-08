@@ -3562,40 +3562,6 @@ export function ExamBuilderWizard({
       {/* STEP 3: REVIEW & LIVE PREVIEW */}
       {step === 3 && (
         <div className="space-y-8">
-          
-          {/* Info Card Summary */}
-          <div className="bg-gradient-to-tr from-slate-900 to-slate-800 border border-slate-950 text-white rounded-3xl p-6 shadow-md relative overflow-hidden">
-            <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff03_1px,transparent_1px),linear-gradient(to_bottom,#ffffff03_1px,transparent_1px)] bg-[size:24px_24px]" />
-            <div className="relative z-10 grid grid-cols-2 md:grid-cols-5 gap-4 sm:gap-6 text-sm">
-              <div>
-                <p className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest">Selected Course</p>
-                <p className="font-extrabold text-slate-200 mt-1">
-                  {courses.find(c => c.course_id === courseId)?.course_code} - {courses.find(c => c.course_id === courseId)?.course_title}
-                </p>
-              </div>
-              <div>
-                <p className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest">Assigned Students</p>
-                <p className="font-extrabold text-emerald-400 mt-1 flex items-center gap-1.5">
-                  <Users className="w-4 h-4 text-emerald-400" />
-                  <span>{selectedStudentIds.length} / {assignedStudents.length} Students</span>
-                </p>
-              </div>
-              <div>
-                <p className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest">Time Limit</p>
-                <p className="font-extrabold text-slate-200 mt-1">{timeLimit} Minutes</p>
-              </div>
-              <div>
-                <p className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest">Question Bank Size</p>
-                <p className="font-extrabold text-slate-200 mt-1">{questions.length} Items ({questions.reduce((sum, q) => sum + q.points, 0)} points)</p>
-              </div>
-              <div>
-                <p className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest">Item Randomization</p>
-                <p className={`font-extrabold mt-1 ${randomizeItems ? "text-emerald-400" : "text-amber-400"}`}>
-                  {randomizeItems ? "Enabled (Shuffle on)" : "Disabled (Sequential)"}
-                </p>
-              </div>
-            </div>
-          </div>
 
           {/* STEP 3 VERTICALLY STACKED PREVIEW CONTAINER */}
           <div className="space-y-8 font-sans">
