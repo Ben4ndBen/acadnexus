@@ -331,8 +331,10 @@ export function ExamBuilderWizard({
   // Steps: 1 = Config, 2 = Questions, 3 = Preview & Submit
   const [step, setStep] = useState<number>(1);
 
-  // 1. Examination Term (Default from DI choice, non-editable by faculty) & Date
-  const term = exam.term || academicPeriodSettings?.active_term || "Midterm";
+  // 1. Examination Term (Selectable by Faculty / Chairs) & Date
+  const [term, setTerm] = useState<string>(
+    exam.term || "Prelim"
+  );
   const [examDate, setExamDate] = useState<string>(
     exam.exam_date
       ? typeof exam.exam_date === "string"
@@ -420,10 +422,12 @@ export function ExamBuilderWizard({
   }, [userRole, returnUrl]);
 
   // Configuration Settings State - Title is auto-populated and not manually edited
+  const defaultCourseTitleStr = selectedCourse?.course_title || selectedCourse?.course_code || "";
+  const defaultExamTitle = defaultCourseTitleStr ? `${term} Examination in ${defaultCourseTitleStr}` : `${term} Examination`;
   const [title, setTitle] = useState<string>(
     exam.title && exam.title !== "New Examination Draft"
       ? exam.title
-      : `${term} Examination - ${selectedCourse.course_code || selectedCourse.course_title} (Draft)`
+      : defaultExamTitle
   );
   const [timeLimit, setTimeLimit] = useState<number>(exam.time_limit_minutes);
   const [randomizeItems, setRandomizeItems] = useState<boolean>(exam.randomize_items);
@@ -1386,6 +1390,7 @@ export function ExamBuilderWizard({
     timePenalty,
     scorePenalty,
     examDate,
+    term,
     documentReference,
     selectedStudentIds
   ]);
@@ -2136,8 +2141,13 @@ export function ExamBuilderWizard({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white/70 backdrop-blur-md border border-slate-200/80 p-5 rounded-3xl shadow-sm">
         <div className="flex items-center gap-3">
           <button 
-            onClick={() => router.push(returnUrl || "/dashboard/faculty")}
-            className="p-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-500 hover:text-slate-800 transition-all shadow-sm"
+            onClick={async () => {
+              await autoSaveExamData();
+              router.push(returnUrl || "/dashboard/faculty");
+              router.refresh();
+            }}
+            className="p-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-500 hover:text-slate-800 transition-all shadow-sm cursor-pointer"
+            title="Save and Return to Dashboard"
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
@@ -2301,14 +2311,27 @@ export function ExamBuilderWizard({
                     </div>
                   </div>
 
-                  {/* 2. Examination Term (Configured / Non-editable) */}
+                  {/* 2. Examination Term (Selected by Faculty) */}
                   <div className="space-y-1.5">
                     <label className="text-xs font-extrabold text-slate-700 block">
-                      Examination Term
+                      Examination Term <span className="text-rose-500">*</span>
                     </label>
-                    <div className="w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm font-extrabold px-3.5 py-2.5 rounded-xl flex items-center justify-between">
-                      <span>{term} Examination</span>
-                    </div>
+                    <select
+                      value={term}
+                      onChange={(e) => {
+                        const newTerm = e.target.value;
+                        setTerm(newTerm);
+                        const courseTitleStr = selectedCourse?.course_title || selectedCourse?.course_code || "";
+                        const courseStr = courseTitleStr ? ` in ${courseTitleStr}` : "";
+                        const newTitle = `${newTerm} Examination${courseStr}`;
+                        setTitle(newTitle);
+                      }}
+                      className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 text-slate-900 text-sm font-extrabold px-3.5 py-2.5 rounded-xl transition-all outline-none cursor-pointer"
+                    >
+                      <option value="Prelim">Prelim Examination</option>
+                      <option value="Midterm">Midterm Examination</option>
+                      <option value="Final">Final Examination</option>
+                    </select>
                   </div>
 
                   {/* 3. Exam Administration Date (Editable) */}

@@ -220,7 +220,6 @@ export function DirectorDashboardClient({
       const res = await saveActiveAcademicPeriod(directorUserId, {
         active_academic_year: periodAY,
         active_semester: periodSem,
-        active_term: periodTerm,
         sem1_start: sem1Start,
         sem1_end: sem1End,
         sem2_start: sem2Start,
@@ -1048,7 +1047,7 @@ export function DirectorDashboardClient({
           )}
 
           <form onSubmit={handleSaveAcademicPeriod} className="space-y-6">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
               {/* Active Academic Year */}
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-slate-700 block">
@@ -1081,23 +1080,27 @@ export function DirectorDashboardClient({
                 </select>
                 <p className="text-[11px] text-slate-400">Current officially active collegiate term</p>
               </div>
+            </div>
 
-              {/* Active Examination Term */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-700 block">
-                  Active Examination Term <span className="text-rose-500">*</span>
-                </label>
-                <select
-                  value={periodTerm}
-                  onChange={(e) => setPeriodTerm(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 text-sm font-bold text-slate-800 px-4 py-2.5 rounded-xl transition-all"
-                >
-                  <option value="Midterm">Midterm Examination</option>
-                  <option value="Final">Final Examination</option>
-                  <option value="Prelim">Prelim Examination</option>
-                </select>
-                <p className="text-[11px] text-slate-400">Default term locked for exam creation across faculty</p>
+            {/* Examination Term Status (Disabled for DI - Selected by Faculty during Exam Creation) */}
+            <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-2xl flex items-center justify-between text-xs">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-slate-200 text-slate-600 rounded-xl">
+                  <Calendar className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-extrabold text-slate-800">Examination Term Field</span>
+                    <span className="text-[10px] bg-indigo-50 text-indigo-700 border border-indigo-200 font-extrabold px-2 py-0.5 rounded-full">
+                      Faculty Responsiblity
+                    </span>
+                  </div>
+                  <p className="text-slate-500 text-[11px] mt-0.5">
+                    The examination term (Midterm, Final, Prelim) is selected directly by Faculty when creating an examination.
+                  </p>
+                </div>
               </div>
+              <span className="text-[11px] font-bold text-slate-400 italic shrink-0">DI Configuration Disabled</span>
             </div>
 
             {/* Semester Date Ranges */}
@@ -2051,8 +2054,9 @@ export function DirectorDashboardClient({
                 </div>
               )}
 
-              {/* List of courses */}
-              <div className="max-h-60 overflow-y-auto space-y-1.5 border border-slate-200 rounded-2xl p-2.5 bg-slate-50/50">
+              {/* List of courses (Scrollable) */}
+              <div className="border border-slate-200 rounded-xl overflow-hidden bg-slate-50/50">
+                <div className="max-h-72 overflow-y-auto p-2 space-y-1.5 scrollbar-thin scrollbar-thumb-slate-300">
                 {availableEditCourses.map((c) => {
                   const isChecked = editCourseIds.includes(c.course_id);
                   return (
@@ -2086,7 +2090,8 @@ export function DirectorDashboardClient({
                 )}
               </div>
             </div>
-            </div>
+          </div>
+        </div>
 
             {/* Modal Footer (Fixed Bottom) */}
             <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/90 flex justify-end gap-3 shrink-0">

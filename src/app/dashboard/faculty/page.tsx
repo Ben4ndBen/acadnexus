@@ -185,15 +185,15 @@ export default async function FacultyDashboard() {
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-        {/* Welcome banner */}
-        <div className="bg-gradient-to-tr from-emerald-900 via-emerald-800 to-teal-900 text-white rounded-3xl p-6 sm:p-8 shadow-xl relative overflow-hidden border border-emerald-950/20">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-5 space-y-5">
+        {/* Welcome banner (Compact) */}
+        <div className="bg-gradient-to-tr from-emerald-900 via-emerald-800 to-teal-900 text-white rounded-2xl p-4 sm:p-5 shadow-md relative overflow-hidden border border-emerald-950/20">
           <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff03_1px,transparent_1px),linear-gradient(to_bottom,#ffffff03_1px,transparent_1px)] bg-[size:16px_16px]" />
-          <div className="relative z-10 space-y-4">
-            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
+          <div className="relative z-10 space-y-1.5">
+            <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight">
               Welcome back, {faculty.first_name}!
             </h1>
-            <p className="text-emerald-100 max-w-xl text-sm leading-relaxed">
+            <p className="text-emerald-100 max-w-2xl text-xs sm:text-sm leading-relaxed">
               Design new examination question banks, align test structures to Course Outlines (TOS), and track compliance matrices for accreditation.
             </p>
           </div>

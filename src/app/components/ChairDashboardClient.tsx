@@ -456,7 +456,7 @@ export function ChairDashboardClient({
     });
 
     const totalPoints = qBank.reduce((sum: number, q: any) => sum + (q.points || 1), 0);
-    const term = approval.exam?.term || "Midterm";
+    const term = approval.exam?.term || "Prelim";
     const semester = approval.exam?.semester || "1st Semester";
     const courseCode = approval.exam?.course?.course_code || "";
     const courseTitle = approval.exam?.course?.course_title || "";
@@ -847,17 +847,17 @@ export function ChairDashboardClient({
       {/* OVERVIEW TAB */}
       {activeTab === "overview" && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-6">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                <span className="w-1.5 h-6 rounded-full" style={{ backgroundColor: deptTheme.colors.primary }} />
+          <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+              <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                <span className="w-1.5 h-5 rounded-full" style={{ backgroundColor: deptTheme.colors.primary }} />
                 {isProgramChair ? "Program Overview" : "Department Overview"}
               </h2>
               <DepartmentBadge department={isProgramChair && programCode ? programCode : departmentName} size="sm" />
             </div>
-            <div className="space-y-4">
+            <div className="space-y-3">
               <div>
-                <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">
+                <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-wider">
                   {isProgramChair ? "Program & Academic Specialty" : "Department & Academic Programs"}
                 </p>
                 <p className="text-sm font-bold text-slate-800 mt-0.5">{departmentName}</p>
@@ -869,14 +869,14 @@ export function ChairDashboardClient({
                   ))}
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4 border-t border-slate-100 pt-4">
+              <div className="grid grid-cols-2 gap-3 border-t border-slate-100 pt-3">
                 <div>
-                  <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Faculty Members</p>
-                  <p className="text-2xl font-extrabold text-slate-800 mt-0.5">{facultyMembers.length}</p>
+                  <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-wider">Faculty Members</p>
+                  <p className="text-xl font-extrabold text-slate-800 mt-0.5">{facultyMembers.length}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Pending Reviews</p>
-                  <p className="text-2xl font-extrabold text-amber-600 mt-0.5">{pendingApprovals.length}</p>
+                  <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-wider">Pending Reviews</p>
+                  <p className="text-xl font-extrabold text-amber-600 mt-0.5">{pendingApprovals.length}</p>
                 </div>
               </div>
             </div>
@@ -1020,7 +1020,7 @@ export function ChairDashboardClient({
             </div>
           </div>
 
-          <div className="space-y-6">
+          <div className="max-h-[650px] overflow-y-auto pr-2 space-y-6 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
             {pendingApprovals.map(approval => {
               const hasTosFile = Boolean(approval.exam.tos_file_path && approval.exam.tos_file_path.trim() !== "");
 
@@ -1241,7 +1241,7 @@ export function ChairDashboardClient({
                             courseCode={activeSplitApproval.exam.course?.course_code || ""}
                             courseTitle={activeSplitApproval.exam.course?.course_title || activeSplitApproval.exam.title}
                             departmentName={departmentName}
-                            term={activeSplitApproval.exam.term || "Midterm"}
+                            term={activeSplitApproval.exam.term || "Prelim"}
                             semester={activeSplitApproval.exam.semester || "1st Semester"}
                             academicYear={activeSplitApproval.exam.academic_year || "2026-2027"}
                             examDate={activeSplitApproval.exam.exam_date ? String(activeSplitApproval.exam.exam_date).split("T")[0] : ""}
@@ -1294,7 +1294,7 @@ export function ChairDashboardClient({
                           courseCode={activeSplitApproval.exam.course?.course_code || ""}
                           courseTitle={activeSplitApproval.exam.course?.course_title || activeSplitApproval.exam.title}
                           departmentName={departmentName}
-                          term={activeSplitApproval.exam.term || "Midterm"}
+                          term={activeSplitApproval.exam.term || "Prelim"}
                           semester={activeSplitApproval.exam.semester || "1st Semester"}
                           academicYear={activeSplitApproval.exam.academic_year || "2026-2027"}
                           examDate={activeSplitApproval.exam.exam_date ? String(activeSplitApproval.exam.exam_date).split("T")[0] : ""}
@@ -1550,39 +1550,41 @@ export function ChairDashboardClient({
                   </div>
                 )}
 
-                {/* List of courses */}
-                <div className="max-h-60 overflow-y-auto space-y-1.5 border border-slate-200 rounded-2xl p-2.5 bg-slate-50/50">
-                  {availableChairEditCourses.map((c) => {
-                    const isChecked = editCourseIds.includes(c.course_id);
-                    return (
-                      <label
-                        key={c.course_id}
-                        className={`flex items-center gap-2 p-2 rounded-xl text-xs cursor-pointer transition-colors ${
-                          isChecked ? "bg-amber-50 font-bold text-amber-900 border border-amber-200" : "bg-white hover:bg-slate-100/80 text-slate-700 font-medium border border-transparent"
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setEditCourseIds((prev) => [...prev, c.course_id]);
-                            } else {
-                              setEditCourseIds((prev) => prev.filter((id) => id !== c.course_id));
-                            }
-                          }}
-                          className="rounded border-slate-300 text-amber-600 focus:ring-amber-500 w-3.5 h-3.5"
-                        />
-                        <span className="font-mono text-[11px] font-black text-slate-900 bg-slate-100 px-1.5 py-0.5 rounded shrink-0">
-                          {c.course_code}
-                        </span>
-                        <span className="truncate">{c.course_title}</span>
-                      </label>
-                    );
-                  })}
-                  {availableChairEditCourses.length === 0 && (
-                    <p className="text-xs text-slate-400 text-center py-4">No subjects found matching this department / program.</p>
-                  )}
+                {/* List of courses (Scrollable) */}
+                <div className="border border-slate-200 rounded-xl overflow-hidden bg-slate-50/50">
+                  <div className="max-h-72 overflow-y-auto p-2 space-y-1.5 scrollbar-thin scrollbar-thumb-slate-300">
+                    {availableChairEditCourses.map((c) => {
+                      const isChecked = editCourseIds.includes(c.course_id);
+                      return (
+                        <label
+                          key={c.course_id}
+                          className={`flex items-center gap-2 p-2 rounded-xl text-xs cursor-pointer transition-colors ${
+                            isChecked ? "bg-amber-50 font-bold text-amber-900 border border-amber-200" : "bg-white hover:bg-slate-100/80 text-slate-700 font-medium border border-transparent"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setEditCourseIds((prev) => [...prev, c.course_id]);
+                              } else {
+                                setEditCourseIds((prev) => prev.filter((id) => id !== c.course_id));
+                              }
+                            }}
+                            className="rounded border-slate-300 text-amber-600 focus:ring-amber-500 w-3.5 h-3.5"
+                          />
+                          <span className="font-mono text-[11px] font-black text-slate-900 bg-slate-100 px-1.5 py-0.5 rounded shrink-0">
+                            {c.course_code}
+                          </span>
+                          <span className="truncate">{c.course_title}</span>
+                        </label>
+                      );
+                    })}
+                    {availableChairEditCourses.length === 0 && (
+                      <p className="text-xs text-slate-400 text-center py-4">No subjects found matching this department / program.</p>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>

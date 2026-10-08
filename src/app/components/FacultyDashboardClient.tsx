@@ -262,7 +262,7 @@ export function FacultyDashboardClient({
     if (exam.title && exam.title !== "New Examination Draft") {
       return exam.title;
     }
-    const termStr = exam.term || "Midterm";
+    const termStr = exam.term || "Prelim";
     const courseTitleStr = exam.course?.course_title || exam.course?.course_code || "";
     const courseStr = courseTitleStr ? ` in ${courseTitleStr}` : "";
     const suffix = fallbackIndex !== undefined ? ` (Draft #${fallbackIndex + 1})` : " (Draft)";
@@ -1198,97 +1198,96 @@ export function FacultyDashboardClient({
       {activeTab === "overview" && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Left Panel: Portfolios & Overview Stats */}
-          <div className="space-y-8">
-            {/* Premium Faculty Identity Card */}
-            <div className="bg-gradient-to-b from-[#7A151A] to-[#580B0F] rounded-3xl overflow-hidden shadow-lg border-2 border-[#E2A123]/60 relative text-white transition-all duration-500 hover:shadow-2xl hover:scale-[1.01] group/idcard select-none">
+          <div className="space-y-5">
+            {/* Compact Faculty Identity Card */}
+            <div className="bg-gradient-to-b from-[#7A151A] to-[#580B0F] rounded-2xl overflow-hidden shadow-md border-2 border-[#E2A123]/60 relative text-white transition-all duration-300 hover:shadow-xl group/idcard select-none">
               {/* Card Holographic/Vector overlay */}
               <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff03_1px,transparent_1px),linear-gradient(to_bottom,#ffffff03_1px,transparent_1px)] bg-[size:16px_16px] opacity-40 pointer-events-none" />
               <div className="absolute top-0 right-0 w-24 h-full bg-[#E2A123]/5 transform skew-x-12 origin-top-right pointer-events-none" />
               
               {/* ID Card Header */}
-              <div className="bg-[#580B0F] px-5 py-4 border-b border-[#E2A123]/30 flex items-center gap-3">
+              <div className="bg-[#580B0F] px-4 py-2.5 border-b border-[#E2A123]/30 flex items-center gap-2.5">
                 <div className="bg-white p-1 rounded-full border border-[#E2A123]/50 shrink-0 shadow-sm">
-                  <img src="/bsc-logo.png" alt="BSC Logo" className="w-8 h-8 object-contain" />
+                  <img src="/bsc-logo.png" alt="BSC Logo" className="w-6 h-6 object-contain" />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-[10px] text-[#E2A123] font-black uppercase tracking-wider leading-none">Batanes State College</p>
-                  <p className="text-[11px] text-amber-100 font-bold uppercase tracking-widest mt-1 opacity-90 leading-none">Faculty Identity Card</p>
+                  <p className="text-[9px] text-[#E2A123] font-black uppercase tracking-wider leading-none">Batanes State College</p>
+                  <p className="text-[10px] text-amber-100 font-bold uppercase tracking-widest mt-0.5 opacity-90 leading-none">Faculty Identity Card</p>
                 </div>
               </div>
 
               {/* ID Card Body */}
-              <div className="p-6 flex flex-col items-center text-center space-y-4">
+              <div className="p-4 flex flex-col items-center text-center space-y-3">
                 {/* Profile Image Frame */}
-                <div className="relative w-28 h-28 rounded-2xl overflow-hidden border-2 border-[#E2A123] bg-[#7A151A]/40 shadow-inner flex items-center justify-center shrink-0">
+                <div className="relative w-20 h-20 rounded-xl overflow-hidden border-2 border-[#E2A123] bg-[#7A151A]/40 shadow-inner flex items-center justify-center shrink-0">
                   {faculty.profile_image ? (
                     <img src={faculty.profile_image} alt={`${faculty.first_name} ${faculty.last_name}`} className="w-full h-full object-cover" />
                   ) : (
-                    <div className="w-full h-full bg-gradient-to-tr from-[#7A151A] to-amber-700 flex items-center justify-center text-white text-3xl font-black">
+                    <div className="w-full h-full bg-gradient-to-tr from-[#7A151A] to-amber-700 flex items-center justify-center text-white text-2xl font-black">
                       {faculty.first_name.charAt(0)}{faculty.last_name.charAt(0)}
                     </div>
                   )}
                 </div>
 
                 {/* Faculty Name & Role */}
-                <div className="space-y-1">
-                  <h3 className="text-lg font-black tracking-wide truncate max-w-[220px]">
+                <div className="space-y-0.5">
+                  <h3 className="text-base font-black tracking-wide truncate max-w-[220px]">
                     {faculty.first_name} {faculty.middle_name ? `${faculty.middle_name.charAt(0).toUpperCase()}. ` : ""}{faculty.last_name}
                   </h3>
-                  <p className="text-[10px] bg-[#E2A123]/20 text-[#E2A123] font-extrabold uppercase tracking-widest px-3 py-1 rounded-full inline-block border border-[#E2A123]/30">
+                  <p className="text-[9px] bg-[#E2A123]/20 text-[#E2A123] font-extrabold uppercase tracking-widest px-2.5 py-0.5 rounded-full inline-block border border-[#E2A123]/30">
                     Faculty Instructor
                   </p>
                 </div>
 
                 {/* Faculty Specific Details */}
-                <div className="w-full text-left bg-black/15 rounded-2xl p-4 border border-white/5 space-y-2 text-xs font-semibold text-neutral-100">
-                  <div className="flex justify-between items-center gap-4">
-                    <span className="text-amber-200/70 text-[10px] font-bold uppercase tracking-wider">Dept</span>
+                <div className="w-full text-left bg-black/15 rounded-xl p-3 border border-white/5 space-y-1.5 text-[11px] font-semibold text-neutral-100">
+                  <div className="flex justify-between items-center gap-3">
+                    <span className="text-amber-200/70 text-[9px] font-bold uppercase tracking-wider">Dept</span>
                     <span className="truncate max-w-[150px] font-bold">{faculty.department?.department_name || "BSC Faculty"}</span>
                   </div>
-                  <div className="flex justify-between items-center gap-4">
-                    <span className="text-amber-200/70 text-[10px] font-bold uppercase tracking-wider">ID Number</span>
+                  <div className="flex justify-between items-center gap-3">
+                    <span className="text-amber-200/70 text-[9px] font-bold uppercase tracking-wider">ID Number</span>
                     <span className="font-mono font-bold">{institutionalId}</span>
                   </div>
                   {username && (
-                    <div className="flex justify-between items-center gap-4">
-                      <span className="text-amber-200/70 text-[10px] font-bold uppercase tracking-wider">Username</span>
+                    <div className="flex justify-between items-center gap-3">
+                      <span className="text-amber-200/70 text-[9px] font-bold uppercase tracking-wider">Username</span>
                       <span className="font-mono font-bold text-amber-300">{username}</span>
                     </div>
                   )}
-                  <div className="flex justify-between items-center gap-4 border-t border-white/10 pt-2 mt-2">
-                    <span className="text-amber-200/70 text-[10px] font-bold uppercase tracking-wider">Email</span>
-                    <span className="truncate max-w-[150px] font-mono text-neutral-200">
+                  <div className="flex justify-between items-center gap-3 border-t border-white/10 pt-1.5 mt-1.5">
+                    <span className="text-amber-200/70 text-[9px] font-bold uppercase tracking-wider">Email</span>
+                    <span className="truncate max-w-[150px] font-mono text-neutral-200 text-[10px]">
                       {faculty.institutional_email || `${institutionalId.toLowerCase()}@acadnexus.bsc.edu.ph`}
                     </span>
                   </div>
                 </div>
 
                 {/* Aesthetic Digital Card Details */}
-                <div className="w-full flex items-center justify-between border-t border-white/10 pt-3">
+                <div className="w-full flex items-center justify-between border-t border-white/10 pt-2">
                   <div className="flex flex-col items-start gap-0.5">
-                    <span className="text-[8px] text-white/40 font-bold uppercase tracking-widest">Digital ID Security</span>
-                    <span className="text-[9px] text-[#E2A123] font-bold font-mono tracking-wider">SECURE-ACADNEXUS-2026</span>
+                    <span className="text-[7px] text-white/40 font-bold uppercase tracking-widest">Digital ID Security</span>
+                    <span className="text-[8px] text-[#E2A123] font-bold font-mono tracking-wider">SECURE-ACADNEXUS-2026</span>
                   </div>
                   {/* Stylized CSS Barcode */}
-                  <div className="flex gap-[2px] items-center h-6 opacity-60">
-                    <div className="w-[2px] h-6 bg-white" />
-                    <div className="w-[1px] h-6 bg-white" />
-                    <div className="w-[3px] h-6 bg-white" />
-                    <div className="w-[1px] h-6 bg-white" />
-                    <div className="w-[2px] h-6 bg-white" />
-                    <div className="w-[1px] h-6 bg-white" />
-                    <div className="w-[4px] h-6 bg-white" />
-                    <div className="w-[1px] h-6 bg-white" />
+                  <div className="flex gap-[2px] items-center h-4 opacity-60">
+                    <div className="w-[2px] h-4 bg-white" />
+                    <div className="w-[1px] h-4 bg-white" />
+                    <div className="w-[3px] h-4 bg-white" />
+                    <div className="w-[1px] h-4 bg-white" />
+                    <div className="w-[2px] h-4 bg-white" />
+                    <div className="w-[1px] h-4 bg-white" />
+                    <div className="w-[4px] h-4 bg-white" />
                   </div>
                 </div>
               </div>
             </div>
 
             {/* Assigned Courses / Teaching Load */}
-            <div className="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-sm space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                  <span className="w-1.5 h-6 bg-emerald-600 rounded-full" />
+            <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-sm space-y-3">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                  <span className="w-1.5 h-5 bg-emerald-600 rounded-full" />
                   Assigned Teaching Load
                 </h2>
                 <span className="text-[10px] bg-emerald-100 text-emerald-800 font-extrabold px-2.5 py-0.5 rounded-full">
@@ -1296,9 +1295,9 @@ export function FacultyDashboardClient({
                 </span>
               </div>
               {assignedCourses.length > 0 ? (
-                <div className="space-y-2.5">
+                <div className="max-h-[220px] overflow-y-auto space-y-2 pr-1 scrollbar-thin scrollbar-thumb-slate-200">
                   {assignedCourses.map((c) => (
-                    <div key={c.course_id} className="p-3 bg-slate-50 border border-slate-200/70 rounded-2xl flex items-center justify-between gap-3 hover:border-emerald-200 transition-colors">
+                    <div key={c.course_id} className="p-2.5 bg-slate-50 border border-slate-200/70 rounded-xl flex items-center justify-between gap-3 hover:border-emerald-200 transition-colors">
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
                           <span className="font-mono text-xs font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-100 shrink-0">
@@ -1316,7 +1315,7 @@ export function FacultyDashboardClient({
                   ))}
                 </div>
               ) : (
-                <div className="text-center py-6 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
+                <div className="text-center py-5 bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
                   <p className="text-xs text-slate-500">No official courses assigned yet by Department Chair or Academic Directorate.</p>
                 </div>
               )}
@@ -1328,12 +1327,17 @@ export function FacultyDashboardClient({
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
                 <span className="w-1.5 h-6 bg-emerald-600 rounded-full" />
-                Recent Examinations
+                Examinations & Drafts
+                {faculty.examinations && faculty.examinations.length > 0 && (
+                  <span className="text-xs font-semibold text-slate-500 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full">
+                    {faculty.examinations.length}
+                  </span>
+                )}
               </h2>
               <button
                 disabled={isCreatingExam}
                 onClick={handleCreateExam}
-                className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold px-3 py-2 rounded-xl shadow-sm transition-all hover:scale-105 duration-300 flex items-center gap-1"
+                className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold px-3 py-2 rounded-xl shadow-sm transition-all hover:scale-105 duration-300 flex items-center gap-1 cursor-pointer"
               >
                 {isCreatingExam ? (
                   <RefreshCw className="w-3 h-3 animate-spin" />
@@ -1345,55 +1349,57 @@ export function FacultyDashboardClient({
             </div>
 
             {faculty.examinations && faculty.examinations.length > 0 ? (
-              <div className="divide-y divide-slate-100">
-                {faculty.examinations.slice(0, 5).map((exam, idx) => (
-                  <div key={exam.exam_id} className="py-4 flex justify-between items-center first:pt-0 last:pb-0 gap-4">
-                    <div className="space-y-1 min-w-0 flex-1">
-                      <p className="text-xs sm:text-sm font-extrabold text-slate-800 leading-snug break-words">{getExamDisplayTitle(exam, faculty.examinations.length - 1 - idx)}</p>
-                      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-400 font-medium">
-                        <span>{exam.course.course_code} - {exam.course.course_title}</span>
-                        <span>•</span>
-                        <span>{exam.time_limit_minutes} min</span>
-                        <span>•</span>
-                        <span className="font-bold text-slate-500">
-                          {exam._count?.questionBank ?? 0} Questions
-                        </span>
-                      </div>
-                      {exam.current_status === "Approved" && (
-                        <div className="mt-1.5 flex items-center gap-1 text-[10px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded w-fit shadow-sm">
-                          <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                          Digitally Signed
+              <div className="max-h-[520px] overflow-y-auto pr-2 space-y-1 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
+                <div className="divide-y divide-slate-100">
+                  {faculty.examinations.map((exam, idx) => (
+                    <div key={exam.exam_id} className="py-4 flex justify-between items-center first:pt-0 last:pb-0 gap-4 hover:bg-slate-50/60 rounded-xl px-2 transition-colors">
+                      <div className="space-y-1 min-w-0 flex-1">
+                        <p className="text-xs sm:text-sm font-extrabold text-slate-800 leading-snug break-words">{getExamDisplayTitle(exam, faculty.examinations.length - 1 - idx)}</p>
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-400 font-medium">
+                          <span>{exam.course.course_code} - {exam.course.course_title}</span>
+                          <span>•</span>
+                          <span>{exam.time_limit_minutes} min</span>
+                          <span>•</span>
+                          <span className="font-bold text-slate-500">
+                            {exam._count?.questionBank ?? 0} Questions
+                          </span>
                         </div>
-                      )}
+                        {exam.current_status === "Approved" && (
+                          <div className="mt-1.5 flex items-center gap-1 text-[10px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded w-fit shadow-sm">
+                            <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                            Digitally Signed
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {renderStatusBadge(exam.current_status)}
+                        {(exam.current_status === "Draft" || exam.current_status === "Returned") && (
+                          <>
+                            <button
+                              onClick={() => router.push(`/dashboard/faculty/exams/${exam.exam_id}/builder`)}
+                              className="p-1.5 rounded-lg border border-slate-200 text-slate-500 hover:text-slate-800 hover:bg-slate-50 transition-colors cursor-pointer"
+                              title="Edit in Builder"
+                            >
+                              <PenTool className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              disabled={deletingExamId === exam.exam_id}
+                              onClick={() => handleDeleteExam(exam.exam_id)}
+                              className="p-1.5 rounded-lg border border-slate-200 text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors disabled:opacity-50 cursor-pointer"
+                              title="Delete Exam"
+                            >
+                              {deletingExamId === exam.exam_id ? (
+                                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <Trash2 className="w-3.5 h-3.5" />
+                              )}
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      {renderStatusBadge(exam.current_status)}
-                      {(exam.current_status === "Draft" || exam.current_status === "Returned") && (
-                        <>
-                          <button
-                            onClick={() => router.push(`/dashboard/faculty/exams/${exam.exam_id}/builder`)}
-                            className="p-1.5 rounded-lg border border-slate-200 text-slate-500 hover:text-slate-800 hover:bg-slate-50 transition-colors"
-                            title="Edit in Builder"
-                          >
-                            <PenTool className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            disabled={deletingExamId === exam.exam_id}
-                            onClick={() => handleDeleteExam(exam.exam_id)}
-                            className="p-1.5 rounded-lg border border-slate-200 text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors disabled:opacity-50"
-                            title="Delete Exam"
-                          >
-                            {deletingExamId === exam.exam_id ? (
-                              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                            ) : (
-                              <Trash2 className="w-3.5 h-3.5" />
-                            )}
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center py-20 text-center border-2 border-dashed border-slate-100 rounded-3xl">
@@ -1449,7 +1455,7 @@ export function FacultyDashboardClient({
           </div>
 
           {filteredExams.length > 0 ? (
-            <div className="space-y-6">
+            <div className="max-h-[650px] overflow-y-auto pr-2 space-y-6 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
               {filteredExams.map((exam) => {
                 const isTransitioning = transitioningExamId === exam.exam_id;
                 
@@ -3305,7 +3311,7 @@ export function FacultyDashboardClient({
               <span className="text-xs font-semibold text-slate-500">Querying historical archives...</span>
             </div>
           ) : archivedExams.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="max-h-[600px] overflow-y-auto pr-2 grid grid-cols-1 md:grid-cols-2 gap-6 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
               {archivedExams.map((exam) => (
                 <div key={exam.exam_id} className="border border-slate-200 rounded-2xl p-5 hover:shadow-md transition-all duration-300 bg-white flex flex-col justify-between gap-4">
                   <div className="space-y-2">
