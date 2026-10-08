@@ -436,11 +436,7 @@ export function ExamBuilderWizard({
 
   // 3. Assigned Students Selection with Sort & Filter
   const [assignedStudents, setAssignedStudents] = useState<StudentItem[]>(initialAssignedStudents);
-  const [selectedStudentIds, setSelectedStudentIds] = useState<number[]>(
-    exam.selected_student_ids && exam.selected_student_ids.length > 0
-      ? exam.selected_student_ids
-      : initialAssignedStudents.map(s => s.student_id)
-  );
+  const [selectedStudentIds, setSelectedStudentIds] = useState<number[]>([]);
   const [loadingStudents, setLoadingStudents] = useState<boolean>(false);
 
   // Filter & Sort State for Assigned Students
@@ -450,53 +446,136 @@ export function ExamBuilderWizard({
   const [studentYearFilter, setStudentYearFilter] = useState<string>("ALL");
   const [studentSortBy, setStudentSortBy] = useState<"lastNameAsc" | "lastNameDesc" | "firstNameAsc" | "firstNameDesc" | "yearAsc" | "yearDesc" | "programAsc" | "majorAsc" | "majorDesc">("lastNameAsc");
 
-  const availableStudentPrograms = useMemo(() => {
-    return Array.from(new Set(assignedStudents.map(s => s.program_code).filter(Boolean)));
-  }, [assignedStudents]);
+  // Helper reference mapping for academic programs & departments
+  const PROGRAM_REFERENCE_MAP: Record<string, { code: string; name: string; dept: string; majors?: string[] }> = useMemo(() => ({
+    BSInfoTech: {
+      code: "BSInfoTech",
+      name: "Bachelor of Science in Information Technology",
+      dept: "Computing and Industrial Technology Department (CITD)",
+    },
+    BSIT: {
+      code: "BSIT",
+      name: "Bachelor of Science in Industrial Technology",
+      dept: "Computing and Industrial Technology Department (CITD)",
+      majors: ["ARCHITECTURE TECHNOLOGY", "AUTOMOTIVE TECHNOLOGY", "ELECTRONICS TECHNOLOGY"],
+    },
+    BSA: {
+      code: "BSA",
+      name: "Bachelor of Science in Agriculture",
+      dept: "Agriculture Department",
+    },
+    BEED: {
+      code: "BEED",
+      name: "Bachelor of Elementary Education",
+      dept: "Teacher Education Department (TED)",
+    },
+    BSED: {
+      code: "BSED",
+      name: "Bachelor of Secondary Education",
+      dept: "Teacher Education Department (TED)",
+      majors: ["English", "Science", "Mathematics"],
+    },
+    BSHM: {
+      code: "BSHM",
+      name: "Bachelor of Science in Hospitality Management",
+      dept: "HTM Department",
+    },
+    BSTM: {
+      code: "BSTM",
+      name: "Bachelor of Science in Tourism Management",
+      dept: "HTM Department",
+    },
+  }), []);
 
-  const isBSEdProgram = useMemo(() => {
-    return availableStudentPrograms.some(p => {
-      const code = p.toUpperCase();
-      return code.includes("BSED") || code.includes("TED");
-    });
-  }, [availableStudentPrograms]);
+  // Automatically determine the academic program based on assigned subject/course
+  const determinedProgramInfo = useMemo(() => {
+    const code = (selectedCourse?.course_code || "").trim().toUpperCase();
+    const title = (selectedCourse?.course_title || "").trim().toUpperCase();
 
-  const isIndustrialTechProgram = useMemo(() => {
-    return availableStudentPrograms.some(p => {
-      const code = p.toUpperCase();
-      if (code === "BSINFOTECH" || code === "BS-INFOTECH") return false;
-      return code.includes("INDTECH") || code.includes("BIT") || code.includes("INDUSTRIAL") || code === "BSIT";
-    });
-  }, [availableStudentPrograms]);
+    // 1. BSInfoTech (Bachelor of Science in Information Technology) - CITD
+    if (
+      code.startsWith("ITC") || code.startsWith("ITE") || code.startsWith("ITM") || code.startsWith("ITD") ||
+      code === "ENT 403" || code.includes("INFOTECH") || code === "BSINFOTECH" || title.includes("INFORMATION TECHNOLOGY") || title.includes("COMPUTING")
+    ) {
+      return PROGRAM_REFERENCE_MAP["BSInfoTech"];
+    }
 
-  const hasMajors = isBSEdProgram || isIndustrialTechProgram;
+    // 2. BSIT (Bachelor of Science in Industrial Technology) - CITD
+    if (
+      code.startsWith("IND") || code.startsWith("BIT") || code === "BSIT" || code === "BSINDTECH" ||
+      title.includes("INDUSTRIAL TECHNOLOGY") || title.includes("AUTOMOTIVE") || title.includes("ELECTRONICS") || title.includes("ARCHITECTURE")
+    ) {
+      return PROGRAM_REFERENCE_MAP["BSIT"];
+    }
+
+    // 3. BSA (Bachelor of Science in Agriculture) - AGRI
+    if (
+      code.startsWith("AGRI") || code.startsWith("AG EXT") || code.startsWith("AGB") || code.startsWith("AME") ||
+      code.startsWith("ANSCI") || code.startsWith("CROP PROT") || code.startsWith("CROP SCI") || code.startsWith("SOIL SCI") ||
+      code.startsWith("THESIS") || code === "PRACTICUM" || code.startsWith("SEM ") || code === "CA" || code === "BSA" || title.includes("AGRICULTURE")
+    ) {
+      return PROGRAM_REFERENCE_MAP["BSA"];
+    }
+
+    // 4. BEED (Bachelor of Elementary Education) - TED
+    if (code.startsWith("BEED") || title.includes("ELEMENTARY EDUCATION")) {
+      return PROGRAM_REFERENCE_MAP["BEED"];
+    }
+
+    // 5. BSED (Bachelor of Secondary Education) - TED
+    if (code.startsWith("BSED") || title.includes("SECONDARY EDUCATION")) {
+      return PROGRAM_REFERENCE_MAP["BSED"];
+    }
+
+    if (code.startsWith("EDUC") || title.includes("EDUCATION")) {
+      const isSec = title.includes("SEC") || title.includes("SECONDARY");
+      return isSec ? PROGRAM_REFERENCE_MAP["BSED"] : PROGRAM_REFERENCE_MAP["BEED"];
+    }
+
+    // 6. BSHM (Bachelor of Science in Hospitality Management) - HTM
+    if (code.startsWith("HPC") || code.startsWith("HMPE") || code === "PRAC" || code === "BSHM" || title.includes("HOSPITALITY")) {
+      return PROGRAM_REFERENCE_MAP["BSHM"];
+    }
+
+    // 7. BSTM (Bachelor of Science in Tourism Management) - HTM
+    if (code.startsWith("TPC") || code.startsWith("TPE") || code.startsWith("ITRM") || code === "OJT" || code === "BSTM" || title.includes("TOURISM")) {
+      return PROGRAM_REFERENCE_MAP["BSTM"];
+    }
+
+    // Fallback based on enrolled student program codes
+    if (assignedStudents && assignedStudents.length > 0) {
+      const studentProgs = Array.from(new Set(assignedStudents.map(s => s.program_code).filter(Boolean)));
+      if (studentProgs.length > 0) {
+        const pCode = studentProgs[0];
+        if (PROGRAM_REFERENCE_MAP[pCode]) return PROGRAM_REFERENCE_MAP[pCode];
+        if (pCode.toUpperCase() === "BSIT") return PROGRAM_REFERENCE_MAP["BSIT"];
+        if (pCode.toUpperCase() === "BSINFOTECH") return PROGRAM_REFERENCE_MAP["BSInfoTech"];
+      }
+    }
+
+    return PROGRAM_REFERENCE_MAP["BSInfoTech"];
+  }, [selectedCourse, assignedStudents, PROGRAM_REFERENCE_MAP]);
+
+  // Keep studentProgramFilter automatically synchronized to determined program code
+  useEffect(() => {
+    if (determinedProgramInfo?.code) {
+      setStudentProgramFilter(determinedProgramInfo.code);
+      setStudentMajorFilter("ALL");
+    }
+  }, [determinedProgramInfo]);
+
+  const hasMajors = useMemo(() => {
+    return Array.isArray(determinedProgramInfo.majors) && determinedProgramInfo.majors.length > 0;
+  }, [determinedProgramInfo]);
 
   const availableStudentMajors = useMemo(() => {
-    let baseMajors: string[] = [];
-    if (isBSEdProgram) {
-      baseMajors = [
-        "ENGLISH",
-        "FILIPINO",
-        "MATHEMATICS",
-        "SCIENCE",
-        "SOCIAL STUDIES",
-        "VALUES EDUCATION"
-      ];
-    } else if (isIndustrialTechProgram) {
-      baseMajors = [
-        "ARCHITECTURE TECHNOLOGY",
-        "AUTOMOTIVE TECHNOLOGY",
-        "DRAFTSMANSHIP",
-        "ELECTRICAL TECHNOLOGY",
-        "ELECTRONICS TECHNOLOGY",
-        "FOOD TECHNOLOGY",
-        "MECHANICAL TECHNOLOGY"
-      ];
-    }
-    const presentMajors = assignedStudents.map(s => s.section).filter(Boolean);
-    const set = new Set([...baseMajors, ...presentMajors]);
-    return Array.from(set).sort();
-  }, [assignedStudents, isBSEdProgram, isIndustrialTechProgram]);
+    if (!hasMajors || !determinedProgramInfo.majors) return [];
+    return determinedProgramInfo.majors;
+  }, [determinedProgramInfo, hasMajors]);
+
+  const availableStudentPrograms = useMemo(() => {
+    return [determinedProgramInfo.code];
+  }, [determinedProgramInfo]);
 
   const availableStudentYears = useMemo(() => {
     const defaultYears = [1, 2, 3, 4];
@@ -506,10 +585,8 @@ export function ExamBuilderWizard({
   }, [assignedStudents]);
 
   const programLabel = useMemo(() => {
-    if (availableStudentPrograms.length === 0) return "Program: N/A";
-    if (availableStudentPrograms.length === 1) return `Program: ${availableStudentPrograms[0]}`;
-    return `Program: ${availableStudentPrograms.join(", ")}`;
-  }, [availableStudentPrograms]);
+    return `Program: ${determinedProgramInfo.code} (${determinedProgramInfo.name})`;
+  }, [determinedProgramInfo]);
 
   const yearLabel = useMemo(() => {
     const presentYears = Array.from(new Set(assignedStudents.map(s => s.year_level).filter(Boolean))).sort((a, b) => a - b);
@@ -593,8 +670,8 @@ export function ExamBuilderWizard({
       let newStudentIds: number[] = [];
       if (res.success && res.students) {
         setAssignedStudents(res.students);
-        newStudentIds = res.students.map(s => s.student_id);
-        setSelectedStudentIds(newStudentIds);
+        newStudentIds = [];
+        setSelectedStudentIds([]);
       }
 
       // Auto-save updated subject & title configuration to DB immediately
@@ -2444,7 +2521,7 @@ export function ExamBuilderWizard({
                 {/* Sort & Filter Controls Toolbar for Assigned Students */}
                 {assignedStudents.length > 0 && (
                   <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-3.5 space-y-3">
-                    <div className={`grid grid-cols-1 sm:grid-cols-2 ${hasMajors ? "lg:grid-cols-5" : "lg:grid-cols-4"} gap-2.5`}>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
                       {/* Search */}
                       <div className="relative sm:col-span-1">
                         <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
@@ -2480,35 +2557,39 @@ export function ExamBuilderWizard({
                         </select>
                       </div>
 
-                      {/* Program Code Filter */}
-                      <div className="sm:col-span-1">
-                        <select
-                          value={studentProgramFilter}
-                          onChange={(e) => setStudentProgramFilter(e.target.value)}
-                          className="w-full bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                        >
-                          <option value="ALL">Program: All Programs</option>
-                          {availableStudentPrograms.map(prog => (
-                            <option key={prog} value={prog}>{prog}</option>
-                          ))}
-                        </select>
+                      {/* Automated Program Display (Read-Only - Choice of choosing program removed) */}
+                      <div className="sm:col-span-1 bg-white border border-slate-200 rounded-xl px-3 py-1 rounded-lg flex items-center justify-between gap-2 shadow-2xs">
+                        <div className="truncate">
+                          <span className="text-[9px] font-black text-emerald-700 uppercase tracking-wider block">Auto Program</span>
+                          <span className="text-xs font-extrabold text-slate-800 truncate block" title={`${determinedProgramInfo.code} — ${determinedProgramInfo.name}`}>
+                            {determinedProgramInfo.code}
+                          </span>
+                        </div>
+                        <GraduationCap className="w-4 h-4 text-emerald-600 shrink-0" />
                       </div>
 
-                      {/* Filter by Major / Specialization (Only rendered if program has majors: BSEd or Industrial Tech) */}
-                      {hasMajors && (
-                        <div className="sm:col-span-1">
-                          <select
-                            value={studentMajorFilter}
-                            onChange={(e) => setStudentMajorFilter(e.target.value)}
-                            className="w-full bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                          >
-                            <option value="ALL">Major: All Majors</option>
-                            {availableStudentMajors.map(maj => (
-                              <option key={maj} value={maj}>{maj}</option>
-                            ))}
-                          </select>
-                        </div>
-                      )}
+                      {/* Major / Specialization Dropdown (Disabled if program has no majors, shows only connected majors when available) */}
+                      <div className="sm:col-span-1">
+                        <select
+                          disabled={!hasMajors}
+                          value={hasMajors ? studentMajorFilter : "ALL"}
+                          onChange={(e) => setStudentMajorFilter(e.target.value)}
+                          className="w-full bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500 disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed transition-all"
+                        >
+                          {!hasMajors ? (
+                            <option value="ALL">Major: N/A (No Majors)</option>
+                          ) : (
+                            <>
+                              <option value="ALL">Major: All Majors</option>
+                              {availableStudentMajors.map((maj) => (
+                                <option key={maj} value={maj}>
+                                  {maj}
+                                </option>
+                              ))}
+                            </>
+                          )}
+                        </select>
+                      </div>
 
                       {/* Year Level Filter (Selectable across all year levels 1 to 4) */}
                       <div className="sm:col-span-1">
@@ -2518,8 +2599,10 @@ export function ExamBuilderWizard({
                           className="w-full bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500"
                         >
                           <option value="ALL">Year Level: All Year Levels (1-4)</option>
-                          {availableStudentYears.map(yr => (
-                            <option key={yr} value={String(yr)}>Year {yr}</option>
+                          {availableStudentYears.map((yr) => (
+                            <option key={yr} value={String(yr)}>
+                              Year {yr}
+                            </option>
                           ))}
                         </select>
                       </div>
