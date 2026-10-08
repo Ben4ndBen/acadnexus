@@ -985,11 +985,7 @@ export function ExamBuilderWizard({
         hours: 6,
       }));
     }
-    return [
-      { id: "1", topic: "Module 1: Core Fundamentals & Concepts", hours: 6 },
-      { id: "2", topic: "Module 2: Analytical Methods & Implementation", hours: 10 },
-      { id: "3", topic: "Module 3: Advanced Applications & Problem Solving", hours: 8 },
-    ];
+    return [];
   });
 
   // Editable Learning Outcomes map per topic
@@ -2214,138 +2210,121 @@ export function ExamBuilderWizard({
   return (
     <div className="space-y-8 select-none">
       
-      {/* Top Header Controls */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white/70 backdrop-blur-md border border-slate-200/80 p-5 rounded-3xl shadow-sm">
-        <div className="flex items-center gap-3">
-          <button 
-            onClick={async () => {
-              await autoSaveExamData();
-              router.push(returnUrl || "/dashboard/faculty");
-              router.refresh();
-            }}
-            className="p-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-500 hover:text-slate-800 transition-all shadow-sm cursor-pointer"
-            title="Save and Return to Dashboard"
-          >
-            <ArrowLeft className="w-5 h-5" />
-          </button>
-          <div>
-            <h1 className="text-xl font-extrabold text-slate-900 tracking-tight">Exam Creator Wizard</h1>
-            <p className="text-xs text-slate-500 font-medium">Real-time Auto-Save enabled for all configuration, TOS, and question bank edits</p>
+      {/* Sticky Top Header & Step Progress Bar */}
+      <div className="sticky top-16 z-40 bg-slate-50/95 backdrop-blur-md pt-2 pb-3 space-y-3 transition-all border-b border-slate-200/60 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 shadow-xs print:hidden">
+        {/* Top Header Controls */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white/95 backdrop-blur-md border border-slate-200/80 p-4 rounded-2xl sm:rounded-3xl shadow-xs">
+          <div className="flex items-center gap-3">
+            <button 
+              onClick={async () => {
+                await autoSaveExamData();
+                router.push(returnUrl || "/dashboard/faculty");
+                router.refresh();
+              }}
+              className="p-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-500 hover:text-slate-800 transition-all shadow-xs cursor-pointer"
+              title="Save and Return to Dashboard"
+            >
+              <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" />
+            </button>
+            <div>
+              <h1 className="text-base sm:text-lg font-extrabold text-slate-900 tracking-tight">Exam Creator Wizard</h1>
+              <p className="text-[11px] text-slate-500 font-medium hidden sm:block">Real-time Auto-Save enabled for configuration, TOS, and questions</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2.5">
+            {autoSaveStatus === "saving" && (
+              <span className="inline-flex items-center gap-1.5 text-xs font-bold text-sky-800 bg-sky-50 border border-sky-200 px-3 py-1 rounded-full shadow-2xs">
+                <RefreshCw className="w-3.5 h-3.5 animate-spin text-sky-600" /> Auto-saving...
+              </span>
+            )}
+            {autoSaveStatus === "saved" && lastSavedTime && (
+              <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-full shadow-2xs">
+                <CheckCircle className="w-3.5 h-3.5 text-emerald-600" /> Saved ({lastSavedTime})
+              </span>
+            )}
+            {autoSaveStatus === "error" && (
+              <span className="inline-flex items-center gap-1.5 text-xs font-bold text-rose-800 bg-rose-50 border border-rose-200 px-3 py-1 rounded-full shadow-2xs">
+                <AlertCircle className="w-3.5 h-3.5 text-rose-600" /> Auto-save warning
+              </span>
+            )}
+
+            <button
+              onClick={handleSaveDraft}
+              className="flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-extrabold px-3.5 py-2 rounded-xl transition-all shadow-xs cursor-pointer"
+            >
+              <Save className="w-3.5 h-3.5" />
+              Save Draft
+            </button>
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          {autoSaveStatus === "saving" && (
-            <span className="inline-flex items-center gap-1.5 text-xs font-bold text-sky-800 bg-sky-50 border border-sky-200 px-3 py-1.5 rounded-full shadow-2xs">
-              <RefreshCw className="w-3.5 h-3.5 animate-spin text-sky-600" /> Auto-saving draft...
-            </span>
-          )}
-          {autoSaveStatus === "saved" && lastSavedTime && (
-            <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-full shadow-2xs">
-              <CheckCircle className="w-3.5 h-3.5 text-emerald-600" /> Auto-saved ({lastSavedTime})
-            </span>
-          )}
-          {autoSaveStatus === "error" && (
-            <span className="inline-flex items-center gap-1.5 text-xs font-bold text-rose-800 bg-rose-50 border border-rose-200 px-3 py-1.5 rounded-full shadow-2xs">
-              <AlertCircle className="w-3.5 h-3.5 text-rose-600" /> Auto-save warning
-            </span>
-          )}
+        {/* Step Progress Indicators */}
+        <div className="bg-white/95 backdrop-blur-md border border-slate-200 rounded-2xl p-2 sm:p-3 shadow-xs">
+          <div className="grid grid-cols-3 gap-2 sm:gap-4 relative">
+            
+            {/* Step 1 Indicator */}
+            <button 
+              onClick={() => setStep(1)}
+              className={`flex items-center gap-2.5 sm:gap-3.5 text-left p-2 sm:p-2.5 rounded-xl transition-all duration-300 ${
+                step === 1 
+                  ? "bg-emerald-50/80 border border-emerald-200 text-emerald-900 shadow-2xs" 
+                  : "text-slate-400 hover:bg-slate-50/50 hover:text-slate-700"
+              }`}
+            >
+              <div className={`w-8 h-8 sm:w-9 sm:h-9 rounded-lg flex items-center justify-center font-extrabold text-xs transition-all ${
+                step === 1 ? "bg-emerald-600 text-white shadow-xs" : "bg-slate-100 text-slate-400"
+              }`}>
+                <Settings className="w-4 h-4" />
+              </div>
+              <div className="truncate">
+                <p className="text-[9px] font-black uppercase tracking-wider text-emerald-600/70">Step 1</p>
+                <p className="text-xs sm:text-sm font-bold truncate">Configuration</p>
+              </div>
+            </button>
 
-          <button
-            onClick={handleSaveDraft}
-            className="flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-extrabold px-4 py-2.5 rounded-xl transition-all shadow-sm cursor-pointer"
-          >
-            <Save className="w-4 h-4" />
-            Save Draft
-          </button>
-        </div>
-      </div>
+            {/* Step 2 Indicator */}
+            <button 
+              disabled={!isConfigValid}
+              onClick={() => setStep(2)}
+              className={`flex items-center gap-2.5 sm:gap-3.5 text-left p-2 sm:p-2.5 rounded-xl transition-all duration-300 disabled:opacity-50 disabled:pointer-events-none ${
+                step === 2 
+                  ? "bg-emerald-50/80 border border-emerald-200 text-emerald-900 shadow-2xs" 
+                  : "text-slate-400 hover:bg-slate-50/50 hover:text-slate-700"
+              }`}
+            >
+              <div className={`w-8 h-8 sm:w-9 sm:h-9 rounded-lg flex items-center justify-center font-extrabold text-xs transition-all ${
+                step === 2 ? "bg-emerald-600 text-white shadow-xs" : "bg-slate-100 text-slate-400"
+              }`}>
+                <BookOpen className="w-4 h-4" />
+              </div>
+              <div className="truncate">
+                <p className="text-[9px] font-black uppercase tracking-wider text-emerald-600/70">Step 2</p>
+                <p className="text-xs sm:text-sm font-bold truncate">Question Bank</p>
+              </div>
+            </button>
 
-      {/* Save Notification Banner */}
-      {saveStatus && (
-        <div className={`p-4 rounded-2xl border text-xs font-extrabold flex items-center gap-3 transition-all duration-300 animate-in fade-in slide-in-from-top-4 ${
-          saveStatus.type === "success" 
-            ? "bg-emerald-50 text-emerald-800 border-emerald-100 shadow-sm" 
-            : saveStatus.type === "saving"
-            ? "bg-sky-50 text-sky-800 border-sky-100 shadow-sm"
-            : "bg-rose-50 text-rose-800 border-rose-100 shadow-sm"
-        }`}>
-          {saveStatus.type === "saving" ? (
-            <RefreshCw className="w-4 h-4 animate-spin text-sky-600" />
-          ) : saveStatus.type === "success" ? (
-            <CheckCircle className="w-4 h-4 text-emerald-600" />
-          ) : (
-            <AlertCircle className="w-4 h-4 text-rose-600" />
-          )}
-          <span>{saveStatus.message}</span>
-        </div>
-      )}
-
-      {/* Step Progress Indicators */}
-      <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 relative">
-          
-          {/* Step 1 Indicator */}
-          <button 
-            onClick={() => setStep(1)}
-            className={`flex items-center gap-4 text-left p-3 rounded-2xl transition-all duration-300 ${
-              step === 1 
-                ? "bg-emerald-50/70 border border-emerald-100 text-emerald-900 shadow-sm" 
-                : "text-slate-400 hover:bg-slate-50/50 hover:text-slate-700"
-            }`}
-          >
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-extrabold text-sm transition-all ${
-              step === 1 ? "bg-emerald-600 text-white shadow-md" : "bg-slate-100 text-slate-400"
-            }`}>
-              <Settings className="w-5 h-5" />
-            </div>
-            <div>
-              <p className="text-[10px] font-extrabold uppercase tracking-widest text-emerald-600/70">Step 1</p>
-              <p className="text-sm font-bold">Exam Configuration</p>
-            </div>
-          </button>
-
-          {/* Step 2 Indicator */}
-          <button 
-            disabled={!isConfigValid}
-            onClick={() => setStep(2)}
-            className={`flex items-center gap-4 text-left p-3 rounded-2xl transition-all duration-300 disabled:opacity-50 disabled:pointer-events-none ${
-              step === 2 
-                ? "bg-emerald-50/70 border border-emerald-100 text-emerald-900 shadow-sm" 
-                : "text-slate-400 hover:bg-slate-50/50 hover:text-slate-700"
-            }`}
-          >
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-extrabold text-sm transition-all ${
-              step === 2 ? "bg-emerald-600 text-white shadow-md" : "bg-slate-100 text-slate-400"
-            }`}>
-              <BookOpen className="w-5 h-5" />
-            </div>
-            <div>
-              <p className="text-[10px] font-extrabold uppercase tracking-widest text-emerald-600/70">Step 2</p>
-              <p className="text-sm font-bold">Question Bank</p>
-            </div>
-          </button>
-
-          {/* Step 3 Indicator */}
-          <button 
-            disabled={!isConfigValid || questions.length === 0}
-            onClick={() => setStep(3)}
-            className={`flex items-center gap-4 text-left p-3 rounded-2xl transition-all duration-300 disabled:opacity-50 disabled:pointer-events-none ${
-              step === 3 
-                ? "bg-emerald-50/70 border border-emerald-100 text-emerald-900 shadow-sm" 
-                : "text-slate-400 hover:bg-slate-50/50 hover:text-slate-700"
-            }`}
-          >
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-extrabold text-sm transition-all ${
-              step === 3 ? "bg-emerald-600 text-white shadow-md" : "bg-slate-100 text-slate-400"
-            }`}>
-              <ClipboardCheck className="w-5 h-5" />
-            </div>
-            <div>
-              <p className="text-[10px] font-extrabold uppercase tracking-widest text-emerald-600/70">Step 3</p>
-              <p className="text-sm font-bold">Review & Preview</p>
-            </div>
-          </button>
+            {/* Step 3 Indicator */}
+            <button 
+              disabled={!isConfigValid || questions.length === 0}
+              onClick={() => setStep(3)}
+              className={`flex items-center gap-2.5 sm:gap-3.5 text-left p-2 sm:p-2.5 rounded-xl transition-all duration-300 disabled:opacity-50 disabled:pointer-events-none ${
+                step === 3 
+                  ? "bg-emerald-50/80 border border-emerald-200 text-emerald-900 shadow-2xs" 
+                  : "text-slate-400 hover:bg-slate-50/50 hover:text-slate-700"
+              }`}
+            >
+              <div className={`w-8 h-8 sm:w-9 sm:h-9 rounded-lg flex items-center justify-center font-extrabold text-xs transition-all ${
+                step === 3 ? "bg-emerald-600 text-white shadow-xs" : "bg-slate-100 text-slate-400"
+              }`}>
+                <ClipboardCheck className="w-4 h-4" />
+              </div>
+              <div className="truncate">
+                <p className="text-[9px] font-black uppercase tracking-wider text-emerald-600/70">Step 3</p>
+                <p className="text-xs sm:text-sm font-bold truncate">Review & Preview</p>
+              </div>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -3471,28 +3450,6 @@ export function ExamBuilderWizard({
             )}
           </div>
 
-          {/* Footer Wizard Navigation */}
-          <div className="flex justify-between items-center bg-white border border-slate-200 rounded-3xl p-5 shadow-sm">
-            <button
-              type="button"
-              onClick={() => setStep(1)}
-              className="inline-flex justify-center items-center gap-2 border border-slate-200 bg-white text-slate-700 text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-slate-50 transition-all cursor-pointer shadow-2xs"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              Config Settings
-            </button>
-
-            <button
-              type="button"
-              disabled={questions.length === 0}
-              onClick={() => setStep(3)}
-              className="inline-flex justify-center items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold px-5 py-2.5 rounded-xl shadow-md hover:shadow-emerald-600/20 transition-all disabled:opacity-50 disabled:pointer-events-none cursor-pointer"
-            >
-              Proceed to Preview
-              <ArrowRight className="w-4 h-4" />
-            </button>
-          </div>
-
         </div>
       )}
 
@@ -4211,46 +4168,87 @@ export function ExamBuilderWizard({
                   </div>
                 ))}
             </div>
-
-
-
-
           </div>
-
-          {/* Wizard Navigation Footer */}
-          <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-4 bg-white border border-slate-200 rounded-3xl p-5 shadow-sm w-full">
-            <button
-              type="button"
-              onClick={() => setStep(2)}
-              className="inline-flex justify-center items-center gap-2 border border-slate-200 bg-white text-slate-700 text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-slate-50 transition-all shadow-sm"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              Back to Questions
-            </button>
-
-            <div className="flex flex-wrap items-center justify-end gap-3">
-              <button
-                onClick={handleSaveDraft}
-                className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 border border-slate-300/60 text-slate-700 text-xs font-bold px-4 py-2.5 rounded-xl transition-all shadow-sm cursor-pointer"
-              >
-                <Save className="w-4 h-4" />
-                Save Draft
-              </button>
-
-              <button
-                disabled={isSubmitting || questions.length === 0}
-                onClick={handleSubmitForReview}
-                className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold px-5 py-2.5 rounded-xl transition-all shadow-md hover:shadow-emerald-600/20 disabled:opacity-50 disabled:pointer-events-none cursor-pointer"
-                title={isProgChairAuthor ? "Submit directly to Department Chairperson" : (hasProgramChair ? "Final Submit to Program Chairperson" : "Final Submit to Department Chairperson")}
-              >
-                {isSubmitting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                {isProgChairAuthor ? "Submit to Chair" : (hasProgramChair ? "Final Submit to Prog Chair" : "Final Submit to Dept Chair")}
-              </button>
-            </div>
-          </div>
-
         </div>
       )}
+
+      {/* Sticky Floating Bottom Navigation Bar (Visible while scrolling in all steps) */}
+      <div className="sticky bottom-4 z-40 bg-white/95 backdrop-blur-md border border-slate-200/90 rounded-2xl sm:rounded-3xl p-3 sm:p-4 shadow-xl flex items-center justify-between gap-4 transition-all print:hidden">
+        {/* Left Side Navigation Button */}
+        {step === 1 ? (
+          <div className="flex items-center gap-2 text-xs font-bold text-slate-500 px-2">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span className="hidden sm:inline">Exam Setup & TOS</span>
+            <span className="sm:hidden">Step 1</span>
+          </div>
+        ) : step === 2 ? (
+          <button
+            type="button"
+            onClick={() => setStep(1)}
+            className="inline-flex items-center gap-2 border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold px-4 py-2.5 rounded-xl transition-all shadow-2xs cursor-pointer"
+          >
+            <ArrowLeft className="w-4 h-4 text-slate-500" />
+            <span>Config Settings</span>
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setStep(2)}
+            className="inline-flex items-center gap-2 border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold px-4 py-2.5 rounded-xl transition-all shadow-2xs cursor-pointer"
+          >
+            <ArrowLeft className="w-4 h-4 text-slate-500" />
+            <span>Back to Questions</span>
+          </button>
+        )}
+
+        {/* Right Side Action Buttons */}
+        <div className="flex items-center gap-2.5">
+          <button
+            type="button"
+            onClick={handleSaveDraft}
+            className="hidden sm:inline-flex items-center gap-2 bg-slate-100 hover:bg-slate-200 border border-slate-300/60 text-slate-700 text-xs font-bold px-4 py-2.5 rounded-xl transition-all shadow-2xs cursor-pointer"
+          >
+            <Save className="w-4 h-4 text-slate-600" />
+            <span>Save Draft</span>
+          </button>
+
+          {step === 1 ? (
+            <button
+              type="button"
+              disabled={!isConfigValid}
+              onClick={() => {
+                syncQuestionsWithTos();
+                setStep(2);
+              }}
+              className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold px-5 py-2.5 rounded-xl shadow-md hover:shadow-emerald-600/20 transition-all disabled:opacity-50 cursor-pointer"
+            >
+              <span>Proceed to Questions</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          ) : step === 2 ? (
+            <button
+              type="button"
+              disabled={questions.length === 0}
+              onClick={() => setStep(3)}
+              className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold px-5 py-2.5 rounded-xl shadow-md hover:shadow-emerald-600/20 transition-all disabled:opacity-50 disabled:pointer-events-none cursor-pointer"
+            >
+              <span>Proceed to Preview</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              disabled={isSubmitting || questions.length === 0}
+              onClick={handleSubmitForReview}
+              className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold px-5 py-2.5 rounded-xl transition-all shadow-md hover:shadow-emerald-600/20 disabled:opacity-50 disabled:pointer-events-none cursor-pointer"
+              title={isProgChairAuthor ? "Submit directly to Department Chairperson" : (hasProgramChair ? "Final Submit to Program Chairperson" : "Final Submit to Department Chairperson")}
+            >
+              {isSubmitting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+              <span>{isProgChairAuthor ? "Submit to Chair" : (hasProgramChair ? "Final Submit to Prog Chair" : "Final Submit to Dept Chair")}</span>
+            </button>
+          )}
+        </div>
+      </div>
 
 
 
