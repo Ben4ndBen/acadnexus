@@ -11,6 +11,7 @@ import {
 import { saveExamConfig, saveExamQuestions, updateExamStatus, uploadQuestionAttachment, uploadTosFileAction, getQuestionBankQuestions, importQuestionsToExam, getAssignedStudentsForCourse } from "@/app/actions/faculty";
 import { determineSemesterFromDate, formatStudentName } from "@/lib/academicUtils";
 import { Latex } from "@/app/components/Latex";
+import { formatFullExamDate } from "@/app/components/BSCTableOfSpecificationsView";
 
 interface Course {
   course_id: number;
@@ -165,6 +166,37 @@ function sortQuestionsByType(qs: QuestionState[]): QuestionState[] {
   });
 }
 
+
+
+export function cleanCorrectAnswer(val: any): string {
+  if (!val || typeof val !== "string") return "";
+  const trimmed = val.trim();
+  if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (typeof parsed === "string") return parsed;
+      if (parsed && typeof parsed.answer === "string") return parsed.answer;
+      if (parsed && typeof parsed.text === "string") return parsed.text;
+      return "";
+    } catch {
+      return "";
+    }
+  }
+  return val;
+}
+
+export function cleanQuestionText(rawText: string): string {
+  if (!rawText) return "";
+  const trimmed = rawText.trim();
+  if (trimmed.startsWith("{")) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (typeof parsed.text === "string") return parsed.text;
+    } catch {}
+  }
+  return rawText;
+}
+
 // Deserialization helper
 function deserializeQuestions(dbQuestions: any[]): QuestionState[] {
   return dbQuestions.map(q => {
@@ -174,7 +206,7 @@ function deserializeQuestions(dbQuestions: any[]): QuestionState[] {
     let matches: Array<{ premise: string; choice: string }> = [];
     let blanks: Array<{ id: number; answer: string; points: number }> = [];
     let min_words: number | undefined = undefined;
-    let correctAnswer = q.correct_answer;
+    let correctAnswer = cleanCorrectAnswer(q.correct_answer);
     let image_url = "";
     let taxonomy_level: TaxonomyLevel = "KNOWLEDGE / REMEMBERING";
 
@@ -182,7 +214,7 @@ function deserializeQuestions(dbQuestions: any[]): QuestionState[] {
     if (q.question_text.trim().startsWith("{")) {
       try {
         const parsed = JSON.parse(q.question_text);
-        text = parsed.text || q.question_text;
+        text = typeof parsed.text === "string" ? parsed.text : (parsed.text ?? q.question_text);
         options = parsed.options || [];
         premises = parsed.premises || [];
         blanks = parsed.blanks || [];
@@ -205,7 +237,7 @@ function deserializeQuestions(dbQuestions: any[]): QuestionState[] {
     } else if (q.question_type === "Matching_Type") {
       try {
         const parsedText = JSON.parse(q.question_text);
-        text = parsedText.text || q.question_text;
+        text = typeof parsedText.text === "string" ? parsedText.text : (parsedText.text ?? q.question_text);
         premises = parsedText.premises || [];
         options = parsedText.options || [];
         if (parsedText.taxonomy_level) taxonomy_level = parsedText.taxonomy_level;
@@ -232,6 +264,7 @@ function deserializeQuestions(dbQuestions: any[]): QuestionState[] {
       } catch {}
     }
 
+    text = cleanQuestionText(text);
     // Clean any sample text or item prefixes
     if (text && text.match(/^\[Item \d+\]\s*(Multiple Choice Question for.*)?$/i)) {
       text = "";
@@ -261,14 +294,11 @@ function deserializeQuestions(dbQuestions: any[]): QuestionState[] {
     }
 
     // Clean sample blanks if they are default dummy strings
+    // Clean sample blanks if they are default dummy strings or un-added empty placeholders
     if (blanks && blanks.length > 0) {
-      blanks = blanks.map(b => ({
-        ...b,
-        answer: (b.answer && (b.answer.startsWith("Answer ") || b.answer === "Basco" || b.answer === "northern")) ? "" : b.answer
-      }));
+      blanks = blanks.filter(b => b.answer && b.answer.trim() !== "" && !b.answer.startsWith("Answer ") && b.answer !== "Basco" && b.answer !== "northern");
     }
-
-    const cleanCorrectAnswer = (correctAnswer && (correctAnswer.startsWith("Option ") || correctAnswer === "Option A")) ? "" : correctAnswer;
+    const finalCorrectAnswer = (correctAnswer && (correctAnswer.startsWith("Option ") || correctAnswer === "Option A")) ? "" : correctAnswer;
 
     return {
       question_id: q.question_id,
@@ -279,7 +309,7 @@ function deserializeQuestions(dbQuestions: any[]): QuestionState[] {
       matches,
       blanks,
       min_words,
-      correctAnswer: cleanCorrectAnswer,
+      correctAnswer: finalCorrectAnswer,
       points: q.points,
       image_url,
       topic: q.topic || "",
@@ -479,6 +509,10 @@ export function ExamBuilderWizard({
   const [signatoryDeptChairName, setSignatoryDeptChairName] = useState<string>("NAME OF DEPARTMENT CHAIRPERSON");
   const [signatoryDirectorName, setSignatoryDirectorName] = useState<string>("NAME OF DIRECTOR FOR INSTRUCTION");
   const [signatoryLayoutMode, setSignatoryLayoutMode] = useState<"WITH_PC" | "WITHOUT_PC" | "PREPARED_BY_PC">("WITH_PC");
+
+  // Editable Test Type Headers & Directions State
+  const [customTypeTitles, setCustomTypeTitles] = useState<Record<string, string>>({});
+  const [customDirections, setCustomDirections] = useState<Record<string, string>>({});
 
   // 3. Assigned Students Selection with Sort & Filter
   const [assignedStudents, setAssignedStudents] = useState<StudentItem[]>(initialAssignedStudents);
@@ -1647,7 +1681,7 @@ export function ExamBuilderWizard({
         q.correctAnswer = "True";
       }
     } else if (newType === "Identification") {
-      if (typeof q.correctAnswer !== "string") q.correctAnswer = "";
+      q.correctAnswer = cleanCorrectAnswer(q.correctAnswer);
     } else if (newType === "Matching_Type") {
       if (!q.matches || q.matches.length === 0) {
         q.matches = [
@@ -1662,12 +1696,8 @@ export function ExamBuilderWizard({
       }
       if (q.points === 1) q.points = 5;
     } else if (newType === "Fill_In_The_Blanks") {
-      if (!q.blanks || q.blanks.length === 0) {
-        q.blanks = [
-          { id: 1, answer: "", points: 1 },
-          { id: 2, answer: "", points: 1 },
-        ];
-        q.points = 2;
+      if (!q.blanks) {
+        q.blanks = [];
       }
       if (q.text && (q.text.startsWith("[Item ") || q.text.includes("The core concept"))) {
         q.text = "";
@@ -1833,11 +1863,8 @@ export function ExamBuilderWizard({
       newQ.points = 5;
     } else if (type === "Fill_In_The_Blanks") {
       newQ.text = "";
-      newQ.blanks = [
-        { id: 1, answer: "", points: 1 },
-        { id: 2, answer: "", points: 1 },
-      ];
-      newQ.points = 2;
+      newQ.blanks = [];
+      newQ.points = 1;
     }
 
     // Group existing questions by type
@@ -2412,17 +2439,13 @@ export function ExamBuilderWizard({
 
             <div className="space-y-6">
               {/* 1. Examination Term & Exam Date (First Asked!) */}
-              <div className="bg-white border border-slate-200 rounded-3xl p-5 sm:p-6 space-y-4 shadow-sm">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
-                  <div className="flex items-center gap-2.5">
-                    <div className="p-2 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-100">
-                      <Calendar className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <h2 className="text-base font-extrabold text-slate-900 tracking-tight">1. Examination Term & Scheduled Date</h2>
-                    </div>
-                  </div>
-                  <span className="self-start sm:self-auto bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-black uppercase px-2.5 py-1 rounded-full">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
+                    <Calendar className="w-4 h-4 text-emerald-600" />
+                    1. Examination Term & Scheduled Date
+                  </h3>
+                  <span className="text-[10px] font-black uppercase text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
                     Required Step
                   </span>
                 </div>
@@ -3133,32 +3156,28 @@ export function ExamBuilderWizard({
 
                     {/* Collapsible Content: Questions List under this Topic */}
                     {isOpen && (
-                      <div className="p-4 sm:p-6 space-y-6 divide-y divide-slate-100">
+                      <div className="p-4 sm:p-6 space-y-5">
                         {topicQuestions.length > 0 ? (
-                          topicQuestions.map(({ q, globalIdx }) => (
-                            <div key={globalIdx} className="pt-6 first:pt-0 space-y-5">
+                          topicQuestions.map(({ q, globalIdx }, topicItemIdx) => (
+                            <div key={globalIdx} className="bg-slate-50 border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs space-y-4 hover:border-slate-300 transition-all">
                               
                               {/* Question Item Bar */}
-                              <div className="flex flex-col sm:flex-row sm:items-center justify-between bg-slate-50/80 p-3.5 rounded-2xl border border-slate-200/90 gap-3">
+                              <div className="flex items-center justify-between bg-white p-2.5 rounded-xl border border-slate-200/90 gap-2.5 overflow-x-auto scrollbar-none shadow-2xs">
                                 
-                                {/* Left: Item # & Type Dropdown Selector */}
-                                <div className="flex flex-wrap items-center gap-3">
-                                  <span className="text-xs font-black text-white bg-slate-900 px-2.5 py-1 rounded-xl shadow-2xs">
-                                    Item #{globalIdx + 1}
+                                {/* Left: Badges & Type/Taxonomy/Topic Selectors */}
+                                <div className="flex items-center gap-2.5 shrink-0">
+                                  <span className="text-sm font-black text-slate-900 shrink-0 px-1">
+                                    {topicItemIdx + 1}.
                                   </span>
 
-                                  {/* Dynamic Test Part & Test Item Badge */}
-                                  <span className="text-xs font-extrabold text-indigo-950 bg-indigo-100 border border-indigo-300/80 px-2.5 py-1 rounded-xl shadow-2xs">
-                                    {questionTestInfoMap[globalIdx]?.badge || "Test 1 • Item 1"}
-                                  </span>
 
                                   {/* Question Type Selector Dropdown per Item */}
-                                  <div className="flex items-center gap-1.5">
-                                    <label className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">Type:</label>
+                                  <div className="flex items-center gap-1.5 shrink-0">
+                                    <label className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider shrink-0 whitespace-nowrap">Type:</label>
                                     <select
                                       value={q.question_type}
                                       onChange={(e) => handleQuestionTypeChange(e.target.value as any, globalIdx)}
-                                      className="bg-emerald-50 border border-emerald-300 text-emerald-950 font-extrabold text-xs px-3 py-1 rounded-xl shadow-2xs focus:ring-2 focus:ring-emerald-500 focus:outline-none cursor-pointer"
+                                      className="bg-emerald-50 border border-emerald-300 text-emerald-950 font-extrabold text-xs px-2.5 py-1 rounded-xl shadow-2xs focus:ring-2 focus:ring-emerald-500 focus:outline-none cursor-pointer shrink-0"
                                     >
                                       <option value="Multiple_Choice">Test Part: Multiple Choice</option>
                                       <option value="Identification">Test Part: Identification</option>
@@ -3170,15 +3189,12 @@ export function ExamBuilderWizard({
                                   </div>
 
                                   {/* Taxonomy of Learning Level Selector (Bloom's Taxonomy) */}
-                                  <div className="flex items-center gap-1.5">
-                                    <label className="text-[11px] font-extrabold text-indigo-700 uppercase tracking-wider flex items-center gap-1">
-                                      <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
-                                      Taxonomy Level:
-                                    </label>
+                                  <div className="flex items-center gap-1.5 shrink-0">
+                                    <label className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider shrink-0 whitespace-nowrap">Taxonomy Level:</label>
                                     <select
                                       value={q.taxonomy_level || "KNOWLEDGE / REMEMBERING"}
                                       onChange={(e) => updateQuestionTaxonomy(e.target.value as TaxonomyLevel, globalIdx)}
-                                      className="bg-indigo-50 border border-indigo-300 text-indigo-950 font-extrabold text-xs px-2.5 py-1 rounded-xl shadow-2xs focus:ring-2 focus:ring-indigo-500 focus:outline-none cursor-pointer"
+                                      className="bg-indigo-50 border border-indigo-300 text-indigo-950 font-extrabold text-xs px-2.5 py-1 rounded-xl shadow-2xs focus:ring-2 focus:ring-indigo-500 focus:outline-none cursor-pointer shrink-0 max-w-[210px] truncate"
                                     >
                                       <option value="KNOWLEDGE / REMEMBERING">1. Knowledge / Remembering</option>
                                       <option value="COMPREHENSION / UNDERSTANDING">2. Comprehension / Understanding</option>
@@ -3189,70 +3205,54 @@ export function ExamBuilderWizard({
                                     </select>
                                   </div>
 
-                                  {/* Topic Assignment Dropdown Selector */}
-                                  <div className="flex items-center gap-1.5">
-                                    <label className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">Topic:</label>
-                                    <select
-                                      value={q.topic || ""}
-                                      onChange={(e) => updateQuestionTopic(e.target.value, globalIdx)}
-                                      className="bg-slate-100 border border-slate-300 text-slate-900 font-bold text-xs px-2.5 py-1 rounded-xl shadow-2xs focus:ring-2 focus:ring-emerald-500 focus:outline-none cursor-pointer max-w-[200px] truncate"
-                                    >
-                                      <option value="">-- Select Topic --</option>
-                                      {existingUniqueTopics.map((tName, tIdx) => (
-                                        <option key={tIdx} value={tName}>
-                                          {tName}
-                                        </option>
-                                      ))}
-                                    </select>
-                                  </div>
                                 </div>
 
-                                    {/* Right: Points & Reorder/Delete Buttons */}
-                                    <div className="flex flex-wrap items-center gap-3">
-                                      <div className="flex items-center gap-1.5">
-                                        <label className="text-[11px] font-bold text-slate-500">Points:</label>
-                                        <input
-                                          type="number"
-                                          min="1"
-                                          max="100"
-                                          value={q.points}
-                                          onChange={(e) => updateQuestionPoints(Number(e.target.value), globalIdx)}
-                                          className="w-12 bg-white border border-slate-300 rounded-lg text-center text-xs font-bold text-slate-800 py-1 focus:outline-emerald-500 shadow-2xs"
-                                        />
-                                      </div>
-
-                                      <div className="flex items-center gap-1 border-l border-slate-200 pl-2">
-                                        <button
-                                          type="button"
-                                          disabled={globalIdx === 0}
-                                          onClick={() => handleMoveQuestion(globalIdx, "up")}
-                                          className="p-1 rounded-md text-slate-400 hover:text-slate-800 disabled:opacity-30 disabled:pointer-events-none hover:bg-slate-200 transition-colors cursor-pointer"
-                                          title="Move Up"
-                                        >
-                                          <ArrowUp className="w-3.5 h-3.5" />
-                                        </button>
-                                        <button
-                                          type="button"
-                                          disabled={globalIdx === questions.length - 1}
-                                          onClick={() => handleMoveQuestion(globalIdx, "down")}
-                                          className="p-1 rounded-md text-slate-400 hover:text-slate-800 disabled:opacity-30 disabled:pointer-events-none hover:bg-slate-200 transition-colors cursor-pointer"
-                                          title="Move Down"
-                                        >
-                                          <ArrowDown className="w-3.5 h-3.5" />
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={() => handleDeleteQuestion(globalIdx)}
-                                          className="p-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
-                                          title="Delete Question"
-                                        >
-                                          <Trash2 className="w-3.5 h-3.5" />
-                                        </button>
-                                      </div>
-                                    </div>
+                                {/* Right: Points & Reorder/Delete Buttons */}
+                                <div className="flex items-center gap-2.5 shrink-0 ml-auto">
+                                  <div className="flex items-center gap-1.5 shrink-0">
+                                    <label className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider shrink-0 whitespace-nowrap">Points:</label>
+                                    <input
+                                      type="number"
+                                      min="1"
+                                      max="100"
+                                      value={q.points}
+                                      onChange={(e) => updateQuestionPoints(Number(e.target.value), globalIdx)}
+                                      className="w-12 bg-white border border-slate-300 rounded-xl text-center text-xs font-bold text-slate-800 py-1 focus:outline-emerald-500 shadow-2xs shrink-0"
+                                    />
                                   </div>
 
-                                  {/* Prompt Input Textarea */}
+                                  <div className="flex items-center gap-1 border-l border-slate-200 pl-2 shrink-0">
+                                    <button
+                                      type="button"
+                                      disabled={globalIdx === 0}
+                                      onClick={() => handleMoveQuestion(globalIdx, "up")}
+                                      className="p-1 rounded-md text-slate-400 hover:text-slate-800 disabled:opacity-30 disabled:pointer-events-none hover:bg-slate-200 transition-colors cursor-pointer"
+                                      title="Move Up"
+                                    >
+                                      <ArrowUp className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={globalIdx === questions.length - 1}
+                                      onClick={() => handleMoveQuestion(globalIdx, "down")}
+                                      className="p-1 rounded-md text-slate-400 hover:text-slate-800 disabled:opacity-30 disabled:pointer-events-none hover:bg-slate-200 transition-colors cursor-pointer"
+                                      title="Move Down"
+                                    >
+                                      <ArrowDown className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteQuestion(globalIdx)}
+                                      className="p-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                                      title="Delete Question"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Prompt Input Textarea */}
                                   <div className="space-y-1.5">
                                     <label className="text-xs font-extrabold text-slate-700 block">Question Prompt / Text</label>
                                     <textarea
@@ -3262,29 +3262,11 @@ export function ExamBuilderWizard({
                                           ? "e.g. The capital of Batanes is [blank] and it is located in [blank] region."
                                           : "Enter the question details here..."
                                       }
-                                      value={q.text}
+                                      value={cleanQuestionText(q.text)}
                                       onChange={(e) => updateQuestionText(e.target.value, globalIdx)}
                                       className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 text-xs font-medium text-slate-800 placeholder:text-slate-400 p-3 rounded-xl transition-all duration-300 outline-none"
                                     />
-
-                                    {/* Fill in the Blanks Guidance & Example Box */}
-                                    {q.question_type === "Fill_In_The_Blanks" && (
-                                      <div className="bg-teal-50/90 border border-teal-200/90 rounded-xl p-3 flex items-start gap-2.5 text-xs text-teal-950 shadow-2xs mt-1.5">
-                                        <HelpCircle className="w-4 h-4 text-teal-600 shrink-0 mt-0.5" />
-                                        <div className="space-y-1">
-                                          <span className="font-extrabold text-teal-900 block">How to type Fill in the Blanks:</span>
-                                          <p className="text-teal-800 font-medium text-[11px]">
-                                            Type <code className="bg-teal-100/80 text-teal-950 px-1.5 py-0.5 rounded border border-teal-300 font-bold">[blank]</code> in your question text prompt wherever a blank space should appear.
-                                          </p>
-                                          <div className="bg-white/90 border border-teal-200 rounded-lg p-2 text-[11px] text-slate-700">
-                                            <span className="font-bold text-teal-900 block mb-0.5">Example Prompt:</span>
-                                            &quot;The capital of the Philippines is <span className="font-bold text-teal-800 bg-teal-100 px-1 py-0.5 rounded border border-teal-200">[blank]</span> and it is located in <span className="font-bold text-teal-800 bg-teal-100 px-1 py-0.5 rounded border border-teal-200">[blank]</span>.&quot;
-                                          </div>
-                                        </div>
-                                      </div>
-                                    )}
                                   </div>
-
                                   {/* Option to Upload PNG or Photo */}
                                   <div className="flex flex-wrap items-center gap-3">
                                     <input
@@ -3411,7 +3393,7 @@ export function ExamBuilderWizard({
                                   <input
                                     type="text"
                                     placeholder="Type expected text answer..."
-                                    value={q.correctAnswer}
+                                    value={cleanCorrectAnswer(q.correctAnswer)}
                                     onChange={(e) => updateIdCorrectAnswer(e.target.value, globalIdx)}
                                     className="w-full max-w-md bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-800 px-3 py-2 rounded-xl focus:outline-emerald-500"
                                   />
@@ -3498,7 +3480,8 @@ export function ExamBuilderWizard({
                                       <Plus className="w-3 h-3" /> Insert Blank
                                     </button>
                                   </div>
-                                  <div className="space-y-2">
+                                  {(q.blanks || []).length > 0 && (
+                                    <div className="space-y-2">
                                     {(q.blanks || []).map((blank, blankIdx) => (
                                       <div key={blankIdx} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 bg-teal-50/40 border border-teal-200/80 p-2.5 rounded-xl text-xs">
                                         <span className="font-black bg-teal-600 text-white px-2 py-0.5 rounded-md text-[10px]">
@@ -3522,9 +3505,8 @@ export function ExamBuilderWizard({
                                           />
                                           <button
                                             type="button"
-                                            disabled={(q.blanks || []).length <= 1}
                                             onClick={() => deleteBlankItem(blankIdx, globalIdx)}
-                                            className="p-1 text-slate-400 hover:text-rose-600 disabled:opacity-30 cursor-pointer"
+                                             className="p-1 text-slate-400 hover:text-rose-600 cursor-pointer"
                                           >
                                             <Trash className="w-3.5 h-3.5" />
                                           </button>
@@ -3532,6 +3514,7 @@ export function ExamBuilderWizard({
                                       </div>
                                     ))}
                                   </div>
+                                  )}
                                 </div>
                               )}
 
@@ -3632,21 +3615,21 @@ export function ExamBuilderWizard({
                     </div>
 
                     {/* INNER CONTENT BODY WITH PADDING */}
-                    <div className="p-6 sm:p-10 space-y-4 flex-1">
+                    <div className="px-6 pb-6 pt-2 sm:px-10 sm:pb-10 sm:pt-3 space-y-3 flex-1">
 
                       {/* PAGE 1 ONLY: TOS TITLE & METADATA GRID */}
                       {pageIdx === 0 ? (
                         <>
                           {/* TOS TITLE & TERM */}
-                          <div className="text-center space-y-0.5 py-1">
+                          <div className="text-center space-y-0.5 pt-0 pb-1">
                             <h2 className="text-base sm:text-lg font-black font-sans text-black tracking-wider uppercase">
                               TABLE OF SPECIFICATIONS
                             </h2>
                             <p className="text-xs sm:text-sm font-black text-black uppercase tracking-wide">
-                              <span>[{term ? term.toUpperCase() : "TERM"}] EXAMINATION</span>
+                              <span>{term ? term.toUpperCase() : "TERM"} EXAMINATION</span>
                             </p>
                             <p className="text-xs font-bold text-black tracking-wide">
-                              <span className="border-b border-black pb-0.5 px-3">{applicableSemesterLabel}</span>
+                              <span>{applicableSemesterLabel}</span>
                             </p>
                           </div>
 
@@ -3662,7 +3645,7 @@ export function ExamBuilderWizard({
                               <div className="flex items-baseline gap-2 flex-1 w-full">
                                 <span className="shrink-0 font-black text-[11px] tracking-wide">DATE OF EXAMINATION:</span>
                                 <span className="border-b border-black flex-1 font-mono font-bold text-black px-1 text-[11px] min-h-[18px]">
-                                  {examDate}
+                                  {formatFullExamDate(examDate)}
                                 </span>
                               </div>
                             </div>
@@ -4081,54 +4064,63 @@ export function ExamBuilderWizard({
                     </div>
 
                     {/* INNER CONTENT BODY WITH PADDING */}
-                    <div className="p-6 sm:p-10 space-y-4 flex-1">
+                    <div className="px-6 pb-6 pt-2 sm:px-10 sm:pb-10 sm:pt-3 space-y-3 flex-1">
 
                       {/* PAGE 1: FULL EXAMINATION METADATA HEADER */}
                       {pageIdx === 0 ? (
                         <>
-                          <div className="text-center space-y-1 py-1 border-b border-slate-200">
-                            <h2 className="text-base sm:text-lg font-black font-sans text-slate-900 tracking-wide uppercase">
-                              OFFICIAL EXAMINATION PAPER
+                          <div className="text-center space-y-0.5 pt-0 pb-1 border-b border-slate-200">
+                            <h2 className="text-base sm:text-lg font-black font-sans text-slate-900 tracking-wider uppercase">
+                              {selectedCourse.course_code}{selectedCourse.course_title ? ` — ${selectedCourse.course_title}` : ""}
                             </h2>
-                            <p className="text-xs font-bold text-slate-800 uppercase">
-                              <span className="underline font-black">[{term.toUpperCase()}] EXAMINATION</span>
+                            <p className="text-xs sm:text-sm font-black text-slate-800 uppercase tracking-wide">
+                              {term.toUpperCase()} EXAMINATION
                             </p>
-                            <p className="text-xs font-semibold text-slate-700">
-                              <span className="underline font-bold">{applicableSemesterLabel}</span>
+                            <p className="text-xs font-bold text-slate-700">
+                              {applicableSemesterLabel}
                             </p>
                           </div>
 
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-xs font-bold border-b border-slate-200 pb-3">
-                            <div className="flex items-center gap-2">
-                              <span className="text-slate-500 font-bold uppercase min-w-[100px]">COURSE:</span>
-                              <span className="font-mono font-black text-slate-900 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded">{selectedCourse.course_code}</span>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3 text-xs font-bold border-b border-black pb-3 pt-1">
+                            <div className="flex items-baseline gap-2">
+                              <span className="font-black text-black uppercase tracking-wider shrink-0 min-w-[75px]">NAME:</span>
+                              <span
+                                contentEditable
+                                suppressContentEditableWarning
+                                className="border-b border-black flex-1 min-h-[18px] outline-none focus:bg-amber-100/90 rounded px-1 transition-all cursor-text print:bg-transparent"
+                              ></span>
                             </div>
-                            <div className="flex items-center gap-2">
-                              <span className="text-slate-500 font-bold uppercase min-w-[110px]">DATE:</span>
-                              <span className="font-mono font-black text-slate-900 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded">{examDate}</span>
+                            <div className="flex items-baseline gap-2">
+                              <span className="font-black text-black uppercase tracking-wider shrink-0 min-w-[50px]">DATE:</span>
+                              <span
+                                contentEditable
+                                suppressContentEditableWarning
+                                className="border-b border-black flex-1 min-h-[18px] outline-none focus:bg-amber-100/90 rounded px-1 transition-all cursor-text print:bg-transparent"
+                              ></span>
                             </div>
-                            <div className="flex items-center gap-2">
-                              <span className="text-slate-500 font-bold uppercase min-w-[100px]">TIME LIMIT:</span>
-                              <span className="font-black text-slate-900">{timeLimit} Minutes</span>
+                            <div className="flex items-baseline gap-2">
+                              <span className="font-black text-black uppercase tracking-wider shrink-0 min-w-[75px]">YR / LEVEL:</span>
+                              <span
+                                contentEditable
+                                suppressContentEditableWarning
+                                className="border-b border-black flex-1 min-h-[18px] outline-none focus:bg-amber-100/90 rounded px-1 transition-all cursor-text print:bg-transparent"
+                              ></span>
                             </div>
-                            <div className="flex items-center gap-2">
-                              <span className="text-slate-500 font-bold uppercase min-w-[110px]">TOTAL ITEMS:</span>
-                              <span className="font-black text-slate-900">{questions.length} Items ({questions.reduce((sum, q) => sum + (q.points || 1), 0)} Pts)</span>
+                            <div className="flex items-baseline gap-2">
+                              <span className="font-black text-black uppercase tracking-wider shrink-0 min-w-[50px]">SCORE:</span>
+                              <span
+                                contentEditable
+                                suppressContentEditableWarning
+                                className="border-b border-black flex-1 min-h-[18px] outline-none focus:bg-amber-100/90 rounded px-1 transition-all cursor-text print:bg-transparent"
+                              ></span>
                             </div>
-                          </div>
-
-                          <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs space-y-1">
-                            <p className="font-black text-slate-900 uppercase tracking-wider text-[10px]">General Instructions:</p>
-                            <p className="text-slate-700 font-medium text-[11px] leading-relaxed">
-                              Read each item carefully before answering. Ensure your responses are clear and legibly written. Manage your time wisely across all test parts ({timeLimit} minutes).
-                            </p>
                           </div>
                         </>
                       ) : (
                         /* PAGE 2+: COMPACT PAGE HEADER */
                         <div className="flex items-center justify-between border-b border-slate-200 pb-2 text-xs font-bold text-slate-600">
                           <span className="uppercase tracking-wide font-black text-slate-900">
-                            [{term.toUpperCase()}] EXAMINATION PAPER — {selectedCourse.course_code}
+                            {term.toUpperCase()} EXAMINATION PAPER — {selectedCourse.course_code}
                           </span>
                           <span className="bg-slate-100 border border-slate-200 px-2.5 py-0.5 rounded text-[10px] text-slate-700 font-extrabold">
                             Page {pageIdx + 1} of {previewPages.length}
@@ -4160,15 +4152,40 @@ export function ExamBuilderWizard({
                             return (
                               <div key={block.id} className="pt-3 pb-1.5 border-b-2 border-slate-900 mt-4 mb-2">
                                 <div className="flex items-baseline justify-between">
-                                  <h4 className="font-extrabold text-xs sm:text-sm text-slate-900 tracking-wide uppercase font-sans">
-                                    TEST {toRomanNumeral(block.testNum!)}. {typeTitles[qType] || qType.toUpperCase()}
+                                  <h4
+                                    contentEditable
+                                    suppressContentEditableWarning
+                                    onBlur={(e) => {
+                                      const val = e.currentTarget.innerText || "";
+                                      setCustomTypeTitles((prev) => ({ ...prev, [qType]: val }));
+                                    }}
+                                    className="font-extrabold text-xs sm:text-sm text-slate-900 tracking-wide uppercase font-sans outline-none focus:bg-amber-100/90 focus:ring-1 focus:ring-amber-500 rounded px-1 transition-all cursor-text print:p-0 print:bg-transparent print:ring-0"
+                                    title="Click to edit test section header title"
+                                  >
+                                    {customTypeTitles[qType] !== undefined
+                                      ? customTypeTitles[qType]
+                                      : `TEST ${toRomanNumeral(block.testNum!)}. ${typeTitles[qType] || qType.toUpperCase()}`}
                                   </h4>
-                                  <span className="text-xs font-extrabold text-slate-900 font-sans tracking-tight">
+                                  <span className="text-xs font-extrabold text-slate-900 font-sans tracking-tight shrink-0">
                                     ({block.points} {block.points === 1 ? "Point" : "Points"})
                                   </span>
                                 </div>
                                 <p className="text-xs text-slate-700 italic font-sans mt-0.5 leading-tight">
-                                  <span className="font-bold not-italic">Directions: </span>{typeDirections[qType]}
+                                  <span className="font-bold not-italic">Directions: </span>
+                                  <span
+                                    contentEditable
+                                    suppressContentEditableWarning
+                                    onBlur={(e) => {
+                                      const val = e.currentTarget.innerText || "";
+                                      setCustomDirections((prev) => ({ ...prev, [qType]: val }));
+                                    }}
+                                    className="outline-none focus:bg-amber-100/90 focus:ring-1 focus:ring-amber-500 rounded px-1 transition-all cursor-text print:p-0 print:bg-transparent print:ring-0"
+                                    title="Click to edit directions for this test type"
+                                  >
+                                    {customDirections[qType] !== undefined
+                                      ? customDirections[qType]
+                                      : (typeDirections[qType] || "Read each question carefully and answer accordingly.")}
+                                  </span>
                                 </p>
                               </div>
                             );
@@ -4253,7 +4270,7 @@ export function ExamBuilderWizard({
                                 {q.question_type === "Fill_In_The_Blanks" && (
                                   <div className="pl-6 pt-1 space-y-2">
                                     <div className="text-slate-600 font-medium">
-                                      {(q.blanks || [{ id: 1 }]).map((b: any, bIdx: number) => (
+                                      {(q.blanks || []).map((b: any, bIdx: number) => (
                                         <div key={bIdx} className="inline-block mr-3 mt-1 text-[11px] font-mono text-slate-700 bg-slate-100 border border-slate-300 px-2 py-0.5 rounded">
                                           Blank #{bIdx + 1}: ____________
                                         </div>

@@ -3386,7 +3386,8 @@ export function FacultyDashboardClient({
                 let promptPreview = q.question_text;
                 if (q.question_text.trim().startsWith("{")) {
                   try {
-                    promptPreview = JSON.parse(q.question_text).text || q.question_text;
+                    const parsed = JSON.parse(q.question_text);
+                    promptPreview = typeof parsed.text === "string" ? parsed.text : (parsed.text ?? q.question_text);
                   } catch {}
                 }
 

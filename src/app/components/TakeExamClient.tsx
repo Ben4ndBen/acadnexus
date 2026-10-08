@@ -970,7 +970,7 @@ export function TakeExamClient({
 
                 {/* 6. Fill in the Blanks */}
                 {currentQuestion.question_type === "Fill_In_The_Blanks" && (() => {
-                  const text = currentParsed?.text || currentQuestion.question_text || "";
+                  const text = typeof currentParsed?.text === "string" ? currentParsed.text : (currentQuestion.question_text || "");
                   const blanks = currentParsed?.blanks || [];
 
                   if (text.includes("[blank]")) {

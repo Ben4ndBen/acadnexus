@@ -41,6 +41,39 @@ export interface BSCTableOfSpecificationsViewProps {
 }
 
 /**
+ * Formats a date string or Date into full uppercase format (e.g., AUGUST 08, 2026).
+ */
+export function formatFullExamDate(dateInput?: string | Date | null): string {
+  if (!dateInput) return "";
+  try {
+    if (typeof dateInput === "string") {
+      const trimmed = dateInput.trim();
+      if (!trimmed) return "";
+      const match = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if (match) {
+        const year = parseInt(match[1], 10);
+        const monthIdx = parseInt(match[2], 10) - 1;
+        const day = parseInt(match[3], 10);
+        const monthNames = [
+          "JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE",
+          "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER"
+        ];
+        if (monthIdx >= 0 && monthIdx < 12) {
+          const dayStr = String(day).padStart(2, "0");
+          return `${monthNames[monthIdx]} ${dayStr}, ${year}`;
+        }
+      }
+    }
+    const d = new Date(dateInput);
+    if (isNaN(d.getTime())) return String(dateInput).toUpperCase();
+    const options: Intl.DateTimeFormatOptions = { month: "long", day: "2-digit", year: "numeric", timeZone: "UTC" };
+    return d.toLocaleDateString("en-US", options).toUpperCase();
+  } catch (e) {
+    return String(dateInput).toUpperCase();
+  }
+}
+
+/**
  * Normalizes department name so that "DEPARTMENT" is at the end.
  * e.g., "DEPARTMENT OF AGRICULTURE" -> "AGRICULTURE DEPARTMENT"
  */
@@ -166,18 +199,18 @@ export function BSCTableOfSpecificationsView({
       </div>
 
       {/* INNER CONTENT BODY WITH PADDING */}
-      <div className="p-4 sm:p-8 space-y-4 flex-1">
+      <div className="px-4 pb-4 pt-2 sm:px-8 sm:pb-8 sm:pt-3 space-y-3 flex-1">
 
       {/* TOS TITLE & TERM */}
-      <div className="text-center space-y-0.5 py-1">
+      <div className="text-center space-y-0.5 pt-0 pb-1">
         <h2 className="text-base sm:text-lg font-black font-sans text-black tracking-wider uppercase">
           TABLE OF SPECIFICATIONS
         </h2>
         <p className="text-xs sm:text-sm font-black text-black uppercase tracking-wide">
-          <span>[{term ? term.toUpperCase() : "TERM"}] EXAMINATION</span>
+          <span>{term ? term.toUpperCase() : "TERM"} EXAMINATION</span>
         </p>
         <p className="text-xs font-bold text-black tracking-wide">
-          <span className="border-b border-black pb-0.5 px-3">
+          <span>
             {semester ? semester : "________"} Semester, AY {academicYear ? academicYear : "20___-20___"}
           </span>
         </p>
@@ -195,7 +228,7 @@ export function BSCTableOfSpecificationsView({
           <div className="flex items-baseline gap-2 flex-1 w-full">
             <span className="shrink-0 font-black text-[11px] tracking-wide">DATE OF EXAMINATION:</span>
             <span className="border-b border-black flex-1 font-mono font-bold text-black px-1 text-[11px] min-h-[18px]">
-              {examDate || ""}
+              {formatFullExamDate(examDate)}
             </span>
           </div>
         </div>

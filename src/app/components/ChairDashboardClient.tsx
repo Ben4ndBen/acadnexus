@@ -19,7 +19,7 @@ import {
 } from "@/lib/courseDepartmentMapping";
 import { getExpectedYearAndSemForCourse } from "@/lib/bsitCurriculum";
 import { FacultyDashboardClient } from "@/app/components/FacultyDashboardClient";
-import { BSCTableOfSpecificationsView } from "@/app/components/BSCTableOfSpecificationsView";
+import { BSCTableOfSpecificationsView, formatFullExamDate } from "@/app/components/BSCTableOfSpecificationsView";
 
 function toRomanNumeral(num: number): string {
   const romanMap: [number, string][] = [
@@ -478,45 +478,51 @@ export function ChairDashboardClient({
         </div>
 
         {/* EXAMINATION METADATA HEADER */}
-        <div className="text-center space-y-1 py-1 border-b border-slate-200">
-          <h2 className="text-base sm:text-lg font-black font-sans text-slate-900 tracking-wide uppercase">
-            OFFICIAL EXAMINATION PAPER
+        <div className="text-center space-y-0.5 py-1 border-b border-slate-200">
+          <h2 className="text-base sm:text-lg font-black font-sans text-slate-900 tracking-wider uppercase">
+            {courseCode}{courseTitle ? ` — ${courseTitle}` : ""}
           </h2>
-          <p className="text-xs font-bold text-slate-800 uppercase">
-            <span className="underline font-black">[{term.toUpperCase()}] EXAMINATION</span>
+          <p className="text-xs sm:text-sm font-black text-slate-800 uppercase tracking-wide">
+            {term.toUpperCase()} EXAMINATION
           </p>
-          <p className="text-xs font-semibold text-slate-700">
-            <span className="underline font-bold">{semester}</span>
+          <p className="text-xs font-bold text-slate-700">
+            {semester}
           </p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-xs font-bold border-b border-slate-200 pb-3">
-          <div className="flex items-center gap-2">
-            <span className="text-slate-500 font-bold uppercase min-w-[100px]">COURSE:</span>
-            <span className="font-mono font-black text-slate-900 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded">
-              {courseCode} {courseTitle ? `— ${courseTitle}` : ""}
-            </span>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3 text-xs font-bold border-b border-black pb-3 pt-1">
+          <div className="flex items-baseline gap-2">
+            <span className="font-black text-black uppercase tracking-wider shrink-0 min-w-[75px]">NAME:</span>
+            <span
+              contentEditable
+              suppressContentEditableWarning
+              className="border-b border-black flex-1 min-h-[18px] outline-none focus:bg-amber-100/90 rounded px-1 transition-all cursor-text print:bg-transparent"
+            ></span>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="text-slate-500 font-bold uppercase min-w-[110px]">DATE:</span>
-            <span className="font-mono font-black text-slate-900 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded">{examDate}</span>
+          <div className="flex items-baseline gap-2">
+            <span className="font-black text-black uppercase tracking-wider shrink-0 min-w-[50px]">DATE:</span>
+            <span
+              contentEditable
+              suppressContentEditableWarning
+              className="border-b border-black flex-1 min-h-[18px] outline-none focus:bg-amber-100/90 rounded px-1 transition-all cursor-text print:bg-transparent"
+            ></span>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="text-slate-500 font-bold uppercase min-w-[100px]">TIME LIMIT:</span>
-            <span className="font-black text-slate-900">{timeLimit} Minutes</span>
+          <div className="flex items-baseline gap-2">
+            <span className="font-black text-black uppercase tracking-wider shrink-0 min-w-[75px]">YR / LEVEL:</span>
+            <span
+              contentEditable
+              suppressContentEditableWarning
+              className="border-b border-black flex-1 min-h-[18px] outline-none focus:bg-amber-100/90 rounded px-1 transition-all cursor-text print:bg-transparent"
+            ></span>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="text-slate-500 font-bold uppercase min-w-[110px]">TOTAL ITEMS:</span>
-            <span className="font-black text-slate-900">{qBank.length} Items ({totalPoints} Pts)</span>
+          <div className="flex items-baseline gap-2">
+            <span className="font-black text-black uppercase tracking-wider shrink-0 min-w-[50px]">SCORE:</span>
+            <span
+              contentEditable
+              suppressContentEditableWarning
+              className="border-b border-black flex-1 min-h-[18px] outline-none focus:bg-amber-100/90 rounded px-1 transition-all cursor-text print:bg-transparent"
+            ></span>
           </div>
-        </div>
-
-        {/* GENERAL INSTRUCTIONS */}
-        <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs space-y-1">
-          <p className="font-black text-slate-900 uppercase tracking-wider text-[10px]">General Instructions:</p>
-          <p className="text-slate-700 font-medium text-[11px] leading-relaxed">
-            Read each item carefully before answering. Ensure your responses are clear and legibly written. Manage your time wisely across all test parts ({timeLimit} minutes).
-          </p>
         </div>
 
         {/* TEST PARTS */}
@@ -532,15 +538,28 @@ export function ChairDashboardClient({
                 {/* TEST PART HEADER */}
                 <div className="pt-3 pb-2 border-b-2 border-slate-900">
                   <div className="flex items-baseline justify-between">
-                    <h4 className="font-extrabold text-xs sm:text-sm text-slate-900 tracking-wide uppercase font-sans">
+                    <h4
+                      contentEditable
+                      suppressContentEditableWarning
+                      className="font-extrabold text-xs sm:text-sm text-slate-900 tracking-wide uppercase font-sans outline-none focus:bg-amber-100/90 focus:ring-1 focus:ring-amber-500 rounded px-1 transition-all cursor-text print:p-0 print:bg-transparent print:ring-0"
+                      title="Click to edit test section header title"
+                    >
                       TEST {toRomanNumeral(typeIdx + 1)}. {headerLabel}
                     </h4>
-                    <span className="text-xs font-extrabold text-slate-900 font-sans tracking-tight">
+                    <span className="text-xs font-extrabold text-slate-900 font-sans tracking-tight shrink-0">
                       ({groupPoints} {groupPoints === 1 ? "Point" : "Points"})
                     </span>
                   </div>
                   <p className="text-xs text-slate-700 italic font-sans mt-0.5 leading-tight">
-                    <span className="font-bold not-italic">Directions: </span>{instruction}
+                    <span className="font-bold not-italic">Directions: </span>
+                    <span
+                      contentEditable
+                      suppressContentEditableWarning
+                      className="outline-none focus:bg-amber-100/90 focus:ring-1 focus:ring-amber-500 rounded px-1 transition-all cursor-text print:p-0 print:bg-transparent print:ring-0"
+                      title="Click to edit directions for this test type"
+                    >
+                      {instruction}
+                    </span>
                   </p>
                 </div>
 
