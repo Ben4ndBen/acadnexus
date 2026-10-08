@@ -81,6 +81,12 @@ export async function startStudentExam(examId: number, studentId: number) {
       });
 
       if (!target) {
+        const examRecord = await db.examination.findUnique({
+          where: { exam_id: examId },
+        });
+        if (examRecord && examRecord.current_status === "Approved") {
+          return { error: "Examination has been approved by the Director for Instruction, but the examination schedule has not been set by the creator yet. Access is restricted until scheduled." };
+        }
         return { error: "Examination is not active or targeted for your program and year level." };
       }
 

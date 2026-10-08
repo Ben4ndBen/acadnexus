@@ -676,12 +676,33 @@ export function FacultyDashboardClient({
     end_time: ""
   });
   const [isScheduling, setIsScheduling] = useState(false);
+  const [scheduleSuccessModalOpen, setScheduleSuccessModalOpen] = useState(false);
+  const [scheduleSuccessInfo, setScheduleSuccessInfo] = useState<{
+    examTitle: string;
+    date: string;
+    startTime: string;
+    endTime: string;
+    notifiedCount: number;
+  } | null>(null);
 
   const handleOpenScheduleModal = (examId: number, title: string) => {
     setSelectedExamForSchedule({ exam_id: examId, title });
     setScheduleModalOpen(true);
 
-    const existingTarget = faculty.examinations.find(e => e.exam_id === examId)?.examTargets?.[0];
+    const targetExam = faculty.examinations.find(e => e.exam_id === examId);
+    const existingTarget = targetExam?.examTargets?.[0];
+
+    let initialDate = new Date().toISOString().split("T")[0];
+    if (existingTarget?.scheduled_date) {
+      initialDate = typeof existingTarget.scheduled_date === "string"
+        ? existingTarget.scheduled_date.split("T")[0]
+        : new Date(existingTarget.scheduled_date).toISOString().split("T")[0];
+    } else if ((targetExam as any)?.exam_date) {
+      const examDateVal = (targetExam as any).exam_date;
+      initialDate = typeof examDateVal === "string"
+        ? examDateVal.split("T")[0]
+        : new Date(examDateVal).toISOString().split("T")[0];
+    }
 
     if (existingTarget) {
       const formatTime = (timeStr: string) => {
@@ -699,16 +720,17 @@ export function FacultyDashboardClient({
         program_id: String(existingTarget.program_id),
         year_level: String(existingTarget.year_level),
         section: existingTarget.section || "All Sections",
-        scheduled_date: existingTarget.scheduled_date.split("T")[0],
+        scheduled_date: initialDate,
         start_time: formatTime(existingTarget.start_time),
         end_time: formatTime(existingTarget.end_time)
       });
     } else {
+      const progId = (targetExam as any)?.course?.program_id || (programs.length > 0 ? programs[0].program_id : "");
       setScheduleForm({
-        program_id: programs.length > 0 ? String(programs[0].program_id) : "",
+        program_id: String(progId),
         year_level: "1",
         section: "All Sections",
-        scheduled_date: new Date().toISOString().split("T")[0],
+        scheduled_date: initialDate,
         start_time: "09:00",
         end_time: "10:00"
       });
@@ -736,8 +758,15 @@ export function FacultyDashboardClient({
       alert(res.error);
     } else {
       setScheduleModalOpen(false);
+      setScheduleSuccessInfo({
+        examTitle: selectedExamForSchedule.title,
+        date: scheduleForm.scheduled_date,
+        startTime: scheduleForm.start_time,
+        endTime: scheduleForm.end_time,
+        notifiedCount: res.notifiedCount ?? 0,
+      });
+      setScheduleSuccessModalOpen(true);
       router.refresh();
-      alert(`Examination scheduled successfully! ${res.notifiedCount ?? 0} student(s) notified.`);
     }
   };
 
@@ -911,9 +940,55 @@ export function FacultyDashboardClient({
     }
   };
 
+  const getExamScheduleStatus = (exam: any) => {
+    if (exam.current_status !== "Approved") {
+      return exam.current_status;
+    }
+    const target = exam.examTargets?.[0];
+    if (!target || !target.start_time || !target.end_time) {
+      return "Approved_Schedule_Pending";
+    }
+
+    const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
+    const scheduledDate = new Date(target.scheduled_date);
+    const startTime = new Date(target.start_time);
+    const endTime = new Date(target.end_time);
+
+    const examStart = new Date(
+      scheduledDate.getUTCFullYear(),
+      scheduledDate.getUTCMonth(),
+      scheduledDate.getUTCDate(),
+      startTime.getUTCHours(),
+      startTime.getUTCMinutes(),
+      0
+    );
+
+    const examEnd = new Date(
+      scheduledDate.getUTCFullYear(),
+      scheduledDate.getUTCMonth(),
+      scheduledDate.getUTCDate(),
+      endTime.getUTCHours(),
+      endTime.getUTCMinutes(),
+      0
+    );
+
+    if (now < examStart) {
+      return "Scheduled";
+    }
+    if (now >= examStart && now <= examEnd) {
+      return "Live";
+    }
+    return "Completed";
+  };
+
   // Status Badge Helper
-  const renderStatusBadge = (status: string) => {
-    switch (status) {
+  const renderStatusBadge = (status: string, exam?: any) => {
+    let effectiveStatus = status;
+    if (exam && status === "Approved") {
+      effectiveStatus = getExamScheduleStatus(exam);
+    }
+
+    switch (effectiveStatus) {
       case "Draft":
         return (
           <span className="inline-flex items-center gap-1.5 text-xs font-semibold bg-slate-100 text-slate-800 border border-slate-200 px-2.5 py-1 rounded-full shadow-sm">
@@ -942,9 +1017,30 @@ export function FacultyDashboardClient({
             Pending Director for Instruction Approval
           </span>
         );
+      case "Approved_Schedule_Pending":
+        return (
+          <span className="inline-flex items-center gap-1.5 text-xs font-extrabold bg-amber-100 text-amber-900 border border-amber-300 px-2.5 py-1 rounded-full shadow-sm">
+            <span className="w-2 h-2 rounded-full bg-amber-600 animate-pulse" />
+            Approved — Schedule Pending
+          </span>
+        );
+      case "Scheduled":
+        return (
+          <span className="inline-flex items-center gap-1.5 text-xs font-extrabold bg-blue-100 text-blue-900 border border-blue-300 px-2.5 py-1 rounded-full shadow-sm">
+            <span className="w-2 h-2 rounded-full bg-blue-600" />
+            Scheduled
+          </span>
+        );
+      case "Live":
+        return (
+          <span className="inline-flex items-center gap-1.5 text-xs font-extrabold bg-emerald-100 text-emerald-900 border border-emerald-300 px-2.5 py-1 rounded-full shadow-sm">
+            <span className="w-2 h-2 rounded-full bg-emerald-600 animate-ping" />
+            Live / Active
+          </span>
+        );
       case "Approved":
         return (
-          <span className="inline-flex items-center gap-1.5 text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200 px-2.5 py-1 rounded-full shadow-sm">
+          <span className="inline-flex items-center gap-1.5 text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 px-2.5 py-1 rounded-full shadow-sm">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
             Approved
           </span>
@@ -954,6 +1050,13 @@ export function FacultyDashboardClient({
           <span className="inline-flex items-center gap-1.5 text-xs font-semibold bg-rose-50 text-rose-800 border border-rose-200 px-2.5 py-1 rounded-full shadow-sm">
             <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
             Returned
+          </span>
+        );
+      case "Completed":
+        return (
+          <span className="inline-flex items-center gap-1.5 text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200 px-2.5 py-1 rounded-full shadow-sm">
+            <span className="w-1.5 h-1.5 rounded-full bg-slate-500" />
+            Completed
           </span>
         );
       default:
@@ -1468,7 +1571,7 @@ export function FacultyDashboardClient({
                       <div>
                         <div className="flex flex-wrap items-center gap-3">
                           <h3 className="text-base font-bold text-slate-900">{getExamDisplayTitle(exam)}</h3>
-                          {renderStatusBadge(exam.current_status)}
+                          {renderStatusBadge(exam.current_status, exam)}
                           <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200/80 px-2 py-0.5 rounded-full shadow-sm" title="TOS Matrix Enabled">
                             <Layers className="w-3 h-3 text-emerald-600" /> TOS Matrix Active
                           </span>
@@ -1546,10 +1649,10 @@ export function FacultyDashboardClient({
                           <div className="flex gap-2">
                             <button
                               onClick={() => handleOpenScheduleModal(exam.exam_id, exam.title)}
-                              className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-2 rounded-xl shadow-sm transition-all duration-300"
+                              className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-2 rounded-xl shadow-sm transition-all duration-300 cursor-pointer"
                             >
                               <Calendar className="w-3.5 h-3.5" />
-                              Schedule Exam
+                              {exam.examTargets && exam.examTargets.length > 0 ? "Update Schedule" : "Set Schedule & Publish"}
                             </button>
                             <button
                               onClick={async () => {
@@ -1651,21 +1754,44 @@ export function FacultyDashboardClient({
                                 }`} />
                               </div>
 
-                              {/* Step 5: Approved / Live */}
-                              <div className="relative flex flex-col items-center text-center">
-                                <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm border-2 z-10 transition-all ${
-                                  exam.current_status === "Approved"
-                                    ? "bg-emerald-600 border-emerald-600 text-white"
-                                    : "bg-white border-slate-200 text-slate-400"
-                                }`}>
-                                  5
-                                </div>
-                                <p className="text-xs font-extrabold text-slate-800 mt-2">Active / Live</p>
-                                <p className="text-[10px] text-slate-400 mt-0.5">Targeted to students</p>
-                                <div className={`hidden md:block absolute left-0 right-1/2 top-4 h-[2px] -z-0 ${
-                                  exam.current_status === "Approved" ? "bg-emerald-600" : "bg-slate-200"
-                                }`} />
-                              </div>
+                              {/* Step 5: Scheduling & Publication */}
+                              {(() => {
+                                const schedStatus = getExamScheduleStatus(exam);
+                                let circleBg = "bg-white border-slate-200 text-slate-400";
+                                let label = "Schedule & Publish";
+                                let sub = "Targeted to students";
+
+                                if (schedStatus === "Approved_Schedule_Pending") {
+                                  circleBg = "bg-amber-100 border-amber-400 text-amber-900 font-extrabold";
+                                  label = "Schedule Pending";
+                                  sub = "Set schedule to publish";
+                                } else if (schedStatus === "Scheduled") {
+                                  circleBg = "bg-blue-600 border-blue-600 text-white font-extrabold";
+                                  label = "Scheduled";
+                                  sub = "Awaiting start time";
+                                } else if (schedStatus === "Live") {
+                                  circleBg = "bg-emerald-600 border-emerald-600 text-white font-extrabold animate-pulse";
+                                  label = "Live / Active";
+                                  sub = "Available to students";
+                                } else if (schedStatus === "Completed") {
+                                  circleBg = "bg-slate-700 border-slate-700 text-white font-extrabold";
+                                  label = "Completed";
+                                  sub = "Exam window closed";
+                                }
+
+                                return (
+                                  <div className="relative flex flex-col items-center text-center">
+                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm border-2 z-10 transition-all ${circleBg}`}>
+                                      5
+                                    </div>
+                                    <p className="text-xs font-extrabold text-slate-800 mt-2">{label}</p>
+                                    <p className="text-[10px] text-slate-400 mt-0.5">{sub}</p>
+                                    <div className={`hidden md:block absolute left-0 right-1/2 top-4 h-[2px] -z-0 ${
+                                      exam.current_status === "Approved" ? "bg-emerald-600" : "bg-slate-200"
+                                    }`} />
+                                  </div>
+                                );
+                              })()}
                             </div>
                           );
                         }
@@ -1726,21 +1852,44 @@ export function FacultyDashboardClient({
                               }`} />
                             </div>
 
-                            {/* Step 4: Approved */}
-                            <div className="relative flex flex-col items-center text-center">
-                              <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm border-2 z-10 transition-all ${
-                                exam.current_status === "Approved"
-                                  ? "bg-emerald-600 border-emerald-600 text-white"
-                                  : "bg-white border-slate-200 text-slate-400"
-                              }`}>
-                                4
-                              </div>
-                              <p className="text-xs font-extrabold text-slate-800 mt-2">Active / Live</p>
-                              <p className="text-[10px] text-slate-400 mt-0.5">Targeted to students</p>
-                              <div className={`hidden md:block absolute left-0 right-1/2 top-4 h-[2px] -z-0 ${
-                                exam.current_status === "Approved" ? "bg-emerald-600" : "bg-slate-200"
-                              }`} />
-                            </div>
+                            {/* Step 4: Scheduling & Publication */}
+                            {(() => {
+                              const schedStatus = getExamScheduleStatus(exam);
+                              let circleBg = "bg-white border-slate-200 text-slate-400";
+                              let label = "Schedule & Publish";
+                              let sub = "Targeted to students";
+
+                              if (schedStatus === "Approved_Schedule_Pending") {
+                                circleBg = "bg-amber-100 border-amber-400 text-amber-900 font-extrabold";
+                                label = "Schedule Pending";
+                                sub = "Set schedule to publish";
+                              } else if (schedStatus === "Scheduled") {
+                                circleBg = "bg-blue-600 border-blue-600 text-white font-extrabold";
+                                label = "Scheduled";
+                                sub = "Awaiting start time";
+                              } else if (schedStatus === "Live") {
+                                circleBg = "bg-emerald-600 border-emerald-600 text-white font-extrabold animate-pulse";
+                                label = "Live / Active";
+                                sub = "Available to students";
+                              } else if (schedStatus === "Completed") {
+                                circleBg = "bg-slate-700 border-slate-700 text-white font-extrabold";
+                                label = "Completed";
+                                sub = "Exam window closed";
+                              }
+
+                              return (
+                                <div className="relative flex flex-col items-center text-center">
+                                  <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm border-2 z-10 transition-all ${circleBg}`}>
+                                    4
+                                  </div>
+                                  <p className="text-xs font-extrabold text-slate-800 mt-2">{label}</p>
+                                  <p className="text-[10px] text-slate-400 mt-0.5">{sub}</p>
+                                  <div className={`hidden md:block absolute left-0 right-1/2 top-4 h-[2px] -z-0 ${
+                                    exam.current_status === "Approved" ? "bg-emerald-600" : "bg-slate-200"
+                                  }`} />
+                                </div>
+                              );
+                            })()}
                           </div>
                         );
                       })()}
@@ -3015,29 +3164,18 @@ export function FacultyDashboardClient({
             <form onSubmit={handleScheduleSubmit} className="space-y-4">
               <div>
                 <label className="text-xs font-bold text-slate-600 block mb-1">Target Program</label>
-                <select 
-                  required
-                  value={scheduleForm.program_id}
-                  onChange={e => setScheduleForm({...scheduleForm, program_id: e.target.value})}
-                  className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 text-sm font-medium text-slate-900 placeholder:text-slate-500 px-4 py-2.5 rounded-xl transition-all duration-300"
-                >
-                  <option value="" disabled>Select Program</option>
-                  {programs.map(p => (
-                    <option key={p.program_id} value={p.program_id}>{p.program_code} - {p.program_name}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="text-xs font-bold text-slate-600 block mb-1">Year Level</label>
-                <select 
-                  required
-                  value={scheduleForm.year_level}
-                  onChange={e => setScheduleForm({...scheduleForm, year_level: e.target.value})}
-                  className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 text-sm font-medium text-slate-900 placeholder:text-slate-500 px-4 py-2.5 rounded-xl transition-all duration-300"
-                >
-                  {[1, 2, 3, 4].map(y => <option key={y} value={y}>{y}</option>)}
-                </select>
+                {(() => {
+                  const pObj = programs.find(p => String(p.program_id) === String(scheduleForm.program_id));
+                  return (
+                    <input 
+                      type="text"
+                      disabled
+                      readOnly
+                      value={pObj ? `${pObj.program_code} - ${pObj.program_name}` : (scheduleForm.program_id ? `Program ID: ${scheduleForm.program_id}` : "Program set from exam creation")}
+                      className="w-full bg-slate-100 border border-slate-200 text-slate-700 font-medium text-sm px-4 py-2.5 rounded-xl cursor-not-allowed select-none"
+                    />
+                  );
+                })()}
               </div>
 
               <div>
@@ -3087,6 +3225,62 @@ export function FacultyDashboardClient({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Schedule Success Popup Modal */}
+      {scheduleSuccessModalOpen && scheduleSuccessInfo && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[999] flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-6 text-center border border-slate-100 relative transform transition-all animate-in zoom-in-95 duration-200">
+            {/* Animated Checkmark Icon */}
+            <div className="mx-auto w-16 h-16 bg-emerald-100/80 rounded-full flex items-center justify-center mb-4 text-emerald-600 shadow-inner">
+              <svg className="w-10 h-10 animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+
+            <h3 className="text-xl font-extrabold text-slate-900 mb-1">
+              Schedule Set Successfully!
+            </h3>
+            <p className="text-xs text-slate-500 mb-5 font-medium">
+              The examination schedule has been saved and published to student dashboards.
+            </p>
+
+            {/* Schedule Summary Card */}
+            <div className="bg-emerald-50/70 border border-emerald-100 rounded-2xl p-4 text-left space-y-2 mb-6">
+              <div className="text-xs">
+                <span className="font-semibold text-slate-500 block">Examination</span>
+                <span className="font-bold text-slate-900 text-sm line-clamp-1">{scheduleSuccessInfo.examTitle}</span>
+              </div>
+              <div className="grid grid-cols-2 gap-3 pt-2.5 border-t border-emerald-100">
+                <div>
+                  <span className="font-semibold text-slate-500 block text-[11px]">Scheduled Date</span>
+                  <span className="font-bold text-emerald-950 text-xs">{scheduleSuccessInfo.date}</span>
+                </div>
+                <div>
+                  <span className="font-semibold text-slate-500 block text-[11px]">Time Window</span>
+                  <span className="font-bold text-emerald-950 text-xs">
+                    {scheduleSuccessInfo.startTime} - {scheduleSuccessInfo.endTime}
+                  </span>
+                </div>
+              </div>
+              {scheduleSuccessInfo.notifiedCount > 0 && (
+                <div className="pt-2 border-t border-emerald-100 text-xs text-emerald-700 font-semibold flex items-center gap-1.5">
+                  <svg className="w-4 h-4 text-emerald-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                  </svg>
+                  <span>{scheduleSuccessInfo.notifiedCount} student(s) notified</span>
+                </div>
+              )}
+            </div>
+
+            <button
+              onClick={() => setScheduleSuccessModalOpen(false)}
+              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-6 rounded-xl transition-all duration-200 shadow-lg shadow-emerald-600/20 active:scale-[0.98] text-sm"
+            >
+              Done
+            </button>
           </div>
         </div>
       )}

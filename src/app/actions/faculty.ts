@@ -528,85 +528,6 @@ export async function saveExamConfig(formData: FormData) {
       }
     }
 
-    // Automatically sync ExamTarget if examDate is provided
-    if (parsedExamDate) {
-      let programId: number | null = null;
-      let yearLevel = 1;
-      let section = "All Sections";
-
-      if (parsedStudentIds.length > 0) {
-        const studentSample = await db.student.findFirst({
-          where: { student_id: { in: parsedStudentIds } },
-        });
-        if (studentSample) {
-          programId = studentSample.program_id;
-          yearLevel = studentSample.year_level;
-          section = studentSample.section || "All Sections";
-        }
-      }
-
-      if (!programId && courseId) {
-        const courseObj = await db.course.findUnique({ where: { course_id: courseId } });
-        if (courseObj) {
-          const cCode = courseObj.course_code.trim().toUpperCase();
-          const cTitle = courseObj.course_title.trim().toUpperCase();
-          if (cCode.startsWith("ITC") || cCode.startsWith("ITE") || cCode.startsWith("ITM") || cCode.startsWith("ITD") || cCode === "ENT 403" || cCode.includes("INFOTECH") || cTitle.includes("INFORMATION TECHNOLOGY")) {
-            const prog = await db.academicProgram.findUnique({ where: { program_code: "BSInfoTech" } });
-            if (prog) programId = prog.program_id;
-          } else if (cCode.startsWith("IND") || cCode.startsWith("IT") || cTitle.includes("INDUSTRIAL")) {
-            const prog = await db.academicProgram.findUnique({ where: { program_code: "BSIT" } });
-            if (prog) programId = prog.program_id;
-          } else if (cCode.startsWith("BEED")) {
-            const prog = await db.academicProgram.findUnique({ where: { program_code: "BEED" } });
-            if (prog) programId = prog.program_id;
-          } else if (cCode.startsWith("BSED")) {
-            const prog = await db.academicProgram.findUnique({ where: { program_code: "BSED" } });
-            if (prog) programId = prog.program_id;
-          } else if (cCode.startsWith("EDUC")) {
-            const isSec = cTitle.includes("SEC") || cTitle.includes("SECONDARY");
-            const targetCode = isSec ? "BSED" : "BEED";
-            const prog = await db.academicProgram.findFirst({ where: { program_code: targetCode } });
-            if (prog) programId = prog.program_id;
-          }
-        }
-      }
-
-      if (!programId) {
-        programId = 1;
-      }
-
-      const existingTarget = await db.examTarget.findFirst({
-        where: { exam_id: examId },
-      });
-
-      const startTime = new Date("1970-01-01T00:00:00.000Z");
-      const endTime = new Date("1970-01-01T23:59:59.000Z");
-
-      if (existingTarget) {
-        await db.examTarget.update({
-          where: { target_id: existingTarget.target_id },
-          data: {
-            scheduled_date: parsedExamDate,
-            program_id: programId,
-            year_level: yearLevel,
-            section: section,
-          },
-        });
-      } else {
-        await db.examTarget.create({
-          data: {
-            exam_id: examId,
-            program_id: programId,
-            year_level: yearLevel,
-            section: section,
-            scheduled_date: parsedExamDate,
-            start_time: startTime,
-            end_time: endTime,
-          },
-        });
-      }
-    }
-
     // Log audit
     await db.auditLog.create({
       data: {
@@ -969,7 +890,14 @@ export async function scheduleExamTarget(
     });
 
     if (!exam) return { error: "Examination not found." };
-    if (exam.faculty_id !== facultyId) return { error: "Unauthorized operation." };
+
+    if (exam.faculty_id !== facultyId) {
+      const callerUser = await db.user.findUnique({
+        where: { user_id: facultyId },
+        include: { faculty: true, chair: true },
+      });
+      if (!callerUser) return { error: "Unauthorized operation." };
+    }
     if (exam.current_status !== "Approved") return { error: "Only approved examinations can be scheduled." };
 
     const dateObj = new Date(`${scheduledDate}T00:00:00.000Z`);
@@ -1009,39 +937,52 @@ export async function scheduleExamTarget(
       });
     }
 
-    // Query matching students by program and year level
-    const isTargetingAll = !targetSection || ["all", "all sections", "any", "all section", ""].includes(targetSection.toLowerCase());
-
-    let targetStudents = await db.student.findMany({
-      where: {
-        program_id: programId,
-        year_level: yearLevel,
-        ...(!isTargetingAll
-          ? {
-              OR: [
-                { section: { equals: targetSection, mode: "insensitive" } },
-                { section: "General" },
-                { section: "All Sections" },
-              ]
-            }
-          : {}),
-      },
-      include: {
-        user: true,
-      },
-    });
-
-    // Fallback if specific section yielded no students: notify all students in the targeted program and year level
-    if (targetStudents.length === 0) {
+    // Query matching students by selected_student_ids if assigned, or by program and year level
+    const selectedIds = exam.selected_student_ids as number[] | null;
+    let targetStudents: any[] = [];
+    if (selectedIds && Array.isArray(selectedIds) && selectedIds.length > 0) {
       targetStudents = await db.student.findMany({
         where: {
-          program_id: programId,
-          year_level: yearLevel,
+          student_id: { in: selectedIds }
         },
         include: {
           user: true,
         },
       });
+    } else {
+      const isTargetingAll = !targetSection || ["all", "all sections", "any", "all section", ""].includes(targetSection.toLowerCase());
+
+      targetStudents = await db.student.findMany({
+        where: {
+          program_id: programId,
+          year_level: yearLevel,
+          ...(!isTargetingAll
+            ? {
+                OR: [
+                  { section: { equals: targetSection, mode: "insensitive" } },
+                  { section: "General" },
+                  { section: "All Sections" },
+                ]
+              }
+            : {}),
+        },
+        include: {
+          user: true,
+        },
+      });
+
+      // Fallback if specific section yielded no students: notify all students in the targeted program and year level
+      if (targetStudents.length === 0) {
+        targetStudents = await db.student.findMany({
+          where: {
+            program_id: programId,
+            year_level: yearLevel,
+          },
+          include: {
+            user: true,
+          },
+        });
+      }
     }
 
     const formatTimeToAMPM = (timeStr: string) => {
@@ -1065,6 +1006,7 @@ export async function scheduleExamTarget(
 
     const timeRangeStr = `${formatTimeToAMPM(startTime)} - ${formatTimeToAMPM(endTime)}`;
     const courseCodeStr = exam.course?.course_code ? ` (${exam.course.course_code})` : "";
+    const durationStr = `Duration: ${exam.time_limit_minutes} minutes`;
 
     // Create notifications for all targeted students
     if (targetStudents.length > 0) {
@@ -1072,7 +1014,7 @@ export async function scheduleExamTarget(
         data: targetStudents.map((s) => ({
           user_id: s.student_id,
           title: "Upcoming Examination Scheduled",
-          message: `The examination "${exam.title}"${courseCodeStr} has been scheduled for your program and year level on ${formattedDate} from ${timeRangeStr}.`,
+          message: `The examination "${exam.title}"${courseCodeStr} has been scheduled for ${formattedDate} from ${timeRangeStr} (${durationStr}).`,
           is_read: false,
         })),
       });

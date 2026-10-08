@@ -37,8 +37,8 @@ export default async function StudentDashboard() {
     redirect("/");
   }
 
-  // 1. Concurrently fetch targeted examinations, active student overrides, and completed exams
-  const [targets, studentOverrides, completedExams] = await Promise.all([
+  // 1. Concurrently fetch targeted examinations, approved exams, active student overrides, and completed exams
+  const [targets, approvedExams, studentOverrides, completedExams] = await Promise.all([
     db.examTarget.findMany({
       where: {
         program_id: student.program_id,
@@ -57,6 +57,19 @@ export default async function StudentDashboard() {
               },
             },
           },
+        },
+      },
+    }),
+    db.examination.findMany({
+      where: {
+        current_status: "Approved",
+        is_archived: false,
+      },
+      include: {
+        course: true,
+        examTargets: true,
+        questionBank: {
+          select: { points: true },
         },
       },
     }),
@@ -227,6 +240,32 @@ export default async function StudentDashboard() {
     }
   });
 
+  // Also check DI Approved examinations that have no ExamTarget set yet (Approved — Schedule Pending)
+  const targetedExamIds = new Set(targets.map((t) => t.exam_id));
+  approvedExams.forEach((exam) => {
+    if (targetedExamIds.has(exam.exam_id)) return;
+    if (completedExamIds.has(exam.exam_id)) return;
+    if (overrideExamIds.has(exam.exam_id)) return;
+
+    if (exam.selected_student_ids && Array.isArray(exam.selected_student_ids) && exam.selected_student_ids.length > 0) {
+      if (!exam.selected_student_ids.includes(student.student_id)) return;
+    }
+
+    upcomingExams.push({
+      ...exam,
+      target: null,
+      is_schedule_pending: true,
+      official_schedule: exam.exam_date
+        ? {
+            scheduled_date: exam.exam_date.toISOString(),
+            start_time: null,
+            end_time: null,
+          }
+        : null,
+      is_reopened: false,
+    });
+  });
+
   // Handle active student overrides (individual reopened exam attempts)
   studentOverrides.forEach(o => {
     if (completedExamIds.has(o.exam_id)) {
@@ -351,7 +390,18 @@ export default async function StudentDashboard() {
                   {upcomingExams.length} Upcoming {upcomingExams.length === 1 ? "Examination" : "Examinations"} Scheduled
                 </p>
                 <p className="text-xs text-slate-600 mt-0.5">
-                  Nearest: <span className="font-semibold text-blue-900">{upcomingExams[0].title}</span> ({upcomingExams[0].course?.course_code || "Course"}) on {new Date(upcomingExams[0].target.scheduled_date).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })}
+                  Nearest: <span className="font-semibold text-blue-900">{upcomingExams[0].title}</span> ({upcomingExams[0].course?.course_code || "Course"}) • {" "}
+                  {upcomingExams[0].target?.scheduled_date ? (
+                    <span>
+                      on <span className="font-bold text-slate-800">{new Date(upcomingExams[0].target.scheduled_date).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })}</span>
+                      {" "}@ <span className="font-bold text-slate-800">{new Date(upcomingExams[0].target.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })} - {new Date(upcomingExams[0].target.end_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })}</span>
+                      {" "}(Duration: <span className="font-bold text-emerald-800">{upcomingExams[0].time_limit_minutes} mins</span>)
+                    </span>
+                  ) : upcomingExams[0].official_schedule?.scheduled_date ? (
+                    <span>Submitted Date: {new Date(upcomingExams[0].official_schedule.scheduled_date).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })} (Schedule Pending)</span>
+                  ) : (
+                    <span className="font-bold text-amber-800">Schedule Pending</span>
+                  )}
                 </p>
               </div>
             </div>
