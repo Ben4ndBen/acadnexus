@@ -3681,36 +3681,36 @@ export function ExamBuilderWizard({
                         <table className="w-full text-left border-collapse text-[9px] print:text-[8.5px] table-fixed border-black font-sans">
                           <thead>
                             <tr className="bg-white text-black font-black uppercase text-center border-b border-black">
-                              <th rowSpan={3} className="py-2 px-1 border-r border-black w-[13%] text-left font-black align-middle text-[8.5px] leading-tight">LESSON / TOPIC</th>
-                              <th rowSpan={3} className="py-2 px-1 border-r border-black w-[16%] text-left font-black align-middle text-[8.5px] leading-tight">LEARNING OUTCOMES</th>
-                              <th rowSpan={3} className="py-2 px-0.5 border-r border-black w-[5%] font-black text-center align-middle text-[7.5px] leading-tight">NO. OF TEACHING HOURS</th>
-                              <th rowSpan={3} className="py-2 px-0.5 border-r border-black w-[5%] font-black text-center align-middle text-[7.5px] leading-tight">% OF ALLOCATION</th>
-                              <th rowSpan={3} className="py-2 px-0.5 border-r border-black w-[5%] font-black text-center align-middle text-[7.5px] leading-tight">NO. OF ITEMS</th>
+                              <th rowSpan={3} className="py-2 px-1 border-r border-black w-[14%] text-left font-black align-middle text-[8.5px] leading-tight">LESSON / TOPIC</th>
+                              <th rowSpan={3} className="py-2 px-1.5 border-r border-black w-[24%] text-left font-black align-middle text-[8.5px] leading-tight">LEARNING OUTCOMES</th>
+                              <th rowSpan={3} className="py-2 px-0.5 border-r border-black w-[5.5%] font-black text-center align-middle text-[7.5px] leading-tight">NO. OF TEACHING HOURS</th>
+                              <th rowSpan={3} className="py-2 px-0.5 border-r border-black w-[5.5%] font-black text-center align-middle text-[7.5px] leading-tight">% OF ALLOCATION</th>
+                              <th rowSpan={3} className="py-2 px-0.5 border-r border-black w-[5.5%] font-black text-center align-middle text-[7.5px] leading-tight">NO. OF ITEMS</th>
                               <th colSpan={7} className="py-1.5 px-0.5 border-r border-b border-black bg-white text-black font-black text-center text-[8.5px] tracking-tight">
                                 ITEM SPECIFICATION PER TAXONOMY OF LEARNING
                               </th>
-                              <th rowSpan={3} className="py-2 px-1 border-black w-[6.5%] font-black text-center align-middle text-[7.5px] leading-tight">ITEM PLACEMENT</th>
+                              <th rowSpan={3} className="py-2 px-1 border-black w-[11.7%] font-black text-center align-middle text-[7.5px] leading-tight">ITEM PLACEMENT</th>
                             </tr>
                             <tr className="bg-white text-black font-black text-[7px] uppercase text-center border-b border-black">
-                              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-normal text-center overflow-hidden">
+                              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-normal text-center overflow-hidden w-[4.8%]">
                                 KNOW LEDGE /<br />REMEMBERING
                               </th>
-                              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-normal text-center overflow-hidden">
+                              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-normal text-center overflow-hidden w-[4.8%]">
                                 COMPRE HENSION /<br />UNDERSTANDING
                               </th>
-                              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-normal text-center overflow-hidden">
+                              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-normal text-center overflow-hidden w-[4.8%]">
                                 APPLICATION /<br />APPLYING
                               </th>
-                              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-normal text-center overflow-hidden">
+                              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-normal text-center overflow-hidden w-[4.8%]">
                                 ANALYSIS /<br />ANALYZING
                               </th>
-                              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-normal text-center overflow-hidden">
+                              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-normal text-center overflow-hidden w-[4.8%]">
                                 SYNTHESIS /<br />EVALUATING
                               </th>
-                              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-normal text-center overflow-hidden">
+                              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-normal text-center overflow-hidden w-[4.8%]">
                                 EVALUATION /<br />CREA TING
                               </th>
-                              <th rowSpan={2} className="py-2 px-0.5 border-r border-black bg-white font-black text-black text-[8.5px] text-center align-middle">TOTAL</th>
+                              <th rowSpan={2} className="py-2 px-0.5 border-r border-black bg-white font-black text-black text-[8.5px] text-center align-middle w-[5%]">TOTAL</th>
                             </tr>
                             <tr className="bg-white text-black font-black text-[8.5px] uppercase text-center border-b border-black">
                               <th className="py-1 px-0.5 border-r border-black font-black text-center underline">
@@ -3738,15 +3738,15 @@ export function ExamBuilderWizard({
                               const t = row.taxonomy;
                               return (
                                 <tr key={idx} className="bg-white border-b border-black">
-                                  <td className="py-2 px-2 font-bold text-black border-r border-black align-top">
+                                  <td className="py-2 px-2 font-bold text-black border-r border-black align-top text-[9px] leading-normal break-words">
                                     {row.topic}
                                   </td>
-                                  <td className="py-1 px-1.5 text-black border-r border-black text-[8.5px] align-top whitespace-pre-wrap break-words">
+                                  <td className="py-1.5 px-2 text-black border-r border-black text-[9px] align-top whitespace-pre-wrap break-words leading-normal">
                                     <div
                                       contentEditable
                                       suppressContentEditableWarning
                                       onBlur={(e) => handleUpdateLearningOutcome(row.topic, e.currentTarget.innerText || "")}
-                                      className="w-full min-h-[32px] bg-transparent outline-none font-sans text-[8.5px] leading-snug text-black font-medium focus:bg-amber-50/80 focus:ring-1 focus:ring-amber-300 rounded p-0.5 transition-all cursor-text print:p-0 print:focus:bg-transparent print:focus:ring-0"
+                                      className="w-full min-h-[36px] bg-transparent outline-none font-sans text-[9px] leading-normal text-black font-medium focus:bg-amber-50 focus:ring-1 focus:ring-amber-400 rounded p-1 transition-all cursor-text print:p-0 print:focus:bg-transparent print:focus:ring-0 whitespace-pre-wrap break-words"
                                       title="Faculty: Click to edit learning outcomes for this topic"
                                     >
                                       {learningOutcomes[row.topic] ?? `Demonstrates competency and learning outcomes for ${row.topic.toLowerCase()}.`}
@@ -3782,7 +3782,7 @@ export function ExamBuilderWizard({
                                   <td className="py-2 px-0.5 text-center border-r border-black font-black text-black bg-white align-top">
                                     {row.count}
                                   </td>
-                                  <td className="py-2 px-1.5 font-mono font-bold text-black text-[9px] align-top">
+                                  <td className="py-2 px-1.5 font-sans font-bold text-black text-[9px] align-top text-center whitespace-nowrap">
                                     {row.rangeString}
                                   </td>
                                 </tr>

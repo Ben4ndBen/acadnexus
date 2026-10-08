@@ -212,48 +212,48 @@ export function BSCTableOfSpecificationsView({
         <table className="w-full text-left border-collapse text-[9px] print:text-[8.5px] table-fixed border-black font-sans">
           <thead>
             <tr className="bg-white text-black font-black uppercase text-center border-b border-black">
-              <th rowSpan={3} className="py-2 px-1.5 border-r border-black w-[15%] text-left font-black align-middle text-[8.5px] leading-tight">
+              <th rowSpan={3} className="py-2 px-1.5 border-r border-black w-[14%] text-left font-black align-middle text-[8.5px] leading-tight">
                 LESSON / TOPIC
               </th>
-              <th rowSpan={3} className="py-2 px-1.5 border-r border-black w-[20%] text-left font-black align-middle text-[8.5px] leading-tight">
+              <th rowSpan={3} className="py-2 px-2 border-r border-black w-[24%] text-left font-black align-middle text-[8.5px] leading-tight">
                 LEARNING OUTCOMES
               </th>
-              <th rowSpan={3} className="py-2 px-0.5 border-r border-black w-[6%] font-black text-center align-middle text-[7.5px] leading-tight">
+              <th rowSpan={3} className="py-2 px-0.5 border-r border-black w-[5.5%] font-black text-center align-middle text-[7.5px] leading-tight">
                 NO. OF TEACHING HOURS
               </th>
-              <th rowSpan={3} className="py-2 px-0.5 border-r border-black w-[6%] font-black text-center align-middle text-[7.5px] leading-tight">
+              <th rowSpan={3} className="py-2 px-0.5 border-r border-black w-[5.5%] font-black text-center align-middle text-[7.5px] leading-tight">
                 % OF ALLOCATION
               </th>
-              <th rowSpan={3} className="py-2 px-0.5 border-r border-black w-[6%] font-black text-center align-middle text-[7.5px] leading-tight">
+              <th rowSpan={3} className="py-2 px-0.5 border-r border-black w-[5.5%] font-black text-center align-middle text-[7.5px] leading-tight">
                 NO. OF ITEMS
               </th>
               <th colSpan={7} className="py-1.5 px-0.5 border-r border-b border-black bg-white text-black font-black text-center text-[8.5px] tracking-tight">
                 ITEM SPECIFICATION PER TAXONOMY OF LEARNING
               </th>
-              <th rowSpan={3} className="py-2 px-1 border-black w-[9%] font-black text-center align-middle text-[7.5px] leading-tight">
+              <th rowSpan={3} className="py-2 px-1 border-black w-[11.7%] font-black text-center align-middle text-[7.5px] leading-tight">
                 ITEM PLACEMENT
               </th>
             </tr>
             <tr className="bg-white text-black font-black text-[7px] uppercase text-center border-b border-black">
-              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-normal text-center overflow-hidden">
+              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-normal text-center overflow-hidden w-[4.8%]">
                 KNOW LEDGE /<br />REMEMBERING
               </th>
-              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-normal text-center overflow-hidden">
+              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-normal text-center overflow-hidden w-[4.8%]">
                 COMPRE HENSION /<br />UNDERSTANDING
               </th>
-              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-normal text-center overflow-hidden">
+              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-normal text-center overflow-hidden w-[4.8%]">
                 APPLICATION /<br />APPLYING
               </th>
-              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-normal text-center overflow-hidden">
+              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-normal text-center overflow-hidden w-[4.8%]">
                 ANALYSIS /<br />ANALYZING
               </th>
-              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-normal text-center overflow-hidden">
+              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-normal text-center overflow-hidden w-[4.8%]">
                 SYNTHESIS /<br />EVALUATING
               </th>
-              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-normal text-center overflow-hidden">
+              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-normal text-center overflow-hidden w-[4.8%]">
                 EVALUATION /<br />CREA TING
               </th>
-              <th rowSpan={2} className="py-2 px-0.5 border-r border-black bg-white font-black text-black text-[8.5px] text-center align-middle">
+              <th rowSpan={2} className="py-2 px-0.5 border-r border-black bg-white font-black text-black text-[8.5px] text-center align-middle w-[5%]">
                 TOTAL
               </th>
             </tr>
@@ -300,14 +300,14 @@ export function BSCTableOfSpecificationsView({
 
                 return (
                   <tr key={t.id || idx} className="bg-white border-b border-black">
-                    <td className="py-2 px-2 font-bold text-black border-r border-black align-top">
+                    <td className="py-2 px-2 font-bold text-black border-r border-black align-top text-[9px] leading-normal break-words">
                       {t.topic_name || `Topic ${idx + 1}`}
                     </td>
-                    <td className="py-1.5 px-2 text-black border-r border-black text-[8.5px] align-top whitespace-pre-wrap break-words leading-snug">
+                    <td className="py-1.5 px-2 text-black border-r border-black text-[9px] align-top whitespace-pre-wrap break-words leading-normal">
                       {outcomeLines.map((line, lIdx) => (
-                        <div key={lIdx} className="flex items-start gap-1 mb-0.5">
+                        <div key={lIdx} className="flex items-start gap-1 mb-1 text-[9px] leading-normal font-sans">
                           <span className="shrink-0 font-bold">•</span>
-                          <span>{line.replace(/^[•\-\*]\s*/, "")}</span>
+                          <span className="break-words whitespace-pre-wrap">{line.replace(/^[•\-\*]\s*/, "")}</span>
                         </div>
                       ))}
                     </td>
