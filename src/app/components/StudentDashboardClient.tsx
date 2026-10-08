@@ -509,7 +509,7 @@ export function StudentDashboardClient({
                         href={`/dashboard/student/exam/${exam.exam_id}`}
                         className="bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs px-5 py-3 rounded-xl flex items-center gap-2 transition-all shadow-sm hover:shadow-md self-start sm:self-auto text-center"
                       >
-                        Start Exam <ArrowRight className="w-4 h-4" />
+                        {(exam as any).is_in_progress ? "Resume Exam" : "Start Exam"} <ArrowRight className="w-4 h-4" />
                       </Link>
                     </div>
                   ))}

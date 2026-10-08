@@ -153,10 +153,13 @@ export default async function StudentDashboard() {
   });
   const enrolledSubjectsCount = enrolledCoursesList.length;
 
+  // Only count exams with submitted_at as completed
+  const actualCompletedExams = completedExams.filter((se) => se.submitted_at !== null);
+
   // Average examination performance
   let totalPointsAccumulated = 0;
   let maxPossiblePointsAccumulated = 0;
-  completedExams.forEach(se => {
+  actualCompletedExams.forEach((se) => {
     const examMaxPoints = se.exam.questionBank.reduce((sum, q) => sum + q.points, 0);
     totalPointsAccumulated += se.total_score;
     maxPossiblePointsAccumulated += examMaxPoints;
@@ -167,14 +170,23 @@ export default async function StudentDashboard() {
     : 0;
 
   // Categorize examinations
-  const completedExamIds = new Set(completedExams.map(se => se.exam_id));
+  const completedExamIds = new Set(actualCompletedExams.map((se) => se.exam_id));
+
+  // Map in-progress student exams (started, but not yet submitted)
+  const inProgressExamsMap = new Map<number, (typeof completedExams)[0]>();
+  completedExams.forEach((se) => {
+    if (!se.submitted_at) {
+      inProgressExamsMap.set(se.exam_id, se);
+    }
+  });
+
   const activeExams: any[] = [];
   const upcomingExams: any[] = [];
   const missedExams: any[] = [];
 
   const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
 
-  eligibleTargets.forEach(t => {
+  eligibleTargets.forEach((t) => {
     if (completedExamIds.has(t.exam_id)) {
       return;
     }
@@ -216,58 +228,55 @@ export default async function StudentDashboard() {
       end_time: t.end_time.toISOString(),
     };
 
+    // Check if student has an active in-progress attempt
+    const inProgressAttempt = inProgressExamsMap.get(t.exam_id);
+
+    if (inProgressAttempt) {
+      const elapsedMs = now.getTime() - inProgressAttempt.started_at.getTime();
+      const limitMs = t.exam.time_limit_minutes * 60 * 1000;
+      if (elapsedMs < limitMs) {
+        // Attempt is still active and student has remaining time to finish
+        activeExams.push({
+          ...t.exam,
+          target: sanitizedTarget,
+          official_schedule: officialSchedule,
+          is_reopened: false,
+          is_in_progress: true,
+        });
+        return;
+      }
+    }
+
     if (now >= examStart && now <= examEnd) {
       activeExams.push({
         ...t.exam,
         target: sanitizedTarget,
         official_schedule: officialSchedule,
-        is_reopened: false
+        is_reopened: false,
       });
     } else if (now < examStart) {
       upcomingExams.push({
         ...t.exam,
         target: sanitizedTarget,
         official_schedule: officialSchedule,
-        is_reopened: false
+        is_reopened: false,
       });
     } else {
+      // Time is up and student did not open or start the exam -> Missed Exam
       missedExams.push({
         ...t.exam,
         target: sanitizedTarget,
         official_schedule: officialSchedule,
-        is_reopened: false
+        is_reopened: false,
       });
     }
   });
 
-  // Also check DI Approved examinations that have no ExamTarget set yet (Approved — Schedule Pending)
-  const targetedExamIds = new Set(targets.map((t) => t.exam_id));
-  approvedExams.forEach((exam) => {
-    if (targetedExamIds.has(exam.exam_id)) return;
-    if (completedExamIds.has(exam.exam_id)) return;
-    if (overrideExamIds.has(exam.exam_id)) return;
-
-    if (exam.selected_student_ids && Array.isArray(exam.selected_student_ids) && exam.selected_student_ids.length > 0) {
-      if (!exam.selected_student_ids.includes(student.student_id)) return;
-    }
-
-    upcomingExams.push({
-      ...exam,
-      target: null,
-      is_schedule_pending: true,
-      official_schedule: exam.exam_date
-        ? {
-            scheduled_date: exam.exam_date.toISOString(),
-            start_time: null,
-            end_time: null,
-          }
-        : null,
-      is_reopened: false,
-    });
-  });
+  // Note: Approved exams without an ExamTarget (unscheduled) are NOT shown to students
+  // until the faculty has explicitly set the schedule.
 
   // Handle active student overrides (individual reopened exam attempts)
-  studentOverrides.forEach(o => {
+  studentOverrides.forEach((o) => {
     if (completedExamIds.has(o.exam_id)) {
       return;
     }
@@ -276,16 +285,20 @@ export default async function StudentDashboard() {
     const examEnd = o.new_end_time;
 
     // Find original target schedule to preserve official examination date
-    const origTarget = eligibleTargets.find(t => t.exam_id === o.exam_id);
-    const officialSchedule = origTarget ? {
-      scheduled_date: origTarget.scheduled_date.toISOString(),
-      start_time: origTarget.start_time.toISOString(),
-      end_time: origTarget.end_time.toISOString(),
-    } : (o.exam.exam_date ? {
-      scheduled_date: o.exam.exam_date.toISOString(),
-      start_time: null,
-      end_time: null,
-    } : null);
+    const origTarget = eligibleTargets.find((t) => t.exam_id === o.exam_id);
+    const officialSchedule = origTarget
+      ? {
+          scheduled_date: origTarget.scheduled_date.toISOString(),
+          start_time: origTarget.start_time.toISOString(),
+          end_time: origTarget.end_time.toISOString(),
+        }
+      : o.exam.exam_date
+      ? {
+          scheduled_date: o.exam.exam_date.toISOString(),
+          start_time: null,
+          end_time: null,
+        }
+      : null;
 
     const sanitizedTarget = {
       target_id: -o.override_id, // negative ID to distinguish from real targets
@@ -299,13 +312,30 @@ export default async function StudentDashboard() {
       end_time: o.new_end_time.toISOString(),
     };
 
+    const inProgressAttempt = inProgressExamsMap.get(o.exam_id);
+    if (inProgressAttempt) {
+      const elapsedMs = now.getTime() - inProgressAttempt.started_at.getTime();
+      const limitMs = o.exam.time_limit_minutes * 60 * 1000;
+      if (elapsedMs < limitMs) {
+        activeExams.push({
+          ...o.exam,
+          target: sanitizedTarget,
+          official_schedule: officialSchedule,
+          reopened_window: reopenedWindow,
+          is_reopened: true,
+          is_in_progress: true,
+        });
+        return;
+      }
+    }
+
     if (now >= examStart && now <= examEnd) {
       activeExams.push({
         ...o.exam,
         target: sanitizedTarget,
         official_schedule: officialSchedule,
         reopened_window: reopenedWindow,
-        is_reopened: true
+        is_reopened: true,
       });
     } else if (now < examStart) {
       upcomingExams.push({
@@ -313,7 +343,7 @@ export default async function StudentDashboard() {
         target: sanitizedTarget,
         official_schedule: officialSchedule,
         reopened_window: reopenedWindow,
-        is_reopened: true
+        is_reopened: true,
       });
     } else {
       missedExams.push({
@@ -321,12 +351,12 @@ export default async function StudentDashboard() {
         target: sanitizedTarget,
         official_schedule: officialSchedule,
         reopened_window: reopenedWindow,
-        is_reopened: true
+        is_reopened: true,
       });
     }
   });
 
-  const serializedCompletedExams = completedExams.map(se => ({
+  const serializedCompletedExams = actualCompletedExams.map((se) => ({
     ...se,
     submitted_at: se.submitted_at ? se.submitted_at.toISOString() : null,
     started_at: se.started_at.toISOString(),

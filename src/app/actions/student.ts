@@ -111,19 +111,7 @@ export async function startStudentExam(examId: number, studentId: number) {
       );
     }
 
-    if (now < examStart) {
-      const startTimeString = examStart.toLocaleTimeString([], { 
-        hour: '2-digit', 
-        minute: '2-digit'
-      });
-      return { error: `Examination has not started yet. It is scheduled to start at ${startTimeString}.` };
-    }
-
-    if (now > examEnd) {
-      return { error: "Examination window has already closed." };
-    }
-
-    // 4. Fetch or create StudentExam
+    // 3. Fetch or check existing StudentExam attempt FIRST
     let studentExam = await db.studentExam.findFirst({
       where: {
         student_id: studentId,
@@ -137,7 +125,7 @@ export async function startStudentExam(examId: number, studentId: number) {
     let remainingSeconds = exam.time_limit_minutes * 60;
 
     if (studentExam) {
-      // If exam already completed, return status
+      // If exam already completed, return completed status
       if (studentExam.submitted_at) {
         return {
           isCompleted: true,
@@ -147,17 +135,13 @@ export async function startStudentExam(examId: number, studentId: number) {
         };
       }
 
-      // Resume attempt - use saved remaining_seconds or calculate if null
-      if (studentExam.remaining_seconds !== null && studentExam.remaining_seconds !== undefined) {
-        remainingSeconds = studentExam.remaining_seconds;
-      } else {
-        const elapsedMs = now.getTime() - studentExam.started_at.getTime();
-        const limitMs = exam.time_limit_minutes * 60 * 1000;
-        remainingSeconds = Math.max(0, Math.floor((limitMs - elapsedMs) / 1000));
-      }
+      // Resume attempt - countdown starts from when student started taking the exam
+      const elapsedMs = now.getTime() - studentExam.started_at.getTime();
+      const limitMs = exam.time_limit_minutes * 60 * 1000;
+      remainingSeconds = Math.max(0, Math.floor((limitMs - elapsedMs) / 1000));
 
       if (remainingSeconds <= 0) {
-        // Time exceeded while away, auto-submit
+        // Time limit exceeded, auto-submit exam
         const submitResult = await submitStudentExam(studentExam.student_exam_id, "Timeout");
         if (submitResult.error) {
           return { error: submitResult.error };
@@ -170,12 +154,20 @@ export async function startStudentExam(examId: number, studentId: number) {
         };
       }
     } else {
-      // Task 32: Check global testing window deadline ONLY for starting new attempts
-      if (now > examEnd) {
-        return { error: "Examination window has already closed." };
+      // Starting a NEW attempt: check testing window start and end bounds
+      if (now < examStart) {
+        const startTimeString = examStart.toLocaleTimeString([], { 
+          hour: '2-digit', 
+          minute: '2-digit'
+        });
+        return { error: `Examination has not started yet. It is scheduled to start at ${startTimeString}.` };
       }
 
-      // Create new student exam attempt
+      if (now > examEnd) {
+        return { error: "Examination window has already closed. You missed the scheduled time." };
+      }
+
+      // Create new student exam attempt when student actually opens/starts the exam
       studentExam = await db.studentExam.create({
         data: {
           student_id: studentId,

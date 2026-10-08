@@ -978,6 +978,24 @@ export function FacultyDashboardClient({
     if (now >= examStart && now <= examEnd) {
       return "Live";
     }
+
+    // Check if any student started taking the exam and is currently finishing within their allowed time limit
+    const attempts = (studentExams || []).filter(
+      (se: any) => se.exam_id === exam.exam_id || se.exam?.exam_id === exam.exam_id
+    );
+
+    const activeAttemptsCount = attempts.filter((se: any) => {
+      if (se.submitted_at) return false;
+      const startedAt = new Date(se.started_at);
+      const elapsedMs = now.getTime() - startedAt.getTime();
+      const limitMs = (exam.time_limit_minutes || 60) * 60 * 1000;
+      return elapsedMs < limitMs;
+    }).length;
+
+    if (activeAttemptsCount > 0) {
+      return "In_Progress";
+    }
+
     return "Completed";
   };
 
@@ -1038,6 +1056,13 @@ export function FacultyDashboardClient({
             Live / Active
           </span>
         );
+      case "In_Progress":
+        return (
+          <span className="inline-flex items-center gap-1.5 text-xs font-extrabold bg-amber-100 text-amber-900 border border-amber-300 px-2.5 py-1 rounded-full shadow-sm">
+            <span className="w-2 h-2 rounded-full bg-amber-600 animate-pulse" />
+            Students In Progress
+          </span>
+        );
       case "Approved":
         return (
           <span className="inline-flex items-center gap-1.5 text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 px-2.5 py-1 rounded-full shadow-sm">
@@ -1056,7 +1081,7 @@ export function FacultyDashboardClient({
         return (
           <span className="inline-flex items-center gap-1.5 text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200 px-2.5 py-1 rounded-full shadow-sm">
             <span className="w-1.5 h-1.5 rounded-full bg-slate-500" />
-            Completed
+            Exam Concluded
           </span>
         );
       default:
@@ -1773,10 +1798,14 @@ export function FacultyDashboardClient({
                                   circleBg = "bg-emerald-600 border-emerald-600 text-white font-extrabold animate-pulse";
                                   label = "Live / Active";
                                   sub = "Available to students";
+                                } else if (schedStatus === "In_Progress") {
+                                  circleBg = "bg-amber-500 border-amber-500 text-white font-extrabold animate-pulse";
+                                  label = "Students In Progress";
+                                  sub = "Finishing time limit";
                                 } else if (schedStatus === "Completed") {
                                   circleBg = "bg-slate-700 border-slate-700 text-white font-extrabold";
-                                  label = "Completed";
-                                  sub = "Exam window closed";
+                                  label = "Exam Concluded";
+                                  sub = "Testing window concluded";
                                 }
 
                                 return (
@@ -1871,10 +1900,14 @@ export function FacultyDashboardClient({
                                 circleBg = "bg-emerald-600 border-emerald-600 text-white font-extrabold animate-pulse";
                                 label = "Live / Active";
                                 sub = "Available to students";
+                              } else if (schedStatus === "In_Progress") {
+                                circleBg = "bg-amber-500 border-amber-500 text-white font-extrabold animate-pulse";
+                                label = "Students In Progress";
+                                sub = "Finishing time limit";
                               } else if (schedStatus === "Completed") {
                                 circleBg = "bg-slate-700 border-slate-700 text-white font-extrabold";
-                                label = "Completed";
-                                sub = "Exam window closed";
+                                label = "Exam Concluded";
+                                sub = "Testing window concluded";
                               }
 
                               return (
