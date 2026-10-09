@@ -51,6 +51,7 @@ interface FacultyDashboardClientProps {
       approvalWorkflow: {
         reviewed_by_prog_chair_id?: number | null;
         prog_chair_review_status?: string | null;
+        prog_chair_comments?: string | null;
         chair_comments: string | null;
         chair_review_status: string;
         di_review_status: string;
@@ -1244,17 +1245,6 @@ export function FacultyDashboardClient({
           Dashboard Overview
         </button>
         <button
-          onClick={() => setActiveTab("tracker")}
-          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-bold rounded-xl transition-all duration-300 ${
-            activeTab === "tracker"
-              ? "bg-emerald-600 text-white shadow-md shadow-emerald-600/20"
-              : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-          }`}
-        >
-          <ClipboardList className="w-4 h-4" />
-          Examination Workflow Tracker
-        </button>
-        <button
           onClick={() => setActiveTab("students")}
           className={`flex items-center gap-2 px-4 py-2.5 text-sm font-bold rounded-xl transition-all duration-300 ${
             activeTab === "students"
@@ -1450,22 +1440,25 @@ export function FacultyDashboardClient({
             </div>
           </div>
 
-          {/* Right Panel: Recent Exams and Quick Actions */}
+          {/* Right Panel: Examinations & Drafts with Review Workflow */}
           <div className="lg:col-span-2 bg-white border border-slate-200/80 rounded-3xl p-6 shadow-sm space-y-6">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                <span className="w-1.5 h-6 bg-emerald-600 rounded-full" />
-                Examinations & Drafts
-                {faculty.examinations && faculty.examinations.length > 0 && (
-                  <span className="text-xs font-semibold text-slate-500 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full">
-                    {faculty.examinations.length}
-                  </span>
-                )}
-              </h2>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+              <div>
+                <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                  <span className="w-1.5 h-6 bg-emerald-600 rounded-full" />
+                  Examinations & Drafts
+                  {faculty.examinations && faculty.examinations.length > 0 && (
+                    <span className="text-xs font-semibold text-slate-500 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full">
+                      {faculty.examinations.length}
+                    </span>
+                  )}
+                </h2>
+                <p className="text-slate-500 text-xs mt-1">Multi-tier review status & management for all course examinations.</p>
+              </div>
               <button
                 disabled={isCreatingExam}
                 onClick={handleCreateExam}
-                className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold px-3 py-2 rounded-xl shadow-sm transition-all hover:scale-105 duration-300 flex items-center gap-1 cursor-pointer"
+                className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold px-3 py-2 rounded-xl shadow-sm transition-all hover:scale-105 duration-300 flex items-center gap-1 cursor-pointer shrink-0"
               >
                 {isCreatingExam ? (
                   <RefreshCw className="w-3 h-3 animate-spin" />
@@ -1476,58 +1469,308 @@ export function FacultyDashboardClient({
               </button>
             </div>
 
-            {faculty.examinations && faculty.examinations.length > 0 ? (
-              <div className="max-h-[520px] overflow-y-auto pr-2 space-y-1 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
-                <div className="divide-y divide-slate-100">
-                  {faculty.examinations.map((exam, idx) => (
-                    <div key={exam.exam_id} className="py-4 flex justify-between items-center first:pt-0 last:pb-0 gap-4 hover:bg-slate-50/60 rounded-xl px-2 transition-colors">
-                      <div className="space-y-1 min-w-0 flex-1">
-                        <p className="text-xs sm:text-sm font-extrabold text-slate-800 leading-snug break-words">{getExamDisplayTitle(exam, faculty.examinations.length - 1 - idx)}</p>
-                        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-400 font-medium">
-                          <span>{exam.course.course_code} - {exam.course.course_title}</span>
-                          <span>•</span>
-                          <span>{exam.time_limit_minutes} min</span>
-                          <span>•</span>
-                          <span className="font-bold text-slate-500">
-                            {exam._count?.questionBank ?? 0} Questions
-                          </span>
-                        </div>
-                        {exam.current_status === "Approved" && (
-                          <div className="mt-1.5 flex items-center gap-1 text-[10px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded w-fit shadow-sm">
-                            <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                            Digitally Signed
+            {/* Filter Tabs */}
+            <div className="flex flex-wrap gap-1.5 bg-slate-50 p-1.5 rounded-xl border border-slate-100">
+              {[
+                { id: "ALL", label: "All" },
+                { id: "Draft", label: "Draft" },
+                { id: "Pending_Program_Chair", label: "Pending Program Chairperson" },
+                { id: "Pending_Chair", label: "Pending Department Chairperson" },
+                { id: "Pending_DI", label: "Pending DI" },
+                { id: "Approved", label: "Approved" },
+                { id: "Returned", label: "Returned" },
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setTrackerFilter(tab.id)}
+                  className={`px-3 py-1.5 text-xs font-extrabold rounded-lg transition-all cursor-pointer ${
+                    trackerFilter === tab.id
+                      ? "bg-white text-emerald-700 shadow-sm border border-slate-200/60"
+                      : "text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {filteredExams.length > 0 ? (
+              <div className="max-h-[650px] overflow-y-auto pr-2 space-y-6 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
+                {filteredExams.map((exam) => {
+                  const isTransitioning = transitioningExamId === exam.exam_id;
+                  
+                  return (
+                    <div 
+                      key={exam.exam_id} 
+                      className="border border-slate-200 rounded-2xl p-6 hover:shadow-md transition-all duration-300 bg-gradient-to-br from-white to-slate-50/30"
+                    >
+                      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-100 pb-4">
+                        <div className="flex-1 w-full">
+                          <div className="flex flex-wrap items-center justify-between gap-3">
+                            <h3 className="text-base font-extrabold text-slate-900">{getExamDisplayTitle(exam)}</h3>
+                            
+                            <div className="flex items-center gap-2">
+                              {renderStatusBadge(exam.current_status, exam)}
+                              
+                              {(exam.current_status === "Draft" || exam.current_status === "Returned") && (
+                                <div className="flex items-center gap-1.5 ml-1">
+                                  <button
+                                    onClick={() => router.push(`/dashboard/faculty/exams/${exam.exam_id}/builder`)}
+                                    className="p-1.5 border border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 text-slate-600 rounded-xl shadow-sm transition-all cursor-pointer"
+                                    title="Edit Exam in Builder"
+                                  >
+                                    <PenTool className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    disabled={deletingExamId === exam.exam_id}
+                                    onClick={() => handleDeleteExam(exam.exam_id)}
+                                    className="p-1.5 border border-slate-200 bg-white hover:bg-rose-50 hover:border-rose-200 text-slate-400 hover:text-rose-600 rounded-xl shadow-sm transition-all cursor-pointer disabled:opacity-50"
+                                    title="Delete Exam"
+                                  >
+                                    {deletingExamId === exam.exam_id ? (
+                                      <RefreshCw className="w-4 h-4 animate-spin" />
+                                    ) : (
+                                      <Trash2 className="w-4 h-4" />
+                                    )}
+                                  </button>
+                                </div>
+                              )}
+                            </div>
                           </div>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        {renderStatusBadge(exam.current_status)}
-                        {(exam.current_status === "Draft" || exam.current_status === "Returned") && (
-                          <>
+                          
+                          <p className="text-xs text-slate-400 font-semibold mt-1 flex flex-wrap items-center gap-1.5">
+                            <span className="text-slate-400 font-medium">{exam.course.course_code} - {exam.course.course_title}</span>
+                            <span className="text-slate-400">•</span>
+                            <span>{exam.time_limit_minutes || 60} min</span>
+                            <span className="text-slate-400">•</span>
+                            <span>{exam._count?.questionBank ?? 0} Questions</span>
+                          </p>
+
+                          {exam.current_status === "Approved" && (
+                            <div className="mt-2.5 flex items-center gap-1.5 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-2.5 py-1 rounded-lg w-fit shadow-sm">
+                              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                              Digitally Signed
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Interactive Primary Actions */}
+                        <div className="flex items-center gap-2 shrink-0">
+                          {exam.current_status === "Draft" && (
                             <button
-                              onClick={() => router.push(`/dashboard/faculty/exams/${exam.exam_id}/builder`)}
-                              className="p-1.5 rounded-lg border border-slate-200 text-slate-500 hover:text-slate-800 hover:bg-slate-50 transition-colors cursor-pointer"
-                              title="Edit in Builder"
+                              disabled={isTransitioning}
+                              onClick={() => handleStatusTransition(exam.exam_id, "Pending_Chair")}
+                              className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold px-3.5 py-2 rounded-xl shadow-sm transition-all duration-300 cursor-pointer"
+                              title="Submit exam for Chair review"
                             >
-                              <PenTool className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              disabled={deletingExamId === exam.exam_id}
-                              onClick={() => handleDeleteExam(exam.exam_id)}
-                              className="p-1.5 rounded-lg border border-slate-200 text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors disabled:opacity-50 cursor-pointer"
-                              title="Delete Exam"
-                            >
-                              {deletingExamId === exam.exam_id ? (
+                              {isTransitioning ? (
                                 <RefreshCw className="w-3.5 h-3.5 animate-spin" />
                               ) : (
-                                <Trash2 className="w-3.5 h-3.5" />
+                                <Send className="w-3.5 h-3.5" />
                               )}
+                              Submit for Review
                             </button>
-                          </>
-                        )}
+                          )}
+                          {exam.current_status === "Returned" && (
+                            <button
+                              disabled={isTransitioning}
+                              onClick={() => handleStatusTransition(exam.exam_id, "Draft")}
+                              className="inline-flex items-center gap-2 bg-slate-800 hover:bg-slate-950 disabled:opacity-50 text-white text-xs font-bold px-3.5 py-2 rounded-xl shadow-sm transition-all duration-300 cursor-pointer"
+                            >
+                              {isTransitioning ? (
+                                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <RotateCcw className="w-3.5 h-3.5" />
+                              )}
+                              Revise & Reset to Draft
+                            </button>
+                          )}
+                          {exam.current_status === "Approved" && (
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => handleOpenScheduleModal(exam.exam_id, exam.title)}
+                                className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3.5 py-2 rounded-xl shadow-sm transition-all duration-300 cursor-pointer"
+                              >
+                                <Calendar className="w-3.5 h-3.5" />
+                                {exam.examTargets && exam.examTargets.length > 0 ? "Update Schedule" : "Set Schedule & Publish"}
+                              </button>
+                              <button
+                                onClick={async () => {
+                                  setExamToArchive(exam);
+                                  const ay = await getCurrentAcademicYear();
+                                  setAcademicYearInput(ay);
+                                  setArchiveModalOpen(true);
+                                }}
+                                className="inline-flex items-center gap-2 bg-slate-700 hover:bg-slate-800 text-white text-xs font-bold px-3.5 py-2 rounded-xl shadow-sm transition-all duration-300 cursor-pointer"
+                              >
+                                <Archive className="w-3.5 h-3.5" />
+                                Archive Exam
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </div>
+
+
+
+                      {/* Returned Comments Showcase */}
+                      {exam.current_status === "Returned" && (
+                        <div className="space-y-3">
+                          {(() => {
+                            const renderCommentCard = (commentsText: string, titleLabel: string) => {
+                              let parsedComments: { general?: string; questions?: Record<string, string> } | null = null;
+                              try {
+                                if (commentsText.startsWith("{")) {
+                                  parsedComments = JSON.parse(commentsText);
+                                }
+                              } catch (e) {
+                                // fallback to plain text
+                              }
+
+                              if (parsedComments) {
+                                const hasQuestionComments = parsedComments.questions && Object.keys(parsedComments.questions).length > 0;
+                                return (
+                                  <div className="bg-rose-50/50 border border-rose-100 rounded-xl p-4 space-y-3">
+                                    <div className="flex gap-3 items-start">
+                                      <AlertCircle className="w-5 h-5 text-rose-500 shrink-0 mt-0.5" />
+                                      <div>
+                                        <p className="text-xs font-bold text-rose-800">{titleLabel}:</p>
+                                        {parsedComments.general && (
+                                          <p className="text-xs text-rose-700 mt-1 italic leading-relaxed">
+                                            "{parsedComments.general}"
+                                          </p>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    {hasQuestionComments && (
+                                      <div className="border-t border-rose-100/60 pt-3 space-y-2">
+                                        <h5 className="text-[11px] font-bold text-rose-800 uppercase tracking-wider">Granular Question Feedback:</h5>
+                                        <div className="space-y-2">
+                                          {Object.entries(parsedComments.questions || {}).map(([qId, val]) => {
+                                            let commentText = "";
+                                            let itemStatus: "Approved" | "Revision" | undefined = undefined;
+
+                                            if (val && typeof val === "object") {
+                                              commentText = (val as any).comment || "";
+                                              itemStatus = (val as any).status;
+                                            } else if (typeof val === "string") {
+                                              commentText = val;
+                                              if (commentText.trim()) itemStatus = "Revision";
+                                            }
+
+                                            if (!itemStatus && !commentText.trim()) return null;
+
+                                            const qIndex = exam.questionBank?.findIndex(q => String(q.question_id) === String(qId)) ?? -1;
+                                            const qNumber = qIndex !== -1 ? qIndex + 1 : "Unknown";
+                                            const qText = qIndex !== -1 ? exam.questionBank?.[qIndex].question_text : "";
+
+                                            return (
+                                              <div key={qId} className={`bg-white border rounded-lg p-2.5 space-y-1.5 ${
+                                                itemStatus === "Approved" ? "border-emerald-100" : "border-rose-100"
+                                              }`}>
+                                                <div className="flex justify-between items-center text-[10px] font-bold">
+                                                  <span className={itemStatus === "Approved" ? "text-emerald-800" : "text-rose-800"}>
+                                                    Question #{qNumber}
+                                                  </span>
+                                                  {itemStatus && (
+                                                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase tracking-wider ${
+                                                      itemStatus === "Approved" 
+                                                        ? "bg-emerald-50 text-emerald-700 border border-emerald-100" 
+                                                        : "bg-rose-50 text-rose-700 border border-rose-100"
+                                                    }`}>
+                                                      {itemStatus === "Approved" ? "Approved" : "Revision Required"}
+                                                    </span>
+                                                  )}
+                                                </div>
+                                                {qText && (
+                                                  <p className="text-[11px] text-slate-500 truncate">{qText}</p>
+                                                )}
+                                                {commentText.trim() && (
+                                                  <p className={`text-xs italic font-medium ${
+                                                    itemStatus === "Approved" ? "text-emerald-700" : "text-rose-700"
+                                                  }`}>
+                                                    "{commentText}"
+                                                  </p>
+                                                )}
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              }
+
+                              // Graceful fallback to raw text
+                              return (
+                                <div className="bg-rose-50/50 border border-rose-100 rounded-xl p-4 flex gap-3 items-start">
+                                  <AlertCircle className="w-5 h-5 text-rose-500 shrink-0 mt-0.5" />
+                                  <div>
+                                    <p className="text-xs font-bold text-rose-800">{titleLabel}:</p>
+                                    <p className="text-xs text-rose-700 mt-1 italic leading-relaxed">
+                                      "{commentsText}"
+                                    </p>
+                                  </div>
+                                </div>
+                              );
+                            };
+
+                            const showProgChairComments = !!exam.approvalWorkflow?.prog_chair_comments && (
+                              exam.approvalWorkflow?.prog_chair_review_status === "Returned" || (!exam.approvalWorkflow?.chair_comments && !exam.approvalWorkflow?.di_comments)
+                            );
+                            const showChairComments = !!exam.approvalWorkflow?.chair_comments && (
+                              exam.approvalWorkflow?.chair_review_status === "Returned" || (!exam.approvalWorkflow?.prog_chair_comments && !exam.approvalWorkflow?.di_comments) || (exam.approvalWorkflow?.prog_chair_review_status !== "Returned" && !exam.approvalWorkflow?.di_comments)
+                            );
+                            const showDiReturnedComments = !!exam.approvalWorkflow?.di_comments && exam.current_status === "Returned";
+
+                            return (
+                              <>
+                                {showProgChairComments && renderCommentCard(exam.approvalWorkflow!.prog_chair_comments!, "Returned by Program Chairperson")}
+                                {showChairComments && renderCommentCard(exam.approvalWorkflow!.chair_comments!, "Returned by Department Chairperson")}
+                                {showDiReturnedComments && renderCommentCard(exam.approvalWorkflow!.di_comments!, "Returned by Director of Instruction")}
+                                {!showProgChairComments && !showChairComments && !showDiReturnedComments && (
+                                  <div className="bg-rose-50/50 border border-rose-100 rounded-xl p-4 flex gap-3 items-start">
+                                    <AlertCircle className="w-5 h-5 text-rose-500 shrink-0 mt-0.5" />
+                                    <div>
+                                      <p className="text-xs font-bold text-rose-800">Returned for Revision:</p>
+                                      <p className="text-xs text-rose-700 mt-1 italic leading-relaxed">
+                                        This examination has been returned for revision by the reviewer. Please review and update your exam.
+                                      </p>
+                                    </div>
+                                  </div>
+                                )}
+                                <div className="pt-1 flex justify-end">
+                                  <button
+                                    onClick={() => router.push(`/dashboard/faculty/exams/${exam.exam_id}/builder`)}
+                                    className="inline-flex items-center gap-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold px-3.5 py-2 rounded-xl shadow-sm transition-all cursor-pointer"
+                                  >
+                                    <PenTool className="w-3.5 h-3.5" />
+                                    Edit Marked Items in Builder (Step 2)
+                                  </button>
+                                </div>
+                              </>
+                            );
+                          })()}
+                        </div>
+                      )}
+
+                      {/* Administrative Hold Remarks (when not in Returned status) */}
+                      {exam.current_status !== "Returned" && exam.approvalWorkflow?.di_comments && (
+                        <div className="bg-[#7A151A]/5 border border-[#7A151A]/20 rounded-xl p-4 flex gap-3 items-start mt-3">
+                          <Clock className="w-5 h-5 text-[#7A151A] shrink-0 mt-0.5" />
+                          <div>
+                            <p className="text-xs font-bold text-[#7A151A]">Administrative Hold Remarks by Director:</p>
+                            <p className="text-xs text-[#7A151A] mt-1 italic leading-relaxed">
+                              "{exam.approvalWorkflow.di_comments}"
+                            </p>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  ))}
-                </div>
+                  );
+                })}
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center py-20 text-center border-2 border-dashed border-slate-100 rounded-3xl">
@@ -1544,515 +1787,7 @@ export function FacultyDashboardClient({
         </div>
       )}
 
-      {/* TRACKER TAB */}
-      {activeTab === "tracker" && (
-        <div className="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-sm space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-5">
-            <div>
-              <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-                <span className="w-1.5 h-6 bg-emerald-600 rounded-full" />
-                Examination Workflow Tracker
-              </h2>
-              <p className="text-slate-500 text-xs mt-1">Track the multi-tier review status of all course examinations.</p>
-            </div>
-            
-            {/* Filter Tabs */}
-            <div className="flex flex-wrap gap-1.5 bg-slate-50 p-1.5 rounded-xl border border-slate-100">
-              {[
-                { id: "ALL", label: "All" },
-                { id: "Draft", label: "Draft" },
-                { id: "Pending_Program_Chair", label: "Pending Program Chairperson" },
-                { id: "Pending_Chair", label: "Pending Department Chairperson" },
-                { id: "Pending_DI", label: "Pending DI" },
-                { id: "Approved", label: "Approved" },
-                { id: "Returned", label: "Returned" },
-              ].map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setTrackerFilter(tab.id)}
-                  className={`px-3 py-1.5 text-xs font-extrabold rounded-lg transition-all ${
-                    trackerFilter === tab.id
-                      ? "bg-white text-emerald-700 shadow-sm border border-slate-200/60"
-                      : "text-slate-500 hover:text-slate-800"
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-          </div>
 
-          {filteredExams.length > 0 ? (
-            <div className="max-h-[650px] overflow-y-auto pr-2 space-y-6 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
-              {filteredExams.map((exam) => {
-                const isTransitioning = transitioningExamId === exam.exam_id;
-                
-                return (
-                  <div 
-                    key={exam.exam_id} 
-                    className="border border-slate-200 rounded-2xl p-6 hover:shadow-md transition-all duration-300 bg-gradient-to-br from-white to-slate-50/30"
-                  >
-                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-100 pb-4">
-                      <div>
-                        <div className="flex flex-wrap items-center gap-3">
-                          <h3 className="text-base font-bold text-slate-900">{getExamDisplayTitle(exam)}</h3>
-                          {renderStatusBadge(exam.current_status, exam)}
-                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200/80 px-2 py-0.5 rounded-full shadow-sm" title="TOS Matrix Enabled">
-                            <Layers className="w-3 h-3 text-emerald-600" /> TOS Matrix Active
-                          </span>
-                        </div>
-                        <p className="text-xs text-emerald-700 font-semibold mt-1">
-                          {exam.course.course_code} - {exam.course.course_title}
-                          <span className="text-slate-400 mx-2">•</span>
-                          <span className="text-slate-500 font-bold">
-                            {exam._count?.questionBank ?? 0} Questions
-                          </span>
-                        </p>
-                        {exam.current_status === "Approved" && (
-                          <div className="mt-2 flex items-center gap-1.5 text-[11px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-100 px-2.5 py-1 rounded-lg w-fit shadow-sm">
-                            <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                            Digitally Signed by Chairperson & Director for Instruction
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Interactive Actions for testing and state transitions */}
-                      <div className="flex items-center gap-2">
-                        {(exam.current_status === "Draft" || exam.current_status === "Returned") && (
-                          <>
-                            <button
-                              onClick={() => router.push(`/dashboard/faculty/exams/${exam.exam_id}/builder`)}
-                              className="inline-flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-300/65 text-slate-700 text-xs font-bold px-3 py-2 rounded-xl shadow-sm transition-all duration-300"
-                            >
-                              <PenTool className="w-3.5 h-3.5" />
-                              Edit Builder
-                            </button>
-                            <button
-                              disabled={deletingExamId === exam.exam_id}
-                              onClick={() => handleDeleteExam(exam.exam_id)}
-                              className="inline-flex items-center justify-center p-2 bg-slate-100 hover:bg-rose-50 border border-slate-300/65 hover:border-rose-200 text-slate-400 hover:text-rose-600 rounded-xl shadow-sm transition-all duration-300 disabled:opacity-50"
-                              title="Delete Exam"
-                            >
-                              {deletingExamId === exam.exam_id ? (
-                                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                              ) : (
-                                <Trash2 className="w-3.5 h-3.5" />
-                              )}
-                            </button>
-                          </>
-                        )}
-                        {exam.current_status === "Draft" && (
-                          <button
-                            disabled={isTransitioning}
-                            onClick={() => handleStatusTransition(exam.exam_id, "Pending_Chair")}
-                            className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold px-3 py-2 rounded-xl shadow-sm transition-all duration-300 cursor-pointer"
-                            title="Submit exam for Chair review"
-                          >
-                            {isTransitioning ? (
-                              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                            ) : (
-                              <Send className="w-3.5 h-3.5" />
-                            )}
-                            Submit for Review
-                          </button>
-                        )}
-                        {exam.current_status === "Returned" && (
-                          <button
-                            disabled={isTransitioning}
-                            onClick={() => handleStatusTransition(exam.exam_id, "Draft")}
-                            className="inline-flex items-center gap-2 bg-slate-800 hover:bg-slate-950 disabled:opacity-50 text-white text-xs font-bold px-3 py-2 rounded-xl shadow-sm transition-all duration-300"
-                          >
-                            {isTransitioning ? (
-                              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                            ) : (
-                              <RotateCcw className="w-3.5 h-3.5" />
-                            )}
-                            Revise & Reset to Draft
-                          </button>
-                        )}
-                        {exam.current_status === "Approved" && (
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => handleOpenScheduleModal(exam.exam_id, exam.title)}
-                              className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-2 rounded-xl shadow-sm transition-all duration-300 cursor-pointer"
-                            >
-                              <Calendar className="w-3.5 h-3.5" />
-                              {exam.examTargets && exam.examTargets.length > 0 ? "Update Schedule" : "Set Schedule & Publish"}
-                            </button>
-                            <button
-                              onClick={async () => {
-                                setExamToArchive(exam);
-                                const ay = await getCurrentAcademicYear();
-                                setAcademicYearInput(ay);
-                                setArchiveModalOpen(true);
-                              }}
-                              className="inline-flex items-center gap-2 bg-slate-700 hover:bg-slate-800 text-white text-xs font-bold px-3 py-2 rounded-xl shadow-sm transition-all duration-300"
-                            >
-                              <Archive className="w-3.5 h-3.5" />
-                              Archive Exam
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Timeline Tracker */}
-                    <div className="py-6">
-                      {(() => {
-                        const hasProgChair = !!exam.approvalWorkflow?.reviewed_by_prog_chair_id || ["Pending_Program_Chair"].includes(exam.current_status) || ["ITC", "ITE", "ITM", "ITD", "IND", "EDUC"].some(prefix => exam.course?.course_code?.startsWith(prefix));
-                        
-                        if (hasProgChair) {
-                          return (
-                            <div className="grid grid-cols-1 md:grid-cols-5 gap-4 md:gap-0">
-                              {/* Step 1: Draft */}
-                              <div className="relative flex flex-col items-center text-center">
-                                <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm border-2 z-10 transition-all ${
-                                  ["Draft", "Pending_Program_Chair", "Pending_Chair", "Pending_DI", "Approved", "Returned"].includes(exam.current_status)
-                                    ? "bg-emerald-600 border-emerald-600 text-white"
-                                    : "bg-white border-slate-200 text-slate-400"
-                                }`}>
-                                  1
-                                </div>
-                                <p className="text-xs font-extrabold text-slate-800 mt-2">Draft Mode</p>
-                                <p className="text-[10px] text-slate-400 mt-0.5">Authoring phase</p>
-                                <div className="hidden md:block absolute left-1/2 right-0 top-4 h-[2px] bg-emerald-600 -z-0" />
-                              </div>
-
-                              {/* Step 2: Program Chairperson Review (Reviewed by) */}
-                              <div className="relative flex flex-col items-center text-center">
-                                <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm border-2 z-10 transition-all ${
-                                  ["Pending_Program_Chair", "Pending_Chair", "Pending_DI", "Approved", "Returned"].includes(exam.current_status)
-                                    ? exam.current_status === "Returned" && exam.approvalWorkflow?.prog_chair_review_status === "Returned"
-                                      ? "bg-rose-500 border-rose-500 text-white"
-                                      : "bg-emerald-600 border-emerald-600 text-white"
-                                    : "bg-white border-slate-200 text-slate-400"
-                                }`}>
-                                  2
-                                </div>
-                                <p className="text-xs font-extrabold text-slate-800 mt-2">Program Chairperson</p>
-                                <p className="text-[10px] text-amber-600 font-bold mt-0.5">Reviewed by</p>
-                                <div className={`hidden md:block absolute left-0 right-1/2 top-4 h-[2px] -z-0 ${
-                                  ["Pending_Program_Chair", "Pending_Chair", "Pending_DI", "Approved", "Returned"].includes(exam.current_status) ? "bg-emerald-600" : "bg-slate-200"
-                                }`} />
-                                <div className={`hidden md:block absolute left-1/2 right-0 top-4 h-[2px] -z-0 ${
-                                  ["Pending_Chair", "Pending_DI", "Approved"].includes(exam.current_status) ? "bg-emerald-600" : "bg-slate-200"
-                                }`} />
-                              </div>
-
-                              {/* Step 3: Department Chairperson Review (Recommended by) */}
-                              <div className="relative flex flex-col items-center text-center">
-                                <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm border-2 z-10 transition-all ${
-                                  ["Pending_Chair", "Pending_DI", "Approved"].includes(exam.current_status)
-                                    ? exam.current_status === "Returned" && exam.approvalWorkflow?.chair_review_status === "Returned"
-                                      ? "bg-rose-500 border-rose-500 text-white"
-                                      : "bg-emerald-600 border-emerald-600 text-white"
-                                    : "bg-white border-slate-200 text-slate-400"
-                                }`}>
-                                  3
-                                </div>
-                                <p className="text-xs font-extrabold text-slate-800 mt-2">Department Chairperson</p>
-                                <p className="text-[10px] text-amber-600 font-bold mt-0.5">Recommended by</p>
-                                <div className={`hidden md:block absolute left-0 right-1/2 top-4 h-[2px] -z-0 ${
-                                  ["Pending_Chair", "Pending_DI", "Approved"].includes(exam.current_status) ? "bg-emerald-600" : "bg-slate-200"
-                                }`} />
-                                <div className={`hidden md:block absolute left-1/2 right-0 top-4 h-[2px] -z-0 ${
-                                  ["Pending_DI", "Approved"].includes(exam.current_status) ? "bg-emerald-600" : "bg-slate-200"
-                                }`} />
-                              </div>
-
-                              {/* Step 4: DI Clearance (Approved by) */}
-                              <div className="relative flex flex-col items-center text-center">
-                                <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm border-2 z-10 transition-all ${
-                                  ["Pending_DI", "Approved"].includes(exam.current_status)
-                                    ? "bg-emerald-600 border-emerald-600 text-white"
-                                    : "bg-white border-slate-200 text-slate-400"
-                                }`}>
-                                  4
-                                </div>
-                                <p className="text-xs font-extrabold text-slate-800 mt-2">Director for Instruction</p>
-                                <p className="text-[10px] text-amber-600 font-bold mt-0.5">Approved by</p>
-                                <div className={`hidden md:block absolute left-0 right-1/2 top-4 h-[2px] -z-0 ${
-                                  ["Pending_DI", "Approved"].includes(exam.current_status) ? "bg-emerald-600" : "bg-slate-200"
-                                }`} />
-                                <div className={`hidden md:block absolute left-1/2 right-0 top-4 h-[2px] -z-0 ${
-                                  exam.current_status === "Approved" ? "bg-emerald-600" : "bg-slate-200"
-                                }`} />
-                              </div>
-
-                              {/* Step 5: Scheduling & Publication */}
-                              {(() => {
-                                const schedStatus = getExamScheduleStatus(exam);
-                                let circleBg = "bg-white border-slate-200 text-slate-400";
-                                let label = "Schedule & Publish";
-                                let sub = "Targeted to students";
-
-                                if (schedStatus === "Approved_Schedule_Pending") {
-                                  circleBg = "bg-amber-100 border-amber-400 text-amber-900 font-extrabold";
-                                  label = "Schedule Pending";
-                                  sub = "Set schedule to publish";
-                                } else if (schedStatus === "Scheduled") {
-                                  circleBg = "bg-blue-600 border-blue-600 text-white font-extrabold";
-                                  label = "Scheduled";
-                                  sub = "Awaiting start time";
-                                } else if (schedStatus === "Live") {
-                                  circleBg = "bg-emerald-600 border-emerald-600 text-white font-extrabold animate-pulse";
-                                  label = "Live / Active";
-                                  sub = "Available to students";
-                                } else if (schedStatus === "In_Progress") {
-                                  circleBg = "bg-amber-500 border-amber-500 text-white font-extrabold animate-pulse";
-                                  label = "Students In Progress";
-                                  sub = "Finishing time limit";
-                                } else if (schedStatus === "Completed") {
-                                  circleBg = "bg-slate-700 border-slate-700 text-white font-extrabold";
-                                  label = "Exam Concluded";
-                                  sub = "Testing window concluded";
-                                }
-
-                                return (
-                                  <div className="relative flex flex-col items-center text-center">
-                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm border-2 z-10 transition-all ${circleBg}`}>
-                                      5
-                                    </div>
-                                    <p className="text-xs font-extrabold text-slate-800 mt-2">{label}</p>
-                                    <p className="text-[10px] text-slate-400 mt-0.5">{sub}</p>
-                                    <div className={`hidden md:block absolute left-0 right-1/2 top-4 h-[2px] -z-0 ${
-                                      exam.current_status === "Approved" ? "bg-emerald-600" : "bg-slate-200"
-                                    }`} />
-                                  </div>
-                                );
-                              })()}
-                            </div>
-                          );
-                        }
-
-                        return (
-                          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 md:gap-0">
-                            {/* Step 1: Draft */}
-                            <div className="relative flex flex-col items-center text-center">
-                              <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm border-2 z-10 transition-all ${
-                                ["Draft", "Pending_Chair", "Pending_DI", "Approved", "Returned"].includes(exam.current_status)
-                                  ? "bg-emerald-600 border-emerald-600 text-white"
-                                  : "bg-white border-slate-200 text-slate-400"
-                              }`}>
-                                1
-                              </div>
-                              <p className="text-xs font-extrabold text-slate-800 mt-2">Draft Mode</p>
-                              <p className="text-[10px] text-slate-400 mt-0.5">Authoring phase</p>
-                              <div className="hidden md:block absolute left-1/2 right-0 top-4 h-[2px] bg-emerald-600 -z-0" />
-                            </div>
-
-                            {/* Step 2: Department Chairperson Review (Recommended by) */}
-                            <div className="relative flex flex-col items-center text-center">
-                              <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm border-2 z-10 transition-all ${
-                                ["Pending_Chair", "Pending_DI", "Approved", "Returned"].includes(exam.current_status)
-                                  ? exam.current_status === "Returned" && exam.approvalWorkflow?.chair_review_status === "Returned"
-                                    ? "bg-rose-500 border-rose-500 text-white"
-                                    : "bg-emerald-600 border-emerald-600 text-white"
-                                  : "bg-white border-slate-200 text-slate-400"
-                              }`}>
-                                2
-                              </div>
-                              <p className="text-xs font-extrabold text-slate-800 mt-2">Department Chairperson</p>
-                              <p className="text-[10px] text-amber-600 font-bold mt-0.5">Recommended by</p>
-                              <div className={`hidden md:block absolute left-0 right-1/2 top-4 h-[2px] -z-0 ${
-                                ["Pending_Chair", "Pending_DI", "Approved", "Returned"].includes(exam.current_status) ? "bg-emerald-600" : "bg-slate-200"
-                              }`} />
-                              <div className={`hidden md:block absolute left-1/2 right-0 top-4 h-[2px] -z-0 ${
-                                ["Pending_DI", "Approved"].includes(exam.current_status) ? "bg-emerald-600" : "bg-slate-200"
-                              }`} />
-                            </div>
-
-                            {/* Step 3: DI Clearance (Approved by) */}
-                            <div className="relative flex flex-col items-center text-center">
-                              <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm border-2 z-10 transition-all ${
-                                ["Pending_DI", "Approved"].includes(exam.current_status)
-                                  ? "bg-emerald-600 border-emerald-600 text-white"
-                                  : "bg-white border-slate-200 text-slate-400"
-                              }`}>
-                                3
-                              </div>
-                              <p className="text-xs font-extrabold text-slate-800 mt-2">Director for Instruction</p>
-                              <p className="text-[10px] text-amber-600 font-bold mt-0.5">Approved by</p>
-                              <div className={`hidden md:block absolute left-0 right-1/2 top-4 h-[2px] -z-0 ${
-                                ["Pending_DI", "Approved"].includes(exam.current_status) ? "bg-emerald-600" : "bg-slate-200"
-                              }`} />
-                              <div className={`hidden md:block absolute left-1/2 right-0 top-4 h-[2px] -z-0 ${
-                                exam.current_status === "Approved" ? "bg-emerald-600" : "bg-slate-200"
-                              }`} />
-                            </div>
-
-                            {/* Step 4: Scheduling & Publication */}
-                            {(() => {
-                              const schedStatus = getExamScheduleStatus(exam);
-                              let circleBg = "bg-white border-slate-200 text-slate-400";
-                              let label = "Schedule & Publish";
-                              let sub = "Targeted to students";
-
-                              if (schedStatus === "Approved_Schedule_Pending") {
-                                circleBg = "bg-amber-100 border-amber-400 text-amber-900 font-extrabold";
-                                label = "Schedule Pending";
-                                sub = "Set schedule to publish";
-                              } else if (schedStatus === "Scheduled") {
-                                circleBg = "bg-blue-600 border-blue-600 text-white font-extrabold";
-                                label = "Scheduled";
-                                sub = "Awaiting start time";
-                              } else if (schedStatus === "Live") {
-                                circleBg = "bg-emerald-600 border-emerald-600 text-white font-extrabold animate-pulse";
-                                label = "Live / Active";
-                                sub = "Available to students";
-                              } else if (schedStatus === "In_Progress") {
-                                circleBg = "bg-amber-500 border-amber-500 text-white font-extrabold animate-pulse";
-                                label = "Students In Progress";
-                                sub = "Finishing time limit";
-                              } else if (schedStatus === "Completed") {
-                                circleBg = "bg-slate-700 border-slate-700 text-white font-extrabold";
-                                label = "Exam Concluded";
-                                sub = "Testing window concluded";
-                              }
-
-                              return (
-                                <div className="relative flex flex-col items-center text-center">
-                                  <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm border-2 z-10 transition-all ${circleBg}`}>
-                                    4
-                                  </div>
-                                  <p className="text-xs font-extrabold text-slate-800 mt-2">{label}</p>
-                                  <p className="text-[10px] text-slate-400 mt-0.5">{sub}</p>
-                                  <div className={`hidden md:block absolute left-0 right-1/2 top-4 h-[2px] -z-0 ${
-                                    exam.current_status === "Approved" ? "bg-emerald-600" : "bg-slate-200"
-                                  }`} />
-                                </div>
-                              );
-                            })()}
-                          </div>
-                        );
-                      })()}
-                    </div>
-
-                    {/* Returned Comments Showcase */}
-                    {exam.current_status === "Returned" && exam.approvalWorkflow?.chair_comments && (() => {
-                      let parsedComments: { general?: string; questions?: Record<string, string> } | null = null;
-                      try {
-                        if (exam.approvalWorkflow.chair_comments.startsWith("{")) {
-                          parsedComments = JSON.parse(exam.approvalWorkflow.chair_comments);
-                        }
-                      } catch (e) {
-                        // fallback to plain text
-                      }
-
-                      if (parsedComments) {
-                        const hasQuestionComments = parsedComments.questions && Object.keys(parsedComments.questions).length > 0;
-                        return (
-                          <div className="bg-rose-50/50 border border-rose-100 rounded-xl p-4 space-y-3">
-                            <div className="flex gap-3 items-start">
-                              <AlertCircle className="w-5 h-5 text-rose-500 shrink-0 mt-0.5" />
-                              <div>
-                                <p className="text-xs font-bold text-rose-800">Returned by Department Chair:</p>
-                                {parsedComments.general && (
-                                  <p className="text-xs text-rose-700 mt-1 italic leading-relaxed">
-                                    "{parsedComments.general}"
-                                  </p>
-                                )}
-                              </div>
-                            </div>
-
-                            {hasQuestionComments && (
-                              <div className="border-t border-rose-100/60 pt-3 space-y-2">
-                                <h5 className="text-[11px] font-bold text-rose-800 uppercase tracking-wider">Granular Question Feedback:</h5>
-                                <div className="space-y-2">
-                                  {Object.entries(parsedComments.questions || {}).map(([qId, val]) => {
-                                    let commentText = "";
-                                    let itemStatus: "Approved" | "Revision" | undefined = undefined;
-
-                                    if (val && typeof val === "object") {
-                                      commentText = (val as any).comment || "";
-                                      itemStatus = (val as any).status;
-                                    } else if (typeof val === "string") {
-                                      commentText = val;
-                                      // default legacy status is Revision if there is text
-                                      if (commentText.trim()) itemStatus = "Revision";
-                                    }
-
-                                    if (!itemStatus && !commentText.trim()) return null;
-
-                                    const qIndex = exam.questionBank?.findIndex(q => String(q.question_id) === String(qId)) ?? -1;
-                                    const qNumber = qIndex !== -1 ? qIndex + 1 : "Unknown";
-                                    const qText = qIndex !== -1 ? exam.questionBank?.[qIndex].question_text : "";
-                                    
-                                    return (
-                                      <div key={qId} className={`bg-white border rounded-lg p-2.5 space-y-1.5 ${
-                                        itemStatus === "Approved" ? "border-emerald-100" : "border-rose-100"
-                                      }`}>
-                                        <div className="flex justify-between items-center text-[10px] font-bold">
-                                          <span className={itemStatus === "Approved" ? "text-emerald-800" : "text-rose-800"}>
-                                            Question #{qNumber}
-                                          </span>
-                                          {itemStatus && (
-                                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase tracking-wider ${
-                                              itemStatus === "Approved" 
-                                                ? "bg-emerald-50 text-emerald-700 border border-emerald-100" 
-                                                : "bg-rose-50 text-rose-700 border border-rose-100"
-                                            }`}>
-                                              {itemStatus === "Approved" ? "Approved" : "Revision Required"}
-                                            </span>
-                                          )}
-                                        </div>
-                                        {qText && (
-                                          <p className="text-[11px] text-slate-500 truncate">{qText}</p>
-                                        )}
-                                        {commentText.trim() && (
-                                          <p className={`text-xs italic font-medium ${
-                                            itemStatus === "Approved" ? "text-emerald-700" : "text-rose-700"
-                                          }`}>
-                                            "{commentText}"
-                                          </p>
-                                        )}
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      }
-
-                      // Graceful fallback to raw text
-                      return (
-                        <div className="bg-rose-50/50 border border-rose-100 rounded-xl p-4 flex gap-3 items-start">
-                          <AlertCircle className="w-5 h-5 text-rose-500 shrink-0 mt-0.5" />
-                          <div>
-                            <p className="text-xs font-bold text-rose-800">Returned by Department Chair:</p>
-                            <p className="text-xs text-rose-700 mt-1 italic leading-relaxed">
-                              "{exam.approvalWorkflow.chair_comments}"
-                            </p>
-                          </div>
-                        </div>
-                      );
-                    })()}
-
-                    {/* Hold Comments Showcase */}
-                    {exam.approvalWorkflow?.di_comments && (
-                      <div className="bg-amber-50/50 border border-amber-100 rounded-xl p-4 flex gap-3 items-start mt-3">
-                        <Clock className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
-                        <div>
-                          <p className="text-xs font-bold text-amber-800">Administrative Hold Remarks by Director:</p>
-                          <p className="text-xs text-amber-700 mt-1 italic leading-relaxed">
-                            "{exam.approvalWorkflow.di_comments}"
-                          </p>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="text-center py-16 border-2 border-dashed border-slate-100 rounded-3xl">
-              <p className="text-slate-500 text-xs">No examinations found in this status category.</p>
-            </div>
-          )}
-        </div>
-      )}
 
       {/* SUBMISSIONS TAB */}
       {activeTab === "submissions" && (

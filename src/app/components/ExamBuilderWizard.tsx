@@ -48,6 +48,17 @@ interface Exam {
   semester?: string | null;
   document_reference?: string | null;
   selected_student_ids?: number[];
+  approvalWorkflow?: {
+    reviewed_by_prog_chair_id?: number | null;
+    prog_chair_review_status?: string | null;
+    prog_chair_comments?: string | null;
+    reviewed_by_chair_id?: number | null;
+    chair_review_status?: string | null;
+    chair_comments?: string | null;
+    reviewed_by_di_id?: number | null;
+    di_review_status?: string | null;
+    di_comments?: string | null;
+  } | null;
   questionBank: Array<{
     question_id: number;
     question_text: string;
@@ -396,7 +407,12 @@ export function ExamBuilderWizard({
   const router = useRouter();
 
   // Steps: 1 = Config, 2 = Questions, 3 = Preview & Submit
-  const [step, setStep] = useState<number>(1);
+  const [step, setStep] = useState<number>(() => {
+    if (exam.current_status === "Returned") {
+      return 2;
+    }
+    return 1;
+  });
 
   // 1. Examination Term (Selectable by Faculty / Chairs) & Date
   const [term, setTerm] = useState<string>(
@@ -837,6 +853,40 @@ export function ExamBuilderWizard({
   const [activeQuestionIdx, setActiveQuestionIdx] = useState<number>(
     exam.questionBank.length > 0 ? 0 : -1
   );
+
+  // Map of question_id -> { comment: string, reviewer: string } for reviewer feedback
+  const questionFeedbackMap = useMemo(() => {
+    const map: Record<string, { comment: string; reviewer: string }> = {};
+    if (!exam.approvalWorkflow) return map;
+
+    const extractQComments = (commentsRaw: string | null | undefined, reviewerLabel: string) => {
+      if (!commentsRaw) return;
+      try {
+        if (commentsRaw.startsWith("{")) {
+          const parsed = JSON.parse(commentsRaw);
+          if (parsed.questions && typeof parsed.questions === "object") {
+            Object.entries(parsed.questions).forEach(([qId, val]) => {
+              let cText = "";
+              if (val && typeof val === "object") {
+                cText = (val as any).comment || "";
+              } else if (typeof val === "string") {
+                cText = val;
+              }
+              if (cText.trim()) {
+                map[String(qId)] = { comment: cText.trim(), reviewer: reviewerLabel };
+              }
+            });
+          }
+        }
+      } catch (e) {}
+    };
+
+    extractQComments(exam.approvalWorkflow.prog_chair_comments, "Program Chairperson");
+    extractQComments(exam.approvalWorkflow.chair_comments, "Department Chairperson");
+    extractQComments(exam.approvalWorkflow.di_comments, "Director of Instruction");
+
+    return map;
+  }, [exam.approvalWorkflow]);
 
   // Topic Accordion Dropdown Open/Closed State (Minimized by default)
   const [openTopics, setOpenTopics] = useState<Record<string, boolean>>({});
@@ -2426,6 +2476,166 @@ export function ExamBuilderWizard({
         </div>
       </div>
 
+      {/* RETURNED REVISION FEEDBACK BANNER */}
+      {exam.current_status === "Returned" && exam.approvalWorkflow && (
+        <div className="space-y-4 mb-6">
+          {exam.approvalWorkflow.prog_chair_comments && (
+            <div className="bg-rose-50 border border-rose-200 rounded-3xl p-6 shadow-sm space-y-3">
+              <div className="flex gap-3 items-start">
+                <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+                <div className="space-y-1 w-full">
+                  <h4 className="text-xs font-extrabold text-rose-900 uppercase tracking-wider">
+                    Feedback from Program Chairperson (Returned)
+                  </h4>
+                  {(() => {
+                    let parsed: { general?: string; questions?: Record<string, any> } | null = null;
+                    try {
+                      if (exam.approvalWorkflow.prog_chair_comments.startsWith("{")) {
+                        parsed = JSON.parse(exam.approvalWorkflow.prog_chair_comments);
+                      }
+                    } catch {}
+                    const generalText = parsed?.general || exam.approvalWorkflow.prog_chair_comments;
+                    const questionComments = parsed?.questions || {};
+                    const hasQuestionComments = Object.keys(questionComments).length > 0;
+
+                    return (
+                      <div className="space-y-3">
+                        {generalText && (
+                          <p className="text-xs text-rose-800 italic leading-relaxed font-medium">
+                            "{generalText}"
+                          </p>
+                        )}
+                        {hasQuestionComments && (
+                          <div className="border-t border-rose-200/80 pt-3 space-y-2">
+                            <p className="text-[11px] font-bold text-rose-900 uppercase tracking-wider">Granular Question Feedback:</p>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                              {Object.entries(questionComments).map(([qId, val]) => {
+                                let commentText = "";
+                                let itemStatus: string | undefined = undefined;
+                                if (val && typeof val === "object") {
+                                  commentText = (val as any).comment || "";
+                                  itemStatus = (val as any).status;
+                                } else if (typeof val === "string") {
+                                  commentText = val;
+                                  if (commentText.trim()) itemStatus = "Revision";
+                                }
+                                if (!itemStatus && !commentText.trim()) return null;
+                                const qIndex = questions.findIndex(q => String(q.question_id) === String(qId));
+                                const qNumber = qIndex !== -1 ? qIndex + 1 : "Unknown";
+                                return (
+                                  <div key={qId} className="bg-white border border-rose-200 rounded-xl p-3 text-xs space-y-1">
+                                    <div className="flex items-center justify-between font-bold text-[11px]">
+                                      <span className="text-rose-900">Question #{qNumber}</span>
+                                      <span className={`px-2 py-0.5 rounded-full text-[9px] uppercase font-black ${
+                                        itemStatus === "Approved" ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-rose-100 text-rose-800"
+                                      }`}>
+                                        {itemStatus === "Approved" ? "Approved" : "Revision Required"}
+                                      </span>
+                                    </div>
+                                    {commentText.trim() && (
+                                      <p className="text-rose-700 italic text-xs">"{commentText}"</p>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {exam.approvalWorkflow.chair_comments && (
+            <div className="bg-rose-50 border border-rose-200 rounded-3xl p-6 shadow-sm space-y-3">
+              <div className="flex gap-3 items-start">
+                <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+                <div className="space-y-1 w-full">
+                  <h4 className="text-xs font-extrabold text-rose-900 uppercase tracking-wider">
+                    Feedback from Department Chairperson (Returned)
+                  </h4>
+                  {(() => {
+                    let parsed: { general?: string; questions?: Record<string, any> } | null = null;
+                    try {
+                      if (exam.approvalWorkflow.chair_comments.startsWith("{")) {
+                        parsed = JSON.parse(exam.approvalWorkflow.chair_comments);
+                      }
+                    } catch {}
+                    const generalText = parsed?.general || exam.approvalWorkflow.chair_comments;
+                    const questionComments = parsed?.questions || {};
+                    const hasQuestionComments = Object.keys(questionComments).length > 0;
+
+                    return (
+                      <div className="space-y-3">
+                        {generalText && (
+                          <p className="text-xs text-rose-800 italic leading-relaxed font-medium">
+                            "{generalText}"
+                          </p>
+                        )}
+                        {hasQuestionComments && (
+                          <div className="border-t border-rose-200/80 pt-3 space-y-2">
+                            <p className="text-[11px] font-bold text-rose-900 uppercase tracking-wider">Granular Question Feedback:</p>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                              {Object.entries(questionComments).map(([qId, val]) => {
+                                let commentText = "";
+                                let itemStatus: string | undefined = undefined;
+                                if (val && typeof val === "object") {
+                                  commentText = (val as any).comment || "";
+                                  itemStatus = (val as any).status;
+                                } else if (typeof val === "string") {
+                                  commentText = val;
+                                  if (commentText.trim()) itemStatus = "Revision";
+                                }
+                                if (!itemStatus && !commentText.trim()) return null;
+                                const qIndex = questions.findIndex(q => String(q.question_id) === String(qId));
+                                const qNumber = qIndex !== -1 ? qIndex + 1 : "Unknown";
+                                return (
+                                  <div key={qId} className="bg-white border border-rose-200 rounded-xl p-3 text-xs space-y-1">
+                                    <div className="flex items-center justify-between font-bold text-[11px]">
+                                      <span className="text-rose-900">Question #{qNumber}</span>
+                                      <span className={`px-2 py-0.5 rounded-full text-[9px] uppercase font-black ${
+                                        itemStatus === "Approved" ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-rose-100 text-rose-800"
+                                      }`}>
+                                        {itemStatus === "Approved" ? "Approved" : "Revision Required"}
+                                      </span>
+                                    </div>
+                                    {commentText.trim() && (
+                                      <p className="text-rose-700 italic text-xs">"{commentText}"</p>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
+            </div>
+          )}
+          {exam.approvalWorkflow.di_comments && (
+            <div className="bg-amber-50 border border-amber-200 rounded-3xl p-6 shadow-sm space-y-3">
+              <div className="flex gap-3 items-start">
+                <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                <div className="space-y-1 w-full">
+                  <h4 className="text-xs font-extrabold text-amber-900 uppercase tracking-wider">
+                    Feedback / Remarks from Director of Instruction
+                  </h4>
+                  <p className="text-xs text-amber-800 italic leading-relaxed font-medium">
+                    "{exam.approvalWorkflow.di_comments}"
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* STEP 1: EXAM CONFIGURATION */}
       {step === 1 && (
         <div className="space-y-8">
@@ -3144,11 +3354,38 @@ export function ExamBuilderWizard({
                     {isOpen && (
                       <div className="p-4 sm:p-6 space-y-5">
                         {topicQuestions.length > 0 ? (
-                          topicQuestions.map(({ q, globalIdx }, topicItemIdx) => (
-                            <div key={globalIdx} className="bg-slate-50 border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs space-y-4 hover:border-slate-300 transition-all">
-                              
-                              {/* Question Item Bar */}
-                              <div className="flex items-center justify-between bg-white p-2.5 rounded-xl border border-slate-200/90 gap-2.5 overflow-x-auto scrollbar-none shadow-2xs">
+                          topicQuestions.map(({ q, globalIdx }, topicItemIdx) => {
+                            const itemFeedback = questionFeedbackMap[String(q.question_id)];
+                            return (
+                              <div
+                                key={globalIdx}
+                                className={`rounded-2xl p-4 sm:p-5 shadow-xs space-y-4 transition-all ${
+                                  itemFeedback
+                                    ? "bg-rose-50/70 border-2 border-rose-300 ring-2 ring-rose-200/50"
+                                    : "bg-slate-50 border border-slate-200 hover:border-slate-300"
+                                }`}
+                              >
+                                {itemFeedback && (
+                                  <div className="bg-rose-100/90 border border-rose-300 rounded-xl p-3.5 flex gap-2.5 items-start text-rose-950 shadow-2xs">
+                                    <AlertCircle className="w-4.5 h-4.5 text-rose-600 shrink-0 mt-0.5" />
+                                    <div className="space-y-0.5">
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-[11px] font-black uppercase text-rose-950 tracking-wider">
+                                          Revision Requested by {itemFeedback.reviewer}
+                                        </span>
+                                        <span className="bg-rose-600 text-white text-[9px] font-black uppercase px-2 py-0.5 rounded-full">
+                                          Revision Required
+                                        </span>
+                                      </div>
+                                      <p className="text-xs text-rose-900 italic font-bold leading-relaxed">
+                                        "{itemFeedback.comment}"
+                                      </p>
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Question Item Bar */}
+                                <div className="flex items-center justify-between bg-white p-2.5 rounded-xl border border-slate-200/90 gap-2.5 overflow-x-auto scrollbar-none shadow-2xs">
                                 
                                 {/* Left: Badges & Type/Taxonomy/Topic Selectors */}
                                 <div className="flex items-center gap-2.5 shrink-0">
@@ -3505,7 +3742,8 @@ export function ExamBuilderWizard({
                               )}
 
                             </div>
-                          ))
+                          );
+                        })
                         ) : (
                           <div className="py-6 text-center text-xs font-semibold text-slate-400">
                             No questions assigned to this topic yet.

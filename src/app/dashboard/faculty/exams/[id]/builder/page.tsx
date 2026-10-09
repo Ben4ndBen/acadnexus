@@ -86,12 +86,13 @@ export default async function ExamBuilderPage({ params }: PageProps) {
     redirect(defaultDashboard);
   }
 
-  // Fetch examination with course, question bank, and targets
+  // Fetch examination with course, question bank, targets, and approval workflow
   const exam = await db.examination.findUnique({
     where: { exam_id: examId },
     include: {
       course: true,
       faculty: true,
+      approvalWorkflow: true,
       questionBank: {
         orderBy: { question_id: "asc" },
       },

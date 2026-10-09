@@ -348,8 +348,8 @@ export function ChairDashboardClient({
     
     if (approval && approval.exam.questionBank) {
       approval.exam.questionBank.forEach(q => {
-        const status = qStatuses[q.question_id] || "Approved"; // default to Approved if not toggled
-        const comment = qComments[q.question_id] || "";
+        const comment = (qComments[q.question_id] || "").trim();
+        const status = comment ? "Revision" : "Approved";
         questionsFeedback[q.question_id] = { status, comment };
       });
     }
@@ -569,13 +569,14 @@ export function ChairDashboardClient({
                     itemCounter += 1;
                     const itemNum = itemCounter;
                     const parsed = parseQuestionData(q);
-                    const currentStatus = questionStatuses[approval.workflow_id]?.[q.question_id] || "Approved";
+                    const itemComment = questionComments[approval.workflow_id]?.[q.question_id] || "";
+                    const isItemCommented = Boolean(itemComment.trim());
 
                     return (
                       <div
                         key={q.question_id}
                         className={`border rounded-xl p-4 space-y-3 transition-all ${
-                          currentStatus === "Revision"
+                          isItemCommented
                             ? "bg-rose-50/50 border-rose-300 ring-1 ring-rose-300"
                             : "bg-white border-slate-200 hover:border-slate-300"
                         }`}
@@ -645,88 +646,48 @@ export function ChairDashboardClient({
                           </div>
                         </div>
 
-                        {/* CHAIR ITEM REVIEW CONTROL & COMMENT TEXTAREA */}
-                        <div className="pt-2 border-t border-slate-200/80 space-y-2">
-                          <div className="flex items-center justify-between flex-wrap gap-2">
-                            <span className="text-[11px] font-extrabold text-slate-700 uppercase tracking-wider">
-                              Item Review Status:
-                            </span>
+                        {/* CHAIR ITEM COMMENT TEXTAREA */}
+                        {(() => {
+                          const itemComment = questionComments[approval.workflow_id]?.[q.question_id] || "";
+                          const hasComment = Boolean(itemComment.trim());
+                          return (
+                            <div className="pt-2 border-t border-slate-200/80 space-y-2">
+                              <div className="flex items-center justify-between flex-wrap gap-2">
+                                <span className="text-[11px] font-extrabold text-slate-700 uppercase tracking-wider">
+                                  Item Feedback / Revision Remark:
+                                </span>
+                                {hasComment && (
+                                  <span className="bg-rose-100 text-rose-800 border border-rose-200 text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase">
+                                    Marked for Revision
+                                  </span>
+                                )}
+                              </div>
 
-                            <div className="flex items-center gap-2">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const currentWorkflowStatuses = questionStatuses[approval.workflow_id] || {};
-                                  setQuestionStatuses({
-                                    ...questionStatuses,
-                                    [approval.workflow_id]: {
-                                      ...currentWorkflowStatuses,
-                                      [q.question_id]: "Approved",
-                                    },
-                                  });
-                                }}
-                                className={`px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                                  currentStatus === "Approved"
-                                    ? "bg-emerald-600 text-white shadow-sm font-extrabold"
-                                    : "bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200"
-                                }`}
-                              >
-                                <Check className="w-3.5 h-3.5" />
-                                Approve
-                              </button>
-
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const currentWorkflowStatuses = questionStatuses[approval.workflow_id] || {};
-                                  setQuestionStatuses({
-                                    ...questionStatuses,
-                                    [approval.workflow_id]: {
-                                      ...currentWorkflowStatuses,
-                                      [q.question_id]: "Revision",
-                                    },
-                                  });
-                                }}
-                                className={`px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                                  currentStatus === "Revision"
-                                    ? "bg-rose-600 text-white shadow-sm font-extrabold"
-                                    : "bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200"
-                                }`}
-                              >
-                                <X className="w-3.5 h-3.5" />
-                                Request Revision
-                              </button>
+                              <div>
+                                <textarea
+                                  value={itemComment}
+                                  onChange={(e) => {
+                                    const currentWorkflowComments = questionComments[approval.workflow_id] || {};
+                                    setQuestionComments({
+                                      ...questionComments,
+                                      [approval.workflow_id]: {
+                                        ...currentWorkflowComments,
+                                        [q.question_id]: e.target.value,
+                                      },
+                                    });
+                                  }}
+                                  placeholder={`Specify correction needed for Item ${itemNum} (e.g. rewrite options, change correct key, etc.)...`}
+                                  rows={2}
+                                  className={`w-full bg-slate-50 border rounded-lg p-2.5 text-xs text-slate-800 placeholder:text-slate-400 focus:bg-white focus:outline-none transition-all ${
+                                    hasComment
+                                      ? "border-rose-300 focus:border-rose-500 focus:ring-1 focus:ring-rose-500/20"
+                                      : "border-slate-200 focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20"
+                                  }`}
+                                />
+                              </div>
                             </div>
-                          </div>
-
-                          {/* PER-QUESTION COMMENT TEXTAREA */}
-                          <div>
-                            <textarea
-                              value={questionComments[approval.workflow_id]?.[q.question_id] || ""}
-                              onChange={(e) => {
-                                const currentWorkflowComments = questionComments[approval.workflow_id] || {};
-                                setQuestionComments({
-                                  ...questionComments,
-                                  [approval.workflow_id]: {
-                                    ...currentWorkflowComments,
-                                    [q.question_id]: e.target.value,
-                                  },
-                                });
-                              }}
-                              placeholder={
-                                currentStatus === "Revision"
-                                  ? "Specify correction needed for Item " + itemNum + " (e.g. rewrite options, change correct key, etc.)..."
-                                  : "Item feedback comment (optional)..."
-                              }
-                              rows={2}
-                              className={`w-full bg-slate-50 border rounded-lg p-2.5 text-xs text-slate-800 placeholder:text-slate-400 focus:bg-white focus:outline-none transition-all ${
-                                currentStatus === "Revision"
-                                  ? "border-rose-300 focus:border-rose-500 focus:ring-1 focus:ring-rose-500/20"
-                                  : "border-slate-200 focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20"
-                              }`}
-                            />
-                          </div>
-                        </div>
+                          );
+                        })()}
                       </div>
                     );
                   })}
@@ -1355,6 +1316,18 @@ export function ChairDashboardClient({
 
                 {/* Questions Panel Body */}
                 <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                  {activeSplitApproval?.prog_chair_comments && (
+                    <div className="bg-blue-50/50 border border-blue-200/60 rounded-xl p-3.5 space-y-1">
+                      <p className="text-xs font-bold text-blue-900 flex items-center gap-1.5">
+                        <CheckCircle className="w-3.5 h-3.5 text-blue-600" />
+                        Program Chairperson Review Remarks:
+                      </p>
+                      <p className="text-xs text-blue-800 italic leading-relaxed font-medium">
+                        "{activeSplitApproval.prog_chair_comments}"
+                      </p>
+                    </div>
+                  )}
+
                   {/* General Review Comments */}
                   <div className="bg-amber-50/50 border border-amber-200/60 rounded-xl p-3.5 space-y-2">
                     <label className="text-xs font-extrabold text-amber-900 block uppercase tracking-wider">

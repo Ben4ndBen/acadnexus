@@ -29,7 +29,7 @@ export async function reviewExamByDirector(
         di_review_status: diReviewStatus,
         reviewed_by_di_id: userId,
         di_action_timestamp: new Date(),
-        di_comments: action === "Hold" ? comments : null,
+        di_comments: comments || null,
       },
     });
 
