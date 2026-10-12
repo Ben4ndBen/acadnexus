@@ -140,6 +140,13 @@ const QUESTION_TYPE_INSTRUCTIONS: Record<string, string> = {
   Essay: "Answer each question concisely and thoroughly in the space provided.",
 };
 
+function countWords(str?: string | null): number {
+  if (!str) return 0;
+  const trimmed = str.trim();
+  if (!trimmed) return 0;
+  return trimmed.split(/\s+/).filter(Boolean).length;
+}
+
 function parseExamPaperQuestion(q: any) {
   let text = q.question_text || "";
   let options: string[] = [];
@@ -149,6 +156,7 @@ function parseExamPaperQuestion(q: any) {
   let min_words: number | undefined = undefined;
   let image_url = "";
   let taxonomy_level = "";
+  let instruction = "";
 
   if (typeof text === "string" && text.trim().startsWith("{")) {
     try {
@@ -161,6 +169,7 @@ function parseExamPaperQuestion(q: any) {
       min_words = parsed.min_words;
       image_url = parsed.image_url || "";
       taxonomy_level = parsed.taxonomy_level || "";
+      instruction = parsed.instruction || parsed.instructions || parsed.rubric || "";
     } catch {
       // fallback
     }
@@ -204,6 +213,7 @@ function parseExamPaperQuestion(q: any) {
     min_words,
     image_url,
     taxonomy_level,
+    instruction,
   };
 }
 
@@ -338,6 +348,12 @@ export function FacultyDashboardClient({
   const [loadingExamPaper, setLoadingExamPaper] = useState(false);
   const [savingEssayId, setSavingEssayId] = useState<number | null>(null);
   const [essayPointsDraft, setEssayPointsDraft] = useState<Record<number, number>>({});
+
+  // Dedicated Essay Evaluation & Grading Modal State
+  const [essayGradingModalOpen, setEssayGradingModalOpen] = useState(false);
+  const [activeEssayGradingData, setActiveEssayGradingData] = useState<any | null>(null);
+  const [loadingEssayGrading, setLoadingEssayGrading] = useState(false);
+  const [essayGradeSuccessToast, setEssayGradeSuccessToast] = useState<string | null>(null);
 
   // Compute categorized courses, attempts, and per-course tallies for Live Monitor & Results
   const monitoringCoursesList = useMemo(() => {
@@ -807,8 +823,37 @@ export function FacultyDashboardClient({
     }
   };
 
+  const handleOpenEssayGrading = async (se: any) => {
+    setLoadingEssayGrading(true);
+    setEssayGradingModalOpen(true);
+    setActiveEssayGradingData(null);
+    try {
+      const res = await getStudentExamPaper(se.student_exam_id);
+      if (res.success && res.paper) {
+        setActiveEssayGradingData(res.paper);
+        const drafts: Record<number, number> = {};
+        res.paper.exam.questions.forEach((q: any) => {
+          if (q.question_type === "Essay" && q.answer_id) {
+            drafts[q.answer_id] = q.points_awarded !== null ? q.points_awarded : (q.points || 10);
+          }
+        });
+        setEssayPointsDraft(drafts);
+      } else {
+        alert(res.error || "Failed to load student essay responses.");
+        setEssayGradingModalOpen(false);
+      }
+    } catch (err) {
+      console.error("Error opening essay grading:", err);
+      alert("An unexpected error occurred while loading essay questions.");
+      setEssayGradingModalOpen(false);
+    } finally {
+      setLoadingEssayGrading(false);
+    }
+  };
+
   const handleSaveEssayScore = async (answerId: number, maxPoints: number) => {
-    if (!activeExamPaperData) return;
+    const targetExamId = activeExamPaperData?.student_exam_id || activeEssayGradingData?.student_exam_id;
+    if (!targetExamId) return;
     const points = essayPointsDraft[answerId] !== undefined ? essayPointsDraft[answerId] : 0;
     const clampedPoints = Math.max(0, Math.min(maxPoints, points));
 
@@ -821,9 +866,10 @@ export function FacultyDashboardClient({
         clampedPoints > 0
       );
       if (res.success) {
-        const fresh = await getStudentExamPaper(activeExamPaperData.student_exam_id);
+        const fresh = await getStudentExamPaper(targetExamId);
         if (fresh.success && fresh.paper) {
-          setActiveExamPaperData(fresh.paper);
+          if (activeExamPaperData) setActiveExamPaperData(fresh.paper);
+          if (activeEssayGradingData) setActiveEssayGradingData(fresh.paper);
           const drafts: Record<number, number> = {};
           fresh.paper.exam.questions.forEach((q: any) => {
             if (q.question_type === "Essay" && q.answer_id) {
@@ -832,6 +878,8 @@ export function FacultyDashboardClient({
           });
           setEssayPointsDraft(drafts);
         }
+        setEssayGradeSuccessToast(`Successfully awarded ${clampedPoints} / ${maxPoints} pts! Exam grade recalculated.`);
+        setTimeout(() => setEssayGradeSuccessToast(null), 3500);
         router.refresh();
       } else {
         alert(res.error || "Failed to grade essay answer.");
@@ -2779,15 +2827,25 @@ export function FacultyDashboardClient({
                                           </div>
                                           {hasEssay && (
                                             hasUngradedEssay ? (
-                                              <div className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black bg-amber-50 text-amber-800 border border-amber-200 shadow-2xs">
+                                              <button
+                                                type="button"
+                                                onClick={() => handleOpenEssayGrading(se)}
+                                                className="mt-1 inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[9px] font-black bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 shadow-2xs transition-all cursor-pointer hover:scale-105 active:scale-95"
+                                                title="Click to evaluate and grade student's essay answer"
+                                              >
                                                 <Clock className="w-2.5 h-2.5 text-amber-600 shrink-0" />
                                                 <span>Essay Ungraded</span>
-                                              </div>
+                                              </button>
                                             ) : (
-                                              <div className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black bg-emerald-50 text-emerald-800 border border-emerald-200 shadow-2xs">
+                                              <button
+                                                type="button"
+                                                onClick={() => handleOpenEssayGrading(se)}
+                                                className="mt-1 inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[9px] font-black bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 shadow-2xs transition-all cursor-pointer hover:scale-105 active:scale-95"
+                                                title="Click to review or modify essay score"
+                                              >
                                                 <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600 shrink-0" />
                                                 <span>Essay Graded</span>
-                                              </div>
+                                              </button>
                                             )
                                           )}
                                         </div>
@@ -2896,6 +2954,21 @@ export function FacultyDashboardClient({
                                           <FileText className="w-3.5 h-3.5" />
                                           <span>View Exam Paper</span>
                                         </button>
+                                        {hasEssay && se.submitted_at && (
+                                          <button
+                                            type="button"
+                                            onClick={() => handleOpenEssayGrading(se)}
+                                            className={`inline-flex items-center gap-1.5 text-[11px] font-extrabold px-2.5 py-1.5 rounded-xl border shadow-2xs transition-all cursor-pointer active:scale-95 ${
+                                              hasUngradedEssay
+                                                ? "bg-amber-500 hover:bg-amber-600 text-white border-amber-600 shadow-amber-200"
+                                                : "bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-300"
+                                            }`}
+                                            title={hasUngradedEssay ? "Evaluate and grade student's submitted essay responses" : "Review and edit awarded essay points"}
+                                          >
+                                            <PenTool className="w-3.5 h-3.5" />
+                                            <span>{hasUngradedEssay ? "Grade Essay" : "Review Essay"}</span>
+                                          </button>
+                                        )}
                                         {se.violations_count > 0 && (
                                           <button
                                             type="button"
@@ -5249,6 +5322,18 @@ export function FacultyDashboardClient({
                                         </div>
                                       )}
 
+                                      {/* Instructions / Rubric Guidelines if any */}
+                                      {q.instruction && (
+                                        <div className="pl-6 pt-1">
+                                          <div className="p-2.5 bg-amber-50/70 border border-amber-200/80 rounded-xl text-xs text-amber-950">
+                                            <span className="font-black text-amber-900 uppercase tracking-wider text-[10px] block mb-0.5">
+                                              Instructions / Guidelines:
+                                            </span>
+                                            <p className="whitespace-pre-wrap leading-relaxed">{q.instruction}</p>
+                                          </div>
+                                        </div>
+                                      )}
+
                                       {/* 1. Multiple Choice Options Rendering */}
                                       {q.question_type === "Multiple_Choice" && (
                                         <div className="pl-6 pt-1 space-y-1.5">
@@ -5445,11 +5530,29 @@ export function FacultyDashboardClient({
                                       {/* 6. Essay Question with Interactive Grading */}
                                       {isEssay && (
                                         <div className="pl-6 pt-1 space-y-3">
+                                          {/* Instructor Reference Key / Scoring Guide */}
+                                          {q.correct_answer && (
+                                            <div className="space-y-1">
+                                              <div className="flex items-center gap-1.5 text-[11px] font-black text-indigo-900">
+                                                <BookOpen className="w-3.5 h-3.5 text-indigo-600" />
+                                                <span>Instructor Evaluation Reference / Criteria Guide:</span>
+                                              </div>
+                                              <div className="p-3 bg-indigo-50/80 border border-indigo-200 rounded-xl text-xs text-indigo-950 leading-relaxed whitespace-pre-wrap select-text">
+                                                {q.correct_answer}
+                                              </div>
+                                            </div>
+                                          )}
+
                                           {/* Student Written Response */}
                                           <div className="space-y-1">
                                             <div className="flex items-center justify-between text-[11px] text-slate-500 font-bold">
-                                              <span>Student Submitted Essay Response:</span>
-                                              <span>Min Words: {q.min_words || 50} words</span>
+                                              <span className="flex items-center gap-1 text-slate-800 font-extrabold">
+                                                <PenTool className="w-3.5 h-3.5 text-slate-600" />
+                                                <span>Student Submitted Essay Response:</span>
+                                              </span>
+                                              <span className="font-mono text-[11px] bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                                                Word count: <strong className={countWords(q.submitted_response || "") >= (q.min_words || 50) ? "text-emerald-700" : "text-amber-700"}>{countWords(q.submitted_response || "")}</strong> / min {q.min_words || 50} words
+                                              </span>
                                             </div>
                                             <div className="p-3.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 leading-relaxed font-normal whitespace-pre-wrap select-text">
                                               {q.submitted_response ? (
@@ -5464,7 +5567,7 @@ export function FacultyDashboardClient({
 
                                           {/* Interactive Grading Panel */}
                                           <div className="p-3 bg-amber-50/80 border border-amber-200/90 rounded-xl flex flex-wrap items-center justify-between gap-3 print:hidden">
-                                            <div className="flex items-center gap-3">
+                                            <div className="flex items-center gap-3 flex-wrap">
                                               <span className="text-xs font-black text-amber-950">
                                                 Award Essay Points:
                                               </span>
@@ -5490,6 +5593,49 @@ export function FacultyDashboardClient({
                                                 <span className="text-xs font-extrabold text-amber-900">
                                                   / {pointsMax} pts
                                                 </span>
+                                              </div>
+
+                                              {/* Quick Score Presets */}
+                                              <div className="flex items-center gap-1 text-[10px] font-bold">
+                                                <button
+                                                  type="button"
+                                                  onClick={() => {
+                                                    setEssayPointsDraft((prev) => ({
+                                                      ...prev,
+                                                      [q.answer_id]: pointsMax,
+                                                    }));
+                                                  }}
+                                                  className="px-2 py-0.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-800 rounded border border-emerald-300 cursor-pointer"
+                                                  title={`Set full score (${pointsMax} pts)`}
+                                                >
+                                                  Full ({pointsMax})
+                                                </button>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => {
+                                                    setEssayPointsDraft((prev) => ({
+                                                      ...prev,
+                                                      [q.answer_id]: Math.round(pointsMax / 2),
+                                                    }));
+                                                  }}
+                                                  className="px-2 py-0.5 bg-amber-100 hover:bg-amber-200 text-amber-900 rounded border border-amber-300 cursor-pointer"
+                                                  title={`Set half score (${Math.round(pointsMax / 2)} pts)`}
+                                                >
+                                                  Half ({Math.round(pointsMax / 2)})
+                                                </button>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => {
+                                                    setEssayPointsDraft((prev) => ({
+                                                      ...prev,
+                                                      [q.answer_id]: 0,
+                                                    }));
+                                                  }}
+                                                  className="px-2 py-0.5 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded border border-slate-300 cursor-pointer"
+                                                  title="Set zero score (0 pts)"
+                                                >
+                                                  Zero (0)
+                                                </button>
                                               </div>
                                             </div>
 
@@ -5567,6 +5713,352 @@ export function FacultyDashboardClient({
                 className="bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold px-4 py-2 rounded-xl cursor-pointer"
               >
                 Close Window
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* DEDICATED STUDENT ESSAY EVALUATION & GRADING MODAL */}
+      {essayGradingModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/75 backdrop-blur-md animate-in fade-in duration-300">
+          <div className="bg-white border border-slate-200 rounded-3xl max-w-4xl w-full shadow-2xl flex flex-col max-h-[92vh] overflow-hidden">
+            {/* Modal Header */}
+            <div className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="bg-amber-100 text-amber-900 p-2.5 rounded-2xl border border-amber-200">
+                  <PenTool className="w-5 h-5 text-amber-700" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
+                    Student Essay Evaluation & Scoring
+                    <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
+                      Instructor Grading Portal
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-500 font-medium mt-0.5">
+                    {activeEssayGradingData?.student ? (
+                      <>
+                        Student: <strong className="text-slate-800">{[activeEssayGradingData.student.first_name, getStudentMiddleInitial(activeEssayGradingData.student.middle_name), activeEssayGradingData.student.last_name].filter(Boolean).join(" ")}</strong> ({activeEssayGradingData.student.institutional_id}) &bull; {activeEssayGradingData.exam?.title} ({activeEssayGradingData.exam?.course?.course_code})
+                      </>
+                    ) : (
+                      "Loading student essay submissions..."
+                    )}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setEssayGradingModalOpen(false)}
+                className="p-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-400 hover:text-slate-700 cursor-pointer transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Score Breakdown Bar */}
+            {activeEssayGradingData && (
+              <div className="bg-slate-50 border-b border-slate-200 px-6 py-3 flex flex-wrap items-center justify-between gap-3 text-xs">
+                <div className="flex items-center gap-4 flex-wrap">
+                  <div>
+                    <span className="text-slate-400 font-bold uppercase text-[10px] tracking-wider block">Raw Score</span>
+                    <span className="text-sm font-black text-slate-800">{activeEssayGradingData.rawItemsScore ?? 0} pts</span>
+                  </div>
+                  {activeEssayGradingData.violations_count > 0 && (
+                    <div className="border-l border-slate-200 pl-4">
+                      <span className="text-rose-600 font-bold uppercase text-[10px] tracking-wider block">Penalty</span>
+                      <span className="text-sm font-black text-rose-700">
+                        -{activeEssayGradingData.penaltyPoints ?? 0} pts ({activeEssayGradingData.violations_count} violation(s))
+                      </span>
+                    </div>
+                  )}
+                  <div className="border-l border-slate-200 pl-4">
+                    <span className="text-emerald-700 font-bold uppercase text-[10px] tracking-wider block">Total Exam Grade</span>
+                    <span className="text-sm font-black text-emerald-800">
+                      {activeEssayGradingData.finalTotalScore ?? 0} pts
+                      {activeEssayGradingData.totalPossiblePoints > 0 && (
+                        <span className="text-xs font-semibold text-slate-400 ml-1">
+                          / {activeEssayGradingData.totalPossiblePoints} pts
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="text-[11px] text-slate-500 font-semibold bg-white border border-slate-200 px-3 py-1.5 rounded-xl shadow-2xs">
+                  Evaluation updates and recalculations save directly to the official grade roster.
+                </div>
+              </div>
+            )}
+
+            {/* Success Toast Banner */}
+            {essayGradeSuccessToast && (
+              <div className="mx-6 mt-4 p-3 bg-emerald-50 border border-emerald-300 rounded-2xl flex items-center gap-2 text-emerald-900 text-xs font-bold animate-in fade-in shadow-2xs">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>{essayGradeSuccessToast}</span>
+              </div>
+            )}
+
+            {/* Modal Body: List of Essay Questions */}
+            <div className="overflow-y-auto flex-1 p-4 sm:p-6 space-y-6">
+              {loadingEssayGrading && !activeEssayGradingData ? (
+                <div className="bg-white rounded-2xl p-16 flex flex-col items-center justify-center gap-4 text-center">
+                  <Loader2 className="w-10 h-10 animate-spin text-amber-600" />
+                  <div>
+                    <h4 className="text-sm font-extrabold text-slate-800">Loading Essay Responses</h4>
+                    <p className="text-xs text-slate-400 font-semibold mt-1">Retrieving student answers, attached images, instructions, and reference keys...</p>
+                  </div>
+                </div>
+              ) : activeEssayGradingData ? (
+                (() => {
+                  const rawQuestions = activeEssayGradingData.exam?.questions || [];
+                  const essayQuestions = rawQuestions
+                    .map((q: any) => parseExamPaperQuestion(q))
+                    .filter((q: any) => q.question_type === "Essay");
+
+                  if (essayQuestions.length === 0) {
+                    return (
+                      <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center text-slate-400 text-xs font-medium">
+                        No essay items found in this examination.
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="space-y-6">
+                      {essayQuestions.map((q: any, eIdx: number) => {
+                        const pointsMax = q.points || 10;
+                        const pointsAwarded = q.points_awarded;
+                        const wordCount = countWords(q.submitted_response || "");
+                        const minWords = q.min_words || 50;
+                        const meetsMinWords = wordCount >= minWords;
+
+                        return (
+                          <div
+                            key={q.question_id || eIdx}
+                            className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4"
+                          >
+                            {/* Question Header & Max Points */}
+                            <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-3">
+                              <div className="flex items-center gap-2">
+                                <span className="bg-amber-100 text-amber-900 border border-amber-200 text-xs font-black px-2.5 py-1 rounded-lg">
+                                  Essay Item #{eIdx + 1}
+                                </span>
+                                {q.taxonomy_level && (
+                                  <span className="text-[10px] font-bold text-slate-500 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded uppercase">
+                                    {q.taxonomy_level}
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-xs font-extrabold text-slate-700 bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-lg">
+                                Max Points: {pointsMax} pts
+                              </span>
+                            </div>
+
+                            {/* Question Prompt */}
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                                Question Prompt:
+                              </label>
+                              <p className="text-sm font-bold text-slate-900 leading-relaxed whitespace-pre-wrap select-text">
+                                {q.displayText || q.question_text || "(No prompt text)"}
+                              </p>
+                            </div>
+
+                            {/* Attached Image if Uploaded by Instructor */}
+                            {q.image_url && (
+                              <div className="space-y-1">
+                                <label className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                                  Attached Reference Image:
+                                </label>
+                                <div className="p-2 bg-slate-50 border border-slate-200 rounded-xl inline-block max-w-full">
+                                  <img
+                                    src={q.image_url}
+                                    alt={`Essay Reference ${eIdx + 1}`}
+                                    className="max-h-60 rounded-lg object-contain border border-slate-300"
+                                  />
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Attached Instructions / Guidelines if Provided */}
+                            {q.instruction && (
+                              <div className="p-3 bg-amber-50/70 border border-amber-200/80 rounded-xl text-xs text-amber-950 space-y-1">
+                                <span className="font-black text-amber-900 uppercase tracking-wider text-[10px] block">
+                                  Instructions / Rubric Guidelines:
+                                </span>
+                                <p className="whitespace-pre-wrap leading-relaxed">{q.instruction}</p>
+                              </div>
+                            )}
+
+                            {/* Instructor's Reference Key / Rubric Evaluation Guide */}
+                            {q.correct_answer && (
+                              <div className="p-3.5 bg-indigo-50/80 border border-indigo-200/90 rounded-xl text-xs space-y-1.5 shadow-2xs">
+                                <div className="flex items-center gap-1.5 text-indigo-950 font-black text-xs">
+                                  <BookOpen className="w-4 h-4 text-indigo-600" />
+                                  <span>Instructor Reference Key / Evaluation Guide (Scoring Basis):</span>
+                                </div>
+                                <div className="p-3 bg-white/90 border border-indigo-100 rounded-lg text-indigo-950 text-xs leading-relaxed whitespace-pre-wrap select-text font-normal">
+                                  {q.correct_answer}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Student Submitted Response */}
+                            <div className="space-y-1.5 pt-1">
+                              <div className="flex items-center justify-between">
+                                <label className="text-xs font-black text-slate-800 flex items-center gap-1.5">
+                                  <PenTool className="w-3.5 h-3.5 text-slate-500" />
+                                  Student's Submitted Essay Answer:
+                                </label>
+                                <span className="text-[11px] font-mono font-bold bg-slate-100 border border-slate-200 px-2.5 py-0.5 rounded-lg">
+                                  Word count: <strong className={meetsMinWords ? "text-emerald-700 font-black" : "text-amber-700 font-black"}>{wordCount}</strong> / min {minWords} words
+                                </span>
+                              </div>
+                              <div className="p-4 bg-slate-50/80 border border-slate-300 rounded-xl text-xs sm:text-sm text-slate-800 leading-relaxed font-normal whitespace-pre-wrap select-text">
+                                {q.submitted_response ? (
+                                  q.submitted_response
+                                ) : (
+                                  <span className="text-slate-400 italic">
+                                    (The student did not provide an answer for this essay item.)
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Interactive Grading Panel */}
+                            <div className="p-3.5 bg-amber-50/90 border border-amber-200 rounded-xl flex flex-wrap items-center justify-between gap-3">
+                              <div className="flex items-center gap-3 flex-wrap">
+                                <span className="text-xs font-black text-amber-950">
+                                  Award Points:
+                                </span>
+                                <div className="flex items-center gap-1.5">
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    max={pointsMax}
+                                    value={
+                                      essayPointsDraft[q.answer_id] !== undefined
+                                        ? essayPointsDraft[q.answer_id]
+                                        : (pointsAwarded !== null ? pointsAwarded : 0)
+                                    }
+                                    onChange={(e) => {
+                                      const val = Number(e.target.value);
+                                      setEssayPointsDraft((prev) => ({
+                                        ...prev,
+                                        [q.answer_id]: isNaN(val) ? 0 : val,
+                                      }));
+                                    }}
+                                    className="w-16 px-2 py-1 text-center text-xs font-black bg-white border border-amber-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 text-slate-900 shadow-2xs"
+                                  />
+                                  <span className="text-xs font-extrabold text-amber-900">
+                                    / {pointsMax} pts
+                                  </span>
+                                </div>
+
+                                {/* Quick Score Preset Buttons */}
+                                <div className="flex items-center gap-1 text-[10px] font-bold">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setEssayPointsDraft((prev) => ({
+                                        ...prev,
+                                        [q.answer_id]: pointsMax,
+                                      }));
+                                    }}
+                                    className="px-2 py-1 bg-emerald-100 hover:bg-emerald-200 text-emerald-800 rounded-md border border-emerald-300 cursor-pointer transition-colors"
+                                    title={`Award full points (${pointsMax} pts)`}
+                                  >
+                                    Full ({pointsMax})
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setEssayPointsDraft((prev) => ({
+                                        ...prev,
+                                        [q.answer_id]: Math.round(pointsMax / 2),
+                                      }));
+                                    }}
+                                    className="px-2 py-1 bg-amber-100 hover:bg-amber-200 text-amber-900 rounded-md border border-amber-300 cursor-pointer transition-colors"
+                                    title={`Award half points (${Math.round(pointsMax / 2)} pts)`}
+                                  >
+                                    Half ({Math.round(pointsMax / 2)})
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setEssayPointsDraft((prev) => ({
+                                        ...prev,
+                                        [q.answer_id]: 0,
+                                      }));
+                                    }}
+                                    className="px-2 py-1 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-md border border-slate-300 cursor-pointer transition-colors"
+                                    title="Award zero points (0 pts)"
+                                  >
+                                    Zero (0)
+                                  </button>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-2">
+                                {pointsAwarded !== null ? (
+                                  <span className="inline-flex items-center gap-1 text-[11px] font-black text-emerald-800 bg-emerald-100/90 border border-emerald-300 px-2.5 py-1 rounded-lg">
+                                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                                    <span>Graded ({pointsAwarded} / {pointsMax} pts)</span>
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 text-[11px] font-black text-amber-800 bg-amber-100 border border-amber-300 px-2.5 py-1 rounded-lg">
+                                    <Clock className="w-3.5 h-3.5 text-amber-600" />
+                                    <span>Ungraded</span>
+                                  </span>
+                                )}
+
+                                <button
+                                  type="button"
+                                  disabled={savingEssayId === q.answer_id || !q.answer_id}
+                                  onClick={() => handleSaveEssayScore(q.answer_id, pointsMax)}
+                                  className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 disabled:opacity-50 text-white text-xs font-extrabold px-3 py-1.5 rounded-lg shadow-xs transition-all cursor-pointer"
+                                  title="Save score and update student's exam grade"
+                                >
+                                  {savingEssayId === q.answer_id ? (
+                                    <>
+                                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                      <span>Saving...</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Check className="w-3.5 h-3.5" />
+                                      <span>Save Score</span>
+                                    </>
+                                  )}
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()
+              ) : (
+                <div className="bg-white rounded-2xl p-12 text-center text-slate-400 text-xs">
+                  Unable to load student essay data.
+                </div>
+              )}
+            </div>
+
+            {/* Modal Bottom Action Bar */}
+            <div className="bg-white border-t border-slate-200 px-6 py-3 flex items-center justify-between shrink-0">
+              <span className="text-xs text-slate-400 font-semibold">
+                Batanes State College &bull; Student Essay Evaluation
+              </span>
+              <button
+                type="button"
+                onClick={() => setEssayGradingModalOpen(false)}
+                className="bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold px-4 py-2 rounded-xl cursor-pointer"
+              >
+                Done Grading
               </button>
             </div>
           </div>
