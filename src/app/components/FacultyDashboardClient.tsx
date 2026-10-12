@@ -2964,122 +2964,15 @@ export function FacultyDashboardClient({
       {/* OVERRIDE CONTROLS TAB */}
       {activeTab === "override" && (
         <div className="space-y-8 animate-in fade-in duration-300">
-          {/* Section 1: Schedules Override Engine */}
-          <div className="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-sm space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div>
-                <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-                  <span className="w-1.5 h-6 bg-emerald-600 rounded-full" />
-                  Schedules Override Engine
-                </h2>
-                <p className="text-slate-500 text-xs mt-1">
-                  View approved examinations and override testing schedules, windows, or dates to fix scheduling conflicts.
-                </p>
-              </div>
-              <div className="sm:w-72">
-                <select
-                  value={selectedOverrideCourseId || ""}
-                  onChange={e => setSelectedOverrideCourseId(e.target.value ? Number(e.target.value) : null)}
-                  className="w-full bg-slate-50 border border-slate-200 text-xs font-bold text-slate-800 px-3.5 py-2.5 rounded-xl transition-all shadow-sm focus:outline-none focus:border-emerald-600 cursor-pointer"
-                >
-                  <option value="">Filter by Course (All Courses)</option>
-                  {availableFacultyCourses.map(c => (
-                    <option key={c.course_id} value={c.course_id}>
-                      {c.course_code} - {c.course_title}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-slate-100 text-left text-xs text-slate-600">
-                <thead className="bg-slate-50 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                  <tr>
-                    <th className="px-6 py-3">Examination Title</th>
-                    <th className="px-6 py-3">Course</th>
-                    <th className="px-6 py-3">Target Details</th>
-                    <th className="px-6 py-3">Testing Window</th>
-                    <th className="px-6 py-3 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 bg-white">
-                  {faculty.examinations
-                    .filter(exam => exam.current_status === "Approved")
-                    .filter(exam => {
-                      if (!selectedOverrideCourseId) return true;
-                      const cId = (exam as any).course_id || (exam.course as any)?.course_id;
-                      return cId === selectedOverrideCourseId;
-                    })
-                    .map(exam => {
-                      const target = exam.examTargets?.[0];
-                      const programName = programs.find(p => p.program_id === target?.program_id)?.program_code || "N/A";
-                      
-                      return (
-                        <tr key={exam.exam_id} className="hover:bg-slate-50/50 transition-colors">
-                          <td className="px-6 py-4 font-bold text-slate-900">{getExamDisplayTitle(exam)}</td>
-                          <td className="px-6 py-4">{exam.course.course_code} - {exam.course.course_title}</td>
-                          <td className="px-6 py-4">
-                            {target ? (
-                              <span className="font-semibold text-slate-800">
-                                {programName} Year {target.year_level}
-                              </span>
-                            ) : (
-                              <span className="text-slate-400 italic">Not Scheduled</span>
-                            )}
-                          </td>
-                          <td className="px-6 py-4">
-                            {target ? (
-                              <div className="space-y-0.5">
-                                <p className="font-semibold text-slate-800">
-                                  {new Date(target.scheduled_date).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}
-                                </p>
-                                <p className="text-[10px] text-slate-400">
-                                  {new Date(target.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })} - {new Date(target.end_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })}
-                                </p>
-                              </div>
-                            ) : (
-                              <span className="text-slate-400 italic">Not Scheduled</span>
-                            )}
-                          </td>
-                          <td className="px-6 py-4 text-right">
-                            <button
-                              onClick={() => handleOpenScheduleModal(exam.exam_id, exam.title)}
-                              className="px-3.5 py-1.5 text-[11px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-100 rounded-lg shadow-sm transition-all"
-                            >
-                              {target ? "Override Schedule" : "Schedule Exam"}
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  {faculty.examinations
-                    .filter(exam => exam.current_status === "Approved")
-                    .filter(exam => {
-                      if (!selectedOverrideCourseId) return true;
-                      const cId = (exam as any).course_id || (exam.course as any)?.course_id;
-                      return cId === selectedOverrideCourseId;
-                    }).length === 0 && (
-                    <tr>
-                      <td colSpan={5} className="text-center py-8 text-slate-400 italic">
-                        No approved examinations available to override{selectedOverrideCourseId ? " for this course" : ""}.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* Section 2: Student Access Resets & Reschedule Overrides */}
+          {/* Student Reschedule & Reopen Controls */}
           <div className="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-sm space-y-6">
             <div>
               <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
                 <span className="w-1.5 h-6 bg-amber-600 rounded-full" />
-                Individual Student Reschedule & Override Controls
+                Student Reschedule & Reopen Controls
               </h2>
               <p className="text-slate-500 text-xs mt-1">
-                Choose a specific course and the examination allotted to it. Select among students who took or missed the exam, searchable by name, to reschedule or extend their testing window.
+                Choose a course and exam, then find students who missed it or need a retake to set a new exam schedule for them.
               </p>
             </div>
 
@@ -3088,7 +2981,7 @@ export function FacultyDashboardClient({
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
                   <BookOpen className="w-3.5 h-3.5 text-emerald-600" />
-                  1. Choose Course Assigned to You
+                  1. Select Course
                 </label>
                 <select
                   value={selectedOverrideCourseId || ""}
@@ -3123,7 +3016,7 @@ export function FacultyDashboardClient({
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
                   <Clock className="w-3.5 h-3.5 text-amber-600" />
-                  2. Choose Specific Examination Allotted
+                  2. Select Examination
                 </label>
                 <select
                   value={selectedOverrideExamId || ""}
@@ -3154,12 +3047,12 @@ export function FacultyDashboardClient({
 
             {selectedOverrideExamId && (
               <div className="space-y-5 pt-2 animate-in fade-in duration-300">
-                {/* Official Exam Schedule Preserved Banner */}
+                {/* Original Exam Schedule Preserved Banner */}
                 <div className="bg-blue-50/80 border border-blue-200/80 rounded-2xl p-4 text-xs space-y-1.5 shadow-sm">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-1.5 text-blue-900 font-bold uppercase tracking-wider text-[10px]">
                       <Calendar className="w-4 h-4 text-blue-600" />
-                      Official Examination Schedule & Date (Preserved in TOS)
+                      Original Exam Schedule
                     </div>
                     {(() => {
                       const exam = faculty.examinations.find(e => e.exam_id === selectedOverrideExamId);
@@ -3171,10 +3064,10 @@ export function FacultyDashboardClient({
                     })()}
                   </div>
                   <p className="text-slate-900 font-extrabold text-sm">
-                    {officialExamScheduleText || "Official Examination Schedule"}
+                    {officialExamScheduleText || "Original Exam Schedule"}
                   </p>
                   <p className="text-[11px] text-slate-600 leading-relaxed pt-0.5">
-                    ✓ Reopening an examination creates an individual attempt window <strong>exclusively for the chosen selected student(s)</strong>. The official exam schedule and Table of Specifications (TOS) remain strictly preserved.
+                    ✓ Rescheduling only applies to the selected students. The original exam schedule and Table of Specifications (TOS) stay the same for everyone else.
                   </p>
                 </div>
 
@@ -3183,10 +3076,10 @@ export function FacultyDashboardClient({
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div>
                       <h3 className="text-sm font-bold text-slate-900">
-                        Students Assigned & Exam Takers
+                        Students & Exam Status
                       </h3>
                       <p className="text-xs text-slate-500">
-                        Search student by name or filter by exam attempt status to grant a reschedule/retake window.
+                        Search by student name or filter by status to reschedule their exam.
                       </p>
                     </div>
                     <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
@@ -3200,7 +3093,7 @@ export function FacultyDashboardClient({
                         className="inline-flex items-center gap-1.5 bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-[11px] px-3.5 py-2 rounded-xl shadow-sm transition-all cursor-pointer"
                       >
                         <Clock className="w-3.5 h-3.5" />
-                        Override Schedule & Assign Retake {selectedOverrideStudentIds.length > 0 ? `(${selectedOverrideStudentIds.length} Selected)` : ""}
+                        Reschedule Selected Student(s) {selectedOverrideStudentIds.length > 0 ? `(${selectedOverrideStudentIds.length} Selected)` : ""}
                       </button>
                       {missedStudents && missedStudents.length > 0 && (
                         <button
@@ -3319,7 +3212,7 @@ export function FacultyDashboardClient({
                         value=""
                         className="w-full bg-white border border-slate-200 text-xs font-bold text-amber-900 bg-amber-50/50 px-3 py-2.5 rounded-xl cursor-pointer"
                       >
-                        <option value="">-- Quick Pick Student to Reopen --</option>
+                        <option value="">-- Select Student to Reschedule --</option>
                         {missedStudents.map(s => (
                           <option key={s.student_id} value={s.student_id}>
                             {s.attempt ? "[Took Exam]" : "[Missed]"} {s.first_name} {s.middle_name ? `${s.middle_name.trim().charAt(0).toUpperCase()}. ` : ""}{s.last_name} ({s.institutional_id})
@@ -3361,7 +3254,7 @@ export function FacultyDashboardClient({
                           <th className="px-6 py-3">Student Name</th>
                           <th className="px-6 py-3">ID / Institutional Email</th>
                           <th className="px-6 py-3">Attempt / Reopen Status</th>
-                          <th className="px-6 py-3 text-right">Override Actions</th>
+                          <th className="px-6 py-3 text-right">Actions</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 bg-white">
@@ -3484,7 +3377,7 @@ export function FacultyDashboardClient({
                                       }}
                                       className="px-3 py-1.5 text-[11px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg shadow-sm transition-all cursor-pointer"
                                     >
-                                      {override && override.is_active ? "Modify Reopened Window" : "Reopen / Reschedule Exam"}
+                                      {override && override.is_active ? "Change Schedule" : "Reschedule Exam"}
                                     </button>
                                     {override && override.is_active && (
                                       <button
@@ -3503,7 +3396,7 @@ export function FacultyDashboardClient({
                         {missedStudents.length === 0 && (
                           <tr>
                             <td colSpan={5} className="text-center py-8 text-slate-400 italic">
-                              No students found for this examination or course.
+                              No assigned students found for this examination.
                             </td>
                           </tr>
                         )}
@@ -3543,10 +3436,10 @@ export function FacultyDashboardClient({
                 <div className="flex justify-between items-start shrink-0">
                   <div>
                     <h3 className="text-xl font-extrabold text-slate-900 flex items-center gap-2">
-                      <Clock className="w-5 h-5 text-amber-600" /> Override Schedule & Assign Retake
+                      <Clock className="w-5 h-5 text-amber-600" /> Reschedule Exam for Student(s)
                     </h3>
                     <p className="text-xs text-slate-500 mt-1">
-                      Choose among students that took or missed this examination to reschedule/reopen their testing window.
+                      Select students who missed the exam or need a retake, then choose their new schedule.
                     </p>
                   </div>
                   <button
@@ -3559,16 +3452,16 @@ export function FacultyDashboardClient({
 
                 {/* Main Body Content */}
                 <div className="overflow-y-auto space-y-4 pr-1">
-                  {/* Official Schedule Banner (Preserved) */}
+                  {/* Original Schedule Banner */}
                   <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3.5 text-xs space-y-1">
                     <p className="text-slate-600 font-bold uppercase tracking-wider text-[10px] flex items-center gap-1.5">
-                      <Calendar className="w-3.5 h-3.5 text-blue-600" /> Official Examination Schedule (Preserved)
+                      <Calendar className="w-3.5 h-3.5 text-blue-600" /> Original Exam Schedule
                     </p>
                     <p className="text-slate-800 font-semibold text-xs">
-                      {officialExamScheduleText || "Original schedule from Examination Record / TOS"}
+                      {officialExamScheduleText || "Original exam schedule"}
                     </p>
                     <p className="text-[10px] text-slate-500 leading-relaxed pt-0.5">
-                      ✓ Reopening applies <strong>strictly to chosen selected student(s)</strong>. The official exam schedule date and Table of Specifications remain untouched for all other students.
+                      ✓ Rescheduling only applies to the selected students. The original exam schedule and Table of Specifications (TOS) stay the same for everyone else.
                     </p>
                   </div>
 
@@ -3576,7 +3469,7 @@ export function FacultyDashboardClient({
                   <div className="space-y-2">
                     <div className="flex justify-between items-center">
                       <label className="text-xs font-bold text-slate-700 block">
-                        Search & Select Student(s) Allowed to Retake
+                        Search & Select Student(s) to Reschedule
                       </label>
                       <div className="flex gap-1.5 text-[10px]">
                         <button
@@ -3761,12 +3654,12 @@ export function FacultyDashboardClient({
                   {/* Override Form Inputs */}
                   <form onSubmit={handleOverrideSubmit} className="space-y-4 pt-1">
                     <div className="bg-amber-50 border border-amber-100 rounded-xl p-3 text-xs text-amber-900 font-medium">
-                      ⚠️ Reopening will reset any previous attempt for the selected student(s) to allow a clean retake during the specified reopened window.
+                      ⚠️ Rescheduling will reset any previous attempt for the selected student(s) so they can take the exam during their new window.
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-1.5">
-                        <label className="text-xs font-bold text-slate-600 block">Reopened Start Date</label>
+                        <label className="text-xs font-bold text-slate-600 block">New Start Date</label>
                         <input
                           type="date"
                           required
@@ -3776,7 +3669,7 @@ export function FacultyDashboardClient({
                         />
                       </div>
                       <div className="space-y-1.5">
-                        <label className="text-xs font-bold text-slate-600 block">Reopened Start Time</label>
+                        <label className="text-xs font-bold text-slate-600 block">New Start Time</label>
                         <input
                           type="time"
                           required
@@ -3789,7 +3682,7 @@ export function FacultyDashboardClient({
 
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-1.5">
-                        <label className="text-xs font-bold text-slate-600 block">Reopened End Date</label>
+                        <label className="text-xs font-bold text-slate-600 block">New End Date</label>
                         <input
                           type="date"
                           required
@@ -3799,7 +3692,7 @@ export function FacultyDashboardClient({
                         />
                       </div>
                       <div className="space-y-1.5">
-                        <label className="text-xs font-bold text-slate-600 block">Reopened End Time</label>
+                        <label className="text-xs font-bold text-slate-600 block">New End Time</label>
                         <input
                           type="time"
                           required
@@ -3825,8 +3718,8 @@ export function FacultyDashboardClient({
                       >
                         {isSavingOverride && <Loader2 className="w-4 h-4 animate-spin" />}
                         {selectedOverrideStudentIds.length > 0
-                          ? `Assign Retake (${selectedOverrideStudentIds.length} Selected)`
-                          : "Select Student(s) to Assign"}
+                          ? `Save New Schedule (${selectedOverrideStudentIds.length} Selected)`
+                          : "Select Student(s) to Reschedule"}
                       </button>
                     </div>
                   </form>

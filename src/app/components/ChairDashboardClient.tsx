@@ -218,6 +218,7 @@ export function ChairDashboardClient({
   facultyMembers, 
   pendingApprovals,
   departmentExams,
+  chairExaminations = [],
   courses = [],
   faculty,
   institutionalId = "",
@@ -419,18 +420,29 @@ export function ChairDashboardClient({
   const [isCreatingExam, setIsCreatingExam] = useState(false);
 
   const effectiveFaculty = useMemo(() => {
-    if (faculty) return faculty;
+    const fallbackExams = (chairExaminations && chairExaminations.length > 0)
+      ? chairExaminations
+      : (departmentExams || []);
+
+    if (faculty) {
+      return {
+        ...faculty,
+        examinations: (faculty.examinations && faculty.examinations.length > 0)
+          ? faculty.examinations
+          : fallbackExams
+      };
+    }
     return {
       faculty_id: chairUserId,
       first_name: chairTitle,
       last_name: "Chairperson",
       department_id: departmentId || 1,
-      examinations: [],
+      examinations: fallbackExams,
       facultyPortfolios: [],
       facultyCourses: [],
       has_seen_course_assignment: true,
     };
-  }, [faculty, chairUserId, chairTitle, departmentId]);
+  }, [faculty, chairUserId, chairTitle, departmentId, chairExaminations, departmentExams]);
 
   const renderOfficialExamPaperReviewer = (approval: any) => {
     const qBank = approval.exam?.questionBank || [];
