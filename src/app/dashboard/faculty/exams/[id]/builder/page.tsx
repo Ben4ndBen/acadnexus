@@ -157,7 +157,7 @@ export default async function ExamBuilderPage({ params }: PageProps) {
     ? new Date(exam.exam_date).toISOString().split("T")[0]
     : exam.examTargets?.[0]?.scheduled_date
     ? new Date(exam.examTargets[0].scheduled_date).toISOString().split("T")[0]
-    : new Date().toISOString().split("T")[0];
+    : "";
 
   // Convert decimal to number/string in portfolios for serialization if necessary
   const sanitizedExam = {

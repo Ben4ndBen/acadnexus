@@ -12,6 +12,7 @@ import { saveExamConfig, saveExamQuestions, updateExamStatus, uploadQuestionAtta
 import { determineSemesterFromDate, formatStudentName } from "@/lib/academicUtils";
 import { Latex } from "@/app/components/Latex";
 import { formatFullExamDate } from "@/app/components/BSCTableOfSpecificationsView";
+import { DatePicker } from "@/app/components/DatePicker";
 
 interface Course {
   course_id: number;
@@ -423,7 +424,7 @@ export function ExamBuilderWizard({
       ? typeof exam.exam_date === "string"
         ? exam.exam_date.split("T")[0]
         : new Date(exam.exam_date).toISOString().split("T")[0]
-      : new Date().toISOString().split("T")[0]
+      : ""
   );
 
   // Document / Reference Number (Top right field, like BSC-ODLF-017)
@@ -2666,7 +2667,7 @@ export function ExamBuilderWizard({
                     <label className="text-xs font-extrabold text-slate-700 block">
                       Academic Year & Semester
                     </label>
-                    <div className="w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm font-extrabold px-3.5 py-2.5 rounded-xl flex items-center justify-between">
+                    <div className="w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm font-medium px-3.5 py-2.5 rounded-xl flex items-center justify-between">
                       <span className="truncate">{applicableSemesterLabel}</span>
                     </div>
                   </div>
@@ -2686,7 +2687,7 @@ export function ExamBuilderWizard({
                         const newTitle = `${newTerm} Examination${courseStr}`;
                         setTitle(newTitle);
                       }}
-                      className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 text-slate-900 text-sm font-extrabold px-3.5 py-2.5 rounded-xl transition-all outline-none cursor-pointer"
+                      className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 text-slate-900 text-sm font-medium px-3.5 py-2.5 rounded-xl transition-all outline-none cursor-pointer"
                     >
                       <option value="Prelim">Prelim Examination</option>
                       <option value="Midterm">Midterm Examination</option>
@@ -2699,12 +2700,11 @@ export function ExamBuilderWizard({
                     <label className="text-xs font-extrabold text-slate-700 block">
                       Exam Administration Date <span className="text-rose-500">*</span>
                     </label>
-                    <input
-                      type="date"
-                      required
+                    <DatePicker
                       value={examDate}
-                      onChange={(e) => setExamDate(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 text-slate-900 text-sm font-bold px-3.5 py-2.5 rounded-xl transition-all"
+                      onChange={setExamDate}
+                      placeholder="Select examination date"
+                      required
                     />
                   </div>
                 </div>
@@ -2728,7 +2728,7 @@ export function ExamBuilderWizard({
                   <select
                     value={courseId}
                     onChange={(e) => handleCourseChange(Number(e.target.value))}
-                    className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 text-sm font-bold text-slate-800 px-4 py-2.5 rounded-xl transition-all duration-300"
+                    className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 text-sm font-medium text-slate-900 px-4 py-2.5 rounded-xl transition-all duration-300"
                   >
                     {effectiveAssignedSubjects.map((c) => (
                       <option key={c.course_id} value={c.course_id}>

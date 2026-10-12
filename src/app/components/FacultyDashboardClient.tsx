@@ -24,6 +24,7 @@ import {
 } from "@/lib/exportExcel";
 import { getProgramsForDepartment } from "@/lib/courseDepartmentMapping";
 import { formatStudentName } from "@/lib/academicUtils";
+import { DatePicker } from "@/app/components/DatePicker";
 
 interface FacultyDashboardClientProps {
   faculty: {
@@ -693,7 +694,7 @@ export function FacultyDashboardClient({
     const targetExam = faculty.examinations.find(e => e.exam_id === examId);
     const existingTarget = targetExam?.examTargets?.[0];
 
-    let initialDate = new Date().toISOString().split("T")[0];
+    let initialDate = "";
     if (existingTarget?.scheduled_date) {
       initialDate = typeof existingTarget.scheduled_date === "string"
         ? existingTarget.scheduled_date.split("T")[0]
@@ -2948,11 +2949,11 @@ export function FacultyDashboardClient({
 
               <div>
                 <label className="text-xs font-bold text-slate-600 block mb-1">Scheduled Date</label>
-                <input 
-                  type="date" required
+                <DatePicker
                   value={scheduleForm.scheduled_date}
-                  onChange={e => setScheduleForm({...scheduleForm, scheduled_date: e.target.value})}
-                  className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 text-sm font-medium text-slate-900 placeholder:text-slate-500 px-4 py-2.5 rounded-xl transition-all duration-300"
+                  onChange={d => setScheduleForm({...scheduleForm, scheduled_date: d})}
+                  placeholder="Select scheduled date"
+                  required
                 />
               </div>
 

@@ -131,7 +131,7 @@ export function BSCTableOfSpecificationsView({
   term = "Midterm",
   semester = "1st Semester",
   academicYear = "2026-2027",
-  examDate = new Date().toISOString().split("T")[0],
+  examDate = "",
   documentReference = "BSC-ODI-F-121",
   facultyName,
   facultyRank,
