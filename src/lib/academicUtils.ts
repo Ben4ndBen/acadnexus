@@ -99,3 +99,127 @@ export function formatStudentName(
   return `${studentOrFirstName} ${midStr}${lastName || ""}`.trim();
 }
 
+export interface SubmissionTimingInfo {
+  scheduledEnd: Date | null;
+  isLateSubmission: boolean;
+  minsLate: number;
+  isActivePastSchedule: boolean;
+  timingLabel: string;
+}
+
+export function getSubmissionScheduleTiming(studentExam: any): SubmissionTimingInfo {
+  let scheduledEnd: Date | null = null;
+
+  // 1. Check if student had an override for this exam
+  const override = studentExam?.student?.studentOverrides?.find(
+    (o: any) => o.exam_id === studentExam.exam_id
+  );
+  if (override?.new_end_time) {
+    scheduledEnd = new Date(override.new_end_time);
+  }
+
+  // 2. Otherwise find the target for student's program and year level
+  if (!scheduledEnd && studentExam?.exam?.examTargets && studentExam.exam.examTargets.length > 0) {
+    const targets = studentExam.exam.examTargets;
+    const target = targets.find(
+      (t: any) =>
+        t.program_id === studentExam.student?.program_id &&
+        t.year_level === studentExam.student?.year_level
+    ) || targets[0];
+
+    if (target?.scheduled_date && target?.end_time) {
+      const schedDate = new Date(target.scheduled_date);
+      const endTime = new Date(target.end_time);
+      scheduledEnd = new Date(
+        schedDate.getUTCFullYear(),
+        schedDate.getUTCMonth(),
+        schedDate.getUTCDate(),
+        endTime.getUTCHours(),
+        endTime.getUTCMinutes(),
+        0
+      );
+    }
+  }
+
+  // 3. Fallback to exam.exam_date
+  if (!scheduledEnd && studentExam?.exam?.exam_date) {
+    const d = new Date(studentExam.exam.exam_date);
+    d.setHours(23, 59, 59, 999);
+    scheduledEnd = d;
+  }
+
+  const isSubmitted = Boolean(studentExam?.submitted_at);
+  const submittedTime = studentExam?.submitted_at ? new Date(studentExam.submitted_at).getTime() : null;
+  const scheduledEndTime = scheduledEnd ? scheduledEnd.getTime() : null;
+
+  const isLateSubmission = Boolean(
+    isSubmitted &&
+    submittedTime &&
+    scheduledEndTime &&
+    submittedTime > scheduledEndTime
+  );
+
+  const minsLate = isLateSubmission && submittedTime && scheduledEndTime
+    ? Math.max(1, Math.round((submittedTime - scheduledEndTime) / 60000))
+    : 0;
+
+  const isActivePastSchedule = Boolean(
+    !isSubmitted &&
+    scheduledEndTime &&
+    Date.now() > scheduledEndTime
+  );
+
+  let timingLabel = "On Schedule";
+  if (isLateSubmission) {
+    timingLabel = `Late (+${minsLate}m)`;
+  } else if (isActivePastSchedule) {
+    timingLabel = "Active (Past Schedule)";
+  } else if (!isSubmitted) {
+    timingLabel = "Active In Progress";
+  }
+
+  return {
+    scheduledEnd,
+    isLateSubmission,
+    minsLate,
+    isActivePastSchedule,
+    timingLabel,
+  };
+}
+
+/**
+ * Format Student Program, Year Level, and Section cleanly.
+ * Automatically suppresses generic or default sections (such as "GENERAL", "General", "N/A", "A", etc.)
+ * especially for BSINFOTECH / BSIT which does not use sections.
+ */
+export function formatStudentProgramAndYear(
+  programCode?: string | null,
+  yearLevel?: number | string | null,
+  section?: string | null
+): string {
+  const pCode = (programCode || "").trim();
+  const yr = yearLevel ? `Yr ${yearLevel}` : "";
+  const pUpper = pCode.toUpperCase();
+  const sec = (section || "").trim();
+  const secUpper = sec.toUpperCase();
+
+  // For BSINFOTECH / BSIT / Information Technology, or if section is "GENERAL", "GEN", "N/A", "NONE", etc., suppress section
+  const isBsInfoTech =
+    pUpper === "BSINFOTECH" ||
+    pUpper === "BSIT" ||
+    pUpper === "BS_INFO_TECH" ||
+    pUpper.includes("INFOTECH");
+  const isGenericSection =
+    !sec ||
+    secUpper === "GENERAL" ||
+    secUpper === "GEN" ||
+    secUpper === "N/A" ||
+    secUpper === "NONE";
+
+  if (isBsInfoTech || isGenericSection) {
+    return [pCode, yr].filter(Boolean).join(" - ");
+  }
+
+  return `${[pCode, yr].filter(Boolean).join(" - ")} • Sec ${sec}`;
+}
+

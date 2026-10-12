@@ -163,8 +163,16 @@ export async function startStudentExam(examId: number, studentId: number) {
         return { error: `Examination has not started yet. It is scheduled to start at ${startTimeString}.` };
       }
 
-      if (now > examEnd) {
-        return { error: "Examination window has already closed. You missed the scheduled time." };
+      // Cutoff rule: Examinations cannot be opened or taken within 15 minutes of the scheduled end time (or if schedule ended).
+      const totalWindowMs = examEnd.getTime() - examStart.getTime();
+      const cutoffTime = totalWindowMs > 15 * 60 * 1000
+        ? new Date(examEnd.getTime() - 15 * 60 * 1000)
+        : examEnd;
+
+      if (now >= cutoffTime || now > examEnd) {
+        return { 
+          error: "The examination entry window has closed. Examinations cannot be opened or taken within 15 minutes of the scheduled end time (or after the schedule has ended). You missed the scheduled examination window." 
+        };
       }
 
       // Create new student exam attempt when student actually opens/starts the exam

@@ -6,7 +6,8 @@ import {
   BookOpen, Award, FileText, ClipboardList, PenTool, CheckCircle, 
   User, Shield, Settings, Activity, Send, RotateCcw, AlertCircle, RefreshCw, Mail,
   Plus, Trash2, Calendar, Lock, Camera, Check, ShieldAlert, Loader2, ShieldCheck, Clock,
-  X, AlertTriangle, Archive, Search, Edit, GraduationCap, Users, Download, Layers
+  X, AlertTriangle, Archive, Search, Edit, GraduationCap, Users, Download, Layers, ChevronRight,
+  Printer, CheckCircle2, XCircle
 } from "lucide-react";
 import { 
   updateFacultyProfile, updateExamStatus, createExamDraft, deleteExam, 
@@ -15,7 +16,7 @@ import {
   archiveExamination, reuseArchivedExamination, getArchivedExaminations,
   getCurrentAcademicYear, getFacultyEnrolledStudentsAndGrades,
   getCourseRoster, enrollStudentInCourse, bulkEnrollStudentsInCourse, unenrollStudentFromCourse,
-  acknowledgeAssignedCoursesAction
+  acknowledgeAssignedCoursesAction, getStudentExamPaper, gradeEssayAnswer
 } from "@/app/actions/faculty";
 import { 
   exportStudentGradesRosterToExcel, 
@@ -23,7 +24,7 @@ import {
   exportMissedStudentsToExcel 
 } from "@/lib/exportExcel";
 import { getProgramsForDepartment } from "@/lib/courseDepartmentMapping";
-import { formatStudentName } from "@/lib/academicUtils";
+import { formatStudentName, getStudentMiddleInitial, getSubmissionScheduleTiming, formatStudentProgramAndYear } from "@/lib/academicUtils";
 import { DatePicker } from "@/app/components/DatePicker";
 
 interface FacultyDashboardClientProps {
@@ -83,6 +84,7 @@ interface FacultyDashboardClientProps {
       total_exams_created: number;
       compliance_percentage: any;
     }>;
+    facultyCourses?: Array<any>;
   };
   institutionalId: string;
   programs?: Array<{ program_id: number; program_code: string; program_name: string; department_id: number }>;
@@ -92,6 +94,117 @@ interface FacultyDashboardClientProps {
   requirePasswordUpdate?: boolean;
   username?: string;
   studentExams?: any[];
+}
+
+function toRomanNumeral(num: number): string {
+  const romanMap: [number, string][] = [
+    [1000, "M"], [900, "CM"], [500, "D"], [400, "CD"],
+    [100, "C"], [90, "XC"], [50, "L"], [40, "XL"],
+    [10, "X"], [9, "IX"], [5, "V"], [4, "IV"], [1, "I"]
+  ];
+  let result = "";
+  let val = num;
+  for (const [limit, letter] of romanMap) {
+    while (val >= limit) {
+      result += letter;
+      val -= limit;
+    }
+  }
+  return result || String(num);
+}
+
+const QUESTION_TYPE_ORDER: Record<string, number> = {
+  Multiple_Choice: 1,
+  True_False: 2,
+  Identification: 3,
+  Fill_In_The_Blanks: 4,
+  Matching_Type: 5,
+  Essay: 6,
+};
+
+const QUESTION_TYPE_HEADER_LABELS: Record<string, string> = {
+  Multiple_Choice: "MULTIPLE CHOICE",
+  True_False: "TRUE OR FALSE",
+  Identification: "IDENTIFICATION",
+  Fill_In_The_Blanks: "FILL IN THE BLANKS",
+  Matching_Type: "MATCHING TYPE",
+  Essay: "ESSAY / COMPREHENSION",
+};
+
+const QUESTION_TYPE_INSTRUCTIONS: Record<string, string> = {
+  Multiple_Choice: "Read each question carefully and select the letter corresponding to the correct answer.",
+  True_False: "Read each statement carefully. Write True if the statement is correct; otherwise write False.",
+  Identification: "Identify the concept, term, or statement described in each item. Write your answer clearly.",
+  Fill_In_The_Blanks: "Fill in the blank space(s) with the correct word or phrase to complete the statement.",
+  Matching_Type: "Match the premises in Column A with the corresponding correct options in Column B.",
+  Essay: "Answer each question concisely and thoroughly in the space provided.",
+};
+
+function parseExamPaperQuestion(q: any) {
+  let text = q.question_text || "";
+  let options: string[] = [];
+  let premises: string[] = [];
+  let blanks: Array<{ id: number | string; answer: string; points: number }> = [];
+  let matches: Array<{ premise: string; choice: string }> = [];
+  let min_words: number | undefined = undefined;
+  let image_url = "";
+  let taxonomy_level = "";
+
+  if (typeof text === "string" && text.trim().startsWith("{")) {
+    try {
+      const parsed = JSON.parse(text);
+      text = typeof parsed.text === "string" ? parsed.text : (parsed.text ?? q.question_text);
+      options = parsed.options || [];
+      premises = parsed.premises || [];
+      blanks = parsed.blanks || [];
+      matches = parsed.matches || [];
+      min_words = parsed.min_words;
+      image_url = parsed.image_url || "";
+      taxonomy_level = parsed.taxonomy_level || "";
+    } catch {
+      // fallback
+    }
+  } else if (q.question_type === "Multiple_Choice") {
+    try {
+      const parsed = JSON.parse(text);
+      text = parsed.text || text;
+      options = parsed.options || [];
+    } catch {}
+  } else if (q.question_type === "Matching_Type") {
+    try {
+      const parsedText = JSON.parse(text);
+      text = parsedText.text || text;
+      premises = parsedText.premises || [];
+      options = parsedText.options || [];
+    } catch {}
+  }
+
+  // Fallbacks for blanks or matches from correct_answer if needed
+  let parsedBlanksFromCorrect: Array<{ id: number | string; answer: string; points: number }> = [];
+  let parsedMatchesFromCorrect: Array<{ premise: string; choice: string }> = [];
+  if (q.question_type === "Fill_In_The_Blanks" && typeof q.correct_answer === "string") {
+    try {
+      const pc = JSON.parse(q.correct_answer);
+      parsedBlanksFromCorrect = pc.blanks || [];
+    } catch {}
+  } else if (q.question_type === "Matching_Type" && typeof q.correct_answer === "string") {
+    try {
+      const pc = JSON.parse(q.correct_answer);
+      parsedMatchesFromCorrect = pc.matches || [];
+    } catch {}
+  }
+
+  return {
+    ...q,
+    displayText: text,
+    options,
+    premises,
+    blanks: blanks.length > 0 ? blanks : parsedBlanksFromCorrect,
+    matches: matches.length > 0 ? matches : parsedMatchesFromCorrect,
+    min_words,
+    image_url,
+    taxonomy_level,
+  };
 }
 
 export function FacultyDashboardClient({ 
@@ -213,6 +326,167 @@ export function FacultyDashboardClient({
       fetchRoster(selectedRosterCourseId);
     }
   }, [activeTab, selectedRosterCourseId]);
+
+  // --- Live Monitoring & Submissions Tab State ---
+  const [selectedMonitoringCourseId, setSelectedMonitoringCourseId] = useState<number | "all">("all");
+  const [monitoringSearch, setMonitoringSearch] = useState<string>("");
+  const [monitoringStatusFilter, setMonitoringStatusFilter] = useState<"all" | "active" | "submitted" | "late">("all");
+
+  // Exam Paper Modal State
+  const [examPaperModalOpen, setExamPaperModalOpen] = useState(false);
+  const [activeExamPaperData, setActiveExamPaperData] = useState<any | null>(null);
+  const [loadingExamPaper, setLoadingExamPaper] = useState(false);
+  const [savingEssayId, setSavingEssayId] = useState<number | null>(null);
+  const [essayPointsDraft, setEssayPointsDraft] = useState<Record<number, number>>({});
+
+  // Compute categorized courses, attempts, and per-course tallies for Live Monitor & Results
+  const monitoringCoursesList = useMemo(() => {
+    const courseMap = new Map<number, {
+      course_id: number;
+      course_code: string;
+      course_title: string;
+      attempts: any[];
+      counts: {
+        totalAttempts: number;
+        liveActive: number;
+        submittedCount: number;
+        lateCount: number;
+      };
+    }>();
+
+    // 1. Initialize from assignedCourses / facultyCourses
+    const myAssigned = (assignedCourses && assignedCourses.length > 0)
+      ? assignedCourses
+      : (faculty.facultyCourses?.map((fc: any) => fc.course) || []);
+
+    myAssigned.forEach((c: any) => {
+      if (c && c.course_id && !courseMap.has(c.course_id)) {
+        courseMap.set(c.course_id, {
+          course_id: c.course_id,
+          course_code: c.course_code,
+          course_title: c.course_title,
+          attempts: [],
+          counts: {
+            totalAttempts: 0,
+            liveActive: 0,
+            submittedCount: 0,
+            lateCount: 0,
+          },
+        });
+      }
+    });
+
+    // 2. Register any course present in studentExams
+    (studentExams || []).forEach((se: any) => {
+      const c = se.exam?.course;
+      if (c && c.course_id) {
+        if (!courseMap.has(c.course_id)) {
+          courseMap.set(c.course_id, {
+            course_id: c.course_id,
+            course_code: c.course_code,
+            course_title: c.course_title,
+            attempts: [],
+            counts: {
+              totalAttempts: 0,
+              liveActive: 0,
+              submittedCount: 0,
+              lateCount: 0,
+            },
+          });
+        }
+        const group = courseMap.get(c.course_id)!;
+        group.attempts.push(se);
+
+        group.counts.totalAttempts++;
+        const isSubmitted = Boolean(se.submitted_at);
+        if (isSubmitted) {
+          group.counts.submittedCount++;
+          const timing = getSubmissionScheduleTiming(se);
+          if (timing.isLateSubmission) {
+            group.counts.lateCount++;
+          }
+        } else {
+          group.counts.liveActive++;
+        }
+      }
+    });
+
+    return Array.from(courseMap.values()).sort((a, b) =>
+      a.course_code.localeCompare(b.course_code)
+    );
+  }, [studentExams, assignedCourses, faculty.facultyCourses]);
+
+  // Aggregate tally across all courses
+  const overallMonitoringCounts = useMemo(() => {
+    let totalAttempts = 0;
+    let liveActive = 0;
+    let submittedCount = 0;
+    let lateCount = 0;
+
+    (studentExams || []).forEach((se: any) => {
+      totalAttempts++;
+      const isSubmitted = Boolean(se.submitted_at);
+      if (isSubmitted) {
+        submittedCount++;
+        const timing = getSubmissionScheduleTiming(se);
+        if (timing.isLateSubmission) lateCount++;
+      } else {
+        liveActive++;
+      }
+    });
+
+    return { totalAttempts, liveActive, submittedCount, lateCount };
+  }, [studentExams]);
+
+  // Currently focused course object (null if All Courses selected)
+  const selectedMonitoringCourse = useMemo(() => {
+    if (selectedMonitoringCourseId === "all") return null;
+    return monitoringCoursesList.find((c) => c.course_id === selectedMonitoringCourseId) || null;
+  }, [selectedMonitoringCourseId, monitoringCoursesList]);
+
+  // Dynamic counts: If a specific course is selected, reflect that course's tally; otherwise show aggregate
+  const monitoringCounts = useMemo(() => {
+    if (selectedMonitoringCourse) {
+      return selectedMonitoringCourse.counts;
+    }
+    return overallMonitoringCounts;
+  }, [selectedMonitoringCourse, overallMonitoringCounts]);
+
+  const filteredMonitoringData = useMemo(() => {
+    const q = monitoringSearch.trim().toLowerCase();
+
+    return monitoringCoursesList.map((courseGroup) => {
+      const filteredAttempts = courseGroup.attempts.filter((se: any) => {
+        // Search filter
+        if (q) {
+          const mi = getStudentMiddleInitial(se.student?.middle_name);
+          const fullName = `${se.student?.first_name || ""} ${mi ? `${mi} ` : ""}${se.student?.last_name || ""}`.toLowerCase();
+          const institutionalId = (se.student?.user?.institutional_id || se.student?.institutional_id || "").toLowerCase();
+          const examTitle = (se.exam?.title || "").toLowerCase();
+          const progSec = `${se.student?.program?.program_code || ""} ${se.student?.section || ""}`.toLowerCase();
+
+          const matches = fullName.includes(q) || institutionalId.includes(q) || examTitle.includes(q) || progSec.includes(q);
+          if (!matches) return false;
+        }
+
+        // Status filter
+        if (monitoringStatusFilter !== "all") {
+          const timing = getSubmissionScheduleTiming(se);
+          const isSubmitted = Boolean(se.submitted_at);
+          if (monitoringStatusFilter === "active" && isSubmitted) return false;
+          if (monitoringStatusFilter === "submitted" && !isSubmitted) return false;
+          if (monitoringStatusFilter === "late" && (!isSubmitted || !timing.isLateSubmission)) return false;
+        }
+
+        return true;
+      });
+
+      return {
+        ...courseGroup,
+        filteredAttempts,
+      };
+    });
+  }, [monitoringCoursesList, monitoringSearch, monitoringStatusFilter]);
 
   // --- Question Bank Tab State ---
   const [qbFilters, setQbFilters] = useState({
@@ -460,6 +734,113 @@ export function FacultyDashboardClient({
       setLogsModalOpen(false);
     } finally {
       setLoadingLogs(false);
+    }
+  };
+
+  const handleViewExamPaper = async (se: any) => {
+    setLoadingExamPaper(true);
+    setExamPaperModalOpen(true);
+    setActiveExamPaperData(null);
+    try {
+      const res = await getStudentExamPaper(se.student_exam_id);
+      if (res.success && res.paper) {
+        setActiveExamPaperData(res.paper);
+        const drafts: Record<number, number> = {};
+        res.paper.exam.questions.forEach((q: any) => {
+          if (q.question_type === "Essay" && q.answer_id) {
+            drafts[q.answer_id] = q.points_awarded !== null ? q.points_awarded : 0;
+          }
+        });
+        setEssayPointsDraft(drafts);
+      } else {
+        const questions = se.exam?.questionBank || [];
+        const answers = se.studentAnswers || [];
+        const penaltyPerViolation = se.exam?.score_penalty_points ?? 2;
+        const penaltyPoints = (se.violations_count || 0) * penaltyPerViolation;
+        const rawItemsScore = se.rawScore ?? ((se.total_score || 0) + (se.submitted_at ? penaltyPoints : 0));
+        const finalTotalScore = se.finalScore ?? (se.total_score || 0);
+
+        const mappedQuestions = questions.map((q: any) => {
+          const ans = answers.find((a: any) => a.question_id === q.question_id);
+          return {
+            ...q,
+            submitted_response: ans?.submitted_response || "",
+            is_correct: ans?.is_correct ?? null,
+            points_awarded: ans?.points_awarded ?? null,
+            answer_id: ans?.answer_id || null,
+          };
+        });
+
+        setActiveExamPaperData({
+          student_exam_id: se.student_exam_id,
+          started_at: se.started_at,
+          submitted_at: se.submitted_at,
+          violations_count: se.violations_count || 0,
+          submission_trigger: se.submission_trigger,
+          rawItemsScore,
+          penaltyPoints,
+          penaltyPerViolation,
+          finalTotalScore,
+          hasEssay: questions.some((q: any) => q.question_type === "Essay"),
+          pendingEssayCount: 0,
+          student: {
+            first_name: se.student?.first_name,
+            middle_name: se.student?.middle_name,
+            last_name: se.student?.last_name,
+            year_level: se.student?.year_level,
+            section: se.student?.section,
+            program_code: se.student?.program?.program_code || "",
+          },
+          exam: {
+            title: se.exam?.title,
+            term: se.exam?.term,
+            semester: se.exam?.semester,
+            course: se.exam?.course,
+            questions: mappedQuestions,
+          },
+        });
+      }
+    } catch (err) {
+      console.error("Error loading exam paper:", err);
+    } finally {
+      setLoadingExamPaper(false);
+    }
+  };
+
+  const handleSaveEssayScore = async (answerId: number, maxPoints: number) => {
+    if (!activeExamPaperData) return;
+    const points = essayPointsDraft[answerId] !== undefined ? essayPointsDraft[answerId] : 0;
+    const clampedPoints = Math.max(0, Math.min(maxPoints, points));
+
+    setSavingEssayId(answerId);
+    try {
+      const res = await gradeEssayAnswer(
+        faculty.faculty_id,
+        answerId,
+        clampedPoints,
+        clampedPoints > 0
+      );
+      if (res.success) {
+        const fresh = await getStudentExamPaper(activeExamPaperData.student_exam_id);
+        if (fresh.success && fresh.paper) {
+          setActiveExamPaperData(fresh.paper);
+          const drafts: Record<number, number> = {};
+          fresh.paper.exam.questions.forEach((q: any) => {
+            if (q.question_type === "Essay" && q.answer_id) {
+              drafts[q.answer_id] = q.points_awarded !== null ? q.points_awarded : 0;
+            }
+          });
+          setEssayPointsDraft(drafts);
+        }
+        router.refresh();
+      } else {
+        alert(res.error || "Failed to grade essay answer.");
+      }
+    } catch (err: any) {
+      console.error("Error grading essay:", err);
+      alert("An unexpected error occurred while saving essay grade.");
+    } finally {
+      setSavingEssayId(null);
     }
   };
   
@@ -1792,7 +2173,8 @@ export function FacultyDashboardClient({
 
       {/* SUBMISSIONS TAB */}
       {activeTab === "submissions" && (
-        <div className="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-sm space-y-6 animate-in fade-in duration-300">
+        <div className="bg-white border border-slate-200/80 rounded-3xl p-6 sm:p-7 shadow-sm space-y-6 animate-in fade-in duration-300">
+          {/* Header & Excel Export */}
           <div className="border-b border-slate-100 pb-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
@@ -1800,118 +2182,780 @@ export function FacultyDashboardClient({
                 Student Exam Monitoring & Results
               </h2>
               <p className="text-slate-500 text-xs mt-1">
-                Track live student examinations, view security violation attempts, and analyze penalties and net scores.
+                Live exam session tracking, security violation flags, and official submission scores categorized by course.
               </p>
             </div>
             {studentExams && studentExams.length > 0 && (
-              <button
-                onClick={() => exportExamSubmissionsToExcel("Exam_Monitoring", faculty.department?.department_name || "Faculty", studentExams)}
-                className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl shadow-md transition-all hover:scale-[1.02] shrink-0 cursor-pointer"
-              >
-                <Download className="w-4 h-4" />
-                Export Submissions Excel
-              </button>
+              <div className="flex items-center gap-2 self-start sm:self-auto">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (selectedMonitoringCourseId === "all") {
+                      exportExamSubmissionsToExcel(
+                        "All_Courses",
+                        faculty.department?.department_name || "Faculty",
+                        studentExams
+                      );
+                    } else {
+                      const selGroup = monitoringCoursesList.find(
+                        (c) => c.course_id === selectedMonitoringCourseId
+                      );
+                      exportExamSubmissionsToExcel(
+                        selGroup?.course_title || "Course_Monitoring",
+                        selGroup?.course_code || "Course",
+                        selGroup?.attempts || []
+                      );
+                    }
+                  }}
+                  className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl shadow-md transition-all hover:scale-[1.02] shrink-0 cursor-pointer"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>
+                    {selectedMonitoringCourseId === "all"
+                      ? "Export All Submissions Excel"
+                      : `Export ${
+                          monitoringCoursesList.find(
+                            (c) => c.course_id === selectedMonitoringCourseId
+                          )?.course_code || "Course"
+                        } Excel`}
+                  </span>
+                </button>
+              </div>
             )}
           </div>
 
-          {studentExams && studentExams.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs font-semibold text-slate-600 border-collapse">
-                <thead>
-                  <tr className="bg-slate-50 border-b border-slate-200/60 text-slate-400 font-extrabold uppercase tracking-wider">
-                    <th className="p-4">Student</th>
-                    <th className="p-4">Examination</th>
-                    <th className="p-4 text-center">Trigger</th>
-                    <th className="p-4 text-center">Violations</th>
-                    <th className="p-4 text-center">Net Score</th>
-                    <th className="p-4">Started At</th>
-                    <th className="p-4">Submitted At</th>
-                    <th className="p-4 text-center">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {studentExams.map((se) => {
-                    const studentName = `${se.student.first_name} ${se.student.last_name}`;
-                    const penaltyText = se.violations_count > 0 
-                      ? `-${se.violations_count * (se.exam.score_penalty_points ?? 2)} pts penalty` 
-                      : "";
+          {/* Course Tally Selector Tabs Bar */}
+          <div className="bg-slate-50/80 border border-slate-200/80 rounded-2xl p-3.5 sm:p-4 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+              <div className="flex items-center gap-2">
+                <BookOpen className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span className="text-xs font-black text-slate-800 uppercase tracking-wider">
+                  Course Tally & Live Monitor:
+                </span>
+                <span className="text-[10px] text-slate-500 font-medium hidden md:inline">
+                  (Select a course to view its specific tally numbers and exam results)
+                </span>
+              </div>
+              {selectedMonitoringCourse && (
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-bold text-slate-600 bg-white border border-slate-200 px-2.5 py-0.5 rounded-lg">
+                    Showing: <strong className="text-emerald-800 font-extrabold">{selectedMonitoringCourse.course_code}</strong>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedMonitoringCourseId("all")}
+                    className="text-[11px] font-extrabold text-emerald-700 hover:text-emerald-900 bg-emerald-100/70 hover:bg-emerald-100 px-2 py-0.5 rounded-lg transition-colors cursor-pointer"
+                  >
+                    View All Courses
+                  </button>
+                </div>
+              )}
+            </div>
 
-                    let triggerBadgeColor = "bg-slate-100 text-slate-800 border-slate-200";
-                    if (se.submission_trigger === "Manual") triggerBadgeColor = "bg-emerald-50 text-emerald-800 border-emerald-200";
-                    if (se.submission_trigger === "Timeout") triggerBadgeColor = "bg-amber-50 text-amber-800 border-amber-200";
-                    if (se.submission_trigger === "Cheating_Lockout") triggerBadgeColor = "bg-rose-50 text-rose-800 border-rose-200";
+            {/* Course Selector Buttons */}
+            <div className="flex items-center gap-2 overflow-x-auto scrollbar-none pb-1">
+              <button
+                type="button"
+                onClick={() => setSelectedMonitoringCourseId("all")}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-2 transition-all shrink-0 cursor-pointer ${
+                  selectedMonitoringCourseId === "all"
+                    ? "bg-slate-900 text-white shadow-sm ring-2 ring-slate-900/10"
+                    : "bg-white text-slate-700 hover:bg-slate-100 border border-slate-200"
+                }`}
+              >
+                <span>All Courses</span>
+                <span
+                  className={`text-[10px] px-1.5 py-0.5 rounded-full font-black ${
+                    selectedMonitoringCourseId === "all"
+                      ? "bg-slate-700 text-white"
+                      : "bg-slate-100 text-slate-600"
+                  }`}
+                >
+                  {overallMonitoringCounts.totalAttempts}
+                </span>
+              </button>
 
-                    return (
-                      <tr key={se.student_exam_id} className="hover:bg-slate-50/50 transition-colors">
-                        <td className="p-4 min-w-[150px]">
-                          <div className="font-extrabold text-slate-800">{studentName}</div>
-                          <div className="text-[10px] text-slate-400 font-mono mt-0.5">{se.student.user.institutional_id}</div>
-                          <div className="text-[9px] text-emerald-700 font-bold uppercase mt-0.5">
-                            {se.student.program.program_code} - Yr {se.student.year_level}
-                          </div>
-                        </td>
-                        <td className="p-4 min-w-[150px]">
-                          <div className="font-bold text-slate-800">{se.exam.title}</div>
-                          <div className="text-[10px] text-slate-400 font-semibold mt-0.5">{se.exam.course.course_code}</div>
-                        </td>
-                        <td className="p-4 text-center">
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border ${triggerBadgeColor}`}>
-                            {se.submission_trigger.replace("_", " ")}
+              {monitoringCoursesList.map((cg) => {
+                const isSelected = selectedMonitoringCourseId === cg.course_id;
+                return (
+                  <button
+                    key={cg.course_id}
+                    type="button"
+                    onClick={() => setSelectedMonitoringCourseId(cg.course_id)}
+                    className={`px-3.5 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-2 transition-all shrink-0 cursor-pointer ${
+                      isSelected
+                        ? "bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-500/20"
+                        : "bg-white text-slate-700 hover:bg-slate-100 border border-slate-200"
+                    }`}
+                  >
+                    <span className="font-mono">{cg.course_code}</span>
+                    <span
+                      className={`text-[10px] px-1.5 py-0.5 rounded-full font-black ${
+                        isSelected
+                          ? "bg-emerald-700 text-white"
+                          : "bg-slate-100 text-slate-600"
+                      }`}
+                    >
+                      {cg.counts.totalAttempts}
+                    </span>
+                    {cg.counts.liveActive > 0 && (
+                      <span
+                        className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0"
+                        title={`${cg.counts.liveActive} Live Active`}
+                      />
+                    )}
+                    {cg.counts.lateCount > 0 && (
+                      <span
+                        className="w-2 h-2 rounded-full bg-amber-400 shrink-0"
+                        title={`${cg.counts.lateCount} Submitted Past Schedule`}
+                      />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* KPI Summary Cards */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+            {/* Total Attempts Card */}
+            <div
+              onClick={() => setMonitoringStatusFilter("all")}
+              className={`bg-slate-50 border rounded-2xl p-4 space-y-1 transition-all cursor-pointer hover:shadow-xs ${
+                monitoringStatusFilter === "all"
+                  ? "border-slate-400 ring-2 ring-slate-400/20 bg-slate-100/70"
+                  : "border-slate-200/80"
+              }`}
+              title="Click to filter all attempts"
+            >
+              <div className="flex items-center justify-between gap-1">
+                <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">
+                  Total Attempts
+                </span>
+                <span className="text-[9px] font-black font-mono px-1.5 py-0.5 rounded bg-slate-200/80 text-slate-700 uppercase tracking-tight truncate max-w-[120px]">
+                  {selectedMonitoringCourse ? selectedMonitoringCourse.course_code : "All Subjects"}
+                </span>
+              </div>
+              <p className="text-2xl font-black text-slate-900">
+                {monitoringCounts.totalAttempts}
+              </p>
+              <span className="text-[10px] text-slate-500 font-medium block truncate">
+                {selectedMonitoringCourse
+                  ? `For ${selectedMonitoringCourse.course_code} - ${selectedMonitoringCourse.course_title}`
+                  : `Across ${monitoringCoursesList.length} teaching subject${monitoringCoursesList.length === 1 ? "" : "s"}`}
+              </span>
+            </div>
+
+            {/* Live In Progress Card */}
+            <div
+              onClick={() => setMonitoringStatusFilter(monitoringStatusFilter === "active" ? "all" : "active")}
+              className={`bg-emerald-50/60 border rounded-2xl p-4 space-y-1 transition-all cursor-pointer hover:shadow-xs ${
+                monitoringStatusFilter === "active"
+                  ? "border-emerald-500 ring-2 ring-emerald-500/20 bg-emerald-100/70"
+                  : "border-emerald-100"
+              }`}
+              title="Click to filter active live attempts"
+            >
+              <div className="flex items-center justify-between gap-1">
+                <span className="text-[10px] font-extrabold text-emerald-700 uppercase tracking-wider flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  Live In Progress
+                </span>
+                <span className="text-[9px] font-black font-mono px-1.5 py-0.5 rounded bg-emerald-200/80 text-emerald-800 uppercase tracking-tight truncate max-w-[120px]">
+                  {selectedMonitoringCourse ? selectedMonitoringCourse.course_code : "All Subjects"}
+                </span>
+              </div>
+              <p className="text-2xl font-black text-emerald-800">
+                {monitoringCounts.liveActive}
+              </p>
+              <span className="text-[10px] text-emerald-600 font-medium block truncate">
+                {selectedMonitoringCourse
+                  ? `Students taking ${selectedMonitoringCourse.course_code} exams`
+                  : "Students currently taking exams"}
+              </span>
+            </div>
+
+            {/* Submitted / Completed Card */}
+            <div
+              onClick={() => setMonitoringStatusFilter(monitoringStatusFilter === "submitted" ? "all" : "submitted")}
+              className={`bg-blue-50/60 border rounded-2xl p-4 space-y-1 transition-all cursor-pointer hover:shadow-xs ${
+                monitoringStatusFilter === "submitted"
+                  ? "border-blue-500 ring-2 ring-blue-500/20 bg-blue-100/70"
+                  : "border-blue-100"
+              }`}
+              title="Click to filter finalized attempts"
+            >
+              <div className="flex items-center justify-between gap-1">
+                <span className="text-[10px] font-extrabold text-blue-700 uppercase tracking-wider block">
+                  Submitted / Completed
+                </span>
+                <span className="text-[9px] font-black font-mono px-1.5 py-0.5 rounded bg-blue-200/80 text-blue-800 uppercase tracking-tight truncate max-w-[120px]">
+                  {selectedMonitoringCourse ? selectedMonitoringCourse.course_code : "All Subjects"}
+                </span>
+              </div>
+              <p className="text-2xl font-black text-blue-800">
+                {monitoringCounts.submittedCount}
+              </p>
+              <span className="text-[10px] text-blue-600 font-medium block truncate">
+                {selectedMonitoringCourse
+                  ? `Finalized in ${selectedMonitoringCourse.course_code}`
+                  : "Finalized exam attempts"}
+              </span>
+            </div>
+
+            {/* Submitted Past Schedule Card */}
+            <div
+              onClick={() => setMonitoringStatusFilter(monitoringStatusFilter === "late" ? "all" : "late")}
+              className={`bg-amber-50/60 border rounded-2xl p-4 space-y-1 transition-all cursor-pointer hover:shadow-xs ${
+                monitoringStatusFilter === "late"
+                  ? "border-amber-500 ring-2 ring-amber-500/20 bg-amber-100/70"
+                  : "border-amber-200/80"
+              }`}
+              title="Click to filter late submissions"
+            >
+              <div className="flex items-center justify-between gap-1">
+                <span className="text-[10px] font-extrabold text-amber-800 uppercase tracking-wider flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5 text-amber-600" />
+                  Submitted Past Schedule
+                </span>
+                <span className="text-[9px] font-black font-mono px-1.5 py-0.5 rounded bg-amber-200/80 text-amber-900 uppercase tracking-tight truncate max-w-[120px]">
+                  {selectedMonitoringCourse ? selectedMonitoringCourse.course_code : "All Subjects"}
+                </span>
+              </div>
+              <p className="text-2xl font-black text-amber-900">
+                {monitoringCounts.lateCount}
+              </p>
+              <span className="text-[10px] text-amber-700 font-medium block truncate">
+                {selectedMonitoringCourse
+                  ? `Finished after schedule in ${selectedMonitoringCourse.course_code}`
+                  : "Finished after schedule end"}
+              </span>
+            </div>
+          </div>
+
+          {/* When "All Courses" is selected: Per-Course Tally Breakdown Matrix */}
+          {selectedMonitoringCourseId === "all" && monitoringCoursesList.length > 0 && (
+            <div className="bg-slate-50/70 border border-slate-200/80 rounded-2xl p-4 sm:p-5 space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/60 pb-3">
+                <div>
+                  <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
+                    <BookOpen className="w-3.5 h-3.5 text-emerald-600" />
+                    Per-Course Tally & Live Status Breakdown
+                  </h3>
+                  <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                    Click any course card below to focus its specific KPI tally and review submissions.
+                  </p>
+                </div>
+                <span className="text-[10px] font-black uppercase text-slate-400 bg-white border border-slate-200 px-2 py-1 rounded-lg self-start sm:self-auto">
+                  {monitoringCoursesList.length} Courses Total
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+                {monitoringCoursesList.map((cg) => {
+                  return (
+                    <div
+                      key={cg.course_id}
+                      onClick={() => setSelectedMonitoringCourseId(cg.course_id)}
+                      className="group bg-white hover:bg-emerald-50/40 border border-slate-200/80 hover:border-emerald-300 rounded-xl p-3.5 shadow-2xs hover:shadow-xs transition-all cursor-pointer flex flex-col justify-between gap-3"
+                    >
+                      <div>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-mono font-black text-xs text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/80">
+                            {cg.course_code}
                           </span>
-                        </td>
-                        <td className="p-4 text-center">
-                          <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold ${
-                            se.violations_count > 0 
-                              ? "bg-rose-50 text-rose-800 border border-rose-100 shadow-sm" 
-                              : "bg-emerald-50 text-emerald-800 border border-emerald-100"
-                          }`}>
-                            {se.violations_count}
+                          <span className="text-[10px] font-bold text-slate-400 group-hover:text-emerald-700 transition-colors flex items-center gap-0.5">
+                            Focus Tally <ChevronRight className="w-3 h-3" />
                           </span>
-                        </td>
-                        <td className="p-4 text-center">
-                          <div className="font-black text-slate-800 text-sm">
-                            {se.submitted_at ? `${se.total_score} pts` : <span className="text-[10px] text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded font-extrabold animate-pulse">LIVE IN PROGRESS</span>}
-                          </div>
-                          {se.violations_count > 0 && se.submitted_at && (
-                            <div className="text-[9px] text-rose-600 font-black tracking-wide mt-0.5 uppercase">
-                              {penaltyText}
-                            </div>
-                          )}
-                        </td>
-                        <td className="p-4 text-slate-500 font-medium whitespace-nowrap">
-                          {new Date(se.started_at).toLocaleString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' })}
-                        </td>
-                        <td className="p-4 text-slate-500 font-medium whitespace-nowrap">
-                          {se.submitted_at ? (
-                            new Date(se.submitted_at).toLocaleString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' })
-                          ) : (
-                            <em className="text-slate-400 font-normal">Active...</em>
-                          )}
-                        </td>
-                        <td className="p-4 text-center whitespace-nowrap">
-                          <button
-                            onClick={() => handleViewAttemptLogs(se.student_id, studentName, se.exam_id)}
-                            className="inline-flex items-center gap-1 bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-770 text-[10px] font-extrabold px-3 py-1.5 rounded-xl shadow-sm transition-all cursor-pointer"
-                          >
-                            <ShieldAlert className="w-3.5 h-3.5 text-rose-500" />
-                            View Logs
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                        </div>
+                        <h4 className="font-extrabold text-slate-900 text-xs mt-1.5 line-clamp-1 group-hover:text-emerald-950">
+                          {cg.course_title}
+                        </h4>
+                      </div>
+
+                      <div className="grid grid-cols-4 gap-1.5 pt-2 border-t border-slate-100 text-center">
+                        <div className="bg-slate-50 rounded-lg p-1.5">
+                          <span className="text-[9px] font-extrabold text-slate-400 uppercase block">Total</span>
+                          <span className="text-xs font-black text-slate-800">{cg.counts.totalAttempts}</span>
+                        </div>
+                        <div className="bg-emerald-50/70 rounded-lg p-1.5">
+                          <span className="text-[9px] font-extrabold text-emerald-700 uppercase block">Live</span>
+                          <span className="text-xs font-black text-emerald-800">{cg.counts.liveActive}</span>
+                        </div>
+                        <div className="bg-blue-50/70 rounded-lg p-1.5">
+                          <span className="text-[9px] font-extrabold text-blue-700 uppercase block">Done</span>
+                          <span className="text-xs font-black text-blue-800">{cg.counts.submittedCount}</span>
+                        </div>
+                        <div className="bg-amber-50/70 rounded-lg p-1.5">
+                          <span className="text-[9px] font-extrabold text-amber-800 uppercase block">Late</span>
+                          <span className="text-xs font-black text-amber-900">{cg.counts.lateCount}</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Status Filter & Search Controls */}
+          <div className="space-y-3 bg-slate-50/70 border border-slate-200/80 rounded-2xl p-4">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-black text-slate-800 uppercase tracking-wider">
+                  Filter Attempts {selectedMonitoringCourse ? `(${selectedMonitoringCourse.course_code})` : "(All Courses)"}:
+                </span>
+              </div>
+
+              {/* Status filter pills */}
+              <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none pb-1 md:pb-0">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mr-1 shrink-0">
+                  Status:
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setMonitoringStatusFilter("all")}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-extrabold transition-all shrink-0 cursor-pointer ${
+                    monitoringStatusFilter === "all"
+                      ? "bg-slate-800 text-white shadow-xs"
+                      : "bg-white text-slate-600 hover:bg-slate-200/80 border border-slate-200"
+                  }`}
+                >
+                  All ({monitoringCounts.totalAttempts})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMonitoringStatusFilter("active")}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-extrabold transition-all shrink-0 cursor-pointer ${
+                    monitoringStatusFilter === "active"
+                      ? "bg-emerald-600 text-white shadow-xs"
+                      : "bg-white text-emerald-700 hover:bg-emerald-50 border border-slate-200"
+                  }`}
+                >
+                  Active ({monitoringCounts.liveActive})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMonitoringStatusFilter("submitted")}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-extrabold transition-all shrink-0 cursor-pointer ${
+                    monitoringStatusFilter === "submitted"
+                      ? "bg-blue-600 text-white shadow-xs"
+                      : "bg-white text-blue-700 hover:bg-blue-50 border border-slate-200"
+                  }`}
+                >
+                  Submitted ({monitoringCounts.submittedCount})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMonitoringStatusFilter("late")}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-extrabold transition-all shrink-0 cursor-pointer ${
+                    monitoringStatusFilter === "late"
+                      ? "bg-amber-600 text-white shadow-xs"
+                      : "bg-white text-amber-800 hover:bg-amber-50 border border-slate-200"
+                  }`}
+                >
+                  Past Schedule ({monitoringCounts.lateCount})
+                </button>
+              </div>
+            </div>
+
+            {/* Student & Exam Search Bar */}
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-3" />
+              <input
+                type="text"
+                placeholder="Search student by name (with middle initial), student ID, exam title, or section..."
+                value={monitoringSearch}
+                onChange={(e) => setMonitoringSearch(e.target.value)}
+                className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-8 py-2 text-xs font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
+              />
+              {monitoringSearch && (
+                <button
+                  type="button"
+                  onClick={() => setMonitoringSearch("")}
+                  className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 text-xs cursor-pointer p-0.5"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Course-Categorized Sections */}
+          {monitoringCoursesList.length === 0 ? (
+            <div className="text-center py-20 border-2 border-dashed border-slate-100 rounded-3xl bg-slate-50/50">
+              <div className="bg-slate-100 p-4 rounded-full text-slate-400 mb-4 inline-block">
+                <BookOpen className="w-8 h-8" />
+              </div>
+              <h3 className="font-extrabold text-slate-800 text-base">No Teaching Courses Assigned</h3>
+              <p className="text-slate-500 text-xs max-w-sm mt-1 mx-auto leading-relaxed">
+                Once subjects are allocated to your teaching load, examinations scheduled for those courses will be monitored here.
+              </p>
             </div>
           ) : (
-            <div className="text-center py-20 border-2 border-dashed border-slate-100 rounded-3xl">
-              <div className="bg-slate-50 p-4 rounded-full text-slate-400 mb-4 inline-block">
-                <ShieldAlert className="w-8 h-8" />
-              </div>
-              <h3 className="font-extrabold text-slate-800 text-base">No exam attempts logged</h3>
-              <p className="text-slate-500 text-xs max-w-xs mt-1 mx-auto leading-relaxed">
-                When students begin taking your scheduled examinations, their active sessions, violation flags, and score penalties will be logged here.
-              </p>
+            <div className="space-y-6">
+              {filteredMonitoringData
+                .filter(
+                  (cg) =>
+                    selectedMonitoringCourseId === "all" ||
+                    cg.course_id === selectedMonitoringCourseId
+                )
+                .map((courseGroup) => {
+                  const courseAttempts = courseGroup.filteredAttempts;
+                  const totalInCourse = courseGroup.attempts.length;
+                  const liveInCourse = courseGroup.attempts.filter(
+                    (se: any) => !se.submitted_at
+                  ).length;
+                  const lateInCourse = courseGroup.attempts.filter((se: any) => {
+                    if (!se.submitted_at) return false;
+                    const timing = getSubmissionScheduleTiming(se);
+                    return timing.isLateSubmission;
+                  }).length;
+
+                  return (
+                    <div
+                      key={courseGroup.course_id}
+                      className="border border-slate-200/90 rounded-2xl overflow-hidden shadow-xs bg-white space-y-0"
+                    >
+                      {/* Course Header Banner */}
+                      <div className="bg-gradient-to-r from-slate-50 via-white to-slate-50 px-5 py-3.5 border-b border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center justify-center font-black font-mono text-xs shrink-0 shadow-xs">
+                            {courseGroup.course_code.split(" ")[0]}
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <h3 className="font-black text-slate-900 text-sm tracking-tight">
+                                {courseGroup.course_code} - {courseGroup.course_title}
+                              </h3>
+                              <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200">
+                                {courseAttempts.length} of {courseGroup.counts.totalAttempts} Attempt{courseGroup.counts.totalAttempts === 1 ? "" : "s"}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2 flex-wrap text-[11px] font-semibold mt-1">
+                              <span className="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200">
+                                Total: {courseGroup.counts.totalAttempts}
+                              </span>
+                              <span className="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                {courseGroup.counts.liveActive} Live
+                              </span>
+                              <span className="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-0.5 rounded-md bg-blue-50 text-blue-800 border border-blue-200">
+                                {courseGroup.counts.submittedCount} Completed
+                              </span>
+                              {courseGroup.counts.lateCount > 0 && (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-0.5 rounded-md bg-amber-50 text-amber-900 border border-amber-300">
+                                  <Clock className="w-3 h-3 text-amber-600" />
+                                  {courseGroup.counts.lateCount} Past Schedule
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Quick Course Actions */}
+                        {courseGroup.attempts.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              exportExamSubmissionsToExcel(
+                                courseGroup.course_title,
+                                courseGroup.course_code,
+                                courseGroup.attempts
+                              )
+                            }
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl shadow-2xs transition-all self-start sm:self-auto cursor-pointer"
+                          >
+                            <Download className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>Export Subject (.xlsx)</span>
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Course Attempts Table */}
+                      {courseAttempts.length > 0 ? (
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left text-xs font-semibold text-slate-600 border-collapse">
+                            <thead>
+                              <tr className="bg-slate-50/70 border-b border-slate-200/60 text-slate-400 font-extrabold uppercase tracking-wider text-[10px]">
+                                <th className="p-3.5 sm:p-4 text-center w-12">#</th>
+                                <th className="p-3.5 sm:p-4">Student</th>
+                                <th className="p-3.5 sm:p-4">Examination</th>
+                                <th className="p-3.5 sm:p-4 text-center">Trigger</th>
+                                <th className="p-3.5 sm:p-4 text-center">Violations</th>
+                                <th className="p-3.5 sm:p-4 text-center">Score</th>
+                                <th className="p-3.5 sm:p-4 text-center">Total Score</th>
+                                <th className="p-3.5 sm:p-4">Started At</th>
+                                <th className="p-3.5 sm:p-4">Submitted At</th>
+                                <th className="p-3.5 sm:p-4 text-center">Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                              {courseAttempts.map((se: any, idx: number) => {
+                                const mi = getStudentMiddleInitial(se.student?.middle_name);
+                                const studentFullName = mi
+                                  ? `${se.student?.first_name} ${mi} ${se.student?.last_name}`
+                                  : `${se.student?.first_name} ${se.student?.last_name}`;
+
+                                const penaltyPerViolation = se.exam?.score_penalty_points ?? 2;
+                                const penaltyPoints = (se.violations_count || 0) * penaltyPerViolation;
+                                const rawScore = se.rawScore !== undefined
+                                  ? se.rawScore
+                                  : ((se.total_score || 0) + (se.submitted_at ? penaltyPoints : 0));
+                                const finalScore = se.finalScore !== undefined
+                                  ? se.finalScore
+                                  : Math.max(0, rawScore - penaltyPoints);
+
+                                const questions = se.exam?.questionBank || [];
+                                const answers = se.studentAnswers || [];
+                                const hasEssay = se.hasEssay !== undefined
+                                  ? se.hasEssay
+                                  : questions.some((q: any) => q.question_type === "Essay");
+                                const essayAnswers = answers.filter((a: any) => a.question?.question_type === "Essay");
+                                const hasUngradedEssay = se.hasUngradedEssay !== undefined
+                                  ? se.hasUngradedEssay
+                                  : (hasEssay && (essayAnswers.length === 0 || essayAnswers.some((a: any) => a.points_awarded === null)));
+
+                                let triggerBadgeColor = "bg-slate-100 text-slate-800 border-slate-200";
+                                if (se.submission_trigger === "Manual") triggerBadgeColor = "bg-emerald-50 text-emerald-800 border-emerald-200";
+                                if (se.submission_trigger === "Timeout") triggerBadgeColor = "bg-amber-50 text-amber-800 border-amber-200";
+                                if (se.submission_trigger === "Cheating_Lockout") triggerBadgeColor = "bg-rose-50 text-rose-800 border-rose-200";
+
+                                const timing = getSubmissionScheduleTiming(se);
+
+                                return (
+                                  <tr key={se.student_exam_id} className="hover:bg-slate-50/60 transition-colors">
+                                    {/* Numbering Column */}
+                                    <td className="p-3.5 sm:p-4 text-center font-mono font-bold text-slate-400 text-xs">
+                                      {idx + 1}
+                                    </td>
+                                    {/* Student Column with Middle Initial */}
+                                    <td className="p-3.5 sm:p-4 min-w-[170px]">
+                                      <div className="font-extrabold text-slate-900 text-xs">
+                                        {studentFullName}
+                                      </div>
+                                      <div className="text-[10px] text-slate-400 font-mono mt-0.5">
+                                        {se.student?.user?.institutional_id || se.student?.institutional_id}
+                                      </div>
+                                      <div className="text-[9px] text-emerald-700 font-bold uppercase mt-0.5">
+                                        {formatStudentProgramAndYear(se.student?.program?.program_code, se.student?.year_level, se.student?.section)}
+                                      </div>
+                                    </td>
+
+                                    {/* Examination Column */}
+                                    <td className="p-3.5 sm:p-4 min-w-[150px]">
+                                      <div className="font-bold text-slate-800">{se.exam?.title}</div>
+                                      <div className="text-[10px] text-slate-400 font-medium mt-0.5">
+                                        {se.exam?.term || "Term Exam"} • {se.exam?.time_limit_minutes}m time limit
+                                      </div>
+                                    </td>
+
+                                    {/* Submission Trigger */}
+                                    <td className="p-3.5 sm:p-4 text-center whitespace-nowrap">
+                                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border ${triggerBadgeColor}`}>
+                                        {(se.submission_trigger || "").replace("_", " ")}
+                                      </span>
+                                    </td>
+
+                                    {/* Security Violations */}
+                                    <td className="p-3.5 sm:p-4 text-center whitespace-nowrap">
+                                      <span
+                                        className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                                          se.violations_count > 0
+                                            ? "bg-rose-50 text-rose-800 border border-rose-100 shadow-2xs"
+                                            : "bg-emerald-50 text-emerald-800 border border-emerald-100"
+                                        }`}
+                                      >
+                                        {se.violations_count}
+                                      </span>
+                                    </td>
+
+                                    {/* Score (Item Score & Essay Status) */}
+                                    <td className="p-3.5 sm:p-4 text-center whitespace-nowrap">
+                                      {se.submitted_at ? (
+                                        <div>
+                                          <div className="font-black text-slate-800 text-sm">
+                                            {rawScore} pts
+                                          </div>
+                                          {hasEssay && (
+                                            hasUngradedEssay ? (
+                                              <div className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black bg-amber-50 text-amber-800 border border-amber-200 shadow-2xs">
+                                                <Clock className="w-2.5 h-2.5 text-amber-600 shrink-0" />
+                                                <span>Essay Ungraded</span>
+                                              </div>
+                                            ) : (
+                                              <div className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black bg-emerald-50 text-emerald-800 border border-emerald-200 shadow-2xs">
+                                                <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600 shrink-0" />
+                                                <span>Essay Graded</span>
+                                              </div>
+                                            )
+                                          )}
+                                        </div>
+                                      ) : (
+                                        <span className="text-[10px] text-indigo-600 bg-indigo-50 px-2.5 py-0.5 rounded-full font-extrabold animate-pulse border border-indigo-200">
+                                          LIVE IN PROGRESS
+                                        </span>
+                                      )}
+                                    </td>
+
+                                    {/* Total Score (Post-Penalty Total) */}
+                                    <td className="p-3.5 sm:p-4 text-center whitespace-nowrap">
+                                      {se.submitted_at ? (
+                                        <div>
+                                          <div className="font-black text-slate-900 text-sm">
+                                            {finalScore} pts
+                                          </div>
+                                          {se.violations_count > 0 ? (
+                                            <div
+                                              className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black bg-rose-50 text-rose-700 border border-rose-200 shadow-2xs"
+                                              title={`${rawScore} pts (Score) - ${penaltyPoints} pts (${se.violations_count} violation(s) x ${penaltyPerViolation} pts penalty)`}
+                                            >
+                                              <span>{rawScore} - {penaltyPoints} = {finalScore}</span>
+                                            </div>
+                                          ) : (
+                                            <div className="text-[10px] text-slate-400 font-semibold mt-0.5">
+                                              No penalty
+                                            </div>
+                                          )}
+                                        </div>
+                                      ) : (
+                                        <span className="text-slate-400 font-bold text-xs">-</span>
+                                      )}
+                                    </td>
+
+                                    {/* Started At */}
+                                    <td className="p-3.5 sm:p-4 text-slate-500 font-medium whitespace-nowrap text-xs">
+                                      {new Date(se.started_at).toLocaleString([], {
+                                        hour: "2-digit",
+                                        minute: "2-digit",
+                                        month: "short",
+                                        day: "numeric",
+                                      })}
+                                    </td>
+
+                                    {/* Submitted At (Reflecting Late Submissions) */}
+                                    <td className="p-3.5 sm:p-4 text-slate-600 font-medium whitespace-nowrap text-xs">
+                                      {se.submitted_at ? (
+                                        <div className="space-y-1">
+                                          <div className="font-semibold text-slate-800 flex items-center gap-1.5">
+                                            <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                            <span>
+                                              {new Date(se.submitted_at).toLocaleString([], {
+                                                hour: "2-digit",
+                                                minute: "2-digit",
+                                                month: "short",
+                                                day: "numeric",
+                                              })}
+                                            </span>
+                                          </div>
+                                          {timing.isLateSubmission ? (
+                                            <div
+                                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black bg-amber-50 text-amber-900 border border-amber-300 shadow-2xs"
+                                              title={
+                                                timing.scheduledEnd
+                                                  ? `Scheduled end time was ${timing.scheduledEnd.toLocaleTimeString([], {
+                                                      hour: "2-digit",
+                                                      minute: "2-digit",
+                                                    })}`
+                                                  : "Submitted past scheduled exam window"
+                                              }
+                                            >
+                                              <Clock className="w-3 h-3 text-amber-600 shrink-0 animate-pulse" />
+                                              <span>Submitted Past Schedule (+{timing.minsLate}m)</span>
+                                            </div>
+                                          ) : (
+                                            <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-1">
+                                              <CheckCircle className="w-2.5 h-2.5" /> On Schedule
+                                            </span>
+                                          )}
+                                        </div>
+                                      ) : timing.isActivePastSchedule ? (
+                                        <div className="space-y-1">
+                                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-black bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-ping shrink-0" />
+                                            <span>Active (Past Schedule)</span>
+                                          </span>
+                                        </div>
+                                      ) : (
+                                        <span className="text-indigo-600 font-semibold italic text-[11px] flex items-center gap-1">
+                                          <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-ping shrink-0" />
+                                          Active in progress...
+                                        </span>
+                                      )}
+                                    </td>
+
+                                    {/* Action: View Exam Paper Button */}
+                                    <td className="p-3.5 sm:p-4 text-center whitespace-nowrap">
+                                      <div className="inline-flex items-center gap-1.5">
+                                        <button
+                                          type="button"
+                                          onClick={() => handleViewExamPaper(se)}
+                                          className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-[11px] font-extrabold px-3 py-1.5 rounded-xl shadow-xs transition-all cursor-pointer"
+                                          title="View official auto-filled student examination paper"
+                                        >
+                                          <FileText className="w-3.5 h-3.5" />
+                                          <span>View Exam Paper</span>
+                                        </button>
+                                        {se.violations_count > 0 && (
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              handleViewAttemptLogs(
+                                                se.student_id,
+                                                studentFullName,
+                                                se.exam_id
+                                              )
+                                            }
+                                            title="View security violation audit logs"
+                                            className="inline-flex items-center gap-1 bg-rose-50 hover:bg-rose-100 active:scale-95 border border-rose-200 text-rose-700 text-[10px] font-black px-2 py-1.5 rounded-xl shadow-2xs transition-all cursor-pointer"
+                                          >
+                                            <ShieldAlert className="w-3.5 h-3.5 text-rose-500" />
+                                            <span className="hidden sm:inline">Logs</span>
+                                          </button>
+                                        )}
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        <div className="p-8 text-center bg-slate-50/50">
+                          <p className="text-xs text-slate-400 font-medium">
+                            {courseGroup.attempts.length === 0
+                              ? `No exam attempts recorded yet for ${courseGroup.course_code}.`
+                              : `No attempts match your current search/status filter for ${courseGroup.course_code}.`}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+
+              {filteredMonitoringData.filter(
+                (cg) =>
+                  selectedMonitoringCourseId === "all" ||
+                  cg.course_id === selectedMonitoringCourseId
+              ).length === 0 && (
+                <div className="text-center py-16 border-2 border-dashed border-slate-100 rounded-3xl bg-slate-50/50">
+                  <p className="text-xs font-bold text-slate-500">
+                    No course attempts match the selected filter or search query.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedMonitoringCourseId("all");
+                      setMonitoringSearch("");
+                      setMonitoringStatusFilter("all");
+                    }}
+                    className="mt-3 px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl cursor-pointer"
+                  >
+                    Reset Filters
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -4011,6 +5055,625 @@ export function FacultyDashboardClient({
                 className="bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold px-4 py-2.5 rounded-xl cursor-pointer"
               >
                 Close Logs Window
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* OFFICIAL STUDENT EXAM PAPER MODAL */}
+      {examPaperModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/70 backdrop-blur-md animate-in fade-in duration-300 print:p-0 print:bg-white print:static print:z-auto print:backdrop-blur-none">
+          <div className="bg-slate-100 border border-slate-200 rounded-3xl max-w-4xl w-full shadow-2xl flex flex-col max-h-[94vh] overflow-hidden print:max-h-none print:overflow-visible print:border-none print:shadow-none print:rounded-none print:bg-white">
+            
+            {/* Modal Header Bar (Non-printable) */}
+            <div className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between shrink-0 print:hidden">
+              <div className="flex items-center gap-3">
+                <div className="bg-emerald-50 text-emerald-700 p-2.5 rounded-2xl border border-emerald-200">
+                  <FileText className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
+                    Official Student Examination Paper
+                    {activeExamPaperData?.hasEssay && (
+                      <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
+                        Includes Essay Questions
+                      </span>
+                    )}
+                  </h3>
+                  <p className="text-xs text-slate-400 font-semibold mt-0.5">
+                    {activeExamPaperData?.student ? (
+                      <>
+                        Student: <span className="text-slate-800 font-bold">{[activeExamPaperData.student.first_name, getStudentMiddleInitial(activeExamPaperData.student.middle_name), activeExamPaperData.student.last_name].filter(Boolean).join(" ")}</span> &bull; {activeExamPaperData.exam?.title || "Examination Paper"}
+                      </>
+                    ) : (
+                      "Loading examination attempt record..."
+                    )}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="inline-flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 text-xs font-bold px-3 py-2 rounded-xl transition-all cursor-pointer shadow-xs active:scale-95"
+                  title="Print or save as PDF"
+                >
+                  <Printer className="w-4 h-4 text-slate-600" />
+                  <span className="hidden sm:inline">Print Paper</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setExamPaperModalOpen(false)}
+                  className="p-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-400 hover:text-slate-700 cursor-pointer transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body / Printable A4 Area */}
+            <div className="overflow-y-auto flex-1 p-2 sm:p-6 print:p-0 print:overflow-visible">
+              {loadingExamPaper && !activeExamPaperData ? (
+                <div className="bg-white rounded-2xl p-16 flex flex-col items-center justify-center gap-4 text-center">
+                  <Loader2 className="w-10 h-10 animate-spin text-emerald-600" />
+                  <div>
+                    <h4 className="text-sm font-extrabold text-slate-800">Generating Official Examination Paper</h4>
+                    <p className="text-xs text-slate-400 font-semibold mt-1">Retrieving question bank items, student answers, and grading data...</p>
+                  </div>
+                </div>
+              ) : activeExamPaperData ? (
+                (() => {
+                  const paper = activeExamPaperData;
+                  const student = paper.student || {};
+                  const exam = paper.exam || {};
+                  const mi = getStudentMiddleInitial(student.middle_name);
+                  const studentFullName = mi
+                    ? `${student.first_name} ${mi} ${student.last_name}`
+                    : `${student.first_name} ${student.last_name}`;
+
+                  const yrLevelSection = formatStudentProgramAndYear(student.program_code, student.year_level || 1, student.section);
+                  
+                  const examDate = paper.submitted_at ? new Date(paper.submitted_at) : (paper.started_at ? new Date(paper.started_at) : new Date());
+                  const formattedExamDate = examDate.toLocaleDateString("en-US", {
+                    month: "long",
+                    day: "numeric",
+                    year: "numeric"
+                  });
+
+                  const rawItemsScore = paper.rawItemsScore ?? 0;
+                  const penaltyPoints = paper.penaltyPoints ?? 0;
+                  const finalTotalScore = paper.finalTotalScore ?? Math.max(0, rawItemsScore - penaltyPoints);
+                  const totalPossiblePoints = paper.totalPossiblePoints ?? 0;
+                  const hasPenalty = penaltyPoints > 0;
+
+                  // Group questions by canonical types
+                  const rawQuestions = exam.questions || [];
+                  const parsedQuestions = rawQuestions.map((q: any) => parseExamPaperQuestion(q));
+
+                  // Group by question_type
+                  const groupedTypesMap = new Map<string, any[]>();
+                  parsedQuestions.forEach((q: any) => {
+                    const qType = q.question_type || "Multiple_Choice";
+                    if (!groupedTypesMap.has(qType)) {
+                      groupedTypesMap.set(qType, []);
+                    }
+                    groupedTypesMap.get(qType)!.push(q);
+                  });
+
+                  // Sort groups by canonical order
+                  const sortedTypeKeys = Array.from(groupedTypesMap.keys()).sort((a, b) => {
+                    const orderA = QUESTION_TYPE_ORDER[a] ?? 99;
+                    const orderB = QUESTION_TYPE_ORDER[b] ?? 99;
+                    return orderA - orderB;
+                  });
+
+                  let runningItemNumber = 0;
+
+                  return (
+                    <div
+                      style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}
+                      className="exam-paper-printable w-full max-w-[794px] mx-auto bg-white border border-slate-200/90 rounded-2xl shadow-xl p-6 sm:p-10 text-slate-900 space-y-5 print:max-w-none print:shadow-none print:border-none print:m-0 print:p-0 print:rounded-none select-text"
+                    >
+                      {/* BSC OFFICIAL HEADER IMAGE */}
+                      <div className="w-full relative overflow-hidden leading-none block shrink-0 border-b border-slate-200 pb-2">
+                        <img
+                          src="/bsc-header.png"
+                          alt="Batanes State College Header"
+                          className="w-full h-auto object-cover block mx-auto print:w-full"
+                        />
+                      </div>
+
+                      {/* FULL EXAMINATION TITLE HEADER */}
+                      <div className="text-center space-y-0.5 pt-1 pb-2 border-b border-slate-200">
+                        <h2 className="text-base sm:text-lg font-black font-sans text-slate-900 tracking-wider uppercase">
+                          {exam.course?.course_code ? `${exam.course.course_code}` : "COURSE EXAMINATION"}
+                          {exam.course?.course_title ? ` — ${exam.course.course_title}` : ""}
+                        </h2>
+                        <p className="text-xs sm:text-sm font-black text-slate-800 uppercase tracking-wide">
+                          {exam.term ? `${exam.term.toUpperCase()} EXAMINATION` : "TERM EXAMINATION"}
+                        </p>
+                        <p className="text-xs font-bold text-slate-600">
+                          {exam.semester || "First Semester"} {exam.academic_year ? `• A.Y. ${exam.academic_year}` : ""}
+                        </p>
+                      </div>
+
+                      {/* AUTO-FILLED 4-BOX STUDENT METADATA (NAME, DATE, YR/LEVEL, SCORE) */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3.5 text-xs font-bold border-b-2 border-black pb-4 pt-1">
+                        {/* NAME */}
+                        <div className="flex items-baseline gap-2">
+                          <span className="font-black text-black uppercase tracking-wider shrink-0 min-w-[75px]">NAME:</span>
+                          <span className="border-b border-black flex-1 min-h-[20px] px-1 font-black text-slate-900 text-xs">
+                            {studentFullName}
+                          </span>
+                        </div>
+                        {/* DATE */}
+                        <div className="flex items-baseline gap-2">
+                          <span className="font-black text-black uppercase tracking-wider shrink-0 min-w-[50px]">DATE:</span>
+                          <span className="border-b border-black flex-1 min-h-[20px] px-1 font-black text-slate-900 text-xs">
+                            {formattedExamDate}
+                          </span>
+                        </div>
+                        {/* YR / LEVEL */}
+                        <div className="flex items-baseline gap-2">
+                          <span className="font-black text-black uppercase tracking-wider shrink-0 min-w-[75px]">YR / LEVEL:</span>
+                          <span className="border-b border-black flex-1 min-h-[20px] px-1 font-black text-slate-900 text-xs">
+                            {yrLevelSection}
+                          </span>
+                        </div>
+                        {/* SCORE: Total score with penalty breakdown */}
+                        <div className="flex items-baseline gap-2">
+                          <span className="font-black text-black uppercase tracking-wider shrink-0 min-w-[50px]">SCORE:</span>
+                          <span className="border-b border-black flex-1 min-h-[20px] px-1 font-black text-emerald-800 text-xs flex items-center justify-between">
+                            <span>
+                              {hasPenalty ? (
+                                <span className="font-black">
+                                  {rawItemsScore} - {penaltyPoints} = {finalTotalScore} pts
+                                </span>
+                              ) : (
+                                <span className="font-black">
+                                  {finalTotalScore} pts
+                                </span>
+                              )}
+                            </span>
+                            {totalPossiblePoints > 0 && (
+                              <span className="text-[10px] text-slate-500 font-bold ml-2">
+                                (out of {totalPossiblePoints} pts)
+                              </span>
+                            )}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* PENALTY & VIOLATIONS ALERT BANNER (If penalty exists) */}
+                      {hasPenalty && (
+                        <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 flex items-center justify-between gap-3 text-xs">
+                          <div className="flex items-center gap-2 text-rose-800">
+                            <ShieldAlert className="w-4 h-4 text-rose-600 shrink-0" />
+                            <span className="font-extrabold">
+                              Security Violations Penalty Applied: {paper.violations_count} violation(s) recorded ({paper.penaltyPerViolation ?? 2} pts penalty each).
+                            </span>
+                          </div>
+                          <div className="text-[11px] font-black font-mono text-rose-900 shrink-0">
+                            Calculation: {rawItemsScore} - {penaltyPoints} = {finalTotalScore} pts
+                          </div>
+                        </div>
+                      )}
+
+                      {/* QUESTION SECTIONS */}
+                      <div className="space-y-6 pt-2">
+                        {sortedTypeKeys.map((qType, typeIdx) => {
+                          const typeQuestions = groupedTypesMap.get(qType) || [];
+                          const sectionTotalPoints = typeQuestions.reduce((sum: number, q: any) => sum + (q.points || 1), 0);
+                          const headerLabel = QUESTION_TYPE_HEADER_LABELS[qType] || qType.toUpperCase();
+                          const instructionsText = QUESTION_TYPE_INSTRUCTIONS[qType] || "Read each question carefully and answer accordingly.";
+
+                          return (
+                            <div key={qType} className="space-y-4">
+                              {/* Test Section Header */}
+                              <div className="pt-3 pb-1.5 border-b-2 border-slate-900">
+                                <div className="flex items-baseline justify-between">
+                                  <h4 className="font-black text-sm text-slate-900 tracking-wide uppercase font-sans">
+                                    TEST {toRomanNumeral(typeIdx + 1)}. {headerLabel}
+                                  </h4>
+                                  <span className="text-xs font-extrabold text-slate-900 font-sans tracking-tight shrink-0">
+                                    ({sectionTotalPoints} {sectionTotalPoints === 1 ? "Point" : "Points"})
+                                  </span>
+                                </div>
+                                <p className="text-xs text-slate-700 italic font-sans mt-0.5 leading-tight">
+                                  <span className="font-bold not-italic">Directions: </span>
+                                  <span>{instructionsText}</span>
+                                </p>
+                              </div>
+
+                              {/* Questions in this Section */}
+                              <div className="space-y-4">
+                                {typeQuestions.map((q: any) => {
+                                  runningItemNumber++;
+                                  const currentItemNum = runningItemNumber;
+                                  const pointsMax = q.points || 1;
+                                  const isEssay = q.question_type === "Essay";
+                                  const isCorrect = q.is_correct;
+                                  const pointsAwarded = q.points_awarded;
+
+                                  return (
+                                    <div
+                                      key={q.question_id}
+                                      className="bg-white border border-slate-200 rounded-xl p-4 space-y-3 text-xs shadow-2xs"
+                                    >
+                                      {/* Item Header & Points */}
+                                      <div className="flex items-start justify-between gap-3">
+                                        <div className="flex items-start gap-2.5">
+                                          <span className="font-extrabold text-slate-900 bg-slate-100 border border-slate-300 px-2 py-0.5 rounded text-[11px] shrink-0">
+                                            Item {currentItemNum}.
+                                          </span>
+                                          <p className="font-bold text-slate-900 leading-relaxed text-xs">
+                                            {q.displayText || "(Question prompt)"}
+                                          </p>
+                                        </div>
+                                        <div className="flex items-center gap-2 shrink-0">
+                                          {isEssay ? (
+                                            <span className="text-[10px] font-extrabold bg-amber-50 border border-amber-200 text-amber-800 px-2 py-0.5 rounded">
+                                              Max {pointsMax} pts
+                                            </span>
+                                          ) : (
+                                            <span
+                                              className={`inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-0.5 rounded border ${
+                                                isCorrect === true
+                                                  ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                                                  : isCorrect === false
+                                                  ? "bg-rose-50 text-rose-800 border-rose-200"
+                                                  : "bg-slate-100 text-slate-700 border-slate-200"
+                                              }`}
+                                            >
+                                              {isCorrect === true ? (
+                                                <>
+                                                  <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                                  <span>+{pointsAwarded ?? pointsMax} pt</span>
+                                                </>
+                                              ) : isCorrect === false ? (
+                                                <>
+                                                  <XCircle className="w-3 h-3 text-rose-600" />
+                                                  <span>0 / {pointsMax} pt</span>
+                                                </>
+                                              ) : (
+                                                <span>{pointsMax} pt</span>
+                                              )}
+                                            </span>
+                                          )}
+                                        </div>
+                                      </div>
+
+                                      {/* Prompt Image if any */}
+                                      {q.image_url && (
+                                        <div className="pl-6 pt-1">
+                                          <img
+                                            src={q.image_url}
+                                            alt={`Question ${currentItemNum}`}
+                                            className="max-h-44 rounded-lg border border-slate-300 object-contain"
+                                          />
+                                        </div>
+                                      )}
+
+                                      {/* 1. Multiple Choice Options Rendering */}
+                                      {q.question_type === "Multiple_Choice" && (
+                                        <div className="pl-6 pt-1 space-y-1.5">
+                                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                            {(q.options || []).map((opt: string, optIdx: number) => {
+                                              const label = String.fromCharCode(65 + optIdx);
+                                              const optText = opt || `Option ${label}`;
+                                              const isStudentChoice = (q.submitted_response || "").trim() === optText.trim() ||
+                                                (q.submitted_response || "").trim().toUpperCase() === label;
+                                              const isCorrectChoice = (q.correct_answer || "").trim() === optText.trim() ||
+                                                (q.correct_answer || "").trim().toUpperCase() === label;
+
+                                              let borderBg = "bg-slate-50 border-slate-200 text-slate-700";
+                                              if (isStudentChoice && isCorrectChoice) {
+                                                borderBg = "bg-emerald-50 border-emerald-300 text-emerald-900 ring-1 ring-emerald-400";
+                                              } else if (isStudentChoice && !isCorrectChoice) {
+                                                borderBg = "bg-rose-50 border-rose-300 text-rose-900 ring-1 ring-rose-400";
+                                              } else if (!isStudentChoice && isCorrectChoice) {
+                                                borderBg = "bg-emerald-50/50 border-emerald-200 border-dashed text-emerald-900";
+                                              }
+
+                                              return (
+                                                <div
+                                                  key={optIdx}
+                                                  className={`flex items-center justify-between gap-2 p-2 rounded-lg border text-xs font-semibold ${borderBg}`}
+                                                >
+                                                  <div className="flex items-center gap-2">
+                                                    <span className="font-black px-1.5 py-0.5 rounded text-[10px] bg-slate-200/80 text-slate-800">
+                                                      {label}.
+                                                    </span>
+                                                    <span>{optText}</span>
+                                                  </div>
+                                                  <div className="shrink-0 text-[10px] font-black">
+                                                    {isStudentChoice && isCorrectChoice && (
+                                                      <span className="text-emerald-700 flex items-center gap-1">
+                                                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                                                        <span>Student Answer (Correct)</span>
+                                                      </span>
+                                                    )}
+                                                    {isStudentChoice && !isCorrectChoice && (
+                                                      <span className="text-rose-700 flex items-center gap-1">
+                                                        <XCircle className="w-3.5 h-3.5 text-rose-600" />
+                                                        <span>Student Answer (Incorrect)</span>
+                                                      </span>
+                                                    )}
+                                                    {!isStudentChoice && isCorrectChoice && (
+                                                      <span className="text-emerald-600 italic">
+                                                        (Correct Answer)
+                                                      </span>
+                                                    )}
+                                                  </div>
+                                                </div>
+                                              );
+                                            })}
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {/* 2. True or False Rendering */}
+                                      {q.question_type === "True_False" && (
+                                        <div className="pl-6 pt-1 space-y-2">
+                                          <div className="flex items-center gap-3">
+                                            {["True", "False"].map((choice) => {
+                                              const isStudentChoice = (q.submitted_response || "").trim().toLowerCase() === choice.toLowerCase();
+                                              const isCorrectChoice = (q.correct_answer || "").trim().toLowerCase() === choice.toLowerCase();
+
+                                              let badgeStyle = "bg-slate-50 border-slate-200 text-slate-600";
+                                              if (isStudentChoice && isCorrectChoice) {
+                                                badgeStyle = "bg-emerald-50 border-emerald-300 text-emerald-900 ring-1 ring-emerald-400";
+                                              } else if (isStudentChoice && !isCorrectChoice) {
+                                                badgeStyle = "bg-rose-50 border-rose-300 text-rose-900 ring-1 ring-rose-400";
+                                              } else if (!isStudentChoice && isCorrectChoice) {
+                                                badgeStyle = "bg-emerald-50/50 border-emerald-200 border-dashed text-emerald-800";
+                                              }
+
+                                              return (
+                                                <div
+                                                  key={choice}
+                                                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-bold ${badgeStyle}`}
+                                                >
+                                                  <span>{choice}</span>
+                                                  {isStudentChoice && isCorrectChoice && (
+                                                    <span className="text-[10px] text-emerald-700 font-black flex items-center gap-0.5">
+                                                      <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Student Ans
+                                                    </span>
+                                                  )}
+                                                  {isStudentChoice && !isCorrectChoice && (
+                                                    <span className="text-[10px] text-rose-700 font-black flex items-center gap-0.5">
+                                                      <XCircle className="w-3 h-3 text-rose-600" /> Student Ans
+                                                    </span>
+                                                  )}
+                                                  {!isStudentChoice && isCorrectChoice && (
+                                                    <span className="text-[10px] text-emerald-600 italic">
+                                                      (Key)
+                                                    </span>
+                                                  )}
+                                                </div>
+                                              );
+                                            })}
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {/* 3. Identification Rendering */}
+                                      {q.question_type === "Identification" && (
+                                        <div className="pl-6 pt-1 space-y-1.5">
+                                          <div className="flex flex-wrap items-center gap-2 text-xs">
+                                            <span className="font-extrabold text-slate-500">Student Response:</span>
+                                            <span
+                                              className={`font-mono font-bold px-2 py-0.5 rounded border ${
+                                                isCorrect === true
+                                                  ? "bg-emerald-50 border-emerald-300 text-emerald-900"
+                                                  : isCorrect === false
+                                                  ? "bg-rose-50 border-rose-300 text-rose-900"
+                                                  : "bg-slate-100 border-slate-300 text-slate-800"
+                                              }`}
+                                            >
+                                              {q.submitted_response || "(Blank / No Answer)"}
+                                            </span>
+                                            {isCorrect === false && (
+                                              <span className="text-slate-500 text-[11px] ml-2 font-medium">
+                                                Expected Key: <span className="font-mono font-bold text-slate-800">{q.correct_answer}</span>
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {/* 4. Fill In The Blanks Rendering */}
+                                      {q.question_type === "Fill_In_The_Blanks" && (
+                                        <div className="pl-6 pt-1 space-y-2">
+                                          <div className="space-y-1 text-xs">
+                                            <div className="font-extrabold text-slate-500">Student Submitted Blanks:</div>
+                                            <div className="flex flex-wrap gap-2">
+                                              {(() => {
+                                                let studentBlanks: Record<string, string> = {};
+                                                try {
+                                                  if ((q.submitted_response || "").trim().startsWith("{")) {
+                                                    const parsed = JSON.parse(q.submitted_response);
+                                                    studentBlanks = parsed.blanks || {};
+                                                  } else if (q.submitted_response) {
+                                                    studentBlanks = { "1": q.submitted_response };
+                                                  }
+                                                } catch {}
+
+                                                return (q.blanks || []).map((b: any, bIdx: number) => {
+                                                  const studentVal = studentBlanks[String(b.id || bIdx + 1)] || "";
+                                                  const isBlankCorrect = studentVal.trim().toLowerCase() === (b.answer || "").trim().toLowerCase();
+
+                                                  return (
+                                                    <div
+                                                      key={bIdx}
+                                                      className={`p-2 rounded-lg border text-xs font-mono ${
+                                                        isBlankCorrect
+                                                          ? "bg-emerald-50 border-emerald-300 text-emerald-900"
+                                                          : "bg-rose-50 border-rose-300 text-rose-900"
+                                                      }`}
+                                                    >
+                                                      <span className="font-bold">Blank #{bIdx + 1}: </span>
+                                                      <span>{studentVal || "(Empty)"}</span>
+                                                      {!isBlankCorrect && (
+                                                        <div className="text-[10px] text-slate-600 mt-0.5">
+                                                          Key: {b.answer} ({b.points || 1} pt)
+                                                        </div>
+                                                      )}
+                                                    </div>
+                                                  );
+                                                });
+                                              })()}
+                                            </div>
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {/* 5. Matching Type Rendering */}
+                                      {q.question_type === "Matching_Type" && (
+                                        <div className="pl-6 pt-1 space-y-2">
+                                          <div className="space-y-1 text-xs">
+                                            <div className="font-extrabold text-slate-500">Premise & Student Matching:</div>
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                              {(q.matches || []).map((m: any, mIdx: number) => (
+                                                <div key={mIdx} className="p-2 rounded-lg border bg-slate-50 border-slate-200 text-xs">
+                                                  <div className="font-bold text-slate-800">{mIdx + 1}. {m.premise}</div>
+                                                  <div className="text-slate-600 text-[11px] mt-0.5">
+                                                    Matched with: <span className="font-bold text-slate-900">{m.choice}</span>
+                                                  </div>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {/* 6. Essay Question with Interactive Grading */}
+                                      {isEssay && (
+                                        <div className="pl-6 pt-1 space-y-3">
+                                          {/* Student Written Response */}
+                                          <div className="space-y-1">
+                                            <div className="flex items-center justify-between text-[11px] text-slate-500 font-bold">
+                                              <span>Student Submitted Essay Response:</span>
+                                              <span>Min Words: {q.min_words || 50} words</span>
+                                            </div>
+                                            <div className="p-3.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 leading-relaxed font-normal whitespace-pre-wrap select-text">
+                                              {q.submitted_response ? (
+                                                q.submitted_response
+                                              ) : (
+                                                <span className="text-slate-400 italic">
+                                                  (Student did not submit an answer for this essay item.)
+                                                </span>
+                                              )}
+                                            </div>
+                                          </div>
+
+                                          {/* Interactive Grading Panel */}
+                                          <div className="p-3 bg-amber-50/80 border border-amber-200/90 rounded-xl flex flex-wrap items-center justify-between gap-3 print:hidden">
+                                            <div className="flex items-center gap-3">
+                                              <span className="text-xs font-black text-amber-950">
+                                                Award Essay Points:
+                                              </span>
+                                              <div className="flex items-center gap-1.5">
+                                                <input
+                                                  type="number"
+                                                  min={0}
+                                                  max={pointsMax}
+                                                  value={
+                                                    essayPointsDraft[q.answer_id] !== undefined
+                                                      ? essayPointsDraft[q.answer_id]
+                                                      : (pointsAwarded !== null ? pointsAwarded : 0)
+                                                  }
+                                                  onChange={(e) => {
+                                                    const val = Number(e.target.value);
+                                                    setEssayPointsDraft((prev) => ({
+                                                      ...prev,
+                                                      [q.answer_id]: isNaN(val) ? 0 : val,
+                                                    }));
+                                                  }}
+                                                  className="w-16 px-2 py-1 text-center text-xs font-black bg-white border border-amber-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 text-slate-900"
+                                                />
+                                                <span className="text-xs font-extrabold text-amber-900">
+                                                  / {pointsMax} pts
+                                                </span>
+                                              </div>
+                                            </div>
+
+                                            <div className="flex items-center gap-2">
+                                              {pointsAwarded !== null ? (
+                                                <span className="inline-flex items-center gap-1 text-[11px] font-black text-emerald-800 bg-emerald-100/80 border border-emerald-300 px-2.5 py-1 rounded-lg">
+                                                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                                                  <span>Graded ({pointsAwarded} / {pointsMax} pts)</span>
+                                                </span>
+                                              ) : (
+                                                <span className="inline-flex items-center gap-1 text-[11px] font-black text-amber-800 bg-amber-100 border border-amber-300 px-2.5 py-1 rounded-lg">
+                                                  <Clock className="w-3.5 h-3.5 text-amber-600" />
+                                                  <span>Ungraded</span>
+                                                </span>
+                                              )}
+
+                                              <button
+                                                type="button"
+                                                disabled={savingEssayId === q.answer_id || !q.answer_id}
+                                                onClick={() => handleSaveEssayScore(q.answer_id, pointsMax)}
+                                                className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 disabled:opacity-50 text-white text-xs font-extrabold px-3 py-1.5 rounded-lg shadow-xs transition-all cursor-pointer"
+                                                title="Save score and update student's exam grade"
+                                              >
+                                                {savingEssayId === q.answer_id ? (
+                                                  <>
+                                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                                    <span>Saving...</span>
+                                                  </>
+                                                ) : (
+                                                  <>
+                                                    <Check className="w-3.5 h-3.5" />
+                                                    <span>Save Score</span>
+                                                  </>
+                                                )}
+                                              </button>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* BSC OFFICIAL FOOTER IMAGE */}
+                      <div className="w-full mt-8 relative overflow-hidden leading-none block shrink-0 border-t border-slate-200 pt-3">
+                        <img
+                          src="/bsc-footer.png"
+                          alt="Batanes State College Footer"
+                          className="w-full h-auto object-cover block mx-auto print:w-full"
+                        />
+                      </div>
+                    </div>
+                  );
+                })()
+              ) : (
+                <div className="bg-white rounded-2xl p-12 text-center text-slate-400 text-xs">
+                  Unable to load examination paper details.
+                </div>
+              )}
+            </div>
+
+            {/* Modal Bottom Bar */}
+            <div className="bg-white border-t border-slate-200 px-6 py-3 flex items-center justify-between shrink-0 print:hidden">
+              <span className="text-xs text-slate-400 font-semibold">
+                Batanes State College &bull; Official Examination Paper
+              </span>
+              <button
+                type="button"
+                onClick={() => setExamPaperModalOpen(false)}
+                className="bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold px-4 py-2 rounded-xl cursor-pointer"
+              >
+                Close Window
               </button>
             </div>
           </div>

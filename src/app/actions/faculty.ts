@@ -1064,7 +1064,14 @@ export async function gradeEssayAnswer(
     }
 
     if (answer.studentExam.exam.faculty_id !== facultyId) {
-      return { error: "Unauthorized operation." };
+      const facultyUser = await db.faculty.findUnique({
+        where: { faculty_id: facultyId },
+        include: { user: true }
+      });
+      const allowedRoles = ["Department_Chair", "Program_Chair", "Dean", "Director_of_Instruction", "Superadmin"];
+      if (!allowedRoles.includes(facultyUser?.user?.role || "")) {
+        return { error: "Unauthorized operation." };
+      }
     }
 
     await db.$transaction(async (tx) => {
@@ -1118,10 +1125,142 @@ export async function gradeEssayAnswer(
     });
 
     revalidatePath("/dashboard/faculty");
+    revalidatePath("/dashboard/chair");
     return { success: true };
   } catch (err: any) {
     console.error("Error grading essay answer:", err);
     return { error: err.message || "Failed to grade essay answer." };
+  }
+}
+
+export async function getStudentExamPaper(studentExamId: number) {
+  try {
+    const studentExam = await db.studentExam.findUnique({
+      where: { student_exam_id: studentExamId },
+      include: {
+        student: {
+          include: {
+            user: true,
+            program: true,
+          },
+        },
+        exam: {
+          include: {
+            course: true,
+            questionBank: true,
+            examTargets: {
+              include: {
+                program: true,
+              },
+            },
+          },
+        },
+        studentAnswers: {
+          include: {
+            question: true,
+          },
+        },
+      },
+    });
+
+    if (!studentExam) {
+      return { error: "Student examination attempt not found." };
+    }
+
+    const answers = studentExam.studentAnswers || [];
+    const questions = studentExam.exam?.questionBank || [];
+
+    let rawItemsScore = 0;
+    let totalPossiblePoints = 0;
+    let hasEssay = false;
+    let pendingEssayCount = 0;
+
+    questions.forEach((q) => {
+      totalPossiblePoints += (q.points || 1);
+      if (q.question_type === "Essay") {
+        hasEssay = true;
+      }
+    });
+
+    answers.forEach((ans) => {
+      let pts = ans.points_awarded;
+      if (ans.question?.question_type === "Essay") {
+        if (pts === null) {
+          pendingEssayCount++;
+        }
+      }
+      if (pts === null && ans.is_correct === true) {
+        pts = ans.question?.points ?? 1;
+      } else if (pts === null) {
+        pts = 0;
+      }
+      rawItemsScore += (pts || 0);
+    });
+
+    const violationsCount = studentExam.violations_count || 0;
+    const penaltyPerViolation = studentExam.exam?.score_penalty_points ?? 2;
+    const penaltyPoints = violationsCount * penaltyPerViolation;
+    if (answers.length === 0 && studentExam.submitted_at) {
+      rawItemsScore = (studentExam.total_score || 0) + penaltyPoints;
+    }
+    const finalTotalScore = Math.max(0, rawItemsScore - penaltyPoints);
+
+    return {
+      success: true,
+      paper: {
+        student_exam_id: studentExam.student_exam_id,
+        started_at: studentExam.started_at.toISOString(),
+        submitted_at: studentExam.submitted_at ? studentExam.submitted_at.toISOString() : null,
+        violations_count: violationsCount,
+        submission_trigger: studentExam.submission_trigger,
+        rawItemsScore,
+        totalPossiblePoints,
+        penaltyPoints,
+        penaltyPerViolation,
+        finalTotalScore,
+        hasEssay,
+        pendingEssayCount,
+        student: {
+          student_id: studentExam.student.student_id,
+          first_name: studentExam.student.first_name,
+          middle_name: studentExam.student.middle_name,
+          last_name: studentExam.student.last_name,
+          institutional_id: studentExam.student.user?.institutional_id || "",
+          year_level: studentExam.student.year_level,
+          section: studentExam.student.section,
+          program_code: studentExam.student.program?.program_code || "",
+          program_title: studentExam.student.program?.program_name || "",
+        },
+        exam: {
+          exam_id: studentExam.exam.exam_id,
+          title: studentExam.exam.title,
+          term: studentExam.exam.term,
+          semester: studentExam.exam.semester,
+          academic_year: studentExam.exam.academic_year,
+          time_limit_minutes: studentExam.exam.time_limit_minutes,
+          score_penalty_points: studentExam.exam.score_penalty_points,
+          course: studentExam.exam.course,
+          questions: questions.map((q) => {
+            const ans = answers.find((a) => a.question_id === q.question_id);
+            return {
+              question_id: q.question_id,
+              question_text: q.question_text,
+              question_type: q.question_type,
+              correct_answer: q.correct_answer,
+              points: q.points,
+              topic: q.topic,
+              answer_id: ans?.answer_id || null,
+              submitted_response: ans?.submitted_response || "",
+              is_correct: ans?.is_correct ?? null,
+              points_awarded: ans?.points_awarded ?? null,
+            };
+          }),
+        },
+      },
+    };
+  } catch (err: any) {
+    console.error("Error fetching student exam paper:", err);
+    return { error: err.message || "Failed to fetch student exam paper." };
   }
 }
 

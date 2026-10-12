@@ -247,7 +247,15 @@ export default async function StudentDashboard() {
       }
     }
 
-    if (now >= examStart && now <= examEnd) {
+    // Cutoff rule: students who haven't started yet cannot open or take the exam
+    // within 15 minutes of the scheduled end time (or after the schedule ended).
+    // Students currently taking the exam can continue until their full time limit expires.
+    const totalWindowMs = examEnd.getTime() - examStart.getTime();
+    const cutoffTime = totalWindowMs > 15 * 60 * 1000
+      ? new Date(examEnd.getTime() - 15 * 60 * 1000)
+      : examEnd;
+
+    if (now >= examStart && now < cutoffTime) {
       activeExams.push({
         ...t.exam,
         target: sanitizedTarget,
@@ -262,7 +270,7 @@ export default async function StudentDashboard() {
         is_reopened: false,
       });
     } else {
-      // Time is up and student did not open or start the exam -> Missed Exam
+      // Time is up or within 15 minutes of end and student did not open or start the exam -> Missed Exam
       missedExams.push({
         ...t.exam,
         target: sanitizedTarget,
@@ -329,7 +337,12 @@ export default async function StudentDashboard() {
       }
     }
 
-    if (now >= examStart && now <= examEnd) {
+    const totalOverrideWindowMs = examEnd.getTime() - examStart.getTime();
+    const overrideCutoffTime = totalOverrideWindowMs > 15 * 60 * 1000
+      ? new Date(examEnd.getTime() - 15 * 60 * 1000)
+      : examEnd;
+
+    if (now >= examStart && now < overrideCutoffTime) {
       activeExams.push({
         ...o.exam,
         target: sanitizedTarget,

@@ -1,5 +1,5 @@
 import * as XLSX from "xlsx";
-import { formatStudentName } from "./academicUtils";
+import { formatStudentName, getSubmissionScheduleTiming } from "./academicUtils";
 
 export interface StudentRosterItem {
   course_id: number;
@@ -166,15 +166,23 @@ export function exportExamSubmissionsToExcel(
   courseCode: string,
   submissions: Array<{
     student_exam_id: number;
+    exam_id?: number;
     student: {
       first_name: string;
+      middle_name?: string | null;
       last_name: string;
       user: { institutional_id: string; institutional_email?: string };
       program: { program_code: string };
       year_level: number;
       section: string;
+      studentOverrides?: Array<any>;
     };
-    exam: { title: string; course: { course_code: string } };
+    exam: { 
+      exam_id?: number;
+      title: string; 
+      course: { course_code: string; course_title?: string };
+      examTargets?: Array<any>;
+    };
     submission_trigger: string;
     violations_count: number;
     total_score: number;
@@ -183,25 +191,33 @@ export function exportExamSubmissionsToExcel(
   }>,
   maxExamScore?: number
 ) {
-  if (!submissions) return;
+  if (!submissions || submissions.length === 0) return;
 
   const rows = submissions.map((se) => {
-    const studentName = formatStudentName(se.student);
+    const studentName = formatStudentName(se.student, "firstLast");
+    const timing = getSubmissionScheduleTiming(se);
     const pct = maxExamScore && maxExamScore > 0
       ? `${Math.round((se.total_score / maxExamScore) * 100)}%`
       : "N/A";
 
     return {
       "Student Name": studentName,
-      "Student ID": se.student.user.institutional_id,
+      "Student ID": se.student.user?.institutional_id || "",
+      "Subject Code": se.exam?.course?.course_code || courseCode,
+      "Subject Title": se.exam?.course?.course_title || "",
+      "Examination": se.exam?.title || examTitle,
       "Score (pts)": se.total_score,
       "Max Score (pts)": maxExamScore || "N/A",
       "Percentage Grade": pct,
-      "Program & Year": `${se.student.program.program_code} Year ${se.student.year_level}`,
-      "Submission Trigger": se.submission_trigger.replace("_", " "),
+      "Program & Year": `${se.student.program?.program_code || ""} Year ${se.student.year_level}`,
+      "Section": ((se.student.program?.program_code || "").toUpperCase().includes("INFOTECH") || (se.student.program?.program_code || "").toUpperCase() === "BSIT" || (se.student.section || "").toUpperCase() === "GENERAL") ? "N/A" : (se.student.section || "N/A"),
+      "Submission Trigger": (se.submission_trigger || "").replace("_", " "),
       "Violations Count": se.violations_count,
       "Started At": new Date(se.started_at).toLocaleString(),
-      "Submitted At": se.submitted_at ? new Date(se.submitted_at).toLocaleString() : "In Progress",
+      "Submitted At": se.submitted_at 
+        ? `${new Date(se.submitted_at).toLocaleString()}${timing.isLateSubmission ? ` (Late: +${timing.minsLate}m past schedule)` : ""}` 
+        : "In Progress",
+      "Timing Status": timing.timingLabel,
     };
   });
 

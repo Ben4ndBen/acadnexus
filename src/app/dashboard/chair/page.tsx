@@ -306,16 +306,76 @@ export default async function ChairDashboard() {
   const studentExams = await db.studentExam.findMany({
     include: {
       student: {
-        include: { user: true, program: true },
+        include: { user: true, program: true, studentOverrides: true },
       },
       exam: {
-        include: { course: true },
+        include: { course: true, examTargets: true, questionBank: true },
       },
       studentAnswers: {
         include: { question: true },
       },
     },
     orderBy: { started_at: "desc" },
+  });
+
+  const sanitizedStudentExams = studentExams.map((se) => {
+    const answers = se.studentAnswers || [];
+    const questions = se.exam?.questionBank || [];
+
+    let rawScore = 0;
+    answers.forEach((ans) => {
+      let pts = ans.points_awarded;
+      if (pts === null && ans.is_correct === true) {
+        pts = ans.question?.points ?? 1;
+      } else if (pts === null) {
+        pts = 0;
+      }
+      rawScore += (pts || 0);
+    });
+
+    const penaltyPerViolation = se.exam?.score_penalty_points ?? 2;
+    const penaltyPoints = (se.violations_count || 0) * penaltyPerViolation;
+    if (answers.length === 0 && se.submitted_at) {
+      rawScore = (se.total_score || 0) + penaltyPoints;
+    }
+    const finalScore = Math.max(0, rawScore - penaltyPoints);
+
+    const hasEssay = questions.some((q) => q.question_type === "Essay");
+    const essayAnswers = answers.filter((a) => a.question?.question_type === "Essay");
+    const hasUngradedEssay = hasEssay && (essayAnswers.length === 0 || essayAnswers.some((a) => a.points_awarded === null));
+
+    return {
+      ...se,
+      started_at: se.started_at.toISOString(),
+      submitted_at: se.submitted_at ? se.submitted_at.toISOString() : null,
+      rawScore,
+      penaltyPoints,
+      finalScore,
+      hasEssay,
+      hasUngradedEssay,
+      exam: {
+        ...se.exam,
+        examTargets: se.exam.examTargets?.map((t) => ({
+          ...t,
+          scheduled_date: t.scheduled_date.toISOString(),
+          start_time: t.start_time.toISOString(),
+          end_time: t.end_time.toISOString(),
+        })) || [],
+        questionBank: questions,
+      },
+      student: {
+        ...se.student,
+        studentOverrides: se.student.studentOverrides?.map((o) => ({
+          ...o,
+          new_start_time: o.new_start_time.toISOString(),
+          new_end_time: o.new_end_time.toISOString(),
+        })) || [],
+      },
+      studentAnswers: answers.map((ans) => ({
+        ...ans,
+        last_updated_at: ans.last_updated_at.toISOString(),
+      })),
+    };
   });
 
   // Ensure all curriculum subjects exist in database
@@ -404,7 +464,7 @@ export default async function ChairDashboard() {
           hasSeenCourseAssignment={chairFacultyRecord?.has_seen_course_assignment || false}
           requirePasswordUpdate={dbUser.require_password_update || false}
           username={dbUser.username || undefined}
-          studentExams={studentExams as any}
+          studentExams={sanitizedStudentExams as any}
         />
       </main>
 
