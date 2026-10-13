@@ -2059,83 +2059,19 @@ export function FacultyDashboardClient({
                               }
 
                               if (parsedComments) {
-                                const hasQuestionComments = parsedComments.questions && Object.keys(parsedComments.questions).length > 0;
                                 const hasGeneral = !!(parsedComments.general && parsedComments.general.trim().length > 0);
+                                if (!hasGeneral) return null;
                                 return (
                                   <div className="bg-rose-50/50 border border-rose-100 rounded-xl p-4 space-y-3">
                                     <div className="flex gap-3 items-start">
                                       <AlertCircle className="w-5 h-5 text-rose-500 shrink-0 mt-0.5" />
                                       <div>
                                         <p className="text-xs font-bold text-rose-800">{titleLabel}:</p>
-                                        {hasGeneral && (
-                                          <p className="text-xs text-rose-700 mt-1 italic leading-relaxed">
-                                            "{parsedComments.general!.trim()}"
-                                          </p>
-                                        )}
-                                        {!hasGeneral && !hasQuestionComments && (
-                                          <p className="text-xs text-rose-700 mt-1 italic leading-relaxed">
-                                            Returned for revision. Please review your exam questions.
-                                          </p>
-                                        )}
+                                        <p className="text-xs text-rose-700 mt-1 italic leading-relaxed">
+                                          "{parsedComments.general!.trim()}"
+                                        </p>
                                       </div>
                                     </div>
-
-                                    {hasQuestionComments && (
-                                      <div className="border-t border-rose-100/60 pt-3 space-y-2">
-                                        <h5 className="text-[11px] font-bold text-rose-800 uppercase tracking-wider">Granular Question Feedback:</h5>
-                                        <div className="space-y-2">
-                                          {Object.entries(parsedComments.questions || {}).map(([qId, val]) => {
-                                            let commentText = "";
-                                            let itemStatus: "Approved" | "Revision" | undefined = undefined;
-
-                                            if (val && typeof val === "object") {
-                                              commentText = (val as any).comment || "";
-                                              itemStatus = (val as any).status;
-                                            } else if (typeof val === "string") {
-                                              commentText = val;
-                                              if (commentText.trim()) itemStatus = "Revision";
-                                            }
-
-                                            if (!itemStatus && !commentText.trim()) return null;
-
-                                            const qIndex = exam.questionBank?.findIndex(q => String(q.question_id) === String(qId)) ?? -1;
-                                            const qNumber = qIndex !== -1 ? qIndex + 1 : "Unknown";
-                                            const qText = qIndex !== -1 ? exam.questionBank?.[qIndex].question_text : "";
-
-                                            return (
-                                              <div key={qId} className={`bg-white border rounded-lg p-2.5 space-y-1.5 ${
-                                                itemStatus === "Approved" ? "border-emerald-100" : "border-rose-100"
-                                              }`}>
-                                                <div className="flex justify-between items-center text-[10px] font-bold">
-                                                  <span className={itemStatus === "Approved" ? "text-emerald-800" : "text-rose-800"}>
-                                                    Question #{qNumber}
-                                                  </span>
-                                                  {itemStatus && (
-                                                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase tracking-wider ${
-                                                      itemStatus === "Approved" 
-                                                        ? "bg-emerald-50 text-emerald-700 border border-emerald-100" 
-                                                        : "bg-rose-50 text-rose-700 border border-rose-100"
-                                                    }`}>
-                                                      {itemStatus === "Approved" ? "Approved" : "Revision Required"}
-                                                    </span>
-                                                  )}
-                                                </div>
-                                                {qText && (
-                                                  <p className="text-[11px] text-slate-500 truncate">{qText}</p>
-                                                )}
-                                                {commentText.trim() && (
-                                                  <p className={`text-xs italic font-medium ${
-                                                    itemStatus === "Approved" ? "text-emerald-700" : "text-rose-700"
-                                                  }`}>
-                                                    "{commentText}"
-                                                  </p>
-                                                )}
-                                              </div>
-                                            );
-                                          })}
-                                        </div>
-                                      </div>
-                                    )}
                                   </div>
                                 );
                               }
@@ -2166,18 +2102,23 @@ export function FacultyDashboardClient({
                             );
                             const showDiReturnedComments = !!exam.approvalWorkflow?.di_comments && exam.current_status === "Returned";
 
+                            const card1 = showProgChairComments ? renderCommentCard(exam.approvalWorkflow!.prog_chair_comments!, "Returned by Program Chairperson") : null;
+                            const card2 = showChairComments ? renderCommentCard(exam.approvalWorkflow!.chair_comments!, "Returned by Department Chairperson") : null;
+                            const card3 = showDiReturnedComments ? renderCommentCard(exam.approvalWorkflow!.di_comments!, "Returned by Director of Instruction") : null;
+                            const hasAnyCard = !!(card1 || card2 || card3);
+
                             return (
                               <>
-                                {showProgChairComments && renderCommentCard(exam.approvalWorkflow!.prog_chair_comments!, "Returned by Program Chairperson")}
-                                {showChairComments && renderCommentCard(exam.approvalWorkflow!.chair_comments!, "Returned by Department Chairperson")}
-                                {showDiReturnedComments && renderCommentCard(exam.approvalWorkflow!.di_comments!, "Returned by Director of Instruction")}
-                                {!showProgChairComments && !showChairComments && !showDiReturnedComments && (
+                                {card1}
+                                {card2}
+                                {card3}
+                                {!hasAnyCard && (
                                   <div className="bg-rose-50/50 border border-rose-100 rounded-xl p-4 flex gap-3 items-start">
                                     <AlertCircle className="w-5 h-5 text-rose-500 shrink-0 mt-0.5" />
                                     <div>
                                       <p className="text-xs font-bold text-rose-800">Returned for Revision:</p>
                                       <p className="text-xs text-rose-700 mt-1 italic leading-relaxed">
-                                        This examination has been returned for revision by the reviewer. Please review and update your exam.
+                                        Specific questions have been flagged for revision. Click below to review and edit them in Step 2 of the builder.
                                       </p>
                                     </div>
                                   </div>

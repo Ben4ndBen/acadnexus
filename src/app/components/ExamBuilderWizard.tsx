@@ -2478,166 +2478,79 @@ export function ExamBuilderWizard({
       </div>
 
       {/* RETURNED REVISION FEEDBACK BANNER */}
-      {exam.current_status === "Returned" && exam.approvalWorkflow && (
-        <div className="space-y-4 mb-6">
-          {exam.approvalWorkflow.prog_chair_comments && (
-            <div className="bg-rose-50 border border-rose-200 rounded-3xl p-6 shadow-sm space-y-3">
-              <div className="flex gap-3 items-start">
-                <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
-                <div className="space-y-1 w-full">
-                  <h4 className="text-xs font-extrabold text-rose-900 uppercase tracking-wider">
-                    Feedback from Program Chairperson (Returned)
-                  </h4>
-                  {(() => {
-                    let parsed: { general?: string; questions?: Record<string, any> } | null = null;
-                    try {
-                      const trimmed = exam.approvalWorkflow.prog_chair_comments.trim();
-                      if (trimmed.startsWith("{")) {
-                        parsed = JSON.parse(trimmed);
-                      }
-                    } catch {}
-                    const generalText = parsed ? (parsed.general?.trim() || "") : (!exam.approvalWorkflow.prog_chair_comments.trim().startsWith("{") ? exam.approvalWorkflow.prog_chair_comments.trim() : "");
-                    const questionComments = parsed?.questions || {};
-                    const hasQuestionComments = Object.keys(questionComments).length > 0;
+      {exam.current_status === "Returned" && exam.approvalWorkflow && (() => {
+        const getGeneralText = (commentStr?: string | null) => {
+          if (!commentStr) return "";
+          try {
+            const trimmed = commentStr.trim();
+            if (trimmed.startsWith("{")) {
+              const parsed = JSON.parse(trimmed);
+              return parsed?.general?.trim() || "";
+            }
+            return trimmed;
+          } catch {
+            return commentStr.trim();
+          }
+        };
 
-                    return (
-                      <div className="space-y-3">
-                        {generalText ? (
-                          <p className="text-xs text-rose-800 italic leading-relaxed font-medium">
-                            "{generalText}"
-                          </p>
-                        ) : null}
-                        {hasQuestionComments && (
-                          <div className="border-t border-rose-200/80 pt-3 space-y-2">
-                            <p className="text-[11px] font-bold text-rose-900 uppercase tracking-wider">Granular Question Feedback:</p>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                              {Object.entries(questionComments).map(([qId, val]) => {
-                                let commentText = "";
-                                let itemStatus: string | undefined = undefined;
-                                if (val && typeof val === "object") {
-                                  commentText = (val as any).comment || "";
-                                  itemStatus = (val as any).status;
-                                } else if (typeof val === "string") {
-                                  commentText = val;
-                                  if (commentText.trim()) itemStatus = "Revision";
-                                }
-                                if (!itemStatus && !commentText.trim()) return null;
-                                const qIndex = questions.findIndex(q => String(q.question_id) === String(qId));
-                                const qNumber = qIndex !== -1 ? qIndex + 1 : "Unknown";
-                                return (
-                                  <div key={qId} className="bg-white border border-rose-200 rounded-xl p-3 text-xs space-y-1">
-                                    <div className="flex items-center justify-between font-bold text-[11px]">
-                                      <span className="text-rose-900">Question #{qNumber}</span>
-                                      <span className={`px-2 py-0.5 rounded-full text-[9px] uppercase font-black ${
-                                        itemStatus === "Approved" ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-rose-100 text-rose-800"
-                                      }`}>
-                                        {itemStatus === "Approved" ? "Approved" : "Revision Required"}
-                                      </span>
-                                    </div>
-                                    {commentText.trim() && (
-                                      <p className="text-rose-700 italic text-xs">"{commentText}"</p>
-                                    )}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })()}
+        const progChairGeneral = getGeneralText(exam.approvalWorkflow.prog_chair_comments);
+        const chairGeneral = getGeneralText(exam.approvalWorkflow.chair_comments);
+        const diGeneral = exam.approvalWorkflow.di_comments?.trim() || "";
+
+        if (!progChairGeneral && !chairGeneral && !diGeneral) return null;
+
+        return (
+          <div className="space-y-4 mb-6">
+            {progChairGeneral && (
+              <div className="bg-rose-50 border border-rose-200 rounded-3xl p-6 shadow-sm space-y-3">
+                <div className="flex gap-3 items-start">
+                  <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+                  <div className="space-y-1 w-full">
+                    <h4 className="text-xs font-extrabold text-rose-900 uppercase tracking-wider">
+                      Feedback from Program Chairperson (Returned)
+                    </h4>
+                    <p className="text-xs text-rose-800 italic leading-relaxed font-medium">
+                      "{progChairGeneral}"
+                    </p>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {exam.approvalWorkflow.chair_comments && (
-            <div className="bg-rose-50 border border-rose-200 rounded-3xl p-6 shadow-sm space-y-3">
-              <div className="flex gap-3 items-start">
-                <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
-                <div className="space-y-1 w-full">
-                  <h4 className="text-xs font-extrabold text-rose-900 uppercase tracking-wider">
-                    Feedback from Department Chairperson (Returned)
-                  </h4>
-                  {(() => {
-                    let parsed: { general?: string; questions?: Record<string, any> } | null = null;
-                    try {
-                      const trimmed = exam.approvalWorkflow.chair_comments.trim();
-                      if (trimmed.startsWith("{")) {
-                        parsed = JSON.parse(trimmed);
-                      }
-                    } catch {}
-                    const generalText = parsed ? (parsed.general?.trim() || "") : (!exam.approvalWorkflow.chair_comments.trim().startsWith("{") ? exam.approvalWorkflow.chair_comments.trim() : "");
-                    const questionComments = parsed?.questions || {};
-                    const hasQuestionComments = Object.keys(questionComments).length > 0;
-
-                    return (
-                      <div className="space-y-3">
-                        {generalText ? (
-                          <p className="text-xs text-rose-800 italic leading-relaxed font-medium">
-                            "{generalText}"
-                          </p>
-                        ) : null}
-                        {hasQuestionComments && (
-                          <div className="border-t border-rose-200/80 pt-3 space-y-2">
-                            <p className="text-[11px] font-bold text-rose-900 uppercase tracking-wider">Granular Question Feedback:</p>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                              {Object.entries(questionComments).map(([qId, val]) => {
-                                let commentText = "";
-                                let itemStatus: string | undefined = undefined;
-                                if (val && typeof val === "object") {
-                                  commentText = (val as any).comment || "";
-                                  itemStatus = (val as any).status;
-                                } else if (typeof val === "string") {
-                                  commentText = val;
-                                  if (commentText.trim()) itemStatus = "Revision";
-                                }
-                                if (!itemStatus && !commentText.trim()) return null;
-                                const qIndex = questions.findIndex(q => String(q.question_id) === String(qId));
-                                const qNumber = qIndex !== -1 ? qIndex + 1 : "Unknown";
-                                return (
-                                  <div key={qId} className="bg-white border border-rose-200 rounded-xl p-3 text-xs space-y-1">
-                                    <div className="flex items-center justify-between font-bold text-[11px]">
-                                      <span className="text-rose-900">Question #{qNumber}</span>
-                                      <span className={`px-2 py-0.5 rounded-full text-[9px] uppercase font-black ${
-                                        itemStatus === "Approved" ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-rose-100 text-rose-800"
-                                      }`}>
-                                        {itemStatus === "Approved" ? "Approved" : "Revision Required"}
-                                      </span>
-                                    </div>
-                                    {commentText.trim() && (
-                                      <p className="text-rose-700 italic text-xs">"{commentText}"</p>
-                                    )}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })()}
+            {chairGeneral && (
+              <div className="bg-rose-50 border border-rose-200 rounded-3xl p-6 shadow-sm space-y-3">
+                <div className="flex gap-3 items-start">
+                  <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+                  <div className="space-y-1 w-full">
+                    <h4 className="text-xs font-extrabold text-rose-900 uppercase tracking-wider">
+                      Feedback from Department Chairperson (Returned)
+                    </h4>
+                    <p className="text-xs text-rose-800 italic leading-relaxed font-medium">
+                      "{chairGeneral}"
+                    </p>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
-          {exam.approvalWorkflow.di_comments && (
-            <div className="bg-amber-50 border border-amber-200 rounded-3xl p-6 shadow-sm space-y-3">
-              <div className="flex gap-3 items-start">
-                <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-                <div className="space-y-1 w-full">
-                  <h4 className="text-xs font-extrabold text-amber-900 uppercase tracking-wider">
-                    Feedback / Remarks from Director of Instruction
-                  </h4>
-                  <p className="text-xs text-amber-800 italic leading-relaxed font-medium">
-                    "{exam.approvalWorkflow.di_comments}"
-                  </p>
+            )}
+
+            {diGeneral && (
+              <div className="bg-amber-50 border border-amber-200 rounded-3xl p-6 shadow-sm space-y-3">
+                <div className="flex gap-3 items-start">
+                  <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                  <div className="space-y-1 w-full">
+                    <h4 className="text-xs font-extrabold text-amber-900 uppercase tracking-wider">
+                      Feedback / Remarks from Director of Instruction
+                    </h4>
+                    <p className="text-xs text-amber-800 italic leading-relaxed font-medium">
+                      "{diGeneral}"
+                    </p>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
-        </div>
-      )}
+            )}
+          </div>
+        );
+      })()}
 
       {/* STEP 1: EXAM CONFIGURATION */}
       {step === 1 && (
