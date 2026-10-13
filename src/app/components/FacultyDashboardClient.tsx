@@ -5224,7 +5224,7 @@ export function FacultyDashboardClient({
                                       <div className="flex items-start justify-between gap-3">
                                         <div className="flex items-start gap-2.5">
                                           <span className="font-extrabold text-slate-900 bg-slate-100 border border-slate-300 px-2 py-0.5 rounded text-[11px] shrink-0">
-                                            Item {currentItemNum}.
+                                            {currentItemNum}.
                                           </span>
                                           <p className="font-bold text-slate-900 leading-relaxed text-xs">
                                             {q.displayText || "(Question prompt)"}

@@ -847,7 +847,7 @@ export function DirectorDashboardClient({
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex items-start gap-2.5 flex-1">
                             <span className="font-black text-slate-900 bg-slate-100 border border-slate-300 px-2 py-0.5 rounded text-xs shrink-0">
-                              Item {itemNum}.
+                              {itemNum}.
                             </span>
                             <div className="font-bold text-slate-900 leading-relaxed text-xs pt-0.5">
                               <Latex text={parsed.text || "(Question prompt empty)"} />
