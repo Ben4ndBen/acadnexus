@@ -853,9 +853,6 @@ export function DirectorDashboardClient({
                               <Latex text={parsed.text || "(Question prompt empty)"} />
                             </div>
                           </div>
-                          <span className="text-[10px] font-extrabold bg-slate-100 border border-slate-300 text-slate-700 px-2 py-0.5 rounded shrink-0 uppercase tracking-tight">
-                            {q.taxonomy_level || "KNOWLEDGE"} • {q.points || 1} pt(s)
-                          </span>
                         </div>
 
                         {/* PROMPT IMAGE */}

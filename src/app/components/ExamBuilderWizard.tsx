@@ -4345,9 +4345,6 @@ export function ExamBuilderWizard({
                                       {q.text || "(Question prompt empty)"}
                                     </p>
                                   </div>
-                                  <span className="text-[9px] font-bold bg-indigo-50 border border-indigo-200 text-indigo-800 px-1.5 py-0.5 rounded shrink-0">
-                                    {q.taxonomy_level || "KNOWLEDGE / REMEMBERING"} • {q.points || 1} pt(s)
-                                  </span>
                                 </div>
 
                                 {/* Prompt Image if any */}
