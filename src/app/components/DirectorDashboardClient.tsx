@@ -6,8 +6,10 @@ import {
   BarChart3, ShieldCheck, Map, List, CheckCircle, 
   XCircle, Clock, AlertCircle, RefreshCw, Search, Building2,
   UserPlus, X, Loader2, Eye, EyeOff, Award, Calendar, Sparkles,
-  Users, BookOpen, UserCog
+  Users, BookOpen, UserCog, Columns, FileText
 } from "lucide-react";
+import { BSCTableOfSpecificationsView } from "@/app/components/BSCTableOfSpecificationsView";
+import { Latex } from "@/app/components/Latex";
 import { reviewExamByDirector, toggleGlobalHold, toggleIndividualHold, saveActiveAcademicPeriod, updateDirectorNameAction } from "@/app/actions/director";
 import type { AcademicPeriodSettings } from "@/lib/academicUtils";
 import { registerInstructorByAdminAction } from "@/app/actions/auth";
@@ -22,6 +24,97 @@ import {
   resolveDepartmentKey
 } from "@/lib/courseDepartmentMapping";
 import { getExpectedYearAndSemForCourse } from "@/lib/bsitCurriculum";
+
+const QUESTION_TYPE_ORDER: Record<string, number> = {
+  Multiple_Choice: 1,
+  True_False: 2,
+  Identification: 3,
+  Matching_Type: 4,
+  Fill_In_The_Blanks: 5,
+  Essay: 6,
+};
+
+const QUESTION_TYPE_HEADER_LABELS: Record<string, string> = {
+  Multiple_Choice: "MULTIPLE CHOICE",
+  True_False: "TRUE OR FALSE",
+  Identification: "IDENTIFICATION",
+  Matching_Type: "MATCHING TYPE",
+  Fill_In_The_Blanks: "FILL IN THE BLANKS",
+  Essay: "ESSAY / OPEN-ENDED RESPONSE",
+};
+
+const QUESTION_TYPE_INSTRUCTIONS: Record<string, string> = {
+  Multiple_Choice: "Read each question carefully and select the best answer from the given choices.",
+  True_False: "Write 'True' if the statement is correct, or 'False' if it is incorrect.",
+  Identification: "Identify the concept described in each statement and write your answer clearly on the line provided.",
+  Matching_Type: "Match the items in Column A with their corresponding descriptions in Column B.",
+  Fill_In_The_Blanks: "Fill in the missing word(s) in each sentence to make the statement complete and accurate.",
+  Essay: "Answer the following question(s) comprehensively. Write your answer clearly and concisely.",
+};
+
+const toRomanNumeral = (num: number): string => {
+  const romanMap: [number, string][] = [
+    [10, "X"], [9, "IX"], [5, "V"], [4, "IV"], [1, "I"]
+  ];
+  let result = "";
+  for (const [val, sym] of romanMap) {
+    while (num >= val) {
+      result += sym;
+      num -= val;
+    }
+  }
+  return result || "I";
+};
+
+const parseQuestionData = (q: any) => {
+  let text = q.question_text || "";
+  let image_url = "";
+  let options: string[] = [];
+  let premises: string[] = [];
+  let matches: any[] = [];
+  let blanks: any[] = [];
+  let min_words = 0;
+
+  if (Array.isArray(q.options)) {
+    options = q.options;
+  }
+
+  if (text.startsWith("{")) {
+    try {
+      const parsed = JSON.parse(text);
+      text = parsed.text || text;
+      image_url = parsed.image_url || "";
+      options = parsed.options || options;
+      premises = parsed.premises || [];
+      matches = parsed.matches || [];
+      blanks = parsed.blanks || [];
+      min_words = parsed.min_words;
+    } catch {}
+  }
+
+  let correctAnswerStr = q.correct_answer || "";
+  if (correctAnswerStr.trim().startsWith("{") || correctAnswerStr.trim().startsWith("[")) {
+    try {
+      const parsedAns = JSON.parse(correctAnswerStr);
+      if (parsedAns.blanks && Array.isArray(parsedAns.blanks) && blanks.length === 0) {
+        blanks = parsedAns.blanks;
+      }
+      if (parsedAns.matches && Array.isArray(parsedAns.matches) && matches.length === 0) {
+        matches = parsedAns.matches;
+      }
+    } catch {}
+  }
+
+  return {
+    text,
+    image_url,
+    options,
+    premises,
+    matches,
+    blanks,
+    min_words,
+  };
+};
 
 interface DirectorDashboardClientProps {
   directorUserId: number;
@@ -43,13 +136,25 @@ interface DirectorDashboardClientProps {
     chair_review_status: string;
     exam: {
       title: string;
+      term?: string | null;
+      semester?: string | null;
+      academic_year?: string | null;
+      exam_date?: Date | string | null;
+      document_reference?: string | null;
+      tos_file_path?: string | null;
+      time_limit_minutes?: number | null;
       faculty: {
         first_name: string;
         last_name: string;
+        department?: {
+          department_name: string;
+        } | null;
       };
       course: {
         course_code: string;
-      }
+        course_title?: string;
+      };
+      questionBank?: Array<any>;
     };
   }>;
   departmentsData: Array<{
@@ -73,9 +178,19 @@ interface DirectorDashboardClientProps {
     exam_id: number;
     title: string;
     current_status: string;
+    term?: string | null;
+    semester?: string | null;
+    academic_year?: string | null;
+    exam_date?: Date | string | null;
+    document_reference?: string | null;
+    tos_file_path?: string | null;
+    time_limit_minutes?: number | null;
     faculty: {
       first_name: string;
       last_name: string;
+      department?: {
+        department_name: string;
+      } | null;
     };
     course: {
       course_code: string;
@@ -83,10 +198,12 @@ interface DirectorDashboardClientProps {
     };
     approvalWorkflow: {
       workflow_id: number;
+      chair_review_status?: string | null;
       di_review_status: string;
       reviewed_by_di_id: number | null;
       di_comments: string | null;
     } | null;
+    questionBank?: Array<any>;
   }>;
   globalHoldActive: boolean;
   departmentsList?: Array<{
@@ -275,6 +392,10 @@ export function DirectorDashboardClient({
 
   // State for Review Queue
   const [isSubmittingReview, setIsSubmittingReview] = useState<number | null>(null);
+
+  // State for Director Exam Preview Modal
+  const [activePreviewApproval, setActivePreviewApproval] = useState<any | null>(null);
+  const [previewSplitMode, setPreviewSplitMode] = useState<"split" | "tos_only" | "questions_only">("split");
 
   // State for Global Hold Toggle
   const [isTogglingGlobalHold, setIsTogglingGlobalHold] = useState(false);
@@ -569,6 +690,222 @@ export function DirectorDashboardClient({
     return matchesSearch && matchesStatus;
   });
 
+  const renderOfficialExamPaperForDirector = (approval: any) => {
+    const qBank = approval.exam?.questionBank || [];
+    if (qBank.length === 0) {
+      return (
+        <div className="bg-slate-50 border border-slate-200 rounded-xl p-8 text-center text-slate-500 text-xs">
+          No questions found in this examination draft.
+        </div>
+      );
+    }
+
+    const groupsMap: Record<string, any[]> = {};
+    qBank.forEach((q: any) => {
+      const type = q.question_type || "Multiple_Choice";
+      if (!groupsMap[type]) groupsMap[type] = [];
+      groupsMap[type].push(q);
+    });
+
+    const sortedTypes = Object.keys(groupsMap).sort((a, b) => {
+      const orderA = QUESTION_TYPE_ORDER[a] || 99;
+      const orderB = QUESTION_TYPE_ORDER[b] || 99;
+      return orderA - orderB;
+    });
+
+    const totalPoints = qBank.reduce((sum: number, q: any) => sum + (q.points || 1), 0);
+    const term = approval.exam?.term || "Prelim";
+    const semester = approval.exam?.semester || "1st Semester";
+    const courseCode = approval.exam?.course?.course_code || "";
+    const courseTitle = approval.exam?.course?.course_title || "";
+
+    let itemCounter = 0;
+
+    return (
+      <div className="bg-white border border-slate-300 rounded-2xl shadow-xl p-6 sm:p-8 space-y-6 text-slate-900 font-sans">
+        {/* BSC OFFICIAL HEADER IMAGE */}
+        <div className="w-full border-b border-slate-200 pb-3">
+          <img
+            src="/bsc-header.png"
+            alt="Batanes State College Header"
+            className="w-full h-auto object-contain mx-auto max-h-[140px]"
+          />
+        </div>
+
+        {/* EXAMINATION METADATA HEADER */}
+        <div className="text-center space-y-0.5 py-1 border-b border-slate-200">
+          <h2 className="text-base sm:text-lg font-black font-sans text-slate-900 tracking-wider uppercase">
+            {courseCode}{courseTitle ? ` — ${courseTitle}` : ""}
+          </h2>
+          <p className="text-xs sm:text-sm font-black text-slate-800 uppercase tracking-wide">
+            {term.toUpperCase()} EXAMINATION
+          </p>
+          <p className="text-xs font-bold text-slate-700">
+            {semester}
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3 text-xs font-bold border-b border-black pb-3 pt-1">
+          <div className="flex items-baseline gap-2">
+            <span className="font-black text-black uppercase tracking-wider shrink-0 min-w-[75px]">NAME:</span>
+            <span className="border-b border-black flex-1 min-h-[18px]"></span>
+          </div>
+          <div className="flex items-baseline gap-2">
+            <span className="font-black text-black uppercase tracking-wider shrink-0 min-w-[50px]">DATE:</span>
+            <span className="border-b border-black flex-1 min-h-[18px]"></span>
+          </div>
+          <div className="flex items-baseline gap-2">
+            <span className="font-black text-black uppercase tracking-wider shrink-0 min-w-[75px]">YR / LEVEL:</span>
+            <span className="border-b border-black flex-1 min-h-[18px]"></span>
+          </div>
+          <div className="flex items-baseline gap-2">
+            <span className="font-black text-black uppercase tracking-wider shrink-0 min-w-[50px]">SCORE:</span>
+            <span className="border-b border-black flex-1 min-h-[18px]"></span>
+          </div>
+        </div>
+
+        {/* TEST PARTS */}
+        <div className="space-y-6 pt-2">
+          {sortedTypes.map((qType, typeIdx) => {
+            const items = groupsMap[qType];
+            const groupPoints = items.reduce((sum, q) => sum + (q.points || 1), 0);
+            const headerLabel = QUESTION_TYPE_HEADER_LABELS[qType] || qType.toUpperCase();
+            const instruction = QUESTION_TYPE_INSTRUCTIONS[qType] || "Answer the items as instructed.";
+
+            return (
+              <div key={qType} className="space-y-4">
+                {/* TEST PART HEADER */}
+                <div className="pt-3 pb-2 border-b-2 border-slate-900">
+                  <div className="flex items-baseline justify-between">
+                    <h4 className="font-extrabold text-xs sm:text-sm text-slate-900 tracking-wide uppercase font-sans">
+                      TEST {toRomanNumeral(typeIdx + 1)}. {headerLabel}
+                    </h4>
+                    <span className="text-xs font-extrabold text-slate-900 font-sans tracking-tight shrink-0">
+                      ({groupPoints} {groupPoints === 1 ? "Point" : "Points"})
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-700 italic font-sans mt-0.5 leading-tight">
+                    <span className="font-bold not-italic">Directions: </span>
+                    <span>{instruction}</span>
+                  </p>
+                </div>
+
+                {/* QUESTION ITEMS */}
+                <div className="space-y-4">
+                  {items.map((q: any) => {
+                    itemCounter += 1;
+                    const itemNum = itemCounter;
+                    const parsed = parseQuestionData(q);
+
+                    return (
+                      <div
+                        key={q.question_id}
+                        className="border border-slate-200 rounded-xl p-4 space-y-3 bg-white"
+                      >
+                        {/* ITEM HEADER & QUESTION PROMPT */}
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-start gap-2.5 flex-1">
+                            <span className="font-black text-slate-900 bg-slate-100 border border-slate-300 px-2 py-0.5 rounded text-xs shrink-0">
+                              Item {itemNum}.
+                            </span>
+                            <div className="font-bold text-slate-900 leading-relaxed text-xs pt-0.5">
+                              <Latex text={parsed.text || "(Question prompt empty)"} />
+                            </div>
+                          </div>
+                          <span className="text-[10px] font-extrabold bg-slate-100 border border-slate-300 text-slate-700 px-2 py-0.5 rounded shrink-0 uppercase tracking-tight">
+                            {q.taxonomy_level || "KNOWLEDGE"} • {q.points || 1} pt(s)
+                          </span>
+                        </div>
+
+                        {/* PROMPT IMAGE */}
+                        {parsed.image_url && (
+                          <div className="pl-7">
+                            <img
+                              src={parsed.image_url}
+                              alt={`Item ${itemNum}`}
+                              className="max-h-40 rounded-lg border border-slate-300 object-contain"
+                            />
+                          </div>
+                        )}
+
+                        {/* OPTIONS / PREMISES / MATCHES - STRICTLY NO ANSWER KEY */}
+                        {parsed.options && parsed.options.length > 0 && (
+                          <div className="pl-7 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-semibold text-slate-800">
+                            {parsed.options.map((opt: string, optIdx: number) => {
+                              const letter = String.fromCharCode(65 + optIdx);
+                              return (
+                                <div key={optIdx} className="flex items-start gap-2 bg-slate-50 border border-slate-200 rounded-lg p-2">
+                                  <span className="font-black text-slate-700">{letter}.</span>
+                                  <span><Latex text={opt} /></span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+
+                        {q.question_type === "True_False" && (!parsed.options || parsed.options.length === 0) && (
+                          <div className="pl-7 flex items-center gap-4 text-xs font-semibold text-slate-700">
+                            {["True", "False"].map((choice) => (
+                              <div key={choice} className="flex items-center gap-1.5 border border-slate-300 bg-slate-50 px-3 py-1 rounded-lg">
+                                <div className="w-3.5 h-3.5 border-2 border-slate-400 rounded-sm" />
+                                <span>{choice}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {q.question_type === "Identification" && (
+                          <div className="pl-7">
+                            <div className="border-b-2 border-dashed border-slate-400 w-full max-w-xs h-6 text-slate-400 font-mono text-[10px] flex items-end">
+                              Answer: _______________________
+                            </div>
+                          </div>
+                        )}
+
+                        {q.question_type === "Fill_In_The_Blanks" && (
+                          <div className="pl-7 flex flex-wrap gap-2 text-xs font-mono text-slate-600">
+                            {parsed.blanks && parsed.blanks.length > 0 ? (
+                              parsed.blanks.map((b: any, bIdx: number) => (
+                                <div key={bIdx} className="bg-slate-100 border border-slate-300 px-2.5 py-1 rounded">
+                                  Blank #{bIdx + 1}: ____________
+                                </div>
+                              ))
+                            ) : (
+                              <div className="bg-slate-100 border border-slate-300 px-2.5 py-1 rounded">
+                                Blank: ____________
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {q.question_type === "Matching_Type" && parsed.matches && parsed.matches.length > 0 && (
+                          <div className="pl-7 grid grid-cols-2 gap-4 text-xs border border-slate-200 rounded-lg p-2.5 bg-slate-50">
+                            <div className="space-y-1">
+                              <p className="font-bold text-[10px] text-slate-500 uppercase border-b pb-1">Column A (Premises)</p>
+                              {parsed.matches.map((m: any, mIdx: number) => (
+                                <p key={mIdx} className="font-semibold text-slate-800">{mIdx + 1}. {m.premise || `Premise ${mIdx + 1}`}</p>
+                              ))}
+                            </div>
+                            <div className="space-y-1">
+                              <p className="font-bold text-[10px] text-slate-500 uppercase border-b pb-1">Column B (Choices)</p>
+                              {parsed.matches.map((m: any, mIdx: number) => (
+                                <p key={mIdx} className="font-semibold text-slate-800">{String.fromCharCode(65 + mIdx)}. {m.choice || `Choice ${mIdx + 1}`}</p>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-8">
       {/* Dashboard Sub-navigation Tabs */}
@@ -737,7 +1074,19 @@ export function DirectorDashboardClient({
                         Chair Review: {approval.chair_review_status}
                       </p>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button 
+                        type="button"
+                        onClick={() => {
+                          setActivePreviewApproval(approval);
+                          setPreviewSplitMode("split");
+                        }}
+                        className="bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 text-xs font-bold px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                        title="Preview Official Examination Paper & TOS"
+                      >
+                        <Eye className="w-3.5 h-3.5 text-indigo-600" />
+                        Preview Exam
+                      </button>
                       <button 
                         disabled={isSubmittingReview === approval.workflow_id}
                         onClick={() => handleReview(approval.workflow_id, approval.exam_id, "Approve")}
@@ -827,7 +1176,7 @@ export function DirectorDashboardClient({
                   <th scope="col" className="px-6 py-4">Course & Title</th>
                   <th scope="col" className="px-6 py-4">Faculty Author</th>
                   <th scope="col" className="px-6 py-4">Status</th>
-                  <th scope="col" className="px-6 py-4">Administrative Hold</th>
+                  <th scope="col" className="px-6 py-4">Actions / Administrative Hold</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 bg-white">
@@ -870,26 +1219,45 @@ export function DirectorDashboardClient({
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <button
-                          disabled={isLoading}
-                          onClick={() => handleToggleIndividualHold(exam.exam_id, !isManualHold)}
-                          className={`text-xs font-bold px-3 py-1.5 rounded-lg border transition-all disabled:opacity-50 flex items-center gap-1.5 ${
-                            isManualHold
-                              ? "bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100"
-                              : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
-                          }`}
-                        >
-                          {isLoading ? (
-                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                          ) : isManualHold ? (
-                            <>
-                              <Clock className="w-3.5 h-3.5 text-rose-500" />
-                              On Hold
-                            </>
-                          ) : (
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActivePreviewApproval({
+                                workflow_id: exam.approvalWorkflow?.workflow_id || 0,
+                                exam_id: exam.exam_id,
+                                chair_review_status: exam.approvalWorkflow?.chair_review_status || "Approved",
+                                exam: exam,
+                              });
+                              setPreviewSplitMode("split");
+                            }}
+                            className="text-xs font-bold px-2.5 py-1.5 rounded-lg border border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 transition-all flex items-center gap-1.5 cursor-pointer"
+                            title="Preview Exam Paper & TOS"
+                          >
+                            <Eye className="w-3.5 h-3.5 text-indigo-600" />
+                            Preview
+                          </button>
+                          <button
+                            disabled={isLoading}
+                            onClick={() => handleToggleIndividualHold(exam.exam_id, !isManualHold)}
+                            className={`text-xs font-bold px-3 py-1.5 rounded-lg border transition-all disabled:opacity-50 flex items-center gap-1.5 ${
+                              isManualHold
+                                ? "bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100"
+                                : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+                            }`}
+                          >
+                            {isLoading ? (
+                              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                            ) : isManualHold ? (
+                              <>
+                                <Clock className="w-3.5 h-3.5 text-rose-500" />
+                                On Hold
+                              </>
+                            ) : (
                               "No Hold"
-                          )}
-                        </button>
+                            )}
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -2291,6 +2659,259 @@ export function DirectorDashboardClient({
         </div>
       )}
 
+      {/* DI SPLIT SCREEN REVIEW & PREVIEW MODAL */}
+      {activePreviewApproval && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex flex-col p-3 sm:p-6 overflow-hidden">
+          {/* Modal Header */}
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shrink-0 shadow-lg">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 flex items-center justify-center font-black">
+                <Columns className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-base sm:text-lg font-bold text-white tracking-tight">
+                    {activePreviewApproval.exam.title}
+                  </h2>
+                  <span className="text-[10px] bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-2 py-0.5 rounded-full font-bold uppercase">
+                    Director Review & Preview
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Course: <strong className="text-slate-200">{activePreviewApproval.exam.course.course_code} {activePreviewApproval.exam.course.course_title ? `- ${activePreviewApproval.exam.course.course_title}` : ""}</strong> • Faculty: <strong className="text-slate-200">{activePreviewApproval.exam.faculty.first_name} {activePreviewApproval.exam.faculty.last_name}</strong>
+                </p>
+              </div>
+            </div>
+
+            {/* View Mode Switcher & Close Button */}
+            <div className="flex items-center justify-between md:justify-end gap-3">
+              <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs font-bold text-slate-400">
+                <button
+                  type="button"
+                  onClick={() => setPreviewSplitMode("split")}
+                  className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer ${
+                    previewSplitMode === "split"
+                      ? "bg-indigo-600 text-white shadow-md font-extrabold"
+                      : "hover:text-slate-200"
+                  }`}
+                >
+                  <Columns className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Split 50/50</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPreviewSplitMode("tos_only")}
+                  className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer ${
+                    previewSplitMode === "tos_only"
+                      ? "bg-indigo-600 text-white shadow-md font-extrabold"
+                      : "hover:text-slate-200"
+                  }`}
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">TOS Document</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPreviewSplitMode("questions_only")}
+                  className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer ${
+                    previewSplitMode === "questions_only"
+                      ? "bg-indigo-600 text-white shadow-md font-extrabold"
+                      : "hover:text-slate-200"
+                  }`}
+                >
+                  <Eye className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Exam Paper Only</span>
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setActivePreviewApproval(null)}
+                className="w-9 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition-all cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Modal Split Viewport */}
+          <div className="flex-1 flex flex-col md:flex-row gap-4 mt-3 overflow-hidden min-h-0">
+            {/* LEFT COLUMN: TOS DOCUMENT */}
+            {(previewSplitMode === "split" || previewSplitMode === "tos_only") && (
+              <div className={`flex flex-col bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden transition-all duration-300 ${
+                previewSplitMode === "tos_only" ? "w-full" : "w-full md:w-1/2"
+              }`}>
+                <div className="p-3 bg-slate-950 border-b border-slate-800 flex items-center justify-between shrink-0">
+                  <div className="flex items-center gap-2 text-xs font-bold text-slate-300">
+                    <FileText className="w-4 h-4 text-indigo-400" />
+                    <span>Table of Specifications (TOS)</span>
+                  </div>
+                  {activePreviewApproval.exam.tos_file_path && activePreviewApproval.exam.tos_file_path.startsWith("http") && (
+                    <a
+                      href={activePreviewApproval.exam.tos_file_path}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[11px] font-bold text-indigo-400 hover:text-indigo-300 underline"
+                    >
+                      Open in New Tab
+                    </a>
+                  )}
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-4 bg-slate-950/50">
+                  {(() => {
+                    const tosStr = activePreviewApproval.exam.tos_file_path || "";
+                    let parsedTos: any = null;
+                    if (tosStr.trim().startsWith("{")) {
+                      try {
+                        parsedTos = JSON.parse(tosStr);
+                      } catch {}
+                    }
+
+                    if (parsedTos && parsedTos.topics) {
+                      return (
+                        <div className="w-full h-full overflow-y-auto bg-white p-4 rounded-xl border border-slate-800">
+                          <BSCTableOfSpecificationsView
+                            examTitle={activePreviewApproval.exam.title}
+                            courseCode={activePreviewApproval.exam.course?.course_code || ""}
+                            courseTitle={activePreviewApproval.exam.course?.course_title || activePreviewApproval.exam.title}
+                            departmentName={activePreviewApproval.exam.faculty?.department?.department_name || "Batanes State College"}
+                            term={activePreviewApproval.exam.term || "Prelim"}
+                            semester={activePreviewApproval.exam.semester || "1st Semester"}
+                            academicYear={activePreviewApproval.exam.academic_year || "2026-2027"}
+                            examDate={activePreviewApproval.exam.exam_date ? String(activePreviewApproval.exam.exam_date).split("T")[0] : ""}
+                            documentReference={activePreviewApproval.exam.document_reference || "BSC-ODI-F-121"}
+                            facultyName={`${activePreviewApproval.exam.faculty?.first_name || ""} ${activePreviewApproval.exam.faculty?.last_name || ""}`}
+                            totalItems={parsedTos.targetTotalItems || activePreviewApproval.exam.questionBank?.length || 50}
+                            topics={parsedTos.topics || []}
+                          />
+                        </div>
+                      );
+                    }
+
+                    if (tosStr.trim() !== "" && (tosStr.startsWith("/") || tosStr.startsWith("http"))) {
+                      return (
+                        <div className="w-full h-full flex flex-col">
+                          <iframe
+                            src={tosStr}
+                            className="w-full h-full rounded-xl border border-slate-800 bg-white"
+                            title="TOS Document Preview"
+                          />
+                          <p className="text-[10px] text-slate-400 mt-2 text-center shrink-0">
+                            Viewing document preview. If file format is not supported in browser frame (e.g. DOCX/XLSX), click "Open New Tab".
+                          </p>
+                        </div>
+                      );
+                    }
+
+                    // Fallback to auto-generated TOS from question bank
+                    const qBank = activePreviewApproval.exam.questionBank || [];
+                    const map: Record<string, number> = {};
+                    qBank.forEach((q: any) => {
+                      const t = (q as any).topic?.trim() || "General Course Concepts";
+                      map[t] = (map[t] || 0) + 1;
+                    });
+                    const fallbackTopics = Object.entries(map).map(([tName, qCount], idx) => ({
+                      id: `top-${idx}`,
+                      topic_name: tName,
+                      learning_outcomes: "Demonstrate mastery and application of syllabus competencies.",
+                      hours: Math.max(2, qCount * 2),
+                      weightPercentage: Math.round((qCount / (qBank.length || 1)) * 100),
+                      assignedItems: qCount,
+                      question_types: ["Multiple_Choice"],
+                      itemPlacement: `Items 1–${qBank.length}`,
+                    }));
+
+                    return (
+                      <div className="w-full h-full overflow-y-auto bg-white p-4 rounded-xl border border-slate-800">
+                        <BSCTableOfSpecificationsView
+                          examTitle={activePreviewApproval.exam.title}
+                          courseCode={activePreviewApproval.exam.course?.course_code || ""}
+                          courseTitle={activePreviewApproval.exam.course?.course_title || activePreviewApproval.exam.title}
+                          departmentName={activePreviewApproval.exam.faculty?.department?.department_name || "Batanes State College"}
+                          term={activePreviewApproval.exam.term || "Prelim"}
+                          semester={activePreviewApproval.exam.semester || "1st Semester"}
+                          academicYear={activePreviewApproval.exam.academic_year || "2026-2027"}
+                          examDate={activePreviewApproval.exam.exam_date ? String(activePreviewApproval.exam.exam_date).split("T")[0] : ""}
+                          documentReference={activePreviewApproval.exam.document_reference || "BSC-ODI-F-121"}
+                          facultyName={`${activePreviewApproval.exam.faculty?.first_name || ""} ${activePreviewApproval.exam.faculty?.last_name || ""}`}
+                          totalItems={qBank.length || 50}
+                          topics={fallbackTopics}
+                        />
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
+            )}
+
+            {/* RIGHT COLUMN: EXAMINATION QUESTIONS PAPER (STRICTLY NO ANSWER KEY) */}
+            {(previewSplitMode === "split" || previewSplitMode === "questions_only") && (
+              <div className={`flex flex-col bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-lg transition-all duration-300 ${
+                previewSplitMode === "questions_only" ? "w-full" : "w-full md:w-1/2"
+              }`}>
+                {/* Questions Panel Header */}
+                <div className="p-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between shrink-0">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                    <span className="text-xs font-black text-slate-800 uppercase tracking-wider">
+                      Official Examination Paper
+                    </span>
+                  </div>
+                  <span className="text-xs font-bold text-slate-600 bg-slate-200/80 px-2 py-0.5 rounded-full">
+                    {activePreviewApproval.exam.questionBank?.length || 0} Items
+                  </span>
+                </div>
+
+                {/* Question Paper Body */}
+                <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
+                  {renderOfficialExamPaperForDirector(activePreviewApproval)}
+                </div>
+
+                {/* Footer Action Bar */}
+                {activePreviewApproval.workflow_id > 0 && (
+                  <div className="border-t border-slate-200 p-4 bg-slate-50 flex items-center justify-end gap-3 shrink-0">
+                    <button
+                      disabled={isSubmittingReview === activePreviewApproval.workflow_id}
+                      onClick={() => {
+                        handleReview(activePreviewApproval.workflow_id, activePreviewApproval.exam_id, "Hold");
+                        setActivePreviewApproval(null);
+                      }}
+                      className="inline-flex justify-center items-center gap-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs font-bold px-4 py-2.5 rounded-xl border border-amber-200 transition-all disabled:opacity-50 cursor-pointer"
+                    >
+                      <Clock className="w-3.5 h-3.5" />
+                      Hold Exam
+                    </button>
+                    <button
+                      disabled={isSubmittingReview === activePreviewApproval.workflow_id}
+                      onClick={() => {
+                        handleReview(activePreviewApproval.workflow_id, activePreviewApproval.exam_id, "Return");
+                        setActivePreviewApproval(null);
+                      }}
+                      className="inline-flex justify-center items-center gap-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold px-4 py-2.5 rounded-xl border border-rose-200 transition-all disabled:opacity-50 cursor-pointer"
+                    >
+                      <XCircle className="w-3.5 h-3.5" />
+                      Return Exam
+                    </button>
+                    <button
+                      disabled={isSubmittingReview === activePreviewApproval.workflow_id}
+                      onClick={() => {
+                        handleReview(activePreviewApproval.workflow_id, activePreviewApproval.exam_id, "Approve");
+                        setActivePreviewApproval(null);
+                      }}
+                      className="inline-flex justify-center items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-5 py-2.5 rounded-xl transition-all shadow-sm disabled:opacity-50 cursor-pointer"
+                    >
+                      <CheckCircle className="w-3.5 h-3.5" />
+                      Approve Exam
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+

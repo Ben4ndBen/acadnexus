@@ -112,36 +112,6 @@ const parseQuestionData = (q: any) => {
   };
 };
 
-const formatCorrectAnswer = (answerStr: string) => {
-  if (!answerStr) return "";
-  const trimmed = answerStr.trim();
-  if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
-    try {
-      const parsed = JSON.parse(trimmed);
-      if (Array.isArray(parsed)) {
-        return parsed.map((item) => (typeof item === "object" ? item.answer || item.text || JSON.stringify(item) : String(item))).join(", ");
-      }
-      if (parsed.blanks) {
-        if (Array.isArray(parsed.blanks)) {
-          return parsed.blanks.map((b: any, idx: number) => `[Blank ${idx + 1}]: ${b.answer || b.text || "N/A"}`).join(" • ");
-        }
-        if (typeof parsed.blanks === "object") {
-          return Object.entries(parsed.blanks).map(([key, val]) => `[Blank ${key}]: ${val}`).join(" • ");
-        }
-      }
-      if (parsed.pairs && Array.isArray(parsed.pairs)) {
-        return parsed.pairs.map((p: any) => `${p.premise || ""} → ${p.answer || ""}`).join(" • ");
-      }
-      if (parsed.answer !== undefined) {
-        return String(parsed.answer);
-      }
-      if (parsed.text !== undefined) {
-        return String(parsed.text);
-      }
-    } catch {}
-  }
-  return answerStr;
-};
 
 interface ChairDashboardClientProps {
   chairUserId: number;
@@ -646,17 +616,58 @@ export function ChairDashboardClient({
                           </div>
                         )}
 
-                        {/* ANSWER KEY FOR CHAIR REVIEW */}
-                        <div className="pl-7">
-                          <div className="bg-emerald-50/80 border border-emerald-200/80 rounded-lg p-2.5 text-xs flex items-center gap-2 text-emerald-950 font-medium">
-                            <span className="font-black text-emerald-800 shrink-0 uppercase text-[10px] tracking-wider bg-emerald-100 px-2 py-0.5 rounded border border-emerald-300">
-                              Answer Key
-                            </span>
-                            <span className="font-extrabold font-mono text-emerald-900">
-                              {formatCorrectAnswer(q.correct_answer)}
-                            </span>
+                        {/* QUESTION TYPE SPECIFIC ANSWER AREAS WITHOUT ANSWER KEY */}
+                        {q.question_type === "True_False" && (!parsed.options || parsed.options.length === 0) && (
+                          <div className="pl-7 flex items-center gap-4 text-xs font-semibold text-slate-700">
+                            {["True", "False"].map((choice) => (
+                              <div key={choice} className="flex items-center gap-1.5 border border-slate-300 bg-slate-50 px-3 py-1 rounded-lg">
+                                <div className="w-3.5 h-3.5 border-2 border-slate-400 rounded-sm" />
+                                <span>{choice}</span>
+                              </div>
+                            ))}
                           </div>
-                        </div>
+                        )}
+
+                        {q.question_type === "Identification" && (
+                          <div className="pl-7">
+                            <div className="border-b-2 border-dashed border-slate-400 w-full max-w-xs h-6 text-slate-400 font-mono text-[10px] flex items-end">
+                              Answer: _______________________
+                            </div>
+                          </div>
+                        )}
+
+                        {q.question_type === "Fill_In_The_Blanks" && (
+                          <div className="pl-7 flex flex-wrap gap-2 text-xs font-mono text-slate-600">
+                            {parsed.blanks && parsed.blanks.length > 0 ? (
+                              parsed.blanks.map((b: any, bIdx: number) => (
+                                <div key={bIdx} className="bg-slate-100 border border-slate-300 px-2.5 py-1 rounded">
+                                  Blank #{bIdx + 1}: ____________
+                                </div>
+                              ))
+                            ) : (
+                              <div className="bg-slate-100 border border-slate-300 px-2.5 py-1 rounded">
+                                Blank: ____________
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {q.question_type === "Matching_Type" && parsed.matches && parsed.matches.length > 0 && (
+                          <div className="pl-7 grid grid-cols-2 gap-4 text-xs border border-slate-200 rounded-lg p-2.5 bg-slate-50">
+                            <div className="space-y-1">
+                              <p className="font-bold text-[10px] text-slate-500 uppercase border-b pb-1">Column A (Premises)</p>
+                              {parsed.matches.map((m: any, mIdx: number) => (
+                                <p key={mIdx} className="font-semibold text-slate-800">{mIdx + 1}. {m.premise || `Premise ${mIdx + 1}`}</p>
+                              ))}
+                            </div>
+                            <div className="space-y-1">
+                              <p className="font-bold text-[10px] text-slate-500 uppercase border-b pb-1">Column B (Choices)</p>
+                              {parsed.matches.map((m: any, mIdx: number) => (
+                                <p key={mIdx} className="font-semibold text-slate-800">{String.fromCharCode(65 + mIdx)}. {m.choice || `Choice ${mIdx + 1}`}</p>
+                              ))}
+                            </div>
+                          </div>
+                        )}
 
                         {/* CHAIR ITEM COMMENT TEXTAREA */}
                         {(() => {

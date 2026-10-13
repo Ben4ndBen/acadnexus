@@ -88,17 +88,30 @@ export default async function DirectorDashboard() {
       include: {
         exam: {
           include: {
-            faculty: true,
+            faculty: {
+              include: {
+                department: true,
+              },
+            },
             course: true,
+            questionBank: true,
           },
         },
+      },
+      orderBy: {
+        workflow_id: "desc",
       },
     }),
     db.examination.findMany({
       include: {
-        faculty: true,
+        faculty: {
+          include: {
+            department: true,
+          },
+        },
         course: true,
         approvalWorkflow: true,
+        questionBank: true,
       },
       orderBy: {
         exam_id: "desc",
