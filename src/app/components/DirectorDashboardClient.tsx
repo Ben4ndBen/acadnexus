@@ -390,8 +390,17 @@ export function DirectorDashboardClient({
     }
   };
 
-  // State for Review Queue
+  // State for Review Queue & Feedback Comments
   const [isSubmittingReview, setIsSubmittingReview] = useState<number | null>(null);
+  const [reviewComments, setReviewComments] = useState<Record<number, string>>({});
+  const [questionComments, setQuestionComments] = useState<Record<number, Record<number, string>>>({});
+
+  const hasDirectorComments = (workflowId: number) => {
+    const general = (reviewComments[workflowId] || "").trim();
+    if (general.length > 0) return true;
+    const qComms = questionComments[workflowId] || {};
+    return Object.values(qComms).some((c) => (c || "").trim().length > 0);
+  };
 
   // State for Director Exam Preview Modal
   const [activePreviewApproval, setActivePreviewApproval] = useState<any | null>(null);
@@ -598,8 +607,40 @@ export function DirectorDashboardClient({
       return;
     }
 
+    const generalComment = (reviewComments[workflowId] || "").trim();
+    const qComments = questionComments[workflowId] || {};
+    const approval = pendingApprovals.find(a => a.workflow_id === workflowId);
+    const questionsFeedback: Record<string, { status: "Approved" | "Revision"; comment: string }> = {};
+
+    if (approval && approval.exam?.questionBank) {
+      approval.exam.questionBank.forEach((q: any) => {
+        const comment = (qComments[q.question_id] || "").trim();
+        const status = comment ? "Revision" : "Approved";
+        questionsFeedback[q.question_id] = { status, comment };
+      });
+    }
+    const hasQuestionComments = Object.values(questionsFeedback).some(q => q.comment.trim().length > 0);
+
+    if (action === "Approve" && (generalComment.length > 0 || hasQuestionComments)) {
+      alert("The Approve button is disabled because feedback comments or revisions are entered. Please clear your comments if you wish to approve, or click 'Return'.");
+      return;
+    }
+
+    if (action === "Return" && !generalComment && !hasQuestionComments) {
+      alert("Please provide general remarks or request revisions on specific questions before returning the exam.");
+      return;
+    }
+
+    let compiledComments: string | undefined = undefined;
+    if (action === "Return") {
+      compiledComments = JSON.stringify({
+        general: generalComment,
+        questions: questionsFeedback,
+      });
+    }
+
     setIsSubmittingReview(workflowId);
-    const res = await reviewExamByDirector(workflowId, examId, action, directorUserId);
+    const res = await reviewExamByDirector(workflowId, examId, action, directorUserId, compiledComments);
     setIsSubmittingReview(null);
 
     if (res.error) {
@@ -894,6 +935,49 @@ export function DirectorDashboardClient({
                             </div>
                           </div>
                         )}
+
+                        {/* DI ITEM COMMENT TEXTAREA */}
+                        {(() => {
+                          const itemComment = questionComments[approval.workflow_id]?.[q.question_id] || "";
+                          const hasComment = Boolean(itemComment.trim());
+                          return (
+                            <div className="pt-2 border-t border-slate-200/80 space-y-2">
+                              <div className="flex items-center justify-between flex-wrap gap-2">
+                                <span className="text-[11px] font-extrabold text-slate-700 uppercase tracking-wider">
+                                  Item Feedback / Revision Remark:
+                                </span>
+                                {hasComment && (
+                                  <span className="bg-rose-100 text-rose-800 border border-rose-200 text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase">
+                                    Marked for Revision
+                                  </span>
+                                )}
+                              </div>
+
+                              <div>
+                                <textarea
+                                  value={itemComment}
+                                  onChange={(e) => {
+                                    const currentWorkflowComments = questionComments[approval.workflow_id] || {};
+                                    setQuestionComments({
+                                      ...questionComments,
+                                      [approval.workflow_id]: {
+                                        ...currentWorkflowComments,
+                                        [q.question_id]: e.target.value,
+                                      },
+                                    });
+                                  }}
+                                  placeholder={`Specify correction needed for Item ${itemNum}...`}
+                                  rows={2}
+                                  className={`w-full bg-slate-50 border rounded-lg p-2.5 text-xs text-slate-800 placeholder:text-slate-400 focus:bg-white focus:outline-none transition-all ${
+                                    hasComment
+                                      ? "border-rose-300 focus:border-rose-500 focus:ring-1 focus:ring-rose-500/20"
+                                      : "border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/20"
+                                  }`}
+                                />
+                              </div>
+                            </div>
+                          );
+                        })()}
                       </div>
                     );
                   })}
@@ -1088,9 +1172,18 @@ export function DirectorDashboardClient({
                         Preview Exam
                       </button>
                       <button 
-                        disabled={isSubmittingReview === approval.workflow_id}
+                        disabled={isSubmittingReview === approval.workflow_id || hasDirectorComments(approval.workflow_id)}
                         onClick={() => handleReview(approval.workflow_id, approval.exam_id, "Approve")}
-                        className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2 rounded-xl shadow-sm transition-all disabled:opacity-50 flex items-center gap-2"
+                        title={
+                          hasDirectorComments(approval.workflow_id)
+                            ? "Approve is disabled because comments are entered. Clear comments or click Return."
+                            : "Approve Examination"
+                        }
+                        className={`text-xs font-bold px-4 py-2 rounded-xl shadow-sm transition-all flex items-center gap-2 ${
+                          hasDirectorComments(approval.workflow_id)
+                            ? "bg-slate-200 text-slate-400 cursor-not-allowed opacity-60"
+                            : "bg-indigo-600 hover:bg-indigo-700 text-white disabled:opacity-50 cursor-pointer"
+                        }`}
                       >
                         {isSubmittingReview === approval.workflow_id ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5" />}
                         Approve
@@ -2865,12 +2958,31 @@ export function DirectorDashboardClient({
 
                 {/* Question Paper Body */}
                 <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
+                  {/* General Review Comment */}
+                  <div className="bg-indigo-50/70 border border-indigo-200/80 rounded-xl p-3.5 space-y-1.5 shrink-0">
+                    <label className="text-xs font-black text-indigo-950 uppercase tracking-wider block">
+                      General Review Feedback / Remarks
+                    </label>
+                    <textarea
+                      value={reviewComments[activePreviewApproval.workflow_id] || ""}
+                      onChange={(e) => setReviewComments({...reviewComments, [activePreviewApproval.workflow_id]: e.target.value})}
+                      className="w-full bg-white border border-indigo-200 rounded-lg p-2.5 text-xs text-slate-800 placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all outline-none"
+                      rows={2}
+                      placeholder="Add overall remarks or instructions for the instructor..."
+                    />
+                  </div>
+
                   {renderOfficialExamPaperForDirector(activePreviewApproval)}
                 </div>
 
                 {/* Footer Action Bar */}
                 {activePreviewApproval.workflow_id > 0 && (
                   <div className="border-t border-slate-200 p-4 bg-slate-50 flex items-center justify-end gap-3 shrink-0">
+                    {hasDirectorComments(activePreviewApproval.workflow_id) && (
+                      <span className="text-[11px] font-bold text-rose-700 bg-rose-50 border border-rose-200 px-2.5 py-1 rounded-lg mr-auto">
+                        Comments added — Approve disabled
+                      </span>
+                    )}
                     <button
                       disabled={isSubmittingReview === activePreviewApproval.workflow_id}
                       onClick={() => {
@@ -2894,12 +3006,21 @@ export function DirectorDashboardClient({
                       Return Exam
                     </button>
                     <button
-                      disabled={isSubmittingReview === activePreviewApproval.workflow_id}
+                      disabled={isSubmittingReview === activePreviewApproval.workflow_id || hasDirectorComments(activePreviewApproval.workflow_id)}
                       onClick={() => {
                         handleReview(activePreviewApproval.workflow_id, activePreviewApproval.exam_id, "Approve");
                         setActivePreviewApproval(null);
                       }}
-                      className="inline-flex justify-center items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-5 py-2.5 rounded-xl transition-all shadow-sm disabled:opacity-50 cursor-pointer"
+                      title={
+                        hasDirectorComments(activePreviewApproval.workflow_id)
+                          ? "Approve is disabled because comments are entered. Clear comments or click Return Exam."
+                          : "Approve Exam"
+                      }
+                      className={`inline-flex justify-center items-center gap-1.5 text-xs font-bold px-5 py-2.5 rounded-xl transition-all shadow-sm ${
+                        hasDirectorComments(activePreviewApproval.workflow_id)
+                          ? "bg-slate-200 text-slate-400 cursor-not-allowed opacity-60"
+                          : "bg-indigo-600 hover:bg-indigo-700 text-white disabled:opacity-50 cursor-pointer"
+                      }`}
                     >
                       <CheckCircle className="w-3.5 h-3.5" />
                       Approve Exam

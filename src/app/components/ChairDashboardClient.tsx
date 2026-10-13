@@ -308,6 +308,13 @@ export function ChairDashboardClient({
     }
   };
 
+  const hasReviewerComments = (workflowId: number) => {
+    const general = (reviewComments[workflowId] || "").trim();
+    if (general.length > 0) return true;
+    const qComms = questionComments[workflowId] || {};
+    return Object.values(qComms).some((c) => (c || "").trim().length > 0);
+  };
+
   const handleReview = async (workflowId: number, examId: number, action: "Approve" | "Return") => {
     const generalComment = reviewComments[workflowId] || "";
     const qComments = questionComments[workflowId] || {};
@@ -334,14 +341,10 @@ export function ChairDashboardClient({
       return;
     }
 
-
-
-    // Enforce warning when approving but revisions are requested
-    if (action === "Approve" && hasRevisionRequested) {
-      const confirmApprove = window.confirm(
-        "You have marked some questions as requiring revision. Are you sure you want to approve this exam?"
-      );
-      if (!confirmApprove) return;
+    // Enforce disabled approve when comments or revisions are present
+    if (action === "Approve" && (generalComment.trim().length > 0 || hasRevisionRequested || hasQuestionComments)) {
+      alert("The Approve button is disabled because feedback comments or revisions are entered. Please clear your comments if you wish to approve, or click 'Return Exam'.");
+      return;
     }
 
     // Compile into serialized JSON
@@ -1070,9 +1073,18 @@ export function ChairDashboardClient({
 
                     <div className="flex flex-row lg:flex-col gap-3 w-full lg:w-48 pt-2">
                       <button
-                        disabled={isSubmittingReview === approval.workflow_id}
+                        disabled={isSubmittingReview === approval.workflow_id || hasReviewerComments(approval.workflow_id)}
                         onClick={() => handleReview(approval.workflow_id, approval.exam_id, "Approve")}
-                        className="flex-1 inline-flex justify-center items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-3 rounded-xl transition-all shadow-sm disabled:opacity-50 cursor-pointer"
+                        title={
+                          hasReviewerComments(approval.workflow_id)
+                            ? "Approve is disabled because comments are entered. Clear comments or click Return Exam."
+                            : "Approve Exam"
+                        }
+                        className={`flex-1 inline-flex justify-center items-center gap-2 text-xs font-bold px-4 py-3 rounded-xl transition-all shadow-sm ${
+                          hasReviewerComments(approval.workflow_id)
+                            ? "bg-slate-200 text-slate-400 cursor-not-allowed opacity-60"
+                            : "bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50 cursor-pointer"
+                        }`}
                       >
                         {isSubmittingReview === approval.workflow_id ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
                         Approve Exam
@@ -1384,6 +1396,11 @@ export function ChairDashboardClient({
 
                 {/* Questions Panel Footer / Action Bar */}
                 <div className="border-t border-slate-200 p-4 bg-slate-50 flex items-center justify-end gap-3 shrink-0">
+                  {hasReviewerComments(activeSplitApproval.workflow_id) && (
+                    <span className="text-[11px] font-bold text-rose-700 bg-rose-50 border border-rose-200 px-2.5 py-1 rounded-lg mr-auto">
+                      Comments added — Approve disabled
+                    </span>
+                  )}
                   <button
                     disabled={isSubmittingReview === activeSplitApproval.workflow_id}
                     onClick={() => {
@@ -1395,11 +1412,20 @@ export function ChairDashboardClient({
                     Return Exam
                   </button>
                   <button
-                    disabled={isSubmittingReview === activeSplitApproval.workflow_id}
+                    disabled={isSubmittingReview === activeSplitApproval.workflow_id || hasReviewerComments(activeSplitApproval.workflow_id)}
                     onClick={() => {
                       handleReview(activeSplitApproval.workflow_id, activeSplitApproval.exam_id, "Approve");
                     }}
-                    className="inline-flex justify-center items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-5 py-2.5 rounded-xl transition-all shadow-sm disabled:opacity-50 cursor-pointer"
+                    title={
+                      hasReviewerComments(activeSplitApproval.workflow_id)
+                        ? "Approve is disabled because comments are entered. Clear comments or click Return Exam."
+                        : "Approve Exam"
+                    }
+                    className={`inline-flex justify-center items-center gap-1.5 text-xs font-bold px-5 py-2.5 rounded-xl transition-all shadow-sm ${
+                      hasReviewerComments(activeSplitApproval.workflow_id)
+                        ? "bg-slate-200 text-slate-400 cursor-not-allowed opacity-60"
+                        : "bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50 cursor-pointer"
+                    }`}
                   >
                     {isSubmittingReview === activeSplitApproval.workflow_id ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5" />}
                     Approve Exam
