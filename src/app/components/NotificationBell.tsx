@@ -268,7 +268,7 @@ export function NotificationBell({ userId }: NotificationBellProps) {
                       </span>
                     </div>
                     <p className={`text-xs mt-1 leading-relaxed ${!notif.is_read ? "text-slate-800" : "text-slate-500"}`}>
-                      {notif.message}
+                      {notif.message ? notif.message.replace(/\.?\s*Comments:\s*No comments provided\.?/gi, ".").replace(/\.?\s*Comments:\s*\{.*$/gi, ".").replace(/\.\.+/g, ".").trim() : ""}
                     </p>
                   </div>
 
