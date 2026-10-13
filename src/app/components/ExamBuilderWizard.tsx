@@ -3084,7 +3084,7 @@ export function ExamBuilderWizard({
                     <tr>
                       <th className="py-3 px-4 w-12 text-center">#</th>
                       <th className="py-3 px-4">TOPIC</th>
-                      <th className="py-3 px-4 w-32 text-center">HRS TAUGHT</th>
+                      <th className="py-3 px-4 w-32 text-center">TEACHING HOURS</th>
                       <th className="py-3 px-4 w-32 text-center">PERCENTAGE</th>
                       <th className="py-3 px-4 w-28 text-center">ITEMS</th>
                       <th className="py-3 px-4 w-16 text-center">ACTION</th>
@@ -3152,6 +3152,31 @@ export function ExamBuilderWizard({
                       </tr>
                     )}
                   </tbody>
+                  {tosDistribution.length > 0 && (
+                    <tfoot className="border-t-2 border-slate-300 bg-slate-50/90 font-black text-slate-900 text-xs">
+                      <tr>
+                        <td colSpan={2} className="py-3 px-4 uppercase tracking-wider text-slate-900 font-extrabold">
+                          TOTAL
+                        </td>
+                        <td className="py-3 px-4 text-center font-black text-slate-900">
+                          {totalTosHours} hrs
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-950 border border-amber-300 px-2.5 py-1 rounded-full text-xs font-black">
+                            100%
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <span className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-950 border border-emerald-300 px-2.5 py-1 rounded-full text-xs font-black">
+                            {totalCalculatedTosItems} Item{totalCalculatedTosItems !== 1 ? "s" : ""}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-center text-slate-400 font-bold">
+                          —
+                        </td>
+                      </tr>
+                    </tfoot>
+                  )}
                 </table>
               </div>
 
