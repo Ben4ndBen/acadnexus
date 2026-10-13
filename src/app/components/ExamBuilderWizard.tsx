@@ -3831,7 +3831,7 @@ export function ExamBuilderWizard({
                               <th rowSpan={3} className="py-2 px-1 border-r border-black w-[14%] text-left font-black align-middle text-[8.5px] leading-tight">LESSON / TOPIC</th>
                               <th rowSpan={3} className="py-2 px-1.5 border-r border-black w-[24%] text-left font-black align-middle text-[8.5px] leading-tight">LEARNING OUTCOMES</th>
                               <th rowSpan={2} className="py-2 px-0.5 border-r border-b border-black w-[5.5%] font-black text-center align-middle text-[7.5px] leading-tight">NO. OF TEACHING HOURS</th>
-                              <th rowSpan={2} className="py-2 px-0.5 border-r border-b border-black w-[5.5%] font-black text-center align-middle text-[7.5px] leading-tight">% OF ALLOCATION</th>
+                              <th rowSpan={3} className="py-2 px-0.5 border-r border-black w-[5.5%] font-black text-center align-middle text-[7.5px] leading-tight">% OF ALLOCATION</th>
                               <th rowSpan={2} className="py-2 px-0.5 border-r border-b border-black w-[5.5%] font-black text-center align-middle text-[7.5px] leading-tight">NO. OF ITEMS</th>
                               <th colSpan={7} className="py-1.5 px-0.5 border-r border-b border-black bg-white text-black font-black text-center text-[8.5px] tracking-tight">
                                 ITEM SPECIFICATION PER TAXONOMY OF LEARNING
@@ -3862,9 +3862,6 @@ export function ExamBuilderWizard({
                             <tr className="bg-white text-black font-black text-[8.5px] uppercase text-center border-b border-black">
                               <th className="py-1 px-0.5 border-r border-black font-black text-center underline">
                                 {Math.round(tosTopicBreakdown.reduce((sum, r) => sum + r.hoursTaught, 0))}
-                              </th>
-                              <th className="py-1 px-0.5 border-r border-black font-black text-center underline">
-                                {questions.length > 0 ? "100%" : "0%"}
                               </th>
                               <th className="py-1 px-0.5 border-r border-black font-black text-center underline">
                                 {Math.round(questions.length)}
