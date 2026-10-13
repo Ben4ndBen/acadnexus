@@ -1328,17 +1328,30 @@ export function ChairDashboardClient({
 
                 {/* Questions Panel Body */}
                 <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                  {activeSplitApproval?.prog_chair_comments && (
-                    <div className="bg-blue-50/50 border border-blue-200/60 rounded-xl p-3.5 space-y-1">
-                      <p className="text-xs font-bold text-blue-900 flex items-center gap-1.5">
-                        <CheckCircle className="w-3.5 h-3.5 text-blue-600" />
-                        Program Chairperson Review Remarks:
-                      </p>
-                      <p className="text-xs text-blue-800 italic leading-relaxed font-medium">
-                        "{activeSplitApproval.prog_chair_comments}"
-                      </p>
-                    </div>
-                  )}
+                  {activeSplitApproval?.prog_chair_comments && (() => {
+                    let parsed: { general?: string; questions?: Record<string, any> } | null = null;
+                    try {
+                      const trimmed = activeSplitApproval.prog_chair_comments.trim();
+                      if (trimmed.startsWith("{")) {
+                        parsed = JSON.parse(trimmed);
+                      }
+                    } catch {}
+
+                    const generalText = parsed ? (parsed.general?.trim() || "") : (!activeSplitApproval.prog_chair_comments.trim().startsWith("{") ? activeSplitApproval.prog_chair_comments.trim() : "");
+                    if (!generalText) return null;
+
+                    return (
+                      <div className="bg-blue-50/50 border border-blue-200/60 rounded-xl p-3.5 space-y-1">
+                        <p className="text-xs font-bold text-blue-900 flex items-center gap-1.5">
+                          <CheckCircle className="w-3.5 h-3.5 text-blue-600" />
+                          Program Chairperson Review Remarks:
+                        </p>
+                        <p className="text-xs text-blue-800 italic leading-relaxed font-medium">
+                          "{generalText}"
+                        </p>
+                      </div>
+                    );
+                  })()}
 
                   {/* General Review Comments */}
                   <div className="bg-amber-50/50 border border-amber-200/60 rounded-xl p-3.5 space-y-2">

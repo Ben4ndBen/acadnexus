@@ -2050,8 +2050,9 @@ export function FacultyDashboardClient({
                             const renderCommentCard = (commentsText: string, titleLabel: string) => {
                               let parsedComments: { general?: string; questions?: Record<string, string> } | null = null;
                               try {
-                                if (commentsText.startsWith("{")) {
-                                  parsedComments = JSON.parse(commentsText);
+                                const trimmed = commentsText.trim();
+                                if (trimmed.startsWith("{")) {
+                                  parsedComments = JSON.parse(trimmed);
                                 }
                               } catch (e) {
                                 // fallback to plain text
@@ -2059,15 +2060,21 @@ export function FacultyDashboardClient({
 
                               if (parsedComments) {
                                 const hasQuestionComments = parsedComments.questions && Object.keys(parsedComments.questions).length > 0;
+                                const hasGeneral = !!(parsedComments.general && parsedComments.general.trim().length > 0);
                                 return (
                                   <div className="bg-rose-50/50 border border-rose-100 rounded-xl p-4 space-y-3">
                                     <div className="flex gap-3 items-start">
                                       <AlertCircle className="w-5 h-5 text-rose-500 shrink-0 mt-0.5" />
                                       <div>
                                         <p className="text-xs font-bold text-rose-800">{titleLabel}:</p>
-                                        {parsedComments.general && (
+                                        {hasGeneral && (
                                           <p className="text-xs text-rose-700 mt-1 italic leading-relaxed">
-                                            "{parsedComments.general}"
+                                            "{parsedComments.general!.trim()}"
+                                          </p>
+                                        )}
+                                        {!hasGeneral && !hasQuestionComments && (
+                                          <p className="text-xs text-rose-700 mt-1 italic leading-relaxed">
+                                            Returned for revision. Please review your exam questions.
                                           </p>
                                         )}
                                       </div>
@@ -2133,7 +2140,11 @@ export function FacultyDashboardClient({
                                 );
                               }
 
-                              // Graceful fallback to raw text
+                              // Graceful fallback to raw text (suppress raw JSON payloads)
+                              if (commentsText.trim().startsWith("{")) {
+                                return null;
+                              }
+
                               return (
                                 <div className="bg-rose-50/50 border border-rose-100 rounded-xl p-4 flex gap-3 items-start">
                                   <AlertCircle className="w-5 h-5 text-rose-500 shrink-0 mt-0.5" />

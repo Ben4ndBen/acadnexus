@@ -2491,21 +2491,22 @@ export function ExamBuilderWizard({
                   {(() => {
                     let parsed: { general?: string; questions?: Record<string, any> } | null = null;
                     try {
-                      if (exam.approvalWorkflow.prog_chair_comments.startsWith("{")) {
-                        parsed = JSON.parse(exam.approvalWorkflow.prog_chair_comments);
+                      const trimmed = exam.approvalWorkflow.prog_chair_comments.trim();
+                      if (trimmed.startsWith("{")) {
+                        parsed = JSON.parse(trimmed);
                       }
                     } catch {}
-                    const generalText = parsed?.general || exam.approvalWorkflow.prog_chair_comments;
+                    const generalText = parsed ? (parsed.general?.trim() || "") : (!exam.approvalWorkflow.prog_chair_comments.trim().startsWith("{") ? exam.approvalWorkflow.prog_chair_comments.trim() : "");
                     const questionComments = parsed?.questions || {};
                     const hasQuestionComments = Object.keys(questionComments).length > 0;
 
                     return (
                       <div className="space-y-3">
-                        {generalText && (
+                        {generalText ? (
                           <p className="text-xs text-rose-800 italic leading-relaxed font-medium">
                             "{generalText}"
                           </p>
-                        )}
+                        ) : null}
                         {hasQuestionComments && (
                           <div className="border-t border-rose-200/80 pt-3 space-y-2">
                             <p className="text-[11px] font-bold text-rose-900 uppercase tracking-wider">Granular Question Feedback:</p>
@@ -2561,21 +2562,22 @@ export function ExamBuilderWizard({
                   {(() => {
                     let parsed: { general?: string; questions?: Record<string, any> } | null = null;
                     try {
-                      if (exam.approvalWorkflow.chair_comments.startsWith("{")) {
-                        parsed = JSON.parse(exam.approvalWorkflow.chair_comments);
+                      const trimmed = exam.approvalWorkflow.chair_comments.trim();
+                      if (trimmed.startsWith("{")) {
+                        parsed = JSON.parse(trimmed);
                       }
                     } catch {}
-                    const generalText = parsed?.general || exam.approvalWorkflow.chair_comments;
+                    const generalText = parsed ? (parsed.general?.trim() || "") : (!exam.approvalWorkflow.chair_comments.trim().startsWith("{") ? exam.approvalWorkflow.chair_comments.trim() : "");
                     const questionComments = parsed?.questions || {};
                     const hasQuestionComments = Object.keys(questionComments).length > 0;
 
                     return (
                       <div className="space-y-3">
-                        {generalText && (
+                        {generalText ? (
                           <p className="text-xs text-rose-800 italic leading-relaxed font-medium">
                             "{generalText}"
                           </p>
-                        )}
+                        ) : null}
                         {hasQuestionComments && (
                           <div className="border-t border-rose-200/80 pt-3 space-y-2">
                             <p className="text-[11px] font-bold text-rose-900 uppercase tracking-wider">Granular Question Feedback:</p>
