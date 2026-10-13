@@ -3885,7 +3885,7 @@ export function ExamBuilderWizard({
                                 {overallTaxonomyPercents.creating}%
                               </th>
                               <th className="py-1 px-0.5 border-r border-black font-black text-center underline">
-                                {questions.length > 0 ? 100 : 0}
+                                {Math.round(questions.length)}
                               </th>
                             </tr>
                           </thead>
