@@ -4060,33 +4060,6 @@ export function FacultyDashboardClient({
       {/* PROFILE TAB */}
       {activeTab === "profile" && (
         <div className="max-w-4xl mx-auto space-y-6">
-          {/* Enrolled Students & Grades Quick Access Banner Card */}
-          <div className="bg-gradient-to-br from-slate-900 via-emerald-950 to-slate-900 border border-emerald-800/40 rounded-3xl p-6 sm:p-8 text-white shadow-xl space-y-4 relative overflow-hidden">
-            <div className="absolute -right-8 -bottom-8 w-40 h-40 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
-            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative z-10">
-              <div className="space-y-2">
-                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-black uppercase tracking-wider border border-emerald-500/30">
-                  <Users className="w-3.5 h-3.5" />
-                  Subject Enrollment & Exam Status
-                </div>
-                <h3 className="text-xl font-extrabold text-white tracking-tight">
-                  Class Students & Grade Reports
-                </h3>
-                <p className="text-xs text-slate-300 max-w-xl leading-relaxed">
-                  View class students in your assigned subjects, inspect their exam scores & calculated grades, and track whether they took or missed scheduled examinations.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={handleOpenRosterModal}
-                className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-black px-6 py-3.5 rounded-2xl shadow-lg hover:shadow-emerald-500/25 transition-all duration-300 flex items-center gap-2 shrink-0 cursor-pointer active:scale-95 border border-emerald-400"
-              >
-                <GraduationCap className="w-4.5 h-4.5" />
-                View Class Students & Grades
-              </button>
-            </div>
-          </div>
-
           <div className="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-sm space-y-6">
             <div>
               <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
