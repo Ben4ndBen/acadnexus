@@ -1766,9 +1766,9 @@ export function FacultyDashboardClient({
 
       {/* OVERVIEW TAB */}
       {activeTab === "overview" && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
           {/* Left Panel: Portfolios & Overview Stats */}
-          <div className="space-y-5">
+          <div className="lg:col-span-4 xl:col-span-3 space-y-5">
             {/* Compact Faculty Identity Card */}
             <div className="bg-gradient-to-b from-[#7A151A] to-[#580B0F] rounded-2xl overflow-hidden shadow-md border-2 border-[#E2A123]/60 relative text-white transition-all duration-300 hover:shadow-xl group/idcard select-none">
               {/* Card Holographic/Vector overlay */}
@@ -1893,7 +1893,7 @@ export function FacultyDashboardClient({
           </div>
 
           {/* Right Panel: Examinations & Drafts with Review Workflow */}
-          <div className="lg:col-span-2 bg-white border border-slate-200/80 rounded-3xl p-6 shadow-sm space-y-6">
+          <div className="lg:col-span-8 xl:col-span-9 bg-white border border-slate-200/80 rounded-3xl p-6 shadow-sm space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
               <div>
                 <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
@@ -3098,7 +3098,7 @@ export function FacultyDashboardClient({
                 </div>
 
                 {overrideFilteredExams.length > 0 ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                     {overrideFilteredExams.map((exam) => {
                       const target = exam.examTargets?.[0];
                       const dateStr = target?.scheduled_date

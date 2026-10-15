@@ -223,7 +223,7 @@ export default async function FacultyDashboard() {
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
       {/* Navbar */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-50 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+        <div className="max-w-[1720px] mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="bg-emerald-600 text-white p-2 rounded-xl">
               <BookOpen className="w-6 h-6" />
@@ -249,7 +249,7 @@ export default async function FacultyDashboard() {
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-5 space-y-5">
+      <main className="flex-1 max-w-[1720px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-5 space-y-5">
         {/* Welcome banner (Compact) */}
         <div className="bg-gradient-to-tr from-emerald-900 via-emerald-800 to-teal-900 text-white rounded-2xl p-4 sm:p-5 shadow-md relative overflow-hidden border border-emerald-950/20">
           <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff03_1px,transparent_1px),linear-gradient(to_bottom,#ffffff03_1px,transparent_1px)] bg-[size:16px_16px]" />
@@ -257,7 +257,7 @@ export default async function FacultyDashboard() {
             <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight">
               Welcome back, {faculty.first_name}!
             </h1>
-            <p className="text-emerald-100 max-w-2xl text-xs sm:text-sm leading-relaxed">
+            <p className="text-emerald-100 max-w-4xl text-xs sm:text-sm leading-relaxed">
               Design new examination question banks, align test structures to Course Outlines (TOS), and track compliance matrices for accreditation.
             </p>
           </div>
