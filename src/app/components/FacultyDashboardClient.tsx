@@ -3180,46 +3180,30 @@ export function FacultyDashboardClient({
 
             {selectedOverrideExamId && (
               <div className="space-y-5 pt-2 animate-in fade-in duration-300">
-                {/* Original Exam Schedule Preserved Banner */}
-                <div className="bg-blue-50/80 border border-blue-200/80 rounded-2xl p-4 text-xs space-y-1.5 shadow-sm">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5 text-blue-900 font-bold uppercase tracking-wider text-[10px]">
-                      <Calendar className="w-4 h-4 text-blue-600" />
-                      Original Exam Schedule
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {(() => {
-                        const exam = faculty.examinations.find(e => e.exam_id === selectedOverrideExamId);
-                        return exam ? (
-                          <span className="text-[11px] font-bold text-blue-800 bg-blue-100/80 px-2 py-0.5 rounded-md border border-blue-200">
-                            {exam.course.course_code} • {exam.title}
-                          </span>
-                        ) : null;
-                      })()}
-                      <button
-                        type="button"
-                        onClick={() => setSelectedOverrideExamId(null)}
-                        className="text-[11px] font-bold text-blue-700 hover:text-blue-900 underline ml-2 cursor-pointer"
-                      >
-                        ← Choose Another Exam
-                      </button>
-                    </div>
-                  </div>
-                  <p className="text-slate-900 font-extrabold text-sm">
-                    {officialExamScheduleText || "Original Exam Schedule"}
-                  </p>
-                  <p className="text-[11px] text-slate-600 leading-relaxed pt-0.5">
-                    ✓ Rescheduling only applies to the selected students. The original exam schedule and Table of Specifications (TOS) stay the same for everyone else.
-                  </p>
-                </div>
-
                 {/* Controls Bar: Search & Status Filters */}
                 <div className="space-y-3">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div>
-                      <h3 className="text-sm font-bold text-slate-900">
-                        Students & Exam Status
-                      </h3>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="text-sm font-bold text-slate-900">
+                          Students & Exam Status
+                        </h3>
+                        {(() => {
+                          const exam = faculty.examinations.find(e => e.exam_id === selectedOverrideExamId);
+                          return exam ? (
+                            <span className="text-[11px] font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">
+                              {exam.course.course_code} • {exam.title}
+                            </span>
+                          ) : null;
+                        })()}
+                        <button
+                          type="button"
+                          onClick={() => setSelectedOverrideExamId(null)}
+                          className="text-[11px] font-bold text-blue-700 hover:text-blue-900 underline ml-1 cursor-pointer"
+                        >
+                          ← Choose Another Exam
+                        </button>
+                      </div>
                       <p className="text-xs text-slate-500">
                         Search by student name or filter by status to reschedule their exam.
                       </p>
