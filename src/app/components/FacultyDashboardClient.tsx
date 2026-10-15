@@ -2001,20 +2001,7 @@ export function FacultyDashboardClient({
                               Submit for Review
                             </button>
                           )}
-                          {exam.current_status === "Returned" && (
-                            <button
-                              disabled={isTransitioning}
-                              onClick={() => handleStatusTransition(exam.exam_id, "Draft")}
-                              className="inline-flex items-center gap-2 bg-slate-800 hover:bg-slate-950 disabled:opacity-50 text-white text-xs font-bold px-3.5 py-2 rounded-xl shadow-sm transition-all duration-300 cursor-pointer"
-                            >
-                              {isTransitioning ? (
-                                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                              ) : (
-                                <RotateCcw className="w-3.5 h-3.5" />
-                              )}
-                              Revise & Reset to Draft
-                            </button>
-                          )}
+
                           {exam.current_status === "Approved" && (
                             <div className="flex gap-2">
                               <button
@@ -2105,24 +2092,11 @@ export function FacultyDashboardClient({
                             const card1 = showProgChairComments ? renderCommentCard(exam.approvalWorkflow!.prog_chair_comments!, "Returned by Program Chairperson") : null;
                             const card2 = showChairComments ? renderCommentCard(exam.approvalWorkflow!.chair_comments!, "Returned by Department Chairperson") : null;
                             const card3 = showDiReturnedComments ? renderCommentCard(exam.approvalWorkflow!.di_comments!, "Returned by Director of Instruction") : null;
-                            const hasAnyCard = !!(card1 || card2 || card3);
-
                             return (
                               <>
                                 {card1}
                                 {card2}
                                 {card3}
-                                {!hasAnyCard && (
-                                  <div className="bg-rose-50/50 border border-rose-100 rounded-xl p-4 flex gap-3 items-start">
-                                    <AlertCircle className="w-5 h-5 text-rose-500 shrink-0 mt-0.5" />
-                                    <div>
-                                      <p className="text-xs font-bold text-rose-800">Returned for Revision:</p>
-                                      <p className="text-xs text-rose-700 mt-1 italic leading-relaxed">
-                                        Specific questions have been flagged for revision. Click below to review and edit them in Step 2 of the builder.
-                                      </p>
-                                    </div>
-                                  </div>
-                                )}
                                 <div className="pt-1 flex justify-end">
                                   <button
                                     onClick={() => router.push(`/dashboard/faculty/exams/${exam.exam_id}/builder`)}
