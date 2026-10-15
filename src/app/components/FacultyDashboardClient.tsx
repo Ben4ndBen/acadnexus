@@ -1948,7 +1948,7 @@ export function FacultyDashboardClient({
                                   className="inline-flex items-center gap-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold px-3 py-1.5 rounded-xl shadow-sm transition-all cursor-pointer"
                                 >
                                   <PenTool className="w-3.5 h-3.5" />
-                                  Edit Marked Items in Builder (Step 2)
+                                  Edit
                                 </button>
                               )}
                               
