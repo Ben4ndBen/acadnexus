@@ -1936,50 +1936,10 @@ export function FacultyDashboardClient({
                     >
                       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-100 pb-4">
                         <div className="flex-1 w-full">
-                          <div className="flex flex-wrap items-start justify-between gap-3">
-                            <div className="space-y-1.5">
-                              <h3 className="text-base font-extrabold text-slate-900">{getExamDisplayTitle(exam)}</h3>
-                              <div>
-                                {renderStatusBadge(exam.current_status, exam)}
-                              </div>
-                            </div>
-                            
-                            <div className="flex items-center gap-2">
-                              {exam.current_status === "Returned" && (
-                                <button
-                                  onClick={() => router.push(`/dashboard/faculty/exams/${exam.exam_id}/builder`)}
-                                  className="inline-flex items-center gap-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold px-3 py-1.5 rounded-xl shadow-sm transition-all cursor-pointer"
-                                >
-                                  <PenTool className="w-3.5 h-3.5" />
-                                  Edit
-                                </button>
-                              )}
-                              
-                              {(exam.current_status === "Draft" || exam.current_status === "Returned") && (
-                                <div className="flex items-center gap-1.5 ml-1">
-                                  {exam.current_status === "Draft" && (
-                                    <button
-                                      onClick={() => router.push(`/dashboard/faculty/exams/${exam.exam_id}/builder`)}
-                                      className="p-1.5 border border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 text-slate-600 rounded-xl shadow-sm transition-all cursor-pointer"
-                                      title="Edit Exam in Builder"
-                                    >
-                                      <PenTool className="w-4 h-4" />
-                                    </button>
-                                  )}
-                                  <button
-                                    disabled={deletingExamId === exam.exam_id}
-                                    onClick={() => handleDeleteExam(exam.exam_id)}
-                                    className="p-1.5 border border-slate-200 bg-white hover:bg-rose-50 hover:border-rose-200 text-slate-400 hover:text-rose-600 rounded-xl shadow-sm transition-all cursor-pointer disabled:opacity-50"
-                                    title="Delete Exam"
-                                  >
-                                    {deletingExamId === exam.exam_id ? (
-                                      <RefreshCw className="w-4 h-4 animate-spin" />
-                                    ) : (
-                                      <Trash2 className="w-4 h-4" />
-                                    )}
-                                  </button>
-                                </div>
-                              )}
+                          <div className="space-y-1.5">
+                            <h3 className="text-base font-extrabold text-slate-900">{getExamDisplayTitle(exam)}</h3>
+                            <div>
+                              {renderStatusBadge(exam.current_status, exam)}
                             </div>
                           </div>
                           
@@ -2002,19 +1962,67 @@ export function FacultyDashboardClient({
                         {/* Interactive Primary Actions */}
                         <div className="flex items-center gap-2 shrink-0">
                           {exam.current_status === "Draft" && (
-                            <button
-                              disabled={isTransitioning}
-                              onClick={() => handleStatusTransition(exam.exam_id, "Pending_Chair")}
-                              className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold px-3.5 py-2 rounded-xl shadow-sm transition-all duration-300 cursor-pointer"
-                              title="Submit exam for Chair review"
-                            >
-                              {isTransitioning ? (
-                                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                              ) : (
-                                <Send className="w-3.5 h-3.5" />
-                              )}
-                              Submit for Review
-                            </button>
+                            <>
+                              <button
+                                disabled={isTransitioning}
+                                onClick={() => handleStatusTransition(exam.exam_id, "Pending_Chair")}
+                                className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold px-3.5 py-2 rounded-xl shadow-sm transition-all duration-300 cursor-pointer"
+                                title="Submit exam for Chair review"
+                              >
+                                {isTransitioning ? (
+                                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                                ) : (
+                                  <Send className="w-3.5 h-3.5" />
+                                )}
+                                Submit for Review
+                              </button>
+
+                              <div className="flex items-center gap-1.5 ml-1">
+                                <button
+                                  onClick={() => router.push(`/dashboard/faculty/exams/${exam.exam_id}/builder`)}
+                                  className="p-1.5 border border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 text-slate-600 rounded-xl shadow-sm transition-all cursor-pointer"
+                                  title="Edit Exam in Builder"
+                                >
+                                  <PenTool className="w-4 h-4" />
+                                </button>
+                                <button
+                                  disabled={deletingExamId === exam.exam_id}
+                                  onClick={() => handleDeleteExam(exam.exam_id)}
+                                  className="p-1.5 border border-slate-200 bg-white hover:bg-rose-50 hover:border-rose-200 text-slate-400 hover:text-rose-600 rounded-xl shadow-sm transition-all cursor-pointer disabled:opacity-50"
+                                  title="Delete Exam"
+                                >
+                                  {deletingExamId === exam.exam_id ? (
+                                    <RefreshCw className="w-4 h-4 animate-spin" />
+                                  ) : (
+                                    <Trash2 className="w-4 h-4" />
+                                  )}
+                                </button>
+                              </div>
+                            </>
+                          )}
+
+                          {exam.current_status === "Returned" && (
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => router.push(`/dashboard/faculty/exams/${exam.exam_id}/builder`)}
+                                className="inline-flex items-center gap-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold px-3 py-1.5 rounded-xl shadow-sm transition-all cursor-pointer"
+                              >
+                                <PenTool className="w-3.5 h-3.5" />
+                                Edit
+                              </button>
+                              <button
+                                disabled={deletingExamId === exam.exam_id}
+                                onClick={() => handleDeleteExam(exam.exam_id)}
+                                className="p-1.5 border border-slate-200 bg-white hover:bg-rose-50 hover:border-rose-200 text-slate-400 hover:text-rose-600 rounded-xl shadow-sm transition-all cursor-pointer disabled:opacity-50"
+                                title="Delete Exam"
+                              >
+                                {deletingExamId === exam.exam_id ? (
+                                  <RefreshCw className="w-4 h-4 animate-spin" />
+                                ) : (
+                                  <Trash2 className="w-4 h-4" />
+                                )}
+                              </button>
+                            </div>
                           )}
 
                           {exam.current_status === "Approved" && (
