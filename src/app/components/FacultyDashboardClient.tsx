@@ -3162,7 +3162,7 @@ export function FacultyDashboardClient({
                             className="w-full inline-flex items-center justify-center gap-1.5 bg-amber-50 group-hover:bg-amber-600 text-amber-800 group-hover:text-white border border-amber-200 group-hover:border-amber-600 text-xs font-bold py-2.5 rounded-xl transition-all shadow-2xs cursor-pointer"
                           >
                             <Clock className="w-3.5 h-3.5" />
-                            <span>Select & Manage Overrides</span>
+                            <span>Student Scores</span>
                           </button>
                         </div>
                       );
