@@ -1489,6 +1489,7 @@ export async function getMissedStudentsForExam(facultyId: number, examId: number
       include: {
         course: true,
         examTargets: true,
+        questionBank: true,
         studentOverrides: {
           where: { is_active: true }
         }
@@ -1518,7 +1519,12 @@ export async function getMissedStudentsForExam(facultyId: number, examId: number
         include: {
           user: true,
           studentExams: {
-            where: { exam_id: examId }
+            where: { exam_id: examId },
+            include: {
+              studentAnswers: {
+                include: { question: true }
+              }
+            }
           },
           studentOverrides: {
             where: { exam_id: examId, is_active: true }
@@ -1531,6 +1537,35 @@ export async function getMissedStudentsForExam(facultyId: number, examId: number
           students.push(s);
         }
       }
+
+      // Also ensure all students who actually attempted/took the exam are included
+      const examTakers = await db.studentExam.findMany({
+        where: { exam_id: examId },
+        include: {
+          student: {
+            include: {
+              user: true,
+              studentExams: {
+                where: { exam_id: examId },
+                include: {
+                  studentAnswers: {
+                    include: { question: true }
+                  }
+                }
+              },
+              studentOverrides: {
+                where: { exam_id: examId, is_active: true }
+              }
+            }
+          }
+        }
+      });
+      for (const record of examTakers) {
+        if (record.student && !seenStudentIds.has(record.student.student_id)) {
+          seenStudentIds.add(record.student.student_id);
+          students.push(record.student);
+        }
+      }
     } else {
       // Fallback only if no specific student checklist was assigned:
       // 1. Include students who took or attempted this specific exam
@@ -1541,7 +1576,12 @@ export async function getMissedStudentsForExam(facultyId: number, examId: number
             include: {
               user: true,
               studentExams: {
-                where: { exam_id: examId }
+                where: { exam_id: examId },
+                include: {
+                  studentAnswers: {
+                    include: { question: true }
+                  }
+                }
               },
               studentOverrides: {
                 where: { exam_id: examId, is_active: true }
@@ -1566,7 +1606,12 @@ export async function getMissedStudentsForExam(facultyId: number, examId: number
               include: {
                 user: true,
                 studentExams: {
-                  where: { exam_id: examId }
+                  where: { exam_id: examId },
+                  include: {
+                    studentAnswers: {
+                      include: { question: true }
+                    }
+                  }
                 },
                 studentOverrides: {
                   where: { exam_id: examId, is_active: true }
@@ -1597,7 +1642,12 @@ export async function getMissedStudentsForExam(facultyId: number, examId: number
           include: {
             user: true,
             studentExams: {
-              where: { exam_id: examId }
+              where: { exam_id: examId },
+              include: {
+                studentAnswers: {
+                  include: { question: true }
+                }
+              }
             },
             studentOverrides: {
               where: { exam_id: examId, is_active: true }
@@ -1621,7 +1671,12 @@ export async function getMissedStudentsForExam(facultyId: number, examId: number
             include: {
               user: true,
               studentExams: {
-                where: { exam_id: examId }
+                where: { exam_id: examId },
+                include: {
+                  studentAnswers: {
+                    include: { question: true }
+                  }
+                }
               },
               studentOverrides: {
                 where: { exam_id: examId, is_active: true }
@@ -1636,9 +1691,81 @@ export async function getMissedStudentsForExam(facultyId: number, examId: number
       }
     }
 
+    const examQuestions = exam.questionBank || [];
+    const examHasEssay = examQuestions.some(q => q.question_type === "Essay");
+    const essayQuestions = examQuestions.filter(q => q.question_type === "Essay");
+    const totalExamPoints = examQuestions.reduce((sum, q) => sum + (q.points || 1), 0);
+    const maxEssayPoints = essayQuestions.reduce((sum, q) => sum + (q.points || 1), 0);
+    const scorePenaltyPoints = exam.score_penalty_points ?? 2;
+
     const studentList = students.map(s => {
       const attempt = s.studentExams?.[0] || null;
       const override = s.studentOverrides?.[0] || null;
+
+      let attemptData = null;
+      if (attempt) {
+        const answers = attempt.studentAnswers || [];
+        const violationsCount = attempt.violations_count || 0;
+        const penaltyPoints = violationsCount * scorePenaltyPoints;
+
+        // Filter essay answers
+        const essayAnswers = answers.filter((a: any) => a.question?.question_type === "Essay");
+        const essayPoints = essayAnswers.reduce((sum: number, a: any) => sum + (a.points_awarded ?? 0), 0);
+        const hasUngradedEssay = essayAnswers.some((a: any) => a.points_awarded === null);
+
+        // Calculate raw points
+        let rawScore = 0;
+        answers.forEach((ans: any) => {
+          let pts = ans.points_awarded;
+          if (pts === null && ans.is_correct === true) {
+            pts = ans.question?.points ?? 1;
+          } else if (pts === null) {
+            pts = 0;
+          }
+          rawScore += (pts || 0);
+        });
+
+        if (answers.length === 0 && attempt.submitted_at) {
+          rawScore = (attempt.total_score || 0) + penaltyPoints;
+        }
+
+        const finalTotalScore = attempt.total_score !== null && attempt.total_score !== undefined
+          ? Number(attempt.total_score)
+          : Math.max(0, rawScore - penaltyPoints);
+
+        attemptData = {
+          student_exam_id: attempt.student_exam_id,
+          started_at: attempt.started_at.toISOString(),
+          submitted_at: attempt.submitted_at ? attempt.submitted_at.toISOString() : null,
+          submission_trigger: attempt.submission_trigger,
+          violations_count: violationsCount,
+          penalty_points: penaltyPoints,
+          raw_score: rawScore,
+          total_score: finalTotalScore,
+          has_essay: examHasEssay,
+          has_ungraded_essay: hasUngradedEssay,
+          essay_points: essayPoints,
+          max_essay_points: maxEssayPoints,
+          essayAnswers: essayAnswers.map((a: any) => ({
+            answer_id: a.answer_id,
+            question_id: a.question_id,
+            question_text: a.question?.question_text || "",
+            points: a.question?.points || 10,
+            points_awarded: a.points_awarded,
+            submitted_response: a.submitted_response || "",
+          })),
+          studentAnswers: answers.map((a: any) => ({
+            answer_id: a.answer_id,
+            question_id: a.question_id,
+            submitted_response: a.submitted_response,
+            is_correct: a.is_correct,
+            points_awarded: a.points_awarded,
+            question_type: a.question?.question_type,
+            max_points: a.question?.points,
+          }))
+        };
+      }
+
       return {
         student_id: s.student_id,
         first_name: s.first_name,
@@ -1647,13 +1774,7 @@ export async function getMissedStudentsForExam(facultyId: number, examId: number
         institutional_email: s.user?.institutional_email,
         institutional_id: s.user?.institutional_id,
         has_taken: !!attempt,
-        attempt: attempt ? {
-          student_exam_id: attempt.student_exam_id,
-          started_at: attempt.started_at.toISOString(),
-          submitted_at: attempt.submitted_at ? attempt.submitted_at.toISOString() : null,
-          submission_trigger: attempt.submission_trigger,
-          total_score: attempt.total_score !== null && attempt.total_score !== undefined ? Number(attempt.total_score) : null
-        } : null,
+        attempt: attemptData,
         override: override ? {
           override_id: override.override_id,
           new_start_time: override.new_start_time.toISOString(),
@@ -1678,6 +1799,11 @@ export async function getMissedStudentsForExam(facultyId: number, examId: number
     return {
       success: true,
       examTitle: exam.title,
+      exam_id: exam.exam_id,
+      has_essay: examHasEssay,
+      total_exam_points: totalExamPoints,
+      max_essay_points: maxEssayPoints,
+      score_penalty_points: scorePenaltyPoints,
       course: exam.course ? {
         course_id: exam.course.course_id,
         course_code: exam.course.course_code,

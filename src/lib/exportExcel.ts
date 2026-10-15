@@ -267,12 +267,18 @@ export function exportMissedStudentsToExcel(
     let statusText = "Missed Exam / Not Taken";
     let scoreText: string | number = "0 (Missed)";
     let reopenedInfo = "N/A";
+    let cheatingAttempts = 0;
+    let essayScoreText = "N/A";
 
     if (s.override && s.override.is_active) {
       statusText = "Reopened Window Active";
       scoreText = "Reopened (Pending)";
       reopenedInfo = `${new Date(s.override.new_start_time).toLocaleString()} to ${new Date(s.override.new_end_time).toLocaleString()}`;
     } else if (s.attempt) {
+      cheatingAttempts = (s.attempt as any).violations_count || 0;
+      if ((s.attempt as any).has_essay) {
+        essayScoreText = `${(s.attempt as any).essay_points ?? 0} pts`;
+      }
       if (s.attempt.submitted_at) {
         statusText = "Completed Exam";
         scoreText = `${s.attempt.total_score} pts`;
@@ -285,8 +291,10 @@ export function exportMissedStudentsToExcel(
     return {
       "Student Name": formatStudentName(s),
       "Student ID": s.institutional_id,
-      "Score": scoreText,
       "Exam Status": statusText,
+      "Cheating Attempts": cheatingAttempts,
+      "Essay Score": essayScoreText,
+      "Total Score": scoreText,
       "Reopened Access Window": reopenedInfo,
       "Email": s.institutional_email,
       "Submitted Timestamp": s.attempt?.submitted_at ? new Date(s.attempt.submitted_at).toLocaleString() : "N/A",

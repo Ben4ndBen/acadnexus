@@ -881,6 +881,9 @@ export function FacultyDashboardClient({
         setEssayGradeSuccessToast(`Successfully awarded ${clampedPoints} / ${maxPoints} pts! Exam grade recalculated.`);
         setTimeout(() => setEssayGradeSuccessToast(null), 3500);
         router.refresh();
+        if (selectedOverrideExamId) {
+          fetchMissedStudents(selectedOverrideExamId);
+        }
       } else {
         alert(res.error || "Failed to grade essay answer.");
       }
@@ -959,6 +962,40 @@ export function FacultyDashboardClient({
   const [selectedOverrideExamId, setSelectedOverrideExamId] = useState<number | null>(null);
   const [missedStudents, setMissedStudents] = useState<any[]>([]);
   const [isLoadingMissedStudents, setIsLoadingMissedStudents] = useState(false);
+  const [overrideExamInfo, setOverrideExamInfo] = useState<{
+    has_essay?: boolean;
+    total_exam_points?: number;
+    max_essay_points?: number;
+    score_penalty_points?: number;
+  } | null>(null);
+  const [inlineEssayScores, setInlineEssayScores] = useState<Record<number, number>>({});
+  const [savingInlineEssayId, setSavingInlineEssayId] = useState<number | null>(null);
+
+  const handleSaveInlineEssayScore = async (answerId: number, maxPoints: number) => {
+    const currentVal = inlineEssayScores[answerId];
+    if (currentVal === undefined || currentVal === null || isNaN(Number(currentVal))) return;
+    const clampedPoints = Math.max(0, Math.min(maxPoints, Number(currentVal)));
+    setSavingInlineEssayId(answerId);
+    try {
+      const res = await gradeEssayAnswer(faculty.faculty_id, answerId, clampedPoints, clampedPoints > 0);
+      if (res.success) {
+        if (selectedOverrideExamId) {
+          await fetchMissedStudents(selectedOverrideExamId);
+        }
+        setEssayGradeSuccessToast(`Awarded ${clampedPoints}/${maxPoints} pts! Total score updated.`);
+        setTimeout(() => setEssayGradeSuccessToast(null), 3000);
+        router.refresh();
+      } else {
+        alert(res.error || "Failed to save score.");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("An error occurred while saving score.");
+    } finally {
+      setSavingInlineEssayId(null);
+    }
+  };
+
   const [studentStatusFilter, setStudentStatusFilter] = useState<"ALL" | "TAKERS" | "MISSED" | "OVERRIDE">("ALL");
   const [popupStudentFilter, setPopupStudentFilter] = useState<"ALL" | "TAKERS" | "MISSED">("ALL");
   
@@ -1015,6 +1052,12 @@ export function FacultyDashboardClient({
       alert(res.error);
     } else {
       setMissedStudents(res.students || []);
+      setOverrideExamInfo({
+        has_essay: res.has_essay,
+        total_exam_points: res.total_exam_points,
+        max_essay_points: res.max_essay_points,
+        score_penalty_points: res.score_penalty_points,
+      });
       if (res.course?.course_id && !selectedOverrideCourseId) {
         setSelectedOverrideCourseId(res.course.course_id);
       }
@@ -1035,6 +1078,7 @@ export function FacultyDashboardClient({
       setStudentSearchTerm("");
     } else {
       setMissedStudents([]);
+      setOverrideExamInfo(null);
       setOfficialExamScheduleText("");
       setStudentSearchTerm("");
     }
@@ -3327,202 +3371,386 @@ export function FacultyDashboardClient({
                     <Loader2 className="w-4 h-4 animate-spin text-amber-600" />
                     <span>Loading student records for this examination...</span>
                   </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-slate-100 text-left text-xs text-slate-600 font-semibold">
-                      <thead className="bg-slate-50 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                        <tr>
-                          <th className="px-4 py-3 w-10 text-center">
-                            <input
-                              type="checkbox"
-                              checked={
-                                missedStudents.length > 0 &&
-                                missedStudents.every(s => selectedOverrideStudentIds.includes(s.student_id))
-                              }
-                              onChange={e => {
-                                if (e.target.checked) {
-                                  setSelectedOverrideStudentIds(missedStudents.map(s => s.student_id));
-                                } else {
-                                  setSelectedOverrideStudentIds([]);
-                                }
-                              }}
-                              className="w-3.5 h-3.5 text-amber-600 rounded border-slate-300 focus:ring-amber-500 cursor-pointer"
-                              title="Select All Students"
-                            />
-                          </th>
-                          <th className="px-6 py-3">Student Name</th>
-                          <th className="px-6 py-3">ID / Institutional Email</th>
-                          <th className="px-6 py-3">Attempt / Reopen Status</th>
-                          <th className="px-6 py-3 text-right">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 bg-white">
-                        {missedStudents
-                          .filter(student => {
-                            if (studentStatusFilter === "TAKERS" && !student.attempt) return false;
-                            if (studentStatusFilter === "MISSED" && student.attempt) return false;
-                            if (studentStatusFilter === "OVERRIDE" && (!student.override || !student.override.is_active)) return false;
-
-                            if (!studentSearchTerm.trim()) return true;
-                            const q = studentSearchTerm.toLowerCase().trim();
-                            const fullName = `${student.first_name} ${student.middle_name || ""} ${student.last_name}`.toLowerCase();
-                            const revName = `${student.last_name}, ${student.first_name}`.toLowerCase();
-                            const id = (student.institutional_id || "").toLowerCase();
-                            const email = (student.institutional_email || "").toLowerCase();
-                            return fullName.includes(q) || revName.includes(q) || id.includes(q) || email.includes(q);
-                          })
-                          .map(student => {
-                            const attempt = student.attempt;
-                            const override = student.override;
-                            const isChecked = selectedOverrideStudentIds.includes(student.student_id);
-                            
-                            let statusNode = (
-                              <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase bg-rose-50 text-rose-700 border border-rose-100">
-                                Missed Exam / Not Taken
-                              </span>
-                            );
-
-                            if (override && override.is_active) {
-                              statusNode = (
-                                <div className="space-y-0.5">
-                                  <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase bg-amber-100 text-amber-800 border border-amber-200 inline-block">
-                                    Reopened Window Active
-                                  </span>
-                                  <p className="text-[10px] text-amber-900 font-semibold">
-                                    {new Date(override.new_start_time).toLocaleDateString([], { month: 'short', day: 'numeric' })} ({new Date(override.new_start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - {new Date(override.new_end_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})
-                                  </p>
-                                </div>
-                              );
-                            } else if (attempt) {
-                              if (attempt.submitted_at) {
-                                statusNode = (
-                                  <div className="space-y-0.5">
-                                    <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase bg-emerald-50 text-emerald-700 border border-emerald-100">
-                                      Took Exam • Completed ({attempt.total_score !== null ? `${attempt.total_score} pts` : "Submitted"})
-                                    </span>
-                                    <p className="text-[10px] text-slate-500">
-                                      Submitted: {new Date(attempt.submitted_at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                                    </p>
-                                  </div>
-                                );
-                              } else {
-                                statusNode = (
-                                  <div className="space-y-0.5">
-                                    <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase bg-amber-50 text-amber-700 border border-amber-100">
-                                      Took Exam • In Progress
-                                    </span>
-                                    <p className="text-[10px] text-slate-500">
-                                      Started: {new Date(attempt.started_at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                                    </p>
-                                  </div>
-                                );
-                              }
-                            }
-
-                            return (
-                              <tr key={student.student_id} className={`hover:bg-slate-50/50 transition-colors ${isChecked ? "bg-amber-50/30" : ""}`}>
-                                <td className="px-4 py-4 text-center">
-                                  <input
-                                    type="checkbox"
-                                    checked={isChecked}
-                                    onChange={() => {
-                                      if (isChecked) {
-                                        setSelectedOverrideStudentIds(prev => prev.filter(id => id !== student.student_id));
-                                      } else {
-                                        setSelectedOverrideStudentIds(prev => [...prev, student.student_id]);
-                                      }
-                                    }}
-                                    className="w-3.5 h-3.5 text-amber-600 rounded border-slate-300 focus:ring-amber-500 cursor-pointer"
-                                  />
-                                </td>
-                                <td className="px-6 py-4 font-bold text-slate-800">
-                                  {student.first_name} {student.middle_name ? `${student.middle_name.trim().charAt(0).toUpperCase()}. ` : ""}{student.last_name}
-                                  {attempt && (
-                                    <span className="ml-2 text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100">
-                                      Took Exam
-                                    </span>
-                                  )}
-                                </td>
-                                <td className="px-6 py-4">
-                                  <div className="space-y-0.5 text-slate-500">
-                                    <p className="font-semibold text-slate-700">{student.institutional_id}</p>
-                                    <p className="text-[10px]">{student.institutional_email}</p>
-                                  </div>
-                                </td>
-                                <td className="px-6 py-4">{statusNode}</td>
-                                <td className="px-6 py-4 text-right">
-                                  <div className="flex items-center justify-end gap-2">
-                                    <button
-                                      onClick={() => {
-                                        setSelectedOverrideStudentIds([student.student_id]);
-                                        setPopupStudentSearchInput("");
-                                        setPopupStudentSearchTerm("");
-                                        if (override && override.is_active) {
-                                          setOverrideForm({
-                                            start_date: override.new_start_time.split("T")[0],
-                                            start_time: override.new_start_time.split("T")[1]?.slice(0, 5) || "09:00",
-                                            end_date: override.new_end_time.split("T")[0],
-                                            end_time: override.new_end_time.split("T")[1]?.slice(0, 5) || "09:00",
-                                          });
-                                        } else {
-                                          setOverrideForm({
-                                            start_date: new Date().toISOString().split("T")[0],
-                                            start_time: "09:00",
-                                            end_date: new Date(Date.now() + 86400000).toISOString().split("T")[0],
-                                            end_time: "09:00",
-                                          });
-                                        }
-                                        setOverrideModalOpen(true);
-                                      }}
-                                      className="px-3 py-1.5 text-[11px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg shadow-sm transition-all cursor-pointer"
-                                    >
-                                      {override && override.is_active ? "Change Schedule" : "Reschedule Exam"}
-                                    </button>
-                                    {override && override.is_active && (
-                                      <button
-                                        onClick={() => handleRevokeOverride(student.student_id)}
-                                        className="px-2.5 py-1.5 text-[11px] font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-all cursor-pointer"
-                                        title="Revoke Reopened Window"
-                                      >
-                                        Revoke
-                                      </button>
-                                    )}
-                                  </div>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        {missedStudents.length === 0 && (
+                ) : (() => {
+                  const selectedExamHasEssay = Boolean(
+                    overrideExamInfo?.has_essay ||
+                    missedStudents.some(s => s.attempt?.has_essay)
+                  );
+                  const colSpanCount = selectedExamHasEssay ? 8 : 7;
+                  return (
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full divide-y divide-slate-100 text-left text-xs text-slate-600 font-semibold">
+                        <thead className="bg-slate-50 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
                           <tr>
-                            <td colSpan={5} className="text-center py-8 text-slate-400 italic">
-                              No assigned students found for this examination.
-                            </td>
+                            <th className="px-4 py-3 w-10 text-center">
+                              <input
+                                type="checkbox"
+                                checked={
+                                  missedStudents.length > 0 &&
+                                  missedStudents.every(s => selectedOverrideStudentIds.includes(s.student_id))
+                                }
+                                onChange={e => {
+                                  if (e.target.checked) {
+                                    setSelectedOverrideStudentIds(missedStudents.map(s => s.student_id));
+                                  } else {
+                                    setSelectedOverrideStudentIds([]);
+                                  }
+                                }}
+                                className="w-3.5 h-3.5 text-amber-600 rounded border-slate-300 focus:ring-amber-500 cursor-pointer"
+                                title="Select All Students"
+                              />
+                            </th>
+                            <th className="px-5 py-3">Student Name</th>
+                            <th className="px-4 py-3">ID / Email</th>
+                            <th className="px-4 py-3">Status</th>
+                            <th className="px-4 py-3 text-center">Cheating Attempts</th>
+                            {selectedExamHasEssay && (
+                              <th className="px-4 py-3">Essay Score & Check Answer</th>
+                            )}
+                            <th className="px-4 py-3 text-right">Actions</th>
+                            <th className="px-6 py-3 text-right">Total Score</th>
                           </tr>
-                        )}
-                        {missedStudents.length > 0 &&
-                          missedStudents.filter(student => {
-                            if (studentStatusFilter === "TAKERS" && !student.attempt) return false;
-                            if (studentStatusFilter === "MISSED" && student.attempt) return false;
-                            if (studentStatusFilter === "OVERRIDE" && (!student.override || !student.override.is_active)) return false;
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 bg-white">
+                          {missedStudents
+                            .filter(student => {
+                              if (studentStatusFilter === "TAKERS" && !student.attempt) return false;
+                              if (studentStatusFilter === "MISSED" && student.attempt) return false;
+                              if (studentStatusFilter === "OVERRIDE" && (!student.override || !student.override.is_active)) return false;
 
-                            if (!studentSearchTerm.trim()) return true;
-                            const q = studentSearchTerm.toLowerCase().trim();
-                            const fullName = `${student.first_name} ${student.middle_name || ""} ${student.last_name}`.toLowerCase();
-                            const revName = `${student.last_name}, ${student.first_name}`.toLowerCase();
-                            const id = (student.institutional_id || "").toLowerCase();
-                            const email = (student.institutional_email || "").toLowerCase();
-                            return fullName.includes(q) || revName.includes(q) || id.includes(q) || email.includes(q);
-                          }).length === 0 && (
+                              if (!studentSearchTerm.trim()) return true;
+                              const q = studentSearchTerm.toLowerCase().trim();
+                              const fullName = `${student.first_name} ${student.middle_name || ""} ${student.last_name}`.toLowerCase();
+                              const revName = `${student.last_name}, ${student.first_name}`.toLowerCase();
+                              const id = (student.institutional_id || "").toLowerCase();
+                              const email = (student.institutional_email || "").toLowerCase();
+                              return fullName.includes(q) || revName.includes(q) || id.includes(q) || email.includes(q);
+                            })
+                            .map(student => {
+                              const attempt = student.attempt;
+                              const override = student.override;
+                              const isChecked = selectedOverrideStudentIds.includes(student.student_id);
+                              
+                              let statusNode = (
+                                <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase bg-rose-50 text-rose-700 border border-rose-100">
+                                  Missed Exam / Not Taken
+                                </span>
+                              );
+
+                              if (override && override.is_active) {
+                                statusNode = (
+                                  <div className="space-y-0.5">
+                                    <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase bg-amber-100 text-amber-800 border border-amber-200 inline-block">
+                                      Reopened Window Active
+                                    </span>
+                                    <p className="text-[10px] text-amber-900 font-semibold">
+                                      {new Date(override.new_start_time).toLocaleDateString([], { month: 'short', day: 'numeric' })} ({new Date(override.new_start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - {new Date(override.new_end_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})
+                                    </p>
+                                  </div>
+                                );
+                              } else if (attempt) {
+                                if (attempt.submitted_at) {
+                                  statusNode = (
+                                    <div className="space-y-0.5">
+                                      <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase bg-emerald-50 text-emerald-700 border border-emerald-100">
+                                        Took Exam • Completed
+                                      </span>
+                                      <p className="text-[10px] text-slate-500">
+                                        Submitted: {new Date(attempt.submitted_at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                      </p>
+                                    </div>
+                                  );
+                                } else {
+                                  statusNode = (
+                                    <div className="space-y-0.5">
+                                      <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase bg-amber-50 text-amber-700 border border-amber-100">
+                                        Took Exam • In Progress
+                                      </span>
+                                      <p className="text-[10px] text-slate-500">
+                                        Started: {new Date(attempt.started_at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                      </p>
+                                    </div>
+                                  );
+                                }
+                              }
+
+                              const violationCount = attempt ? (attempt.violations_count || 0) : 0;
+
+                              return (
+                                <tr key={student.student_id} className={`hover:bg-slate-50/50 transition-colors ${isChecked ? "bg-amber-50/30" : ""}`}>
+                                  <td className="px-4 py-4 text-center">
+                                    <input
+                                      type="checkbox"
+                                      checked={isChecked}
+                                      onChange={() => {
+                                        if (isChecked) {
+                                          setSelectedOverrideStudentIds(prev => prev.filter(id => id !== student.student_id));
+                                        } else {
+                                          setSelectedOverrideStudentIds(prev => [...prev, student.student_id]);
+                                        }
+                                      }}
+                                      className="w-3.5 h-3.5 text-amber-600 rounded border-slate-300 focus:ring-amber-500 cursor-pointer"
+                                    />
+                                  </td>
+                                  <td className="px-5 py-4 font-bold text-slate-800">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <span>
+                                        {student.first_name} {student.middle_name ? `${student.middle_name.trim().charAt(0).toUpperCase()}. ` : ""}{student.last_name}
+                                      </span>
+                                      {attempt && (
+                                        <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100">
+                                          Took Exam
+                                        </span>
+                                      )}
+                                    </div>
+                                  </td>
+                                  <td className="px-4 py-4">
+                                    <div className="space-y-0.5 text-slate-500">
+                                      <p className="font-semibold text-slate-700">{student.institutional_id}</p>
+                                      <p className="text-[10px] truncate max-w-[140px]" title={student.institutional_email}>{student.institutional_email}</p>
+                                    </div>
+                                  </td>
+                                  <td className="px-4 py-4">{statusNode}</td>
+                                  
+                                  {/* Cheating Attempts Column */}
+                                  <td className="px-4 py-4 text-center">
+                                    {attempt ? (
+                                      <div className="flex flex-col items-center gap-1">
+                                        {violationCount === 0 ? (
+                                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                                            <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                                            0 Attempts
+                                          </span>
+                                        ) : (
+                                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-rose-50 text-rose-700 border border-rose-200 shadow-xs">
+                                            <ShieldAlert className="w-3.5 h-3.5 text-rose-600 animate-pulse" />
+                                            {violationCount} {violationCount === 1 ? "Attempt" : "Attempts"}
+                                          </span>
+                                        )}
+                                        {selectedOverrideExamId && (
+                                          <button
+                                            type="button"
+                                            onClick={() => handleViewAttemptLogs(student.student_id, `${student.first_name} ${student.last_name}`, selectedOverrideExamId)}
+                                            className="text-[9px] font-bold text-slate-400 hover:text-slate-700 underline cursor-pointer"
+                                            title="View student proctoring and violation logs"
+                                          >
+                                            View Logs
+                                          </button>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <span className="text-slate-300 text-xs">-</span>
+                                    )}
+                                  </td>
+
+                                  {/* Essay Score & Grading Column (if exam has essay) */}
+                                  {selectedExamHasEssay && (
+                                    <td className="px-4 py-4">
+                                      {attempt ? (
+                                        attempt.essayAnswers && attempt.essayAnswers.length > 0 ? (
+                                          <div className="space-y-2 py-0.5">
+                                            <div className="flex items-center gap-1.5 flex-wrap">
+                                              {attempt.has_ungraded_essay ? (
+                                                <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase bg-amber-50 text-amber-700 border border-amber-200">
+                                                  Pending Review
+                                                </span>
+                                              ) : (
+                                                <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                                  Graded
+                                                </span>
+                                              )}
+                                              <span className="text-xs font-bold text-slate-800">
+                                                {attempt.essay_points ?? 0} / {attempt.max_essay_points ?? (attempt.essayAnswers.length * 10)} pts
+                                              </span>
+                                            </div>
+
+                                            {/* Teacher can add their scores there directly */}
+                                            {attempt.essayAnswers.map((ea: any, idx: number) => {
+                                              const maxPts = ea.points || 10;
+                                              const currentVal = inlineEssayScores[ea.answer_id] !== undefined
+                                                ? inlineEssayScores[ea.answer_id]
+                                                : (ea.points_awarded !== null ? ea.points_awarded : "");
+                                              return (
+                                                <div key={ea.answer_id} className="flex items-center gap-1.5">
+                                                  <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 shadow-2xs">
+                                                    {attempt.essayAnswers.length > 1 && (
+                                                      <span className="text-[10px] text-slate-500 font-bold">Q{idx + 1}:</span>
+                                                    )}
+                                                    <input
+                                                      type="number"
+                                                      min={0}
+                                                      max={maxPts}
+                                                      placeholder="0"
+                                                      value={currentVal}
+                                                      onChange={e => {
+                                                        const val = e.target.value === "" ? "" : Number(e.target.value);
+                                                        setInlineEssayScores(prev => ({
+                                                          ...prev,
+                                                          [ea.answer_id]: val as any
+                                                        }));
+                                                      }}
+                                                      className="w-12 text-xs font-bold text-slate-800 bg-white border border-slate-200 rounded px-1.5 py-0.5 focus:outline-none focus:border-amber-500"
+                                                    />
+                                                    <span className="text-[10px] text-slate-400 font-bold">/ {maxPts}</span>
+                                                    <button
+                                                      type="button"
+                                                      disabled={savingInlineEssayId === ea.answer_id || currentVal === ""}
+                                                      onClick={() => handleSaveInlineEssayScore(ea.answer_id, maxPts)}
+                                                      className="px-2 py-0.5 text-[10px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded transition-colors disabled:opacity-50 cursor-pointer"
+                                                      title="Save score"
+                                                    >
+                                                      {savingInlineEssayId === ea.answer_id ? (
+                                                        <Loader2 className="w-3 h-3 animate-spin" />
+                                                      ) : (
+                                                        "Save"
+                                                      )}
+                                                    </button>
+                                                  </div>
+                                                </div>
+                                              );
+                                            })}
+
+                                            {/* Button for teacher to check their answer in the essay */}
+                                            <div>
+                                              <button
+                                                type="button"
+                                                onClick={() => handleOpenEssayGrading(attempt)}
+                                                className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg transition-all cursor-pointer shadow-xs"
+                                                title="Check student's essay answer and rubric"
+                                              >
+                                                <PenTool className="w-3 h-3 text-indigo-600" />
+                                                Check Answer
+                                              </button>
+                                            </div>
+                                          </div>
+                                        ) : (
+                                          <span className="text-[11px] text-slate-400 italic">No essay response</span>
+                                        )
+                                      ) : (
+                                        <span className="text-slate-300 text-xs">-</span>
+                                      )}
+                                    </td>
+                                  )}
+
+                                  {/* Actions Column */}
+                                  <td className="px-4 py-4 text-right">
+                                    <div className="flex items-center justify-end gap-1.5">
+                                      {attempt && (
+                                        <button
+                                          type="button"
+                                          onClick={() => handleViewExamPaper(attempt)}
+                                          className="px-2.5 py-1.5 text-[11px] font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg transition-all cursor-pointer flex items-center gap-1 shadow-2xs"
+                                          title="View Student's Full Exam Paper & Responses"
+                                        >
+                                          <FileText className="w-3 h-3 text-slate-500" />
+                                          Exam Paper
+                                        </button>
+                                      )}
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setSelectedOverrideStudentIds([student.student_id]);
+                                          setPopupStudentSearchInput("");
+                                          setPopupStudentSearchTerm("");
+                                          if (override && override.is_active) {
+                                            setOverrideForm({
+                                              start_date: override.new_start_time.split("T")[0],
+                                              start_time: override.new_start_time.split("T")[1]?.slice(0, 5) || "09:00",
+                                              end_date: override.new_end_time.split("T")[0],
+                                              end_time: override.new_end_time.split("T")[1]?.slice(0, 5) || "09:00",
+                                            });
+                                          } else {
+                                            setOverrideForm({
+                                              start_date: new Date().toISOString().split("T")[0],
+                                              start_time: "09:00",
+                                              end_date: new Date(Date.now() + 86400000).toISOString().split("T")[0],
+                                              end_time: "09:00",
+                                            });
+                                          }
+                                          setOverrideModalOpen(true);
+                                        }}
+                                        className="px-2.5 py-1.5 text-[11px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg shadow-xs transition-all cursor-pointer"
+                                      >
+                                        {override && override.is_active ? "Change Schedule" : "Reschedule"}
+                                      </button>
+                                      {override && override.is_active && (
+                                        <button
+                                          type="button"
+                                          onClick={() => handleRevokeOverride(student.student_id)}
+                                          className="px-2 py-1.5 text-[11px] font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-all cursor-pointer"
+                                          title="Revoke Reopened Window"
+                                        >
+                                          Revoke
+                                        </button>
+                                      )}
+                                    </div>
+                                  </td>
+
+                                  {/* Last Column: Total Score */}
+                                  <td className="px-6 py-4 text-right">
+                                    {attempt ? (
+                                      attempt.submitted_at ? (
+                                        <div className="space-y-0.5">
+                                          <div className="text-sm font-black text-slate-900">
+                                            {attempt.total_score !== null ? `${attempt.total_score} pts` : "Submitted"}
+                                          </div>
+                                          {attempt.penalty_points > 0 && (
+                                            <div className="text-[10px] font-bold text-rose-600">
+                                              -{attempt.penalty_points} pts penalty
+                                            </div>
+                                          )}
+                                          {attempt.raw_score !== undefined && attempt.penalty_points > 0 && (
+                                            <div className="text-[9px] text-slate-400">
+                                              Raw: {attempt.raw_score} pts
+                                            </div>
+                                          )}
+                                        </div>
+                                      ) : (
+                                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-amber-50 text-amber-700 border border-amber-100">
+                                          In Progress
+                                        </span>
+                                      )
+                                    ) : (
+                                      <span className="text-slate-400 text-xs italic">
+                                        0 pts (Missed)
+                                      </span>
+                                    )}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          {missedStudents.length === 0 && (
                             <tr>
-                              <td colSpan={5} className="text-center py-8 text-slate-400 italic">
-                                No students match the search query "{studentSearchTerm}".
+                              <td colSpan={colSpanCount} className="text-center py-8 text-slate-400 italic">
+                                No assigned students found for this examination.
                               </td>
                             </tr>
                           )}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
+                          {missedStudents.length > 0 &&
+                            missedStudents.filter(student => {
+                              if (studentStatusFilter === "TAKERS" && !student.attempt) return false;
+                              if (studentStatusFilter === "MISSED" && student.attempt) return false;
+                              if (studentStatusFilter === "OVERRIDE" && (!student.override || !student.override.is_active)) return false;
+
+                              if (!studentSearchTerm.trim()) return true;
+                              const q = studentSearchTerm.toLowerCase().trim();
+                              const fullName = `${student.first_name} ${student.middle_name || ""} ${student.last_name}`.toLowerCase();
+                              const revName = `${student.last_name}, ${student.first_name}`.toLowerCase();
+                              const id = (student.institutional_id || "").toLowerCase();
+                              const email = (student.institutional_email || "").toLowerCase();
+                              return fullName.includes(q) || revName.includes(q) || id.includes(q) || email.includes(q);
+                            }).length === 0 && (
+                              <tr>
+                                <td colSpan={colSpanCount} className="text-center py-8 text-slate-400 italic">
+                                  No students match the search query "{studentSearchTerm}".
+                                </td>
+                              </tr>
+                            )}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                })()}
               </div>
             )}
           </div>
