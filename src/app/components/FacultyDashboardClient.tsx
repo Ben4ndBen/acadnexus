@@ -1941,16 +1941,28 @@ export function FacultyDashboardClient({
                             
                             <div className="flex items-center gap-2">
                               {renderStatusBadge(exam.current_status, exam)}
+
+                              {exam.current_status === "Returned" && (
+                                <button
+                                  onClick={() => router.push(`/dashboard/faculty/exams/${exam.exam_id}/builder`)}
+                                  className="inline-flex items-center gap-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold px-3 py-1.5 rounded-xl shadow-sm transition-all cursor-pointer"
+                                >
+                                  <PenTool className="w-3.5 h-3.5" />
+                                  Edit Marked Items in Builder (Step 2)
+                                </button>
+                              )}
                               
                               {(exam.current_status === "Draft" || exam.current_status === "Returned") && (
                                 <div className="flex items-center gap-1.5 ml-1">
-                                  <button
-                                    onClick={() => router.push(`/dashboard/faculty/exams/${exam.exam_id}/builder`)}
-                                    className="p-1.5 border border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 text-slate-600 rounded-xl shadow-sm transition-all cursor-pointer"
-                                    title="Edit Exam in Builder"
-                                  >
-                                    <PenTool className="w-4 h-4" />
-                                  </button>
+                                  {exam.current_status === "Draft" && (
+                                    <button
+                                      onClick={() => router.push(`/dashboard/faculty/exams/${exam.exam_id}/builder`)}
+                                      className="p-1.5 border border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 text-slate-600 rounded-xl shadow-sm transition-all cursor-pointer"
+                                      title="Edit Exam in Builder"
+                                    >
+                                      <PenTool className="w-4 h-4" />
+                                    </button>
+                                  )}
                                   <button
                                     disabled={deletingExamId === exam.exam_id}
                                     onClick={() => handleDeleteExam(exam.exam_id)}
@@ -2092,20 +2104,14 @@ export function FacultyDashboardClient({
                             const card1 = showProgChairComments ? renderCommentCard(exam.approvalWorkflow!.prog_chair_comments!, "Returned by Program Chairperson") : null;
                             const card2 = showChairComments ? renderCommentCard(exam.approvalWorkflow!.chair_comments!, "Returned by Department Chairperson") : null;
                             const card3 = showDiReturnedComments ? renderCommentCard(exam.approvalWorkflow!.di_comments!, "Returned by Director of Instruction") : null;
+                            const hasAnyCard = !!(card1 || card2 || card3);
+                            if (!hasAnyCard) return null;
+
                             return (
                               <>
                                 {card1}
                                 {card2}
                                 {card3}
-                                <div className="pt-1 flex justify-end">
-                                  <button
-                                    onClick={() => router.push(`/dashboard/faculty/exams/${exam.exam_id}/builder`)}
-                                    className="inline-flex items-center gap-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold px-3.5 py-2 rounded-xl shadow-sm transition-all cursor-pointer"
-                                  >
-                                    <PenTool className="w-3.5 h-3.5" />
-                                    Edit Marked Items in Builder (Step 2)
-                                  </button>
-                                </div>
                               </>
                             );
                           })()}
