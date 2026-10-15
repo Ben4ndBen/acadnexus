@@ -7,7 +7,7 @@ import {
   User, Shield, Settings, Activity, Send, RotateCcw, AlertCircle, RefreshCw, Mail,
   Plus, Trash2, Calendar, Lock, Camera, Check, ShieldAlert, Loader2, ShieldCheck, Clock,
   X, AlertTriangle, Archive, Search, Edit, GraduationCap, Users, Download, Layers, ChevronRight,
-  Printer, CheckCircle2, XCircle
+  Printer, CheckCircle2, XCircle, ArrowLeft
 } from "lucide-react";
 import { 
   updateFacultyProfile, updateExamStatus, createExamDraft, deleteExam, 
@@ -3199,9 +3199,10 @@ export function FacultyDashboardClient({
                         <button
                           type="button"
                           onClick={() => setSelectedOverrideExamId(null)}
-                          className="text-[11px] font-bold text-blue-700 hover:text-blue-900 underline ml-1 cursor-pointer"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 hover:text-slate-900 border border-slate-200 hover:border-slate-300 rounded-xl shadow-2xs transition-all cursor-pointer ml-1"
                         >
-                          ← Choose Another Exam
+                          <ArrowLeft className="w-3.5 h-3.5 text-slate-500" />
+                          Choose Another Exam
                         </button>
                       </div>
                       <p className="text-xs text-slate-500">
