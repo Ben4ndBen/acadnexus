@@ -998,7 +998,7 @@ export function FacultyDashboardClient({
 
   // Approved exams filtered by selected course (or all if none selected)
   const overrideFilteredExams = useMemo(() => {
-    const approved = faculty.examinations.filter(exam => exam.current_status === "Approved");
+    const approved = faculty.examinations.filter(exam => exam.current_status === "Approved" && !exam.is_archived);
     if (!selectedOverrideCourseId) return approved;
     return approved.filter(exam => {
       const cId = (exam as any).course_id || (exam.course as any)?.course_id;
@@ -3018,7 +3018,7 @@ export function FacultyDashboardClient({
                   {availableFacultyCourses.map(c => {
                     const examCount = faculty.examinations.filter(ex => {
                       const cId = (ex as any).course_id || (ex.course as any)?.course_id;
-                      return ex.current_status === "Approved" && cId === c.course_id;
+                      return ex.current_status === "Approved" && !ex.is_archived && cId === c.course_id;
                     }).length;
                     return (
                       <option key={c.course_id} value={c.course_id}>

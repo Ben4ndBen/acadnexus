@@ -9,6 +9,7 @@ import { StudentDashboardClient } from "@/app/components/StudentDashboardClient"
 
 import { getCachedStudentUser, getActiveAcademicPeriodCached } from "@/lib/cache";
 import { getExpectedYearAndSemForCourse } from "@/lib/bsitCurriculum";
+import { autoArchiveCompletedExams } from "@/app/actions/faculty";
 
 export const dynamic = "force-dynamic";
 
@@ -29,6 +30,9 @@ export default async function StudentDashboard() {
     redirect("/");
   }
 
+  // Ensure completed exams with past schedules are archived
+  await autoArchiveCompletedExams();
+
   // Fetch student details from the database using cached query
   const dbUser = await getCachedStudentUser(institutionalId);
 
@@ -45,6 +49,7 @@ export default async function StudentDashboard() {
         year_level: student.year_level,
         exam: {
           current_status: "Approved",
+          is_archived: false,
         },
       },
       include: {

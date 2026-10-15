@@ -8,6 +8,7 @@ import { BookOpen } from "lucide-react";
 import { FacultyDashboardClient } from "@/app/components/FacultyDashboardClient";
 
 import { ensureChairsAndDepartmentsExist } from "@/lib/chairServer";
+import { autoArchiveCompletedExams } from "@/app/actions/faculty";
 
 export const dynamic = "force-dynamic";
 
@@ -31,6 +32,7 @@ export default async function FacultyDashboard() {
   }
 
   await ensureChairsAndDepartmentsExist();
+  await autoArchiveCompletedExams();
 
   // Fetch faculty details with full relations from database
   const dbUser = await db.user.findUnique({

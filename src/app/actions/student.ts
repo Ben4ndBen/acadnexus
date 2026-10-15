@@ -492,6 +492,14 @@ export async function submitStudentExam(
       });
     });
 
+    // Check if exam is now eligible to automatically transition to archives
+    try {
+      const { autoArchiveCompletedExams } = await import("@/app/actions/faculty");
+      await autoArchiveCompletedExams(exam.faculty_id);
+    } catch (archiveErr) {
+      console.error("Auto-archive check error on submit:", archiveErr);
+    }
+
     revalidatePath("/dashboard/student");
     return { success: true, totalScore: Math.max(0, totalScore - ((studentExam.violations_count ?? 0) * (exam.score_penalty_points ?? 2))) };
   } catch (err: any) {

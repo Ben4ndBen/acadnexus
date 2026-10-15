@@ -2008,6 +2008,148 @@ export async function importQuestionsToExam(examId: number, questionIds: number[
   }
 }
 
+export async function autoArchiveCompletedExams(facultyId?: number) {
+  try {
+    const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
+
+    const where: any = {
+      current_status: "Approved",
+      is_archived: false,
+    };
+    if (facultyId) {
+      where.faculty_id = facultyId;
+    }
+
+    const candidateExams = await db.examination.findMany({
+      where,
+      include: {
+        examTargets: true,
+        studentExams: true,
+        studentOverrides: {
+          where: { is_active: true },
+        },
+      },
+    });
+
+    const examsToArchive: number[] = [];
+
+    for (const exam of candidateExams) {
+      // 1. Must have been taken by students
+      if (!exam.studentExams || exam.studentExams.length === 0) {
+        continue;
+      }
+
+      // 2. Schedule check: must have at least one target or an exam_date
+      let scheduleConcluded = false;
+
+      if (exam.examTargets && exam.examTargets.length > 0) {
+        let allTargetsEnded = true;
+        for (const target of exam.examTargets) {
+          if (!target.scheduled_date || !target.end_time) {
+            allTargetsEnded = false;
+            break;
+          }
+          const schedDate = new Date(target.scheduled_date);
+          const endTime = new Date(target.end_time);
+          const examEnd = new Date(
+            schedDate.getUTCFullYear(),
+            schedDate.getUTCMonth(),
+            schedDate.getUTCDate(),
+            endTime.getUTCHours(),
+            endTime.getUTCMinutes(),
+            0
+          );
+          if (now < examEnd) {
+            allTargetsEnded = false;
+            break;
+          }
+        }
+        scheduleConcluded = allTargetsEnded;
+      } else if (exam.exam_date) {
+        const d = new Date(exam.exam_date);
+        d.setHours(23, 59, 59, 999);
+        scheduleConcluded = now > d;
+      }
+
+      if (!scheduleConcluded) {
+        continue;
+      }
+
+      // 3. Check if any active override has not ended yet
+      if (exam.studentOverrides && exam.studentOverrides.length > 0) {
+        const hasPendingOverride = exam.studentOverrides.some(
+          (o) => o.new_end_time && new Date(o.new_end_time) > now
+        );
+        if (hasPendingOverride) {
+          continue;
+        }
+      }
+
+      // 4. Check if any student is actively taking the exam within allowed time limit
+      const timeLimitMs = (exam.time_limit_minutes || 60) * 60 * 1000;
+      let hasActiveStudentTaking = false;
+
+      for (const se of exam.studentExams) {
+        if (!se.submitted_at) {
+          const startedAt = new Date(se.started_at);
+          const elapsedMs = now.getTime() - startedAt.getTime();
+          if (elapsedMs < timeLimitMs) {
+            hasActiveStudentTaking = true;
+            break;
+          } else {
+            // Time expired for this unsubmitted student attempt: finalize it
+            await db.studentExam.update({
+              where: { student_exam_id: se.student_exam_id },
+              data: {
+                submitted_at: new Date(),
+                submission_trigger: "Timeout",
+                remaining_seconds: 0,
+              },
+            });
+          }
+        }
+      }
+
+      if (hasActiveStudentTaking) {
+        continue;
+      }
+
+      examsToArchive.push(exam.exam_id);
+    }
+
+    if (examsToArchive.length > 0) {
+      const currentAY = await getCurrentAcademicYear();
+
+      for (const examId of examsToArchive) {
+        const examRecord = candidateExams.find((e) => e.exam_id === examId);
+        await db.examination.update({
+          where: { exam_id: examId },
+          data: {
+            is_archived: true,
+            academic_year: examRecord?.academic_year || currentAY,
+          },
+        });
+
+        await db.auditLog.create({
+          data: {
+            user_id: examRecord?.faculty_id || 1,
+            action_performed: `Auto-archived completed examination ID ${examId} ("${examRecord?.title}") for Academic Year ${examRecord?.academic_year || currentAY}`,
+            ip_address: "127.0.0.1",
+          },
+        });
+      }
+
+      revalidatePath("/dashboard/faculty");
+      revalidatePath("/dashboard/student");
+    }
+
+    return { success: true, archivedCount: examsToArchive.length };
+  } catch (err: any) {
+    console.error("Error in autoArchiveCompletedExams:", err);
+    return { error: err.message || "Failed to auto-archive completed examinations." };
+  }
+}
+
 export async function archiveExamination(examId: number, academicYear: string, facultyId: number) {
   try {
     const exam = await db.examination.findUnique({
@@ -2107,6 +2249,7 @@ export async function reuseArchivedExamination(examId: number, facultyId: number
 
 export async function getArchivedExaminations(courseId?: number) {
   try {
+    await autoArchiveCompletedExams();
     const where: any = {
       is_archived: true
     };
