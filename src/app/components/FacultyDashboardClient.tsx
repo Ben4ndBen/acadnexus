@@ -3191,7 +3191,7 @@ export function FacultyDashboardClient({
                         {(() => {
                           const exam = faculty.examinations.find(e => e.exam_id === selectedOverrideExamId);
                           return exam ? (
-                            <span className="text-[11px] font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">
+                            <span className="text-[11px] font-bold text-blue-900 bg-blue-50 px-2.5 py-1 rounded-xl border border-blue-200/80">
                               {exam.course.course_code} • {exam.title}
                             </span>
                           ) : null;
@@ -3199,9 +3199,9 @@ export function FacultyDashboardClient({
                         <button
                           type="button"
                           onClick={() => setSelectedOverrideExamId(null)}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 hover:text-slate-900 border border-slate-200 hover:border-slate-300 rounded-xl shadow-2xs transition-all cursor-pointer ml-1"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 active:scale-95 rounded-xl shadow-xs transition-all cursor-pointer ml-1"
                         >
-                          <ArrowLeft className="w-3.5 h-3.5 text-slate-500" />
+                          <ArrowLeft className="w-3.5 h-3.5 text-white" />
                           Choose Another Exam
                         </button>
                       </div>
