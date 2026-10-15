@@ -1936,12 +1936,15 @@ export function FacultyDashboardClient({
                     >
                       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-100 pb-4">
                         <div className="flex-1 w-full">
-                          <div className="flex flex-wrap items-center justify-between gap-3">
-                            <h3 className="text-base font-extrabold text-slate-900">{getExamDisplayTitle(exam)}</h3>
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div className="space-y-1.5">
+                              <h3 className="text-base font-extrabold text-slate-900">{getExamDisplayTitle(exam)}</h3>
+                              <div>
+                                {renderStatusBadge(exam.current_status, exam)}
+                              </div>
+                            </div>
                             
                             <div className="flex items-center gap-2">
-                              {renderStatusBadge(exam.current_status, exam)}
-
                               {exam.current_status === "Returned" && (
                                 <button
                                   onClick={() => router.push(`/dashboard/faculty/exams/${exam.exam_id}/builder`)}
@@ -1980,7 +1983,7 @@ export function FacultyDashboardClient({
                             </div>
                           </div>
                           
-                          <p className="text-xs text-slate-400 font-semibold mt-1 flex flex-wrap items-center gap-1.5">
+                          <p className="text-xs text-slate-400 font-semibold mt-2 flex flex-wrap items-center gap-1.5">
                             <span className="text-slate-400 font-medium">{exam.course.course_code} - {exam.course.course_title}</span>
                             <span className="text-slate-400">•</span>
                             <span>{exam.time_limit_minutes || 60} min</span>
