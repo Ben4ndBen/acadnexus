@@ -998,7 +998,7 @@ export function FacultyDashboardClient({
 
   // Approved exams filtered by selected course (or all if none selected)
   const overrideFilteredExams = useMemo(() => {
-    const approved = faculty.examinations.filter(exam => exam.current_status === "Approved" && !exam.is_archived);
+    const approved = faculty.examinations.filter(exam => exam.current_status === "Approved");
     if (!selectedOverrideCourseId) return approved;
     return approved.filter(exam => {
       const cId = (exam as any).course_id || (exam.course as any)?.course_id;
@@ -2996,7 +2996,7 @@ export function FacultyDashboardClient({
                   {availableFacultyCourses.map(c => {
                     const examCount = faculty.examinations.filter(ex => {
                       const cId = (ex as any).course_id || (ex.course as any)?.course_id;
-                      return ex.current_status === "Approved" && !ex.is_archived && cId === c.course_id;
+                      return ex.current_status === "Approved" && cId === c.course_id;
                     }).length;
                     return (
                       <option key={c.course_id} value={c.course_id}>
@@ -3039,6 +3039,102 @@ export function FacultyDashboardClient({
               </div>
             </div>
 
+            {/* Approved Examinations Cards Showcase when no specific exam is selected yet */}
+            {!selectedOverrideExamId && (
+              <div className="space-y-4 pt-2">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                  <div>
+                    <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
+                      <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                      Approved Examinations ({overrideFilteredExams.length})
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Select an approved exam below to view taker rosters, inspect student attempts, and set reschedule/override windows for students who missed it.
+                    </p>
+                  </div>
+                </div>
+
+                {overrideFilteredExams.length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {overrideFilteredExams.map((exam) => {
+                      const target = exam.examTargets?.[0];
+                      const dateStr = target?.scheduled_date
+                        ? new Date(target.scheduled_date).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" })
+                        : "No date set";
+                      const timeStr = target?.start_time && target?.end_time
+                        ? `${new Date(target.start_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} - ${new Date(target.end_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+                        : "";
+                      const attemptsCount = studentExams.filter(
+                        (se: any) => se.exam_id === exam.exam_id || se.exam?.exam_id === exam.exam_id
+                      ).length;
+
+                      return (
+                        <div
+                          key={exam.exam_id}
+                          onClick={() => {
+                            setSelectedOverrideExamId(exam.exam_id);
+                            const cId = (exam as any).course_id || (exam.course as any)?.course_id;
+                            if (cId) setSelectedOverrideCourseId(cId);
+                          }}
+                          className="bg-white border border-slate-200 hover:border-amber-400 hover:shadow-md rounded-2xl p-5 transition-all cursor-pointer flex flex-col justify-between gap-4 group"
+                        >
+                          <div className="space-y-2.5">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="font-mono text-[11px] font-black text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded-lg border border-emerald-200">
+                                {exam.course.course_code}
+                              </span>
+                              {exam.is_archived ? (
+                                <span className="text-[10px] font-bold text-slate-600 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full">
+                                  Archived Exam
+                                </span>
+                              ) : (
+                                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full flex items-center gap-1">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                  Approved
+                                </span>
+                              )}
+                            </div>
+
+                            <h4 className="text-sm font-extrabold text-slate-900 group-hover:text-amber-700 transition-colors line-clamp-2">
+                              {getExamDisplayTitle(exam)}
+                            </h4>
+                            <p className="text-xs text-slate-500 font-medium line-clamp-1">
+                              {exam.course.course_title}
+                            </p>
+
+                            <div className="pt-2 border-t border-slate-100 space-y-1.5 text-[11px] text-slate-600">
+                              <div className="flex items-center gap-1.5">
+                                <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                <span className="font-semibold">{dateStr} {timeStr ? `• ${timeStr}` : ""}</span>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <Users className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                <span>{attemptsCount} student attempt(s) recorded</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            className="w-full inline-flex items-center justify-center gap-1.5 bg-amber-50 group-hover:bg-amber-600 text-amber-800 group-hover:text-white border border-amber-200 group-hover:border-amber-600 text-xs font-bold py-2.5 rounded-xl transition-all shadow-2xs cursor-pointer"
+                          >
+                            <Clock className="w-3.5 h-3.5" />
+                            <span>Select & Manage Overrides</span>
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="p-8 text-center bg-slate-50/60 border border-dashed border-slate-200 rounded-2xl">
+                    <AlertCircle className="w-8 h-8 text-slate-400 mx-auto mb-2" />
+                    <p className="text-xs font-bold text-slate-600">No approved examinations found for this selection</p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">Examinations must be approved by the Department Chair & Director to manage student overrides.</p>
+                  </div>
+                )}
+              </div>
+            )}
+
             {selectedOverrideExamId && (
               <div className="space-y-5 pt-2 animate-in fade-in duration-300">
                 {/* Original Exam Schedule Preserved Banner */}
@@ -3048,14 +3144,23 @@ export function FacultyDashboardClient({
                       <Calendar className="w-4 h-4 text-blue-600" />
                       Original Exam Schedule
                     </div>
-                    {(() => {
-                      const exam = faculty.examinations.find(e => e.exam_id === selectedOverrideExamId);
-                      return exam ? (
-                        <span className="text-[11px] font-bold text-blue-800 bg-blue-100/80 px-2 py-0.5 rounded-md border border-blue-200">
-                          {exam.course.course_code} • {exam.title}
-                        </span>
-                      ) : null;
-                    })()}
+                    <div className="flex items-center gap-2">
+                      {(() => {
+                        const exam = faculty.examinations.find(e => e.exam_id === selectedOverrideExamId);
+                        return exam ? (
+                          <span className="text-[11px] font-bold text-blue-800 bg-blue-100/80 px-2 py-0.5 rounded-md border border-blue-200">
+                            {exam.course.course_code} • {exam.title}
+                          </span>
+                        ) : null;
+                      })()}
+                      <button
+                        type="button"
+                        onClick={() => setSelectedOverrideExamId(null)}
+                        className="text-[11px] font-bold text-blue-700 hover:text-blue-900 underline ml-2 cursor-pointer"
+                      >
+                        ← Choose Another Exam
+                      </button>
+                    </div>
                   </div>
                   <p className="text-slate-900 font-extrabold text-sm">
                     {officialExamScheduleText || "Original Exam Schedule"}
