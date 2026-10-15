@@ -46,6 +46,7 @@ interface FacultyDashboardClientProps {
       current_status: "Draft" | "Pending_Program_Chair" | "Pending_Chair" | "Pending_DI" | "Approved" | "Returned";
       is_archived?: boolean;
       academic_year?: string | null;
+      term?: string | null;
       course: {
         course_code: string;
         course_title: string;
@@ -1036,10 +1037,26 @@ export function FacultyDashboardClient({
   // Approved exams filtered by selected course (or all if none selected)
   const overrideFilteredExams = useMemo(() => {
     const approved = faculty.examinations.filter(exam => exam.current_status === "Approved");
-    if (!selectedOverrideCourseId) return approved;
-    return approved.filter(exam => {
-      const cId = (exam as any).course_id || (exam.course as any)?.course_id;
-      return cId === selectedOverrideCourseId;
+    const filtered = !selectedOverrideCourseId
+      ? approved
+      : approved.filter(exam => {
+          const cId = (exam as any).course_id || (exam.course as any)?.course_id;
+          return cId === selectedOverrideCourseId;
+        });
+
+    const getTermRank = (exam: any) => {
+      const t = ((exam.term || "") + " " + (exam.title || "")).toLowerCase();
+      if (t.includes("prelim")) return 1;
+      if (t.includes("midterm")) return 2;
+      if (t.includes("final")) return 3;
+      return 4;
+    };
+
+    return [...filtered].sort((a, b) => {
+      const cA = a.course?.course_code || "";
+      const cB = b.course?.course_code || "";
+      if (cA !== cB) return cA.localeCompare(cB);
+      return getTermRank(a) - getTermRank(b);
     });
   }, [faculty.examinations, selectedOverrideCourseId]);
 
@@ -3072,12 +3089,58 @@ export function FacultyDashboardClient({
                   }}
                   className="w-full bg-white border border-slate-200 text-xs font-bold text-slate-800 px-3.5 py-2.5 rounded-xl transition-all shadow-sm focus:outline-none focus:border-amber-600"
                 >
-                  <option value="">-- Choose Approved Examination --</option>
-                  {overrideFilteredExams.map(exam => (
-                    <option key={exam.exam_id} value={exam.exam_id}>
-                      {exam.title} ({exam.course.course_code})
-                    </option>
-                  ))}
+                  <option value="">-- Choose Examination --</option>
+                  {(() => {
+                    if (selectedOverrideCourseId) {
+                      const terms = ["Prelim", "Midterm", "Finals"] as const;
+                      return terms.flatMap(termName => {
+                        const matching = overrideFilteredExams.filter(exam => {
+                          const t = ((exam.term || "") + " " + (exam.title || "")).toLowerCase();
+                          if (termName === "Prelim") return t.includes("prelim");
+                          if (termName === "Midterm") return t.includes("midterm");
+                          if (termName === "Finals") return t.includes("final");
+                          return false;
+                        });
+
+                        if (matching.length === 0) {
+                          return [
+                            <option key={termName} value="" disabled>
+                              {termName} (No approved exam yet)
+                            </option>
+                          ];
+                        }
+
+                        if (matching.length === 1) {
+                          return [
+                            <option key={matching[0].exam_id} value={matching[0].exam_id}>
+                              {termName}
+                            </option>
+                          ];
+                        }
+
+                        return matching.map((exam, idx) => (
+                          <option key={exam.exam_id} value={exam.exam_id}>
+                            {termName} #{idx + 1}
+                          </option>
+                        ));
+                      });
+                    }
+
+                    return overrideFilteredExams.map(exam => {
+                      const t = ((exam.term || "") + " " + (exam.title || "")).toLowerCase();
+                      let termLabel = "Exam";
+                      if (t.includes("prelim")) termLabel = "Prelim";
+                      else if (t.includes("midterm")) termLabel = "Midterm";
+                      else if (t.includes("final")) termLabel = "Finals";
+                      else termLabel = exam.term || exam.title;
+
+                      return (
+                        <option key={exam.exam_id} value={exam.exam_id}>
+                          {termLabel} ({exam.course.course_code})
+                        </option>
+                      );
+                    });
+                  })()}
                 </select>
               </div>
             </div>
