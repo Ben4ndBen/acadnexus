@@ -1686,28 +1686,6 @@ export function FacultyDashboardClient({
           Class Students
         </button>
         <button
-          onClick={() => setActiveTab("submissions")}
-          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-bold rounded-xl transition-all duration-300 ${
-            activeTab === "submissions"
-              ? "bg-emerald-600 text-white shadow-md shadow-emerald-600/20"
-              : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-          }`}
-        >
-          <ShieldAlert className="w-4 h-4" />
-          Live Monitor & Results
-        </button>
-        <button
-          onClick={() => setActiveTab("question_bank")}
-          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-bold rounded-xl transition-all duration-300 ${
-            activeTab === "question_bank"
-              ? "bg-emerald-600 text-white shadow-md shadow-emerald-600/20"
-              : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-          }`}
-        >
-          <BookOpen className="w-4 h-4" />
-          Question Bank Repository
-        </button>
-        <button
           onClick={() => setActiveTab("archive")}
           className={`flex items-center gap-2 px-4 py-2.5 text-sm font-bold rounded-xl transition-all duration-300 ${
             activeTab === "archive"
