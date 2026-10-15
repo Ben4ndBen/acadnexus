@@ -3001,12 +3001,12 @@ export function FacultyDashboardClient({
       {/* OVERRIDE CONTROLS TAB */}
       {activeTab === "override" && (
         <div className="space-y-8 animate-in fade-in duration-300">
-          {/* Student Reschedule & Reopen Controls */}
+          {/* Student Score and Exam Reschedule */}
           <div className="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-sm space-y-6">
             <div>
               <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
                 <span className="w-1.5 h-6 bg-amber-600 rounded-full" />
-                Student Reschedule & Reopen Controls
+                Student Score and Exam Reschedule
               </h2>
               <p className="text-slate-500 text-xs mt-1">
                 Choose a course and exam, then find students who missed it or need a retake to set a new exam schedule for them.
