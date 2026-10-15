@@ -1749,7 +1749,7 @@ export function FacultyDashboardClient({
           }`}
         >
           <Settings className="w-4 h-4" />
-          Override Controls
+          Override Controls and Student Scores
         </button>
         <button
           onClick={() => setActiveTab("profile")}
