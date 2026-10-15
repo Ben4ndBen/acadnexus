@@ -1905,7 +1905,6 @@ export function FacultyDashboardClient({
                     </span>
                   )}
                 </h2>
-                <p className="text-slate-500 text-xs mt-1">Multi-tier review status & management for all course examinations.</p>
               </div>
               <button
                 disabled={isCreatingExam}
