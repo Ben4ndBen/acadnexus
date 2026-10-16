@@ -178,7 +178,13 @@ export function BSCTableOfSpecificationsView({
 
   // Editable Signatory State
   const [editableFacultyName, setEditableFacultyName] = React.useState(facultyName || "NAME OF FACULTY MEMBER");
-  const [editableFacultyRank, setEditableFacultyRank] = React.useState(facultyRank || "Academic Rank/Designation");
+  const [editableFacultyRank, setEditableFacultyRank] = React.useState(facultyRank || "");
+
+  React.useEffect(() => {
+    if (facultyRank !== undefined) {
+      setEditableFacultyRank(facultyRank || "");
+    }
+  }, [facultyRank]);
   const [editableProgramChairName, setEditableProgramChairName] = React.useState(programChairName || "NAME OF PROGRAM CHAIRPERSON");
   const [editableDeptChairName, setEditableDeptChairName] = React.useState(deptChairName || "NAME OF DEPARTMENT CHAIRPERSON");
   const [editableDirectorName, setEditableDirectorName] = React.useState(directorInstructionName || "NAME OF DIRECTOR FOR INSTRUCTION");
@@ -407,9 +413,7 @@ export function BSCTableOfSpecificationsView({
               <td className="py-2 px-0.5 font-black bg-[#F5B000]">{totalEvaluating}</td>
               <td className="py-2 px-0.5 font-black bg-[#F5B000]">{totalCreating}</td>
               <td className="py-2 px-0.5 font-black bg-[#F5B000]">{totalAssignedItems}</td>
-              <td className="py-2 px-1 font-mono font-bold text-black bg-[#F5B000]">
-                —
-              </td>
+              <td className="py-2 px-1 font-mono font-bold text-black bg-[#F5B000]"></td>
             </tr>
           </tfoot>
         </table>
@@ -437,15 +441,19 @@ export function BSCTableOfSpecificationsView({
                   >
                     {editableFacultyName || "NAME OF FACULTY MEMBER"}
                   </p>
-                  <p
-                    contentEditable
-                    suppressContentEditableWarning
-                    onBlur={(e) => setEditableFacultyRank(e.currentTarget.innerText || "")}
-                    className="text-[11px] text-black font-semibold mt-1 outline-none focus:bg-amber-100/90 focus:ring-1 focus:ring-amber-500 rounded px-1 transition-all cursor-text print:p-0 print:bg-transparent print:ring-0"
-                    title="Click to edit Academic Rank / Designation"
-                  >
-                    {editableFacultyRank || "Academic Rank/Designation"}
-                  </p>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={editableFacultyRank}
+                      onChange={(e) => setEditableFacultyRank(e.target.value)}
+                      placeholder="Academic Rank/Designation"
+                      className="w-full text-[11px] text-black font-semibold mt-1 bg-transparent border-none outline-none focus:bg-amber-100/90 focus:ring-1 focus:ring-amber-500 rounded px-1 transition-all placeholder:text-slate-400 placeholder:font-normal placeholder:italic print:hidden"
+                      title="Click to edit Academic Rank / Designation"
+                    />
+                    <p className="hidden print:block text-[11px] text-black font-semibold mt-1">
+                      {editableFacultyRank}
+                    </p>
+                  </div>
                 </div>
               </div>
 
@@ -520,15 +528,19 @@ export function BSCTableOfSpecificationsView({
                   >
                     {editableFacultyName || "NAME OF FACULTY MEMBER"}
                   </p>
-                  <p
-                    contentEditable
-                    suppressContentEditableWarning
-                    onBlur={(e) => setEditableFacultyRank(e.currentTarget.innerText || "")}
-                    className="text-[11px] text-black font-semibold mt-1 outline-none focus:bg-amber-100/90 focus:ring-1 focus:ring-amber-500 rounded px-1 transition-all cursor-text print:p-0 print:bg-transparent print:ring-0"
-                    title="Click to edit Academic Rank / Designation"
-                  >
-                    {editableFacultyRank || "Academic Rank/Designation"}
-                  </p>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={editableFacultyRank}
+                      onChange={(e) => setEditableFacultyRank(e.target.value)}
+                      placeholder="Academic Rank/Designation"
+                      className="w-full text-[11px] text-black font-semibold mt-1 bg-transparent border-none outline-none focus:bg-amber-100/90 focus:ring-1 focus:ring-amber-500 rounded px-1 transition-all placeholder:text-slate-400 placeholder:font-normal placeholder:italic print:hidden"
+                      title="Click to edit Academic Rank / Designation"
+                    />
+                    <p className="hidden print:block text-[11px] text-black font-semibold mt-1">
+                      {editableFacultyRank}
+                    </p>
+                  </div>
                 </div>
               </div>
 

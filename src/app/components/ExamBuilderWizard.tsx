@@ -521,7 +521,7 @@ export function ExamBuilderWizard({
   // Signatory State for TOS Preview
   const initialFacName = (exam as any).faculty ? `${(exam as any).faculty.first_name || ""} ${(exam as any).faculty.last_name || ""}`.trim() : "";
   const [signatoryFacultyName, setSignatoryFacultyName] = useState<string>(initialFacName || "NAME OF FACULTY MEMBER");
-  const [signatoryFacultyRank, setSignatoryFacultyRank] = useState<string>("Academic Rank/Designation");
+  const [signatoryFacultyRank, setSignatoryFacultyRank] = useState<string>("");
   const [signatoryProgChairName, setSignatoryProgChairName] = useState<string>("NAME OF PROGRAM CHAIRPERSON");
   const [signatoryDeptChairName, setSignatoryDeptChairName] = useState<string>("NAME OF DEPARTMENT CHAIRPERSON");
   const [signatoryDirectorName, setSignatoryDirectorName] = useState<string>("NAME OF DIRECTOR FOR INSTRUCTION");
@@ -1528,6 +1528,7 @@ export function ExamBuilderWizard({
 
   // Real-time background auto-save helper & debounced effect
   const isInitialMount = useRef<boolean>(true);
+  const isSubmittedRef = useRef<boolean>(false);
   const [autoSaveStatus, setAutoSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [lastSavedTime, setLastSavedTime] = useState<string | null>(null);
 
@@ -1537,6 +1538,9 @@ export function ExamBuilderWizard({
     targetItemsToSave = tosTargetTotalItems,
     outcomesToSave = learningOutcomes
   ) => {
+    if (isSubmitting || isSubmittedRef.current || (exam.current_status !== "Draft" && exam.current_status !== "Returned")) {
+      return;
+    }
     try {
       setAutoSaveStatus("saving");
 
@@ -1591,6 +1595,9 @@ export function ExamBuilderWizard({
       isInitialMount.current = false;
       return;
     }
+    if (isSubmitting || isSubmittedRef.current || (exam.current_status !== "Draft" && exam.current_status !== "Returned")) {
+      return;
+    }
 
     const timer = setTimeout(() => {
       autoSaveExamData();
@@ -1612,6 +1619,23 @@ export function ExamBuilderWizard({
     documentReference,
     selectedStudentIds
   ]);
+
+  // Initial check: if already submitted upon opening, show modal without immediate redirect
+  useEffect(() => {
+    if (exam.current_status !== "Draft" && exam.current_status !== "Returned" && !isSubmittedRef.current) {
+      setPopupModal({
+        isOpen: true,
+        type: "warning",
+        title: "Examination Under Review",
+        message: `This examination has already been submitted for review (Status: ${exam.current_status.replace(/_/g, " ")}) and is locked from further edits.`,
+        confirmText: "Return to Dashboard",
+        onConfirm: () => {
+          router.push(returnUrl || "/dashboard/faculty");
+          router.refresh();
+        }
+      });
+    }
+  }, [exam.current_status, returnUrl, router]);
 
   const handleAddTosTopic = () => {
     if (!newTopicName.trim()) return;
@@ -2250,6 +2274,7 @@ export function ExamBuilderWizard({
     }
 
     setIsSubmitting(true);
+    isSubmittedRef.current = true;
     setSaveStatus({ type: "saving", message: "Finalizing and saving exam before submission..." });
 
     try {
@@ -2279,6 +2304,7 @@ export function ExamBuilderWizard({
 
       const configRes = await saveExamConfig(configData);
       if (configRes.error) {
+        isSubmittedRef.current = false;
         setSaveStatus({ type: "error", message: `Config Error: ${configRes.error}` });
         setPopupModal({
           isOpen: true,
@@ -2296,6 +2322,7 @@ export function ExamBuilderWizard({
       const questionsRes = await saveExamQuestions(exam.exam_id, serializedQs, facultyId);
 
       if (questionsRes.error) {
+        isSubmittedRef.current = false;
         setSaveStatus({ type: "error", message: `Questions Error: ${questionsRes.error}` });
         setPopupModal({
           isOpen: true,
@@ -2310,6 +2337,7 @@ export function ExamBuilderWizard({
       // Transition status to Pending_Chair
       const statusRes = await updateExamStatus(exam.exam_id, "Pending_Chair", facultyId);
       if (statusRes.error) {
+        isSubmittedRef.current = false;
         setSaveStatus({ type: "error", message: `Submission Error: ${statusRes.error}` });
         setPopupModal({
           isOpen: true,
@@ -2344,6 +2372,7 @@ export function ExamBuilderWizard({
         }
       });
     } catch (err: any) {
+      isSubmittedRef.current = false;
       console.error("Submit for review error:", err);
       setSaveStatus({ type: "error", message: err?.message || "An error occurred while submitting the exam." });
       setPopupModal({
@@ -3979,9 +4008,7 @@ export function ExamBuilderWizard({
                                 <td className="py-2 px-0.5 text-center border-r border-black font-black bg-[#F5B000]">
                                   {questions.length}
                                 </td>
-                                <td className="py-2 px-1.5 text-[9px] font-black bg-[#F5B000]">
-                                  —
-                                </td>
+                                <td className="py-2 px-1.5 text-[9px] font-black bg-[#F5B000]"></td>
                               </tr>
                             </tfoot>
                           )}
@@ -4008,14 +4035,19 @@ export function ExamBuilderWizard({
                                     >
                                       {signatoryFacultyName || "NAME OF FACULTY MEMBER"}
                                     </p>
-                                    <p
-                                      contentEditable
-                                      suppressContentEditableWarning
-                                      onBlur={(e) => setSignatoryFacultyRank(e.currentTarget.innerText || "")}
-                                      className="text-[11px] text-black font-semibold mt-1 outline-none focus:bg-amber-100 rounded px-1 cursor-text print:p-0 print:bg-transparent"
-                                    >
-                                      {signatoryFacultyRank || "Academic Rank/Designation"}
-                                    </p>
+                                    <div className="relative">
+                                      <input
+                                        type="text"
+                                        value={signatoryFacultyRank}
+                                        onChange={(e) => setSignatoryFacultyRank(e.target.value)}
+                                        placeholder="Academic Rank/Designation"
+                                        className="w-full text-[11px] text-black font-semibold mt-1 bg-transparent border-none outline-none focus:bg-amber-100 rounded px-1 transition-all placeholder:text-slate-400 placeholder:font-normal placeholder:italic print:hidden"
+                                        title="Click to edit Academic Rank / Designation"
+                                      />
+                                      <p className="hidden print:block text-[11px] text-black font-semibold mt-1">
+                                        {signatoryFacultyRank}
+                                      </p>
+                                    </div>
                                   </div>
                                 </div>
 
@@ -4082,14 +4114,19 @@ export function ExamBuilderWizard({
                                     >
                                       {signatoryFacultyName || "NAME OF FACULTY MEMBER"}
                                     </p>
-                                    <p
-                                      contentEditable
-                                      suppressContentEditableWarning
-                                      onBlur={(e) => setSignatoryFacultyRank(e.currentTarget.innerText || "")}
-                                      className="text-[11px] text-black font-semibold mt-1 outline-none focus:bg-amber-100 rounded px-1 cursor-text print:p-0 print:bg-transparent"
-                                    >
-                                      {signatoryFacultyRank || "Academic Rank/Designation"}
-                                    </p>
+                                    <div className="relative">
+                                      <input
+                                        type="text"
+                                        value={signatoryFacultyRank}
+                                        onChange={(e) => setSignatoryFacultyRank(e.target.value)}
+                                        placeholder="Academic Rank/Designation"
+                                        className="w-full text-[11px] text-black font-semibold mt-1 bg-transparent border-none outline-none focus:bg-amber-100 rounded px-1 transition-all placeholder:text-slate-400 placeholder:font-normal placeholder:italic print:hidden"
+                                        title="Click to edit Academic Rank / Designation"
+                                      />
+                                      <p className="hidden print:block text-[11px] text-black font-semibold mt-1">
+                                        {signatoryFacultyRank}
+                                      </p>
+                                    </div>
                                   </div>
                                 </div>
 

@@ -115,10 +115,8 @@ export default async function ExamBuilderPage({ params }: PageProps) {
     redirect(defaultDashboard);
   }
 
-  // Verify status is editable (Draft or Returned)
-  if (exam.current_status !== "Draft" && exam.current_status !== "Returned") {
-    redirect(defaultDashboard);
-  }
+  // Note: Non-draft examination lock states are handled gracefully by ExamBuilderWizard 
+  // to avoid abruptly redirecting during server action revalidation before the success modal is acknowledged.
 
   // Fetch all courses for fallback using cached query
   const courses = await getCoursesCached();
