@@ -20,12 +20,15 @@ export interface TosTopicItem {
   };
   itemPlacement?: string;
 }
+import { getProgramHeaderImage } from "@/lib/programHeader";
 
 export interface BSCTableOfSpecificationsViewProps {
   examTitle: string;
   courseCode: string;
   courseTitle: string;
   departmentName?: string;
+  programCode?: string;
+  headerImage?: string;
   term?: string;
   semester?: string;
   academicYear?: string;
@@ -36,6 +39,10 @@ export interface BSCTableOfSpecificationsViewProps {
   programChairName?: string;
   deptChairName?: string;
   directorInstructionName?: string;
+  isProgramChairAuthor?: boolean;
+  authorRole?: string;
+  reviewerRoleTitle?: string;
+  initialLayoutMode?: "WITH_PC" | "WITHOUT_PC" | "PREPARED_BY_PC" | "ALL_TEMPLATES";
   totalItems: number;
   topics: TosTopicItem[];
 }
@@ -133,16 +140,62 @@ export function BSCTableOfSpecificationsView({
   academicYear = "2026-2027",
   examDate = "",
   documentReference = "BSC-ODI-F-121",
+  programCode,
+  headerImage,
   facultyName,
   facultyRank,
   programChairName,
   deptChairName,
   directorInstructionName,
+  isProgramChairAuthor,
+  authorRole,
+  reviewerRoleTitle,
+  initialLayoutMode,
   totalItems,
   topics,
 }: BSCTableOfSpecificationsViewProps) {
   // Dynamically resolve department name from course code or faculty department
   const resolvedDeptName = resolveDepartmentName(courseCode, departmentName);
+
+  // Automatically determine if program/department has Program Chairperson (ONLY TED and CITD)
+  const hasProgramChair = React.useMemo(() => {
+    const code = (courseCode || "").trim().toUpperCase();
+    const title = (courseTitle || "").trim().toUpperCase();
+    const prog = (programCode || "").trim().toUpperCase();
+    const dept = (departmentName || resolvedDeptName || "").trim().toUpperCase();
+
+    // Explicitly non-PC departments or programs: HTM and AGRI
+    if (
+      dept.includes("HOSPITALITY") || dept.includes("HTM") || dept.includes("TOURISM") ||
+      dept.includes("AGRICULTURE") || dept.includes("AGRI") ||
+      prog === "BSA" || prog === "BSHM" || prog === "BSTM" ||
+      code.startsWith("BSA") || code.startsWith("AGRI") || code.startsWith("HPC") || 
+      code.startsWith("HMPE") || code.startsWith("TPC") || code.startsWith("TPE") || 
+      code.startsWith("THC") || code.startsWith("BME")
+    ) {
+      return false;
+    }
+
+    // ONLY TED and CITD have Program Chairpersons:
+    // 1. CITD: BSInfoTech, BSIT / Industrial Tech
+    const isICT = code.startsWith("ITC") || code.startsWith("ITE") || code.startsWith("ITM") || code.startsWith("ITD") || code === "ENT 403" || code.includes("INFOTECH") || title.includes("COMPUTING") || title.includes("INFORMATION TECH") || prog.includes("BSINFOTECH") || prog.includes("ICT");
+    const isIndustrialTech = code.startsWith("IND") || code.startsWith("BIT") || prog.includes("BIT") || prog.includes("BSINDTECH") || prog.includes("BSIT") || (code.startsWith("IT") && !isICT && !code.startsWith("ITRM"));
+
+    // 2. TED: BEED, BSED
+    const isTED = code.startsWith("EDUC") || prog.includes("BSED") || prog.includes("BEED") || prog.includes("TED") || dept.includes("TEACHER EDUCATION") || title.includes("EDUCATION");
+
+    return isICT || isIndustrialTech || isTED || dept.includes("CITD");
+  }, [courseCode, courseTitle, programCode, departmentName, resolvedDeptName]);
+
+  const isPcOrChairAuthor = React.useMemo(() => {
+    if (isProgramChairAuthor) return true;
+    const rRole = (authorRole || "").toUpperCase();
+    if (rRole.includes("PROGRAMCHAIR") || rRole.includes("PROGRAM CHAIR") || rRole.includes("CHAIR")) return true;
+    if (reviewerRoleTitle === "Department Chairperson") return true;
+    const fac = (facultyName || "").toUpperCase();
+    if (fac.includes("PROGRAM CHAIR") || fac.includes("DEPARTMENT CHAIR") || fac.includes("CHAIRPERSON")) return true;
+    return false;
+  }, [isProgramChairAuthor, authorRole, reviewerRoleTitle, facultyName]);
 
   // Calculate Totals
   const totalHours = topics.reduce((sum, t) => sum + (Number(t.hours) || 0), 0);
@@ -188,7 +241,15 @@ export function BSCTableOfSpecificationsView({
   const [editableProgramChairName, setEditableProgramChairName] = React.useState(programChairName || "NAME OF PROGRAM CHAIRPERSON");
   const [editableDeptChairName, setEditableDeptChairName] = React.useState(deptChairName || "NAME OF DEPARTMENT CHAIRPERSON");
   const [editableDirectorName, setEditableDirectorName] = React.useState(directorInstructionName || "NAME OF DIRECTOR FOR INSTRUCTION");
-  const [signatoryLayoutMode, setSignatoryLayoutMode] = React.useState<"WITH_PC" | "WITHOUT_PC" | "PREPARED_BY_PC" | "ALL_TEMPLATES">("WITH_PC");
+  const [signatoryLayoutMode, setSignatoryLayoutMode] = React.useState<"WITH_PC" | "WITHOUT_PC" | "PREPARED_BY_PC" | "ALL_TEMPLATES">(
+    initialLayoutMode || (hasProgramChair ? "WITH_PC" : "WITHOUT_PC")
+  );
+
+  React.useEffect(() => {
+    if (!initialLayoutMode) {
+      setSignatoryLayoutMode(hasProgramChair ? "WITH_PC" : "WITHOUT_PC");
+    }
+  }, [hasProgramChair, initialLayoutMode]);
 
   let runningItemStart = 1;
 
@@ -198,7 +259,7 @@ export function BSCTableOfSpecificationsView({
       {/* BSC OFFICIAL HEADER BORDER */}
       <div className="w-full relative overflow-hidden leading-none block shrink-0">
         <img
-          src="/bsc-header.png"
+          src={headerImage || getProgramHeaderImage(programCode || resolvedDeptName || courseCode)}
           alt="Batanes State College Header"
           className="w-full h-auto object-cover block mx-auto print:w-full"
         />
@@ -464,13 +525,23 @@ export function BSCTableOfSpecificationsView({
                   <p
                     contentEditable
                     suppressContentEditableWarning
-                    onBlur={(e) => setEditableProgramChairName(e.currentTarget.innerText || "")}
+                    onBlur={(e) => {
+                      if (isPcOrChairAuthor) {
+                        setEditableDeptChairName(e.currentTarget.innerText || "");
+                      } else {
+                        setEditableProgramChairName(e.currentTarget.innerText || "");
+                      }
+                    }}
                     className="font-bold text-black border-b border-black pb-0.5 uppercase tracking-wide inline-block w-full outline-none focus:bg-amber-100/90 focus:ring-1 focus:ring-amber-500 rounded px-1 transition-all cursor-text print:p-0 print:bg-transparent print:ring-0"
-                    title="Click to edit Program Chairperson name"
+                    title={isPcOrChairAuthor ? "Click to edit Department Chairperson name" : "Click to edit Program Chairperson name"}
                   >
-                    {editableProgramChairName || "NAME OF PROGRAM CHAIRPERSON"}
+                    {isPcOrChairAuthor
+                      ? (editableDeptChairName || "NAME OF DEPARTMENT CHAIRPERSON")
+                      : (editableProgramChairName || "NAME OF PROGRAM CHAIRPERSON")}
                   </p>
-                  <p className="text-[11px] text-black font-semibold mt-1">Program Chairperson</p>
+                  <p className="text-[11px] text-black font-semibold mt-1">
+                    {isPcOrChairAuthor ? "Department Chairperson" : "Program Chairperson"}
+                  </p>
                 </div>
               </div>
 
@@ -513,7 +584,7 @@ export function BSCTableOfSpecificationsView({
 
         {/* OPTION 2: ***Signatories for programs with NO Program Chairperson */}
         {(signatoryLayoutMode === "WITHOUT_PC" || signatoryLayoutMode === "ALL_TEMPLATES") && (
-          <div className="space-y-4 pt-4 border-t border-slate-200 print:border-black">
+          <div className={`space-y-4 ${signatoryLayoutMode === "ALL_TEMPLATES" ? "pt-4 border-t border-slate-200 print:border-black" : ""}`}>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-8 gap-x-12 text-xs text-black font-sans pt-1">
               {/* Row 1 Left: Prepared by */}
               <div className="space-y-6">

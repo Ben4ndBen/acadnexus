@@ -482,7 +482,7 @@ export function StudentDashboardClient({
                         </div>
                         <h4 className="font-bold text-slate-800 text-base mt-1">{exam.title}</h4>
                         <p className="text-xs text-slate-400 flex items-center gap-1.5">
-                          <BookOpen className="w-3.5 h-3.5" /> {exam.course.course_title} ({exam.course.course_code})
+                          <BookOpen className="w-3.5 h-3.5" /> {exam.course?.course_title || "Course"} {exam.course?.course_code ? `(${exam.course.course_code})` : ""}
                         </p>
                         <p className="text-xs text-slate-400 flex items-center gap-1.5">
                           <Clock className="w-3.5 h-3.5" /> Time Limit: {exam.time_limit_minutes} minutes
@@ -556,7 +556,7 @@ export function StudentDashboardClient({
                         )}
                       </div>
                       <p className="text-xs text-slate-500 font-medium">
-                        {exam.course.course_title} ({exam.course.course_code})
+                        {exam.course?.course_title || "Course"} {exam.course?.course_code ? `(${exam.course.course_code})` : ""}
                       </p>
                       
                       {exam.is_schedule_pending ? (
@@ -721,7 +721,7 @@ export function StudentDashboardClient({
                         </span>
                       </div>
                       <p className="text-xs text-slate-500">
-                        {exam.course.course_title} ({exam.course.course_code})
+                        {exam.course?.course_title || "Course"} {exam.course?.course_code ? `(${exam.course.course_code})` : ""}
                       </p>
                       <div className="text-xs text-slate-500 flex items-center gap-2">
                         <Calendar className="w-4 h-4 text-slate-400" />

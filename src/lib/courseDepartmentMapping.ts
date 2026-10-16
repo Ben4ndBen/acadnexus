@@ -240,7 +240,8 @@ export function filterCoursesForDepartment<T extends { course_code: string; cour
   const { programCode = null, includeGeneralEducation = false, searchQuery = "", yearLevel = null, semester = null } = options || {};
   const query = searchQuery.trim().toLowerCase();
 
-  return courses.filter((c) => {
+  return (courses || []).filter((c) => {
+    if (!c || !c.course_code) return false;
     // 1. Department / Program match
     const matchesDept = isCourseInDepartmentOrProgram(
       c.course_code,

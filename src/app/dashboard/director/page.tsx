@@ -127,7 +127,11 @@ export default async function DirectorDashboard() {
       include: {
         faculty: {
           include: {
-            examinations: true,
+            examinations: {
+              include: {
+                course: true,
+              },
+            },
             facultyPortfolios: {
               orderBy: { academic_year: "desc" },
               take: 1,

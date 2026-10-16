@@ -26,6 +26,7 @@ import {
 import { getProgramsForDepartment } from "@/lib/courseDepartmentMapping";
 import { formatStudentName, getStudentMiddleInitial, getSubmissionScheduleTiming, formatStudentProgramAndYear } from "@/lib/academicUtils";
 import { DatePicker } from "@/app/components/DatePicker";
+import { getProgramHeaderImage } from "@/lib/programHeader";
 
 interface FacultyDashboardClientProps {
   faculty: {
@@ -373,15 +374,15 @@ export function FacultyDashboardClient({
 
     // 1. Initialize from assignedCourses / facultyCourses
     const myAssigned = (assignedCourses && assignedCourses.length > 0)
-      ? assignedCourses
-      : (faculty.facultyCourses?.map((fc: any) => fc.course) || []);
+      ? assignedCourses.filter((c: any) => Boolean(c && c.course_id))
+      : (faculty.facultyCourses?.filter((fc: any) => fc?.course).map((fc: any) => fc.course) || []);
 
     myAssigned.forEach((c: any) => {
       if (c && c.course_id && !courseMap.has(c.course_id)) {
         courseMap.set(c.course_id, {
           course_id: c.course_id,
-          course_code: c.course_code,
-          course_title: c.course_title,
+          course_code: c.course_code || "",
+          course_title: c.course_title || "",
           attempts: [],
           counts: {
             totalAttempts: 0,
@@ -400,8 +401,8 @@ export function FacultyDashboardClient({
         if (!courseMap.has(c.course_id)) {
           courseMap.set(c.course_id, {
             course_id: c.course_id,
-            course_code: c.course_code,
-            course_title: c.course_title,
+            course_code: c.course_code || "",
+            course_title: c.course_title || "",
             attempts: [],
             counts: {
               totalAttempts: 0,
@@ -429,7 +430,7 @@ export function FacultyDashboardClient({
     });
 
     return Array.from(courseMap.values()).sort((a, b) =>
-      a.course_code.localeCompare(b.course_code)
+      (a.course_code || "").localeCompare(b.course_code || "")
     );
   }, [studentExams, assignedCourses, faculty.facultyCourses]);
 
@@ -1018,20 +1019,40 @@ export function FacultyDashboardClient({
   const availableFacultyCourses = useMemo(() => {
     const map = new Map<number, { course_id: number; course_code: string; course_title: string }>();
     if (assignedCourses && assignedCourses.length > 0) {
-      assignedCourses.forEach(c => map.set(c.course_id, { course_id: c.course_id, course_code: c.course_code, course_title: c.course_title }));
+      assignedCourses.forEach(c => {
+        if (c && c.course_id) {
+          map.set(c.course_id, {
+            course_id: c.course_id,
+            course_code: c.course_code || "",
+            course_title: c.course_title || "",
+          });
+        }
+      });
     }
-    faculty.examinations.forEach(e => {
-      const cId = (e as any).course_id || (e.course as any)?.course_id;
-      if (cId && e.course) {
+    (faculty.examinations || []).forEach(e => {
+      const cId = (e as any)?.course_id || (e?.course as any)?.course_id;
+      if (cId && e?.course) {
         if (!map.has(cId)) {
-          map.set(cId, { course_id: cId, course_code: e.course.course_code, course_title: e.course.course_title });
+          map.set(cId, {
+            course_id: cId,
+            course_code: e.course?.course_code || "",
+            course_title: e.course?.course_title || "",
+          });
         }
       }
     });
     if (map.size === 0 && courses && courses.length > 0) {
-      courses.forEach(c => map.set(c.course_id, { course_id: c.course_id, course_code: c.course_code, course_title: c.course_title }));
+      courses.forEach(c => {
+        if (c && c.course_id) {
+          map.set(c.course_id, {
+            course_id: c.course_id,
+            course_code: c.course_code || "",
+            course_title: c.course_title || "",
+          });
+        }
+      });
     }
-    return Array.from(map.values()).sort((a, b) => a.course_code.localeCompare(b.course_code));
+    return Array.from(map.values()).sort((a, b) => (a.course_code || "").localeCompare(b.course_code || ""));
   }, [assignedCourses, faculty.examinations, courses]);
 
   // Approved exams filtered by selected course (or all if none selected)
@@ -1883,7 +1904,7 @@ export function FacultyDashboardClient({
               </div>
               {assignedCourses.length > 0 ? (
                 <div className="max-h-[220px] overflow-y-auto space-y-2 pr-1 scrollbar-thin scrollbar-thumb-slate-200">
-                  {assignedCourses.map((c) => (
+                  {assignedCourses.filter(c => Boolean(c && c.course_id)).map((c) => (
                     <div key={c.course_id} className="p-2.5 bg-slate-50 border border-slate-200/70 rounded-xl flex items-center justify-between gap-3 hover:border-emerald-200 transition-colors">
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
@@ -1982,7 +2003,7 @@ export function FacultyDashboardClient({
                           </div>
                           
                           <p className="text-xs text-slate-400 font-semibold mt-2 flex flex-wrap items-center gap-1.5">
-                            <span className="text-slate-400 font-medium">{exam.course.course_code} - {exam.course.course_title}</span>
+                            <span className="text-slate-400 font-medium">{exam.course?.course_code || "Course"} {exam.course?.course_title ? `- ${exam.course.course_title}` : ""}</span>
                             <span className="text-slate-400">•</span>
                             <span>{exam.time_limit_minutes || 60} min</span>
                             <span className="text-slate-400">•</span>
@@ -3110,7 +3131,7 @@ export function FacultyDashboardClient({
                           <div className="space-y-2.5">
                             <div className="flex items-center justify-between gap-2">
                               <span className="font-mono text-[11px] font-black text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded-lg border border-emerald-200">
-                                {exam.course.course_code}
+                                {exam.course?.course_code || "Course"}
                               </span>
                               {exam.is_archived ? (
                                 <span className="text-[10px] font-bold text-slate-600 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full">
@@ -3128,7 +3149,7 @@ export function FacultyDashboardClient({
                               {getExamDisplayTitle(exam)}
                             </h4>
                             <p className="text-xs text-slate-500 font-medium line-clamp-1">
-                              {exam.course.course_title}
+                              {exam.course?.course_title || ""}
                             </p>
 
                             <div className="pt-2 border-t border-slate-100 space-y-1.5 text-[11px] text-slate-600">
@@ -3178,7 +3199,7 @@ export function FacultyDashboardClient({
                           const exam = faculty.examinations.find(e => e.exam_id === selectedOverrideExamId);
                           return exam ? (
                             <span className="text-[11px] font-bold text-blue-900 bg-blue-50 px-2.5 py-1 rounded-xl border border-blue-200/80">
-                              {exam.course.course_code} • {exam.title}
+                              {exam.course?.course_code || "Course"} • {exam.title}
                             </span>
                           ) : null;
                         })()}
@@ -4304,7 +4325,7 @@ export function FacultyDashboardClient({
                 className="w-full bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 px-3 py-2.5 focus:outline-emerald-500 shadow-sm"
               >
                 <option value="">All Courses</option>
-                {courses.map((c) => (
+                {(courses || []).filter(c => Boolean(c && c.course_id)).map((c) => (
                   <option key={c.course_id} value={c.course_id}>
                     {c.course_code} - {c.course_title}
                   </option>
@@ -4378,7 +4399,7 @@ export function FacultyDashboardClient({
                         
                         {q.course && (
                           <span className="text-[9px] bg-slate-100 text-slate-600 border border-slate-200 px-2.5 py-0.5 rounded-full font-bold">
-                            {q.course.course_code}
+                            {q.course?.course_code || ""}
                           </span>
                         )}
 
@@ -4466,7 +4487,7 @@ export function FacultyDashboardClient({
                 className="w-full bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 px-3 py-2.5 focus:outline-emerald-500 shadow-sm"
               >
                 <option value="">All Courses</option>
-                {courses.map((c) => (
+                {(courses || []).filter(c => Boolean(c && c.course_id)).map((c) => (
                   <option key={c.course_id} value={c.course_id}>
                     {c.course_code} - {c.course_title}
                   </option>
@@ -4496,10 +4517,10 @@ export function FacultyDashboardClient({
                     </div>
                     <h3 className="font-extrabold text-slate-850 text-sm leading-snug">{getExamDisplayTitle(exam)}</h3>
                     <p className="text-xs text-emerald-700 font-semibold leading-normal">
-                      {exam.course.course_code} - {exam.course.course_title}
+                      {exam.course?.course_code || "Course"} {exam.course?.course_title ? `- ${exam.course.course_title}` : ""}
                     </p>
                     <p className="text-[10px] text-slate-400 font-medium">
-                      Author: Instructor {exam.faculty.first_name} {exam.faculty.last_name}
+                      Author: Instructor {exam.faculty?.first_name || ""} {exam.faculty?.last_name || ""}
                     </p>
                   </div>
                   <button
@@ -4613,7 +4634,7 @@ export function FacultyDashboardClient({
                     onChange={(e) => setSelectedRosterCourseId(Number(e.target.value))}
                     className="w-full sm:max-w-md bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 px-3.5 py-2.5 focus:outline-emerald-500 shadow-sm"
                   >
-                    {courses.map((c) => (
+                    {(courses || []).filter(c => Boolean(c && c.course_id)).map((c) => (
                       <option key={c.course_id} value={c.course_id}>
                         {c.course_code} - {c.course_title}
                       </option>
@@ -4640,11 +4661,11 @@ export function FacultyDashboardClient({
               <div className="flex items-center justify-between bg-emerald-50/60 border border-emerald-100 rounded-2xl px-5 py-3.5">
                 <div className="flex items-center gap-3">
                   <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-black text-xs shadow-sm">
-                    {selectedCourse.course_code.split(" ")[0] || "IT"}
+                    {selectedCourse.course_code ? selectedCourse.course_code.split(" ")[0] : "IT"}
                   </div>
                   <div>
                     <h4 className="text-xs font-black text-slate-900">
-                      {selectedCourse.course_code} - {selectedCourse.course_title}
+                      {selectedCourse.course_code || "Course"} {selectedCourse.course_title ? `- ${selectedCourse.course_title}` : ""}
                     </h4>
                     <p className="text-[11px] text-slate-500 mt-0.5">
                       Active Subject Class List
@@ -4957,7 +4978,7 @@ export function FacultyDashboardClient({
                   className="w-full bg-slate-50 border border-slate-200 focus:bg-white text-sm font-semibold text-slate-900 px-4 py-2.5 rounded-xl transition-all"
                 >
                   <option value="" disabled>Select Course...</option>
-                  {courses.map((c) => (
+                  {(courses || []).filter(c => Boolean(c && c.course_id)).map((c) => (
                     <option key={c.course_id} value={c.course_id}>
                       {c.course_code} - {c.course_title}
                     </option>
@@ -5102,7 +5123,7 @@ export function FacultyDashboardClient({
                 <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Exam Title</p>
                 <p className="text-sm font-extrabold text-slate-800">{examToArchive.title}</p>
                 <p className="text-xs text-emerald-700 font-bold mt-1">
-                  {examToArchive.course.course_code} - {examToArchive.course.course_title}
+                  {examToArchive.course?.course_code || "Course"} {examToArchive.course?.course_title ? `- ${examToArchive.course.course_title}` : ""}
                 </p>
               </div>
 
@@ -5342,7 +5363,7 @@ export function FacultyDashboardClient({
                       {/* BSC OFFICIAL HEADER IMAGE */}
                       <div className="w-full relative overflow-hidden leading-none block shrink-0 border-b border-slate-200 pb-2">
                         <img
-                          src="/bsc-header.png"
+                          src={getProgramHeaderImage(student.program_code || exam.course?.course_code || faculty.department?.department_name)}
                           alt="Batanes State College Header"
                           className="w-full h-auto object-cover block mx-auto print:w-full"
                         />
@@ -6339,7 +6360,7 @@ export function FacultyDashboardClient({
                     className="w-full bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 px-3 py-2.5 focus:outline-emerald-500 shadow-sm"
                   >
                     <option value="">All Taught Subjects</option>
-                    {courses.map((c) => (
+                    {(courses || []).filter(c => Boolean(c && c.course_id)).map((c) => (
                       <option key={c.course_id} value={c.course_id}>
                         {c.course_code} - {c.course_title}
                       </option>
@@ -6557,18 +6578,18 @@ export function FacultyDashboardClient({
 
             {/* List of Assigned Courses */}
             <div className="space-y-2.5 max-h-64 overflow-y-auto pr-1">
-              {assignedCourses.map((c, idx) => (
+              {assignedCourses.filter(c => Boolean(c && c.course_id)).map((c, idx) => (
                 <div 
                   key={c.course_id || idx}
                   className="bg-white border border-slate-200 hover:border-emerald-300 rounded-2xl p-4 flex items-center justify-between gap-4 shadow-sm hover:shadow transition-all group"
                 >
                   <div className="flex items-center gap-3">
                     <span className="font-mono text-xs font-black px-2.5 py-1.5 rounded-xl bg-slate-900 text-emerald-400 shrink-0">
-                      {c.course_code}
+                      {c.course_code || "Course"}
                     </span>
                     <div>
                       <h4 className="text-xs font-black text-slate-800 group-hover:text-emerald-700 transition-colors">
-                        {c.course_title}
+                        {c.course_title || ""}
                       </h4>
                       <p className="text-[10px] text-slate-400 mt-0.5">
                         Active Curriculum Course

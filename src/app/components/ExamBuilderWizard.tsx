@@ -13,6 +13,7 @@ import { determineSemesterFromDate, formatStudentName } from "@/lib/academicUtil
 import { Latex } from "@/app/components/Latex";
 import { formatFullExamDate } from "@/app/components/BSCTableOfSpecificationsView";
 import { DatePicker } from "@/app/components/DatePicker";
+import { getProgramHeaderImage } from "@/lib/programHeader";
 
 interface Course {
   course_id: number;
@@ -88,6 +89,9 @@ interface ExamBuilderWizardProps {
   returnUrl?: string;
   facultyDepartment?: string;
   userRole?: string;
+  initialDeptChairName?: string;
+  initialProgChairName?: string;
+  initialDirectorName?: string;
 }
 
 function toRomanNumeral(num: number): string {
@@ -403,7 +407,10 @@ export function ExamBuilderWizard({
   initialAssignedStudents = [],
   returnUrl,
   facultyDepartment,
-  userRole
+  userRole,
+  initialDeptChairName,
+  initialProgChairName,
+  initialDirectorName
 }: ExamBuilderWizardProps) {
   const router = useRouter();
 
@@ -488,22 +495,41 @@ export function ExamBuilderWizard({
     const code = (selectedCourse?.course_code || "").trim().toUpperCase();
     const title = (selectedCourse?.course_title || "").trim().toUpperCase();
     const progCode = (selectedCourse as any)?.programCode ? String((selectedCourse as any).programCode).trim().toUpperCase() : "";
+    const deptStr = (facultyDepartment || dynamicDepartmentName || "").toUpperCase();
 
-    // ICT (Information and Communications Technology / BSInfoTech)
-    const isICT = code.startsWith("ITC") || code.startsWith("ITE") || code.startsWith("ITM") || code.startsWith("ITD") || code === "ENT 403" || code.includes("INFOTECH") || title.includes("COMPUTING") || title.includes("INFORMATION TECH") || progCode === "BSINFOTECH";
+    // Explicitly non-PC departments or programs: HTM and AGRI
+    if (
+      deptStr.includes("HOSPITALITY") || deptStr.includes("HTM") || deptStr.includes("TOURISM") ||
+      deptStr.includes("AGRICULTURE") || deptStr.includes("AGRI") ||
+      progCode === "BSA" || progCode === "BSHM" || progCode === "BSTM" ||
+      code.startsWith("BSA") || code.startsWith("AGRI") || code.startsWith("HPC") || 
+      code.startsWith("HMPE") || code.startsWith("TPC") || code.startsWith("TPE") || 
+      code.startsWith("THC") || code.startsWith("BME")
+    ) {
+      return false;
+    }
 
-    // IT / Industrial Tech (Industrial Technology / BSIT / BIT / BSINDTECH)
-    const isIndustrialTech = code.startsWith("IND") || code.startsWith("BIT") || progCode === "BIT" || progCode === "BSINDTECH" || (code.startsWith("IT") && !isICT);
+    // ONLY TED and CITD have Program Chairpersons:
+    // 1. CITD: BSInfoTech, BSIT / Industrial Tech
+    const isICT = code.startsWith("ITC") || code.startsWith("ITE") || code.startsWith("ITM") || code.startsWith("ITD") || code === "ENT 403" || code.includes("INFOTECH") || title.includes("COMPUTING") || title.includes("INFORMATION TECH") || progCode.includes("BSINFOTECH") || progCode.includes("ICT");
+    const isIndustrialTech = code.startsWith("IND") || code.startsWith("BIT") || progCode.includes("BIT") || progCode.includes("BSINDTECH") || progCode.includes("BSIT") || (code.startsWith("IT") && !isICT && !code.startsWith("ITRM"));
 
-    // TED (Teacher Education Department / BEED / BSED)
-    const isTED = code.startsWith("EDUC") || progCode.includes("BSED") || progCode.includes("BEED") || progCode.includes("TED") || title.includes("EDUCATION");
+    // 2. TED: BEED, BSED
+    const isTED = code.startsWith("EDUC") || progCode.includes("BSED") || progCode.includes("BEED") || progCode.includes("TED") || deptStr.includes("TEACHER EDUCATION") || title.includes("EDUCATION");
 
-    return isICT || isIndustrialTech || isTED;
-  }, [selectedCourse]);
+    return isICT || isIndustrialTech || isTED || deptStr.includes("CITD");
+  }, [selectedCourse, facultyDepartment, dynamicDepartmentName]);
 
-  const isProgChairAuthor = useMemo(() => {
-    return userRole === "ProgramChair" || userRole === "Program Chair" || returnUrl === "/dashboard/chair";
-  }, [userRole, returnUrl]);
+  const isPcOrChairAuthor = useMemo(() => {
+    const roleStr = (userRole || "").toUpperCase();
+    if (roleStr.includes("PROGRAMCHAIR") || roleStr.includes("PROGRAM CHAIR") || roleStr.includes("CHAIR")) return true;
+    if (returnUrl === "/dashboard/chair") return true;
+    const facName = `${(exam as any)?.faculty?.first_name || ""} ${(exam as any)?.faculty?.last_name || ""}`.toUpperCase();
+    if (facName.includes("PROGRAM CHAIR") || facName.includes("DEPARTMENT CHAIR") || facName.includes("CHAIRPERSON")) return true;
+    return false;
+  }, [userRole, returnUrl, exam]);
+
+  const isProgChairAuthor = isPcOrChairAuthor;
 
   // Configuration Settings State - Title is auto-populated and not manually edited
   const defaultCourseTitleStr = selectedCourse?.course_title || selectedCourse?.course_code || "";
@@ -522,10 +548,17 @@ export function ExamBuilderWizard({
   const initialFacName = (exam as any).faculty ? `${(exam as any).faculty.first_name || ""} ${(exam as any).faculty.last_name || ""}`.trim() : "";
   const [signatoryFacultyName, setSignatoryFacultyName] = useState<string>(initialFacName || "NAME OF FACULTY MEMBER");
   const [signatoryFacultyRank, setSignatoryFacultyRank] = useState<string>("");
-  const [signatoryProgChairName, setSignatoryProgChairName] = useState<string>("NAME OF PROGRAM CHAIRPERSON");
-  const [signatoryDeptChairName, setSignatoryDeptChairName] = useState<string>("NAME OF DEPARTMENT CHAIRPERSON");
-  const [signatoryDirectorName, setSignatoryDirectorName] = useState<string>("NAME OF DIRECTOR FOR INSTRUCTION");
-  const [signatoryLayoutMode, setSignatoryLayoutMode] = useState<"WITH_PC" | "WITHOUT_PC" | "PREPARED_BY_PC">("WITH_PC");
+  const [signatoryProgChairName, setSignatoryProgChairName] = useState<string>(initialProgChairName || "NAME OF PROGRAM CHAIRPERSON");
+  const [signatoryDeptChairName, setSignatoryDeptChairName] = useState<string>(initialDeptChairName || "NAME OF DEPARTMENT CHAIRPERSON");
+  const [signatoryDirectorName, setSignatoryDirectorName] = useState<string>(initialDirectorName || "NAME OF DIRECTOR FOR INSTRUCTION");
+  const [signatoryLayoutMode, setSignatoryLayoutMode] = useState<"WITH_PC" | "WITHOUT_PC" | "PREPARED_BY_PC">(
+    hasProgramChair ? "WITH_PC" : "WITHOUT_PC"
+  );
+
+  // Keep signatoryLayoutMode in sync with course/department
+  useEffect(() => {
+    setSignatoryLayoutMode(hasProgramChair ? "WITH_PC" : "WITHOUT_PC");
+  }, [hasProgramChair]);
 
   // Editable Test Type Headers & Directions State
   const [customTypeTitles, setCustomTypeTitles] = useState<Record<string, string>>({});
@@ -660,6 +693,16 @@ export function ExamBuilderWizard({
       setStudentMajorFilter("ALL");
     }
   }, [determinedProgramInfo]);
+
+  // Automatically resolve official BSC program header image for TOS and TQ preview
+  const activeHeaderImage = useMemo(() => {
+    return getProgramHeaderImage(
+      determinedProgramInfo?.code || 
+      studentProgramFilter || 
+      facultyDepartment || 
+      selectedCourse?.course_code
+    );
+  }, [determinedProgramInfo, studentProgramFilter, facultyDepartment, selectedCourse]);
 
   const hasMajors = useMemo(() => {
     return Array.isArray(determinedProgramInfo.majors) && determinedProgramInfo.majors.length > 0;
@@ -3924,7 +3967,7 @@ export function ExamBuilderWizard({
                     {/* BSC OFFICIAL HEADER IMAGE */}
                     <div className="w-full relative overflow-hidden leading-none block shrink-0">
                       <img
-                        src="/bsc-header.png"
+                        src={activeHeaderImage}
                         alt="Batanes State College Header"
                         className="w-full h-auto object-cover block mx-auto print:w-full"
                       />
@@ -4180,12 +4223,22 @@ export function ExamBuilderWizard({
                                     <p
                                       contentEditable
                                       suppressContentEditableWarning
-                                      onBlur={(e) => setSignatoryProgChairName(e.currentTarget.innerText || "")}
+                                      onBlur={(e) => {
+                                        if (isPcOrChairAuthor) {
+                                          setSignatoryDeptChairName(e.currentTarget.innerText || "");
+                                        } else {
+                                          setSignatoryProgChairName(e.currentTarget.innerText || "");
+                                        }
+                                      }}
                                       className="font-bold text-black border-b border-black pb-0.5 uppercase tracking-wide inline-block w-full outline-none focus:bg-amber-100 rounded px-1 cursor-text print:p-0 print:bg-transparent"
                                     >
-                                      {signatoryProgChairName || "NAME OF PROGRAM CHAIRPERSON"}
+                                      {isPcOrChairAuthor
+                                        ? (signatoryDeptChairName || "NAME OF DEPARTMENT CHAIRPERSON")
+                                        : (signatoryProgChairName || "NAME OF PROGRAM CHAIRPERSON")}
                                     </p>
-                                    <p className="text-[11px] text-black font-semibold mt-1">Program Chairperson</p>
+                                    <p className="text-[11px] text-black font-semibold mt-1">
+                                      {isPcOrChairAuthor ? "Department Chairperson" : "Program Chairperson"}
+                                    </p>
                                   </div>
                                 </div>
 
@@ -4390,7 +4443,7 @@ export function ExamBuilderWizard({
                     {/* BSC OFFICIAL HEADER IMAGE FOR EVERY A4 PAGE */}
                     <div className="w-full relative overflow-hidden leading-none block shrink-0">
                       <img
-                        src="/bsc-header.png"
+                        src={activeHeaderImage}
                         alt="Batanes State College Header"
                         className="w-full h-auto object-cover block mx-auto print:w-full"
                       />

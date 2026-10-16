@@ -127,38 +127,53 @@ export async function updateExamStatus(examId: number, status: ExamStatus, userI
           }
         }
 
-        // Find Program Chair for this program (search by program_id or program_code)
+        const deptName = faculty.department.department_name.trim().toLowerCase();
+        const isTedOrCitdDept = Boolean(
+          deptName.includes("ict") || 
+          deptName.includes("it department") || 
+          deptName.includes("citd") || 
+          deptName.includes("industrial") || 
+          deptName.includes("teacher education") || 
+          deptName.includes("ted") ||
+          targetProgramCode === "BSInfoTech" ||
+          targetProgramCode === "BSIT" ||
+          targetProgramCode === "BEED" ||
+          targetProgramCode === "BSED"
+        );
+
+        // Find Program Chair for this program ONLY if department is TED or CITD
         let progChair: any = null;
-        if (targetProgramId) {
-          progChair = await tx.chair.findFirst({
-            where: { program_id: targetProgramId, is_program_chair: true },
-          });
-        }
-
-        if (!progChair && targetProgramCode) {
-          progChair = await tx.chair.findFirst({
-            where: {
-              is_program_chair: true,
-              program: { program_code: { equals: targetProgramCode } },
-            },
-          });
-        }
-
-        if (!progChair && targetProgramCode) {
-          // Case-insensitive fallback lookup for program
-          const prog = await tx.academicProgram.findFirst({
-            where: { program_code: { equals: targetProgramCode } },
-          });
-          if (prog) {
+        if (isTedOrCitdDept) {
+          if (targetProgramId) {
             progChair = await tx.chair.findFirst({
-              where: { program_id: prog.program_id, is_program_chair: true },
+              where: { program_id: targetProgramId, is_program_chair: true },
             });
+          }
+
+          if (!progChair && targetProgramCode) {
+            progChair = await tx.chair.findFirst({
+              where: {
+                is_program_chair: true,
+                program: { program_code: { equals: targetProgramCode } },
+              },
+            });
+          }
+
+          if (!progChair && targetProgramCode) {
+            // Case-insensitive fallback lookup for program
+            const prog = await tx.academicProgram.findFirst({
+              where: { program_code: { equals: targetProgramCode } },
+            });
+            if (prog) {
+              progChair = await tx.chair.findFirst({
+                where: { program_id: prog.program_id, is_program_chair: true },
+              });
+            }
           }
         }
 
         // Find Department Chair for this department (e.g. CITD for ICT/IT, TED for BEED/BSED, HTM, AGRI)
         let deptChair: any = null;
-        const deptName = faculty.department.department_name.trim().toLowerCase();
 
         if (deptName.includes("ict") || deptName.includes("it department") || deptName.includes("citd") || deptName.includes("industrial")) {
           const citdDept = await tx.department.findFirst({ where: { department_name: "CITD" } });
@@ -217,10 +232,12 @@ export async function updateExamStatus(examId: number, status: ExamStatus, userI
         let chairTimestamp: Date | null = null;
         let diReviewStatus = "Hold";
 
-        if (isAuthorProgChair) {
-          progChairStatus = "Approved";
-          progChairComments = "Authored and recommended by Program Chairperson.";
-          progChairTimestamp = new Date();
+        if (isAuthorProgChair || !isTedOrCitdDept) {
+          // If authored by Program Chairperson OR under departments with NO Program Chairperson (HTM, AGRI),
+          // route directly to Department Chairperson
+          progChairStatus = isAuthorProgChair ? "Approved" : null;
+          progChairComments = isAuthorProgChair ? "Authored and recommended by Program Chairperson." : null;
+          progChairTimestamp = isAuthorProgChair ? new Date() : null;
           status = "Pending_Chair";
         } else if (progChair) {
           status = "Pending_Program_Chair";

@@ -266,7 +266,9 @@ export default async function FacultyDashboard() {
         {/* Render interactive Faculty Dashboard Client */}
 {(() => {
           return getCoursesCached().then(async (allCourses) => {
-            const facultyAssignedCourses = faculty.facultyCourses.map((fc) => fc.course);
+            const facultyAssignedCourses = (faculty.facultyCourses || [])
+              .map((fc) => fc.course)
+              .filter((c): c is NonNullable<typeof c> => Boolean(c && c.course_id && c.course_code));
             // When faculty creates exam and in the question bank, the only courses that should appear are the assigned ones!
             const effectiveCourses = facultyAssignedCourses;
 

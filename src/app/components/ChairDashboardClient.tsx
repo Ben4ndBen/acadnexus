@@ -20,6 +20,7 @@ import {
 import { getExpectedYearAndSemForCourse } from "@/lib/bsitCurriculum";
 import { FacultyDashboardClient } from "@/app/components/FacultyDashboardClient";
 import { BSCTableOfSpecificationsView, formatFullExamDate } from "@/app/components/BSCTableOfSpecificationsView";
+import { getProgramHeaderImage } from "@/lib/programHeader";
 
 function toRomanNumeral(num: number): string {
   const romanMap: [number, string][] = [
@@ -278,7 +279,7 @@ export function ChairDashboardClient({
 
   const handleOpenAssignModal = (faculty: any) => {
     setAssignFacultyTarget(faculty);
-    const currentCourseIds = faculty.facultyCourses?.map((fc: any) => fc.course.course_id) || [];
+    const currentCourseIds = faculty.facultyCourses?.filter((fc: any) => fc?.course).map((fc: any) => fc.course.course_id) || [];
     setEditCourseIds(currentCourseIds);
     setEditCourseSearchQuery("");
     
@@ -456,7 +457,7 @@ export function ChairDashboardClient({
         {/* BSC OFFICIAL HEADER IMAGE */}
         <div className="w-full border-b border-slate-200 pb-3">
           <img
-            src="/bsc-header.png"
+            src={getProgramHeaderImage(programCode || courseCode || deptName)}
             alt="Batanes State College Header"
             className="w-full h-auto object-contain mx-auto max-h-[140px]"
           />
@@ -734,7 +735,7 @@ export function ChairDashboardClient({
 
   const handleCreateExamDirect = async () => {
     setIsCreatingExam(true);
-    const defaultCourseId = (assignedCourses && assignedCourses.length > 0) ? assignedCourses[0].course_id : (courses && courses.length > 0 ? courses[0].course_id : undefined);
+    const defaultCourseId = (assignedCourses && assignedCourses.length > 0 && assignedCourses[0]) ? assignedCourses[0].course_id : (courses && courses.length > 0 && courses[0] ? courses[0].course_id : undefined);
     const res = await createExamDraft(chairUserId, defaultCourseId);
     setIsCreatingExam(false);
 
@@ -971,8 +972,8 @@ export function ChairDashboardClient({
                         <BookOpen className="w-3.5 h-3.5 text-amber-600" />
                         Assigned Courses:
                       </span>
-                      {faculty.facultyCourses && faculty.facultyCourses.length > 0 ? (
-                        faculty.facultyCourses.map((fc: any) => (
+                      {faculty.facultyCourses && faculty.facultyCourses.filter((fc: any) => fc?.course).length > 0 ? (
+                        faculty.facultyCourses.filter((fc: any) => fc?.course).map((fc: any) => (
                           <span
                             key={fc.course.course_id}
                             className="inline-flex items-center gap-1 text-[10px] font-bold bg-amber-50 text-amber-900 border border-amber-200 px-2 py-0.5 rounded-lg"
@@ -1047,9 +1048,9 @@ export function ChairDashboardClient({
                             )}
                           </div>
                           <div className="flex items-center gap-2 text-xs text-slate-500 font-medium mt-1">
-                            <span>Course: <strong className="text-slate-700">{approval.exam.course.course_code} - {approval.exam.course.course_title}</strong></span>
+                            <span>Course: <strong className="text-slate-700">{approval.exam?.course?.course_code || "Course"} {approval.exam?.course?.course_title ? `- ${approval.exam.course.course_title}` : ""}</strong></span>
                             <span>•</span>
-                            <span>Instructor: <strong className="text-slate-700">{approval.exam.faculty.first_name} {approval.exam.faculty.last_name}</strong></span>
+                            <span>Instructor: <strong className="text-slate-700">{approval.exam?.faculty?.first_name || ""} {approval.exam?.faculty?.last_name || ""}</strong></span>
                           </div>
                         </div>
 
@@ -1132,7 +1133,7 @@ export function ChairDashboardClient({
                   </span>
                 </div>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  Course: <strong className="text-slate-200">{activeSplitApproval.exam.course.course_code} - {activeSplitApproval.exam.course.course_title}</strong> • Faculty: <strong className="text-slate-200">{activeSplitApproval.exam.faculty.first_name} {activeSplitApproval.exam.faculty.last_name}</strong>
+                  Course: <strong className="text-slate-200">{activeSplitApproval.exam?.course?.course_code || "Course"} {activeSplitApproval.exam?.course?.course_title ? `- ${activeSplitApproval.exam.course.course_title}` : ""}</strong> • Faculty: <strong className="text-slate-200">{activeSplitApproval.exam?.faculty?.first_name || ""} {activeSplitApproval.exam?.faculty?.last_name || ""}</strong>
                 </p>
               </div>
             </div>
@@ -1242,6 +1243,13 @@ export function ChairDashboardClient({
                       } catch {}
                     }
 
+                    const isAuthorPC = Boolean(
+                      (activeSplitApproval.exam as any).faculty?.first_name?.includes("Program Chair") ||
+                      (activeSplitApproval.exam as any).faculty?.last_name?.includes("Chairperson") ||
+                      activeSplitApproval.exam.faculty?.first_name?.toLowerCase().includes("pc-") ||
+                      activeSplitApproval.exam.faculty?.first_name?.toLowerCase().includes("progchair")
+                    );
+
                     if (parsedTos && parsedTos.topics) {
                       return (
                         <div className="w-full h-full overflow-y-auto bg-white p-4 rounded-xl border border-slate-800">
@@ -1250,12 +1258,14 @@ export function ChairDashboardClient({
                             courseCode={activeSplitApproval.exam.course?.course_code || ""}
                             courseTitle={activeSplitApproval.exam.course?.course_title || activeSplitApproval.exam.title}
                             departmentName={departmentName}
+                            programCode={programCode || activeSplitApproval.exam.course?.course_code || departmentName}
                             term={activeSplitApproval.exam.term || "Prelim"}
                             semester={activeSplitApproval.exam.semester || "1st Semester"}
                             academicYear={activeSplitApproval.exam.academic_year || "2026-2027"}
                             examDate={activeSplitApproval.exam.exam_date ? String(activeSplitApproval.exam.exam_date).split("T")[0] : ""}
                             documentReference={activeSplitApproval.exam.document_reference || "BSC-ODI-F-121"}
                             facultyName={`${activeSplitApproval.exam.faculty?.first_name || ""} ${activeSplitApproval.exam.faculty?.last_name || ""}`}
+                            isProgramChairAuthor={isAuthorPC}
                             totalItems={parsedTos.targetTotalItems || activeSplitApproval.exam.questionBank?.length || 50}
                             topics={parsedTos.topics || []}
                           />
@@ -1303,12 +1313,14 @@ export function ChairDashboardClient({
                           courseCode={activeSplitApproval.exam.course?.course_code || ""}
                           courseTitle={activeSplitApproval.exam.course?.course_title || activeSplitApproval.exam.title}
                           departmentName={departmentName}
+                          programCode={programCode || activeSplitApproval.exam.course?.course_code || departmentName}
                           term={activeSplitApproval.exam.term || "Prelim"}
                           semester={activeSplitApproval.exam.semester || "1st Semester"}
                           academicYear={activeSplitApproval.exam.academic_year || "2026-2027"}
                           examDate={activeSplitApproval.exam.exam_date ? String(activeSplitApproval.exam.exam_date).split("T")[0] : ""}
                           documentReference={activeSplitApproval.exam.document_reference || "BSC-ODI-F-121"}
                           facultyName={`${activeSplitApproval.exam.faculty?.first_name || ""} ${activeSplitApproval.exam.faculty?.last_name || ""}`}
+                          isProgramChairAuthor={isAuthorPC}
                           totalItems={qBank.length || 50}
                           topics={fallbackTopics.length > 0 ? fallbackTopics : [
                             {

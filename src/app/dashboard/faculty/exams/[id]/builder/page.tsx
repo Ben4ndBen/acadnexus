@@ -172,6 +172,61 @@ export default async function ExamBuilderPage({ params }: PageProps) {
     ? (role === "ProgramChair" ? `Program Chair ${faculty.first_name} ${faculty.last_name}` : `Chairperson ${faculty.first_name} ${faculty.last_name}`)
     : `Instructor ${faculty.first_name} ${faculty.last_name}`;
 
+  // Resolve Department Chairperson Name
+  let initialDeptChairName = "";
+  const deptChairRecord = await db.chair.findFirst({
+    where: {
+      department_id: faculty.department_id,
+      is_program_chair: false,
+    },
+    include: {
+      user: {
+        include: {
+          faculty: true,
+        },
+      },
+    },
+  });
+  if (deptChairRecord?.user?.faculty) {
+    initialDeptChairName = `${deptChairRecord.user.faculty.first_name} ${deptChairRecord.user.faculty.last_name}`.trim();
+  }
+
+  // Resolve Program Chairperson Name (if under TED or CITD)
+  let initialProgChairName = "";
+  const courseCodeUpper = (exam.course?.course_code || "").trim().toUpperCase();
+  let progChairRecord: any = null;
+  if (courseCodeUpper.startsWith("ITC") || courseCodeUpper.startsWith("ITE") || courseCodeUpper.startsWith("ITM") || courseCodeUpper.startsWith("ITD") || courseCodeUpper === "ENT 403" || courseCodeUpper.includes("INFOTECH")) {
+    const prog = await db.academicProgram.findFirst({ where: { program_code: "BSInfoTech" } });
+    if (prog) {
+      progChairRecord = await db.chair.findFirst({ where: { program_id: prog.program_id, is_program_chair: true }, include: { user: { include: { faculty: true } } } });
+    }
+  } else if (courseCodeUpper.startsWith("IND") || courseCodeUpper.startsWith("IT")) {
+    const prog = await db.academicProgram.findFirst({ where: { program_code: "BSIT" } });
+    if (prog) {
+      progChairRecord = await db.chair.findFirst({ where: { program_id: prog.program_id, is_program_chair: true }, include: { user: { include: { faculty: true } } } });
+    }
+  } else if (courseCodeUpper.startsWith("BEED")) {
+    const prog = await db.academicProgram.findFirst({ where: { program_code: "BEED" } });
+    if (prog) {
+      progChairRecord = await db.chair.findFirst({ where: { program_id: prog.program_id, is_program_chair: true }, include: { user: { include: { faculty: true } } } });
+    }
+  } else if (courseCodeUpper.startsWith("BSED") || courseCodeUpper.startsWith("EDUC")) {
+    const prog = await db.academicProgram.findFirst({ where: { program_code: "BSED" } });
+    if (prog) {
+      progChairRecord = await db.chair.findFirst({ where: { program_id: prog.program_id, is_program_chair: true }, include: { user: { include: { faculty: true } } } });
+    }
+  }
+  if (progChairRecord?.user?.faculty) {
+    initialProgChairName = `${progChairRecord.user.faculty.first_name} ${progChairRecord.user.faculty.last_name}`.trim();
+  }
+
+  // Resolve Director for Instruction Name
+  let initialDirectorName = "";
+  const directorRecord = await db.director.findFirst();
+  if (directorRecord) {
+    initialDirectorName = [directorRecord.title, directorRecord.first_name, directorRecord.last_name].filter(Boolean).join(" ").trim();
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
       {/* Navbar */}
@@ -213,6 +268,9 @@ export default async function ExamBuilderPage({ params }: PageProps) {
           returnUrl={returnUrl}
           facultyDepartment={faculty.department?.department_name}
           userRole={role}
+          initialDeptChairName={initialDeptChairName}
+          initialProgChairName={initialProgChairName}
+          initialDirectorName={initialDirectorName}
         />
       </main>
 

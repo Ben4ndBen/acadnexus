@@ -9,6 +9,7 @@ import {
   Users, BookOpen, UserCog, Columns, FileText
 } from "lucide-react";
 import { BSCTableOfSpecificationsView } from "@/app/components/BSCTableOfSpecificationsView";
+import { getProgramHeaderImage } from "@/lib/programHeader";
 import { Latex } from "@/app/components/Latex";
 import { reviewExamByDirector, toggleGlobalHold, toggleIndividualHold, saveActiveAcademicPeriod, updateDirectorNameAction } from "@/app/actions/director";
 import type { AcademicPeriodSettings } from "@/lib/academicUtils";
@@ -722,9 +723,9 @@ export function DirectorDashboardClient({
   const filteredExams = allExaminations.filter(exam => {
     const matchesSearch = 
       exam.title.toLowerCase().includes(examSearchQuery.toLowerCase()) ||
-      exam.course.course_code.toLowerCase().includes(examSearchQuery.toLowerCase()) ||
-      exam.course.course_title.toLowerCase().includes(examSearchQuery.toLowerCase()) ||
-      `${exam.faculty.first_name} ${exam.faculty.last_name}`.toLowerCase().includes(examSearchQuery.toLowerCase());
+      (exam.course?.course_code || "").toLowerCase().includes(examSearchQuery.toLowerCase()) ||
+      (exam.course?.course_title || "").toLowerCase().includes(examSearchQuery.toLowerCase()) ||
+      `${exam.faculty?.first_name || ""} ${exam.faculty?.last_name || ""}`.toLowerCase().includes(examSearchQuery.toLowerCase());
 
     const matchesStatus = examStatusFilter === "ALL" || exam.current_status === examStatusFilter;
 
@@ -767,7 +768,7 @@ export function DirectorDashboardClient({
         {/* BSC OFFICIAL HEADER IMAGE */}
         <div className="w-full border-b border-slate-200 pb-3">
           <img
-            src="/bsc-header.png"
+            src={getProgramHeaderImage(courseCode || approval.exam?.faculty?.department?.department_name)}
             alt="Batanes State College Header"
             className="w-full h-auto object-contain mx-auto max-h-[140px]"
           />
@@ -1148,8 +1149,8 @@ export function DirectorDashboardClient({
                     <div className="space-y-1">
                       <h3 className="text-base font-bold text-slate-800">{approval.exam.title}</h3>
                       <p className="text-xs text-slate-500 font-medium">
-                        Course: <strong className="text-slate-700">{approval.exam.course.course_code}</strong> &bull; 
-                        Author: <strong className="text-slate-700">{approval.exam.faculty.first_name} {approval.exam.faculty.last_name}</strong>
+                        Course: <strong className="text-slate-700">{approval.exam?.course?.course_code || "Course"}</strong> &bull; 
+                        Author: <strong className="text-slate-700">{approval.exam?.faculty?.first_name || ""} {approval.exam?.faculty?.last_name || ""}</strong>
                       </p>
                       <p className="text-[11px] text-emerald-600 font-bold bg-emerald-50 inline-block px-2 py-0.5 rounded-full mt-1 border border-emerald-100">
                         Chair Review: {approval.chair_review_status}
@@ -1279,7 +1280,7 @@ export function DirectorDashboardClient({
                       <td className="px-6 py-4">
                         <div className="flex flex-col">
                           <span className="font-bold text-slate-800 text-sm">{exam.title}</span>
-                          <span className="text-xs text-slate-400 mt-0.5">{exam.course.course_code} - {exam.course.course_title}</span>
+                          <span className="text-xs text-slate-400 mt-0.5">{exam.course?.course_code || "Course"} {exam.course?.course_title ? `- ${exam.course.course_title}` : ""}</span>
                           {exam.current_status === "Approved" && (
                             <div className="mt-1.5 flex items-center gap-1 text-[10px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded w-fit shadow-sm">
                               <ShieldCheck className="w-3 h-3 text-emerald-600" />
@@ -2768,7 +2769,7 @@ export function DirectorDashboardClient({
                   </span>
                 </div>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  Course: <strong className="text-slate-200">{activePreviewApproval.exam.course.course_code} {activePreviewApproval.exam.course.course_title ? `- ${activePreviewApproval.exam.course.course_title}` : ""}</strong> • Faculty: <strong className="text-slate-200">{activePreviewApproval.exam.faculty.first_name} {activePreviewApproval.exam.faculty.last_name}</strong>
+                  Course: <strong className="text-slate-200">{activePreviewApproval.exam?.course?.course_code || "Course"} {activePreviewApproval.exam?.course?.course_title ? `- ${activePreviewApproval.exam.course.course_title}` : ""}</strong> • Faculty: <strong className="text-slate-200">{activePreviewApproval.exam?.faculty?.first_name || ""} {activePreviewApproval.exam?.faculty?.last_name || ""}</strong>
                 </p>
               </div>
             </div>
@@ -2858,6 +2859,13 @@ export function DirectorDashboardClient({
                       } catch {}
                     }
 
+                    const isAuthorPC = Boolean(
+                      (activePreviewApproval.exam as any).faculty?.first_name?.includes("Program Chair") ||
+                      (activePreviewApproval.exam as any).faculty?.last_name?.includes("Chairperson") ||
+                      activePreviewApproval.exam.faculty?.first_name?.toLowerCase().includes("pc-") ||
+                      activePreviewApproval.exam.faculty?.first_name?.toLowerCase().includes("progchair")
+                    );
+
                     if (parsedTos && parsedTos.topics) {
                       return (
                         <div className="w-full h-full overflow-y-auto bg-white p-4 rounded-xl border border-slate-800">
@@ -2866,12 +2874,14 @@ export function DirectorDashboardClient({
                             courseCode={activePreviewApproval.exam.course?.course_code || ""}
                             courseTitle={activePreviewApproval.exam.course?.course_title || activePreviewApproval.exam.title}
                             departmentName={activePreviewApproval.exam.faculty?.department?.department_name || "Batanes State College"}
+                            programCode={activePreviewApproval.exam.course?.course_code || activePreviewApproval.exam.faculty?.department?.department_name}
                             term={activePreviewApproval.exam.term || "Prelim"}
                             semester={activePreviewApproval.exam.semester || "1st Semester"}
                             academicYear={activePreviewApproval.exam.academic_year || "2026-2027"}
                             examDate={activePreviewApproval.exam.exam_date ? String(activePreviewApproval.exam.exam_date).split("T")[0] : ""}
                             documentReference={activePreviewApproval.exam.document_reference || "BSC-ODI-F-121"}
                             facultyName={`${activePreviewApproval.exam.faculty?.first_name || ""} ${activePreviewApproval.exam.faculty?.last_name || ""}`}
+                            isProgramChairAuthor={isAuthorPC}
                             totalItems={parsedTos.targetTotalItems || activePreviewApproval.exam.questionBank?.length || 50}
                             topics={parsedTos.topics || []}
                           />
@@ -2919,12 +2929,14 @@ export function DirectorDashboardClient({
                           courseCode={activePreviewApproval.exam.course?.course_code || ""}
                           courseTitle={activePreviewApproval.exam.course?.course_title || activePreviewApproval.exam.title}
                           departmentName={activePreviewApproval.exam.faculty?.department?.department_name || "Batanes State College"}
+                          programCode={activePreviewApproval.exam.course?.course_code || activePreviewApproval.exam.faculty?.department?.department_name}
                           term={activePreviewApproval.exam.term || "Prelim"}
                           semester={activePreviewApproval.exam.semester || "1st Semester"}
                           academicYear={activePreviewApproval.exam.academic_year || "2026-2027"}
                           examDate={activePreviewApproval.exam.exam_date ? String(activePreviewApproval.exam.exam_date).split("T")[0] : ""}
                           documentReference={activePreviewApproval.exam.document_reference || "BSC-ODI-F-121"}
                           facultyName={`${activePreviewApproval.exam.faculty?.first_name || ""} ${activePreviewApproval.exam.faculty?.last_name || ""}`}
+                          isProgramChairAuthor={isAuthorPC}
                           totalItems={qBank.length || 50}
                           topics={fallbackTopics}
                         />

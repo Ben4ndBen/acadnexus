@@ -43,7 +43,14 @@ export default async function ChairDashboard() {
             include: {
               faculty: {
                 include: {
-                  examinations: true,
+                  examinations: {
+                    include: {
+                      course: true,
+                      questionBank: true,
+                      approvalWorkflow: true,
+                      examTargets: true,
+                    },
+                  },
                   facultyPortfolios: {
                     orderBy: {
                       academic_year: "desc",
@@ -154,7 +161,14 @@ export default async function ChairDashboard() {
         },
       },
       include: {
-        examinations: true,
+        examinations: {
+          include: {
+            course: true,
+            questionBank: true,
+            approvalWorkflow: true,
+            examTargets: true,
+          },
+        },
         facultyPortfolios: {
           orderBy: { academic_year: "desc" },
           take: 1,
@@ -384,7 +398,9 @@ export default async function ChairDashboard() {
   // Fetch courses for assignment using cached query
   const courses = await getCoursesCached();
 
-  let assignedCourses = chairFacultyRecord?.facultyCourses.map(fc => fc.course) || [];
+  let assignedCourses = chairFacultyRecord?.facultyCourses
+    ? chairFacultyRecord.facultyCourses.map(fc => fc.course).filter((c): c is NonNullable<typeof c> => Boolean(c && c.course_id && c.course_code))
+    : [];
   if (assignedCourses.length === 0) {
     assignedCourses = filterCoursesForDepartment(courses, department.department_id);
   }
