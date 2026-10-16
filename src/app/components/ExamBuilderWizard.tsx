@@ -2009,11 +2009,94 @@ export function ExamBuilderWizard({
     }
   };
 
+  // Helper to remove a specific [blank] tag from prompt text
+  const removeBlankAtIndex = (text: string, matchIndex: number): string => {
+    const matches = [...text.matchAll(/\[blank\]/gi)];
+    const targetMatch = matches[matchIndex] ?? matches[matches.length - 1];
+    if (!targetMatch || typeof targetMatch.index !== "number") return text;
+
+    const start = targetMatch.index;
+    const end = start + targetMatch[0].length;
+
+    let removeStart = start;
+    let removeEnd = end;
+
+    if (removeStart > 0 && text[removeStart - 1] === " " && removeEnd < text.length && text[removeEnd] === " ") {
+      removeEnd++;
+    } else if (removeStart > 0 && text[removeStart - 1] === " " && (removeEnd >= text.length || [".", ",", "!", "?", ";", ":", "\n"].includes(text[removeEnd]))) {
+      removeStart--;
+    } else if (removeStart === 0 && removeEnd < text.length && text[removeEnd] === " ") {
+      removeEnd++;
+    }
+
+    return (text.substring(0, removeStart) + text.substring(removeEnd)).replace(/  +/g, " ");
+  };
+
   // Updates question text
   const updateQuestionText = (text: string, targetIdx: number = activeQuestionIdx) => {
     if (targetIdx === -1 || !questions[targetIdx]) return;
     const updated = [...questions];
-    updated[targetIdx].text = text;
+    const q = updated[targetIdx];
+    const oldText = q.text || "";
+    q.text = text;
+
+    if (q.question_type === "Fill_In_The_Blanks") {
+      const oldMatches = [...oldText.matchAll(/\[blank\]/gi)];
+      const newMatches = [...text.matchAll(/\[blank\]/gi)];
+
+      // If [blank] tag(s) were erased/deleted in the question box:
+      if (newMatches.length < oldMatches.length) {
+        let prefixLen = 0;
+        while (prefixLen < oldText.length && prefixLen < text.length && oldText[prefixLen] === text[prefixLen]) {
+          prefixLen++;
+        }
+        let suffixLen = 0;
+        while (
+          suffixLen < (oldText.length - prefixLen) &&
+          suffixLen < (text.length - prefixLen) &&
+          oldText[oldText.length - 1 - suffixLen] === text[text.length - 1 - suffixLen]
+        ) {
+          suffixLen++;
+        }
+        const editStart = prefixLen;
+        const editEnd = oldText.length - suffixLen;
+
+        const removedIndices: number[] = [];
+        oldMatches.forEach((m, idx) => {
+          const mStart = m.index ?? 0;
+          const mEnd = mStart + m[0].length;
+          if (mEnd > editStart && mStart < editEnd) {
+            removedIndices.push(idx);
+          }
+        });
+
+        if (removedIndices.length > 0) {
+          const removeSet = new Set(removedIndices);
+          q.blanks = (q.blanks || []).filter((_, idx) => !removeSet.has(idx));
+        }
+
+        // Safety fallback: if remaining blanks still exceed [blank] occurrences, trim excess
+        if ((q.blanks || []).length > newMatches.length) {
+          q.blanks = (q.blanks || []).slice(0, newMatches.length);
+        }
+
+        // Re-index remaining blank IDs
+        q.blanks = (q.blanks || []).map((b, idx) => ({ ...b, id: idx + 1 }));
+        const totalBlanksPoints = q.blanks.reduce((sum, b) => sum + (Number(b.points) || 1), 0);
+        if (totalBlanksPoints > 0) q.points = totalBlanksPoints;
+      }
+      // If a new [blank] tag was typed manually into the question box:
+      else if (newMatches.length > (q.blanks || []).length) {
+        if (!q.blanks) q.blanks = [];
+        const missingCount = newMatches.length - q.blanks.length;
+        for (let i = 0; i < missingCount; i++) {
+          q.blanks.push({ id: q.blanks.length + 1, answer: "", points: 1 });
+        }
+        const totalBlanksPoints = q.blanks.reduce((sum, b) => sum + (Number(b.points) || 1), 0);
+        if (totalBlanksPoints > 0) q.points = totalBlanksPoints;
+      }
+    }
+
     setQuestions(updated);
   };
 
@@ -2084,12 +2167,18 @@ export function ExamBuilderWizard({
     q.blanks = (q.blanks || []).filter((_, idx) => idx !== blankIdx);
     // Re-index blank IDs
     q.blanks = q.blanks.map((b, idx) => ({ ...b, id: idx + 1 }));
+
+    // Automatically remove the corresponding [blank] tag from q.text
+    if (q.text) {
+      q.text = removeBlankAtIndex(q.text, blankIdx);
+    }
+
     const totalBlanksPoints = q.blanks.reduce((sum, b) => sum + (Number(b.points) || 1), 0);
     if (totalBlanksPoints > 0) q.points = totalBlanksPoints;
     setQuestions(updated);
   };
 
-  // Add a blank item & append [blank] tag to text prompt
+  // Add a blank item & insert [blank] tag into text prompt
   const addBlankItem = (targetIdx: number = activeQuestionIdx) => {
     if (targetIdx === -1 || !questions[targetIdx]) return;
     const updated = [...questions];
@@ -2097,9 +2186,35 @@ export function ExamBuilderWizard({
     if (!q.blanks) q.blanks = [];
     const newId = q.blanks.length + 1;
     q.blanks.push({ id: newId, answer: "", points: 1 });
-    if (!q.text.includes("[blank]")) {
-      q.text = q.text ? `${q.text} [blank]` : "[blank]";
+
+    // Insert [blank] into question text prompt (at cursor position if focused, or appended)
+    const textarea = typeof document !== "undefined"
+      ? (document.getElementById(`question-prompt-${targetIdx}`) as HTMLTextAreaElement | null)
+      : null;
+
+    if (textarea && typeof textarea.selectionStart === "number" && typeof textarea.selectionEnd === "number" && document.activeElement === textarea) {
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const currentText = q.text || "";
+      const before = currentText.substring(0, start);
+      const after = currentText.substring(end);
+      const needSpaceBefore = before.length > 0 && !before.endsWith(" ") && !before.endsWith("\n");
+      const needSpaceAfter = after.length > 0 && !after.startsWith(" ") && !after.startsWith("\n") && !after.startsWith(",") && !after.startsWith(".");
+      const insertStr = (needSpaceBefore ? " " : "") + "[blank]" + (needSpaceAfter ? " " : "");
+      q.text = before + insertStr + after;
+
+      const newCursorPos = start + insertStr.length;
+      setTimeout(() => {
+        if (textarea) {
+          textarea.focus();
+          textarea.setSelectionRange(newCursorPos, newCursorPos);
+        }
+      }, 0);
+    } else {
+      const currentText = (q.text || "").trimEnd();
+      q.text = currentText ? `${currentText} [blank]` : "[blank]";
     }
+
     const totalBlanksPoints = q.blanks.reduce((sum, b) => sum + (Number(b.points) || 1), 0);
     if (totalBlanksPoints > 0) q.points = totalBlanksPoints;
     setQuestions(updated);
@@ -3448,6 +3563,7 @@ export function ExamBuilderWizard({
                                   <div className="space-y-1.5">
                                     <label className="text-xs font-extrabold text-slate-700 block">Question Prompt / Text</label>
                                     <textarea
+                                      id={`question-prompt-${globalIdx}`}
                                       rows={2}
                                       placeholder={
                                         q.question_type === "Fill_In_The_Blanks"
@@ -3666,13 +3782,15 @@ export function ExamBuilderWizard({
                                     </div>
                                     <button
                                       type="button"
+                                      onMouseDown={(e) => e.preventDefault()}
                                       onClick={() => addBlankItem(globalIdx)}
-                                      className="inline-flex items-center gap-1 text-[10px] font-black uppercase text-teal-700 bg-teal-50 px-2.5 py-1 rounded-lg border border-teal-200 cursor-pointer"
+                                      className="inline-flex items-center gap-1 text-[10px] font-black uppercase text-teal-700 bg-teal-50 px-2.5 py-1 rounded-lg border border-teal-200 cursor-pointer hover:bg-teal-100 hover:text-teal-800 transition-colors"
+                                      title="Insert a new [blank] tag into the question prompt"
                                     >
                                       <Plus className="w-3 h-3" /> Insert Blank
                                     </button>
                                   </div>
-                                  {(q.blanks || []).length > 0 && (
+                                  {(q.blanks || []).length > 0 ? (
                                     <div className="space-y-2">
                                     {(q.blanks || []).map((blank, blankIdx) => (
                                       <div key={blankIdx} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 bg-teal-50/40 border border-teal-200/80 p-2.5 rounded-xl text-xs">
@@ -3698,7 +3816,8 @@ export function ExamBuilderWizard({
                                           <button
                                             type="button"
                                             onClick={() => deleteBlankItem(blankIdx, globalIdx)}
-                                             className="p-1 text-slate-400 hover:text-rose-600 cursor-pointer"
+                                            className="p-1 text-slate-400 hover:text-rose-600 cursor-pointer transition-colors"
+                                            title="Delete this blank"
                                           >
                                             <Trash className="w-3.5 h-3.5" />
                                           </button>
@@ -3706,6 +3825,10 @@ export function ExamBuilderWizard({
                                       </div>
                                     ))}
                                   </div>
+                                  ) : (
+                                    <div className="text-[11px] text-slate-400 italic px-2 py-1">
+                                      No blanks added yet. Click &ldquo;+ Insert Blank&rdquo; or type <code className="text-teal-700 font-bold">[blank]</code> in the question prompt above.
+                                    </div>
                                   )}
                                 </div>
                               )}
