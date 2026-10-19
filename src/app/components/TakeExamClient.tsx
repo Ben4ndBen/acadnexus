@@ -32,6 +32,8 @@ interface TakeExamClientProps {
     courseCode: string;
     timePenaltySeconds: number;
     scorePenaltyPoints: number;
+    timeLimitMinutes?: number;
+    isInProgress?: boolean;
   };
 }
 
@@ -44,17 +46,26 @@ export function TakeExamClient({
 }: TakeExamClientProps) {
   const router = useRouter();
 
-  // Mode: 'gate' | 'exam' | 'warning' | 'lockout' | 'success' | 'submitting'
-  const [mode, setMode] = useState<"gate" | "exam" | "warning" | "lockout" | "success" | "submitting">("gate");
+  // Mode: 'gate' | 'exam' | 'warning' | 'lockout' | 'success' | 'submitting' | 'timeout_offline'
+  const [mode, setMode] = useState<"gate" | "exam" | "warning" | "lockout" | "success" | "submitting" | "timeout_offline">("gate");
   
   const [currentQuestionIdx, setCurrentQuestionIdx] = useState<number>(0);
   const [remainingSeconds, setRemainingSeconds] = useState<number>(initialData.remainingSeconds);
   const [violations, setViolations] = useState<number>(0);
   const [warningReason, setWarningReason] = useState<string>("");
-  const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "offline">("saved");
+  const [isOnline, setIsOnline] = useState<boolean>(true);
   const [showConfirmSubmit, setShowConfirmSubmit] = useState<boolean>(false);
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(true);
   const [finalScore, setFinalScore] = useState<number | null>(null);
+  const [submissionResult, setSubmissionResult] = useState<{
+    totalScore: number;
+    rawScore?: number;
+    penaltyPoints?: number;
+    violationsCount?: number;
+    maxPoints?: number;
+    trigger?: string;
+  } | null>(null);
 
   // Answers State: Record<question_id, response>
   const [answers, setAnswers] = useState<Record<number, string>>(() => {
@@ -79,12 +90,85 @@ export function TakeExamClient({
 
   const remainingSecondsRef = useRef(remainingSeconds);
   const autoSaveDebounceRef = useRef<NodeJS.Timeout | null>(null);
+  const answersRef = useRef<Record<number, string>>(answers);
+  const lastSavedAnswersRef = useRef<Record<number, string>>(lastSavedAnswers);
+  const isSavingRef = useRef<boolean>(false);
+  const pendingSaveQueuedRef = useRef<boolean>(false);
+
+  const violationsKey = `exam_violations_${initialData.studentExamId}`;
+  const localBackupKey = `exam_answers_backup_${initialData.studentExamId}`;
 
   useEffect(() => {
     remainingSecondsRef.current = remainingSeconds;
   }, [remainingSeconds]);
 
-  const violationsKey = `exam_violations_${initialData.studentExamId}`;
+  useEffect(() => {
+    answersRef.current = answers;
+  }, [answers]);
+
+  useEffect(() => {
+    lastSavedAnswersRef.current = lastSavedAnswers;
+  }, [lastSavedAnswers]);
+
+  // 0. Crash Recovery & Answer Preservation from Local Storage on Mount
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(localBackupKey);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed && typeof parsed === "object") {
+          let hasDiff = false;
+          const merged = { ...answersRef.current };
+          for (const [qIdStr, val] of Object.entries(parsed)) {
+            const qId = Number(qIdStr);
+            const dbVal = initialData.savedAnswers.find((a) => a.question_id === qId)?.submitted_response || "";
+            if (val && val !== dbVal) {
+              merged[qId] = String(val);
+              hasDiff = true;
+            }
+          }
+          if (hasDiff) {
+            setAnswers(merged);
+            answersRef.current = merged;
+            // Synchronize restored changes with database immediately
+            triggerBackgroundSave(merged);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to restore answers from localStorage:", e);
+    }
+  }, [localBackupKey]);
+
+  // 0.5 Network connectivity monitor for resilient offline handling & sync
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      if (mode === "timeout_offline") {
+        triggerTimeoutSubmission();
+      } else {
+        triggerBackgroundSave(answersRef.current);
+      }
+    };
+
+    const handleOffline = () => {
+      setIsOnline(false);
+      setSaveStatus("offline");
+    };
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      setIsOnline(false);
+      setSaveStatus("offline");
+    }
+
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, [mode]);
 
   // 1. Initialize local violation count from localStorage on mount
   useEffect(() => {
@@ -115,7 +199,7 @@ export function TakeExamClient({
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [mode, answers]);
+  }, [mode]);
 
   // 2.5 Heartbeat Timer Sync Loop (Every 10 Seconds)
   useEffect(() => {
@@ -132,28 +216,28 @@ export function TakeExamClient({
     return () => clearInterval(heartbeat);
   }, [mode]);
 
-  // 3. Low-Overhead Background Auto-Save Loop (Every 15 Seconds)
+  // 3. Periodic Background Auto-Save Loop (Every 10 Seconds)
   useEffect(() => {
     if (mode !== "exam") return;
 
     const autoSaveInterval = setInterval(() => {
       triggerBackgroundSave();
-    }, 15000);
+    }, 10000);
 
     return () => clearInterval(autoSaveInterval);
-  }, [mode, answers, lastSavedAnswers]);
+  }, [mode]);
 
   // 4. Focus Loss & Tab Switching Monitor (Alt+Tab & Window Switching)
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === "hidden" && mode === "exam") {
-        triggerViolation("Tab or browser window switch detected.");
+        triggerViolation("Leaving the exam window or switching tabs.");
       }
     };
 
     const handleWindowBlur = () => {
       if (mode === "exam") {
-        triggerViolation("Focus loss detected (window switch or Alt+Tab).");
+        triggerViolation("Switching away from the exam screen.");
       }
     };
 
@@ -170,7 +254,7 @@ export function TakeExamClient({
   useEffect(() => {
     const handleFullscreenChange = () => {
       if (document.fullscreenElement === null && mode === "exam") {
-        triggerViolation("Fullscreen exit detected.");
+        triggerViolation("Exiting full screen mode.");
       }
     };
 
@@ -246,19 +330,37 @@ export function TakeExamClient({
 
   // Background save dirty responses
   const triggerBackgroundSave = async (overrideAnswers?: Record<number, string>) => {
-    const currentAnswers = overrideAnswers || answers;
+    const currentAnswers = overrideAnswers || answersRef.current;
+
+    // If offline, preserve locally and transition status
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      setSaveStatus("offline");
+      return;
+    }
+
+    // If save is already in progress, queue a subsequent sync to avoid race conditions
+    if (isSavingRef.current) {
+      pendingSaveQueuedRef.current = true;
+      return;
+    }
+
     const changedList: { question_id: number; submitted_response: string }[] = [];
 
     Object.entries(currentAnswers).forEach(([qId, val]) => {
       const questionId = Number(qId);
-      if (lastSavedAnswers[questionId] !== val) {
+      if (lastSavedAnswersRef.current[questionId] !== val) {
         changedList.push({ question_id: questionId, submitted_response: val });
       }
     });
 
-    if (changedList.length === 0) return;
+    if (changedList.length === 0) {
+      setSaveStatus("saved");
+      return;
+    }
 
-    setIsSaving(true);
+    isSavingRef.current = true;
+    setSaveStatus("saving");
+
     try {
       const res = await saveStudentAnswers(initialData.studentExamId, changedList);
       if (res.success) {
@@ -267,42 +369,66 @@ export function TakeExamClient({
           changedList.forEach((c) => {
             next[c.question_id] = c.submitted_response;
           });
+          lastSavedAnswersRef.current = next;
           return next;
         });
+        setSaveStatus("saved");
+      } else {
+        if (res.error?.includes("locked") || res.error?.includes("already been submitted")) {
+          console.warn("Save rejected: Exam attempt is locked.");
+        } else {
+          setSaveStatus("offline");
+        }
       }
     } catch (err) {
       console.error("Background auto-save failed:", err);
+      setSaveStatus("offline");
     } finally {
-      setIsSaving(false);
+      isSavingRef.current = false;
+      // If student answered or typed while this network save was in flight, process queue immediately
+      if (pendingSaveQueuedRef.current) {
+        pendingSaveQueuedRef.current = false;
+        triggerBackgroundSave(answersRef.current);
+      }
     }
   };
 
-  // Update answer locally and trigger auto-saving per item
+  // Update answer locally, write to local crash backup, and trigger responsive auto-saving
   const handleAnswerChange = (questionId: number, response: string) => {
     setAnswers((prev) => {
       const newAnswers = {
         ...prev,
         [questionId]: response,
       };
+      answersRef.current = newAnswers;
+
+      // Synchronously write to local storage mirror so answers survive abrupt tab closing / refresh
+      try {
+        localStorage.setItem(localBackupKey, JSON.stringify(newAnswers));
+      } catch (err) {
+        console.warn("Failed to write to local storage mirror:", err);
+      }
 
       const targetQuestion = initialData.questions.find(
         (q) => q.question_id === questionId
       );
       const isTextType =
         targetQuestion?.question_type === "Essay" ||
-        targetQuestion?.question_type === "Identification";
+        targetQuestion?.question_type === "Identification" ||
+        targetQuestion?.question_type === "Fill_In_The_Blanks";
 
       if (autoSaveDebounceRef.current) {
         clearTimeout(autoSaveDebounceRef.current);
       }
 
       if (isTextType) {
-        // Debounce text inputs by 1.5 seconds of inactivity
+        setSaveStatus("saving");
+        // Debounce text inputs by 600ms of inactivity for prompt saving
         autoSaveDebounceRef.current = setTimeout(() => {
           triggerBackgroundSave(newAnswers);
-        }, 1500);
+        }, 600);
       } else {
-        // Save choice selections immediately
+        // Save choice selections, true/false, and matching immediately
         triggerBackgroundSave(newAnswers);
       }
 
@@ -310,9 +436,20 @@ export function TakeExamClient({
     });
   };
 
-  // Paginate questions (saves current dirty answer instantly on navigation)
+  // Instantly flush pending text answer saves on input blur
+  const handleTextBlur = () => {
+    if (autoSaveDebounceRef.current) {
+      clearTimeout(autoSaveDebounceRef.current);
+    }
+    triggerBackgroundSave(answersRef.current);
+  };
+
+  // Paginate questions (flushes current dirty answer instantly on navigation)
   const handleNavigateQuestion = (newIdx: number) => {
-    triggerBackgroundSave();
+    if (autoSaveDebounceRef.current) {
+      clearTimeout(autoSaveDebounceRef.current);
+    }
+    triggerBackgroundSave(answersRef.current);
     setCurrentQuestionIdx(newIdx);
   };
 
@@ -326,8 +463,12 @@ export function TakeExamClient({
 
   // Time Limit Expired Submit
   const triggerTimeoutSubmission = async () => {
+    if (autoSaveDebounceRef.current) {
+      clearTimeout(autoSaveDebounceRef.current);
+    }
     setMode("submitting");
-    const currentAnswersArray = Object.entries(answers).map(([qId, val]) => ({
+
+    const currentAnswersArray = Object.entries(answersRef.current).map(([qId, val]) => ({
       question_id: Number(qId),
       submitted_response: val,
     }));
@@ -335,27 +476,50 @@ export function TakeExamClient({
     try {
       const res = await submitStudentExam(initialData.studentExamId, "Timeout", currentAnswersArray);
       if (res.success) {
-        setFinalScore(res.totalScore ?? 0);
+        setFinalScore(res.totalScore);
+        setSubmissionResult({
+          totalScore: res.totalScore,
+          rawScore: res.rawScore,
+          penaltyPoints: res.penaltyPoints,
+          violationsCount: res.violationsCount,
+          maxPoints: res.maxPoints,
+          trigger: "Timeout",
+        });
         localStorage.removeItem(violationsKey);
+        localStorage.removeItem(localBackupKey);
         setMode("success");
+      } else {
+        // Network or server submission issue: handle safely with offline retry
+        setMode("timeout_offline");
       }
     } catch (err) {
       console.error("Timeout submit failed:", err);
-      setMode("success"); // Still show finish screen fallback
+      setMode("timeout_offline");
     }
   };
 
   // Cheating lockout auto-submit
   const submitViolationSubmission = async () => {
-    const currentAnswersArray = Object.entries(answers).map(([qId, val]) => ({
+    if (autoSaveDebounceRef.current) {
+      clearTimeout(autoSaveDebounceRef.current);
+    }
+    const currentAnswersArray = Object.entries(answersRef.current).map(([qId, val]) => ({
       question_id: Number(qId),
       submitted_response: val,
     }));
-    await submitStudentExam(initialData.studentExamId, "Cheating_Lockout", currentAnswersArray);
+    try {
+      await submitStudentExam(initialData.studentExamId, "Cheating_Lockout", currentAnswersArray);
+      localStorage.removeItem(localBackupKey);
+    } catch (err) {
+      console.error("Lockout submission failed:", err);
+    }
   };
 
   // Manual explicit submit
   const handleManualSubmit = async () => {
+    if (autoSaveDebounceRef.current) {
+      clearTimeout(autoSaveDebounceRef.current);
+    }
     setMode("submitting");
     setShowConfirmSubmit(false);
     
@@ -366,7 +530,7 @@ export function TakeExamClient({
       } catch {}
     }
 
-    const currentAnswersArray = Object.entries(answers).map(([qId, val]) => ({
+    const currentAnswersArray = Object.entries(answersRef.current).map(([qId, val]) => ({
       question_id: Number(qId),
       submitted_response: val,
     }));
@@ -374,15 +538,25 @@ export function TakeExamClient({
     try {
       const res = await submitStudentExam(initialData.studentExamId, "Manual", currentAnswersArray);
       if (res.success) {
-        setFinalScore(res.totalScore ?? 0);
+        setFinalScore(res.totalScore);
+        setSubmissionResult({
+          totalScore: res.totalScore,
+          rawScore: res.rawScore,
+          penaltyPoints: res.penaltyPoints,
+          violationsCount: res.violationsCount,
+          maxPoints: res.maxPoints,
+          trigger: "Manual",
+        });
         localStorage.removeItem(violationsKey);
+        localStorage.removeItem(localBackupKey);
         setMode("success");
       } else {
-        alert(res.error || "Submission failed. Please try again.");
+        alert(res.error || "Submission failed. Please check your internet connection and try again.");
         setMode("exam");
       }
     } catch (err) {
       console.error("Manual submit failed:", err);
+      alert("Submission error. Your answers have been preserved on this device. Please try submitting again.");
       setMode("exam");
     }
   };
@@ -513,11 +687,11 @@ export function TakeExamClient({
               <ShieldAlert className="w-5 h-5" />
             </div>
             <div>
-              <span className="font-extrabold text-sm tracking-tight text-white">AcadNexus SECURE SHELL</span>
+              <span className="font-extrabold text-sm tracking-tight text-white">AcadNexus Exam Portal</span>
             </div>
           </div>
           <span className="text-[10px] bg-slate-800 border border-slate-700 text-slate-400 font-extrabold px-3 py-1 rounded-full uppercase tracking-wider">
-            Lockdown Initialized
+            Secure Test Ready
           </span>
         </header>
 
@@ -528,7 +702,7 @@ export function TakeExamClient({
             
             <div className="space-y-2 text-center sm:text-left">
               <span className="text-[10px] bg-rose-500/10 text-rose-400 border border-rose-500/20 px-2.5 py-1 rounded-full font-bold uppercase tracking-widest">
-                Verification Required
+                Exam Details
               </span>
               <h1 className="text-2xl font-black text-white tracking-tight mt-2">{initialData.examTitle}</h1>
               <p className="text-xs text-slate-400 font-medium">
@@ -536,7 +710,7 @@ export function TakeExamClient({
               </p>
               <div className="mt-2.5 flex items-center gap-1.5 text-[10px] font-bold text-emerald-400 bg-emerald-950/40 border border-emerald-900/60 px-2.5 py-1 rounded-lg w-fit shadow-md">
                 <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                Digitally Signed by Chairperson & Director for Instruction
+                Approved by School Administration
               </div>
             </div>
 
@@ -550,13 +724,18 @@ export function TakeExamClient({
                 <p className="text-slate-200 font-semibold text-sm mt-0.5">{institutionalId}</p>
               </div>
               <div className="mt-2">
-                <p className="text-slate-500 uppercase font-bold text-[10px]">Strict Duration</p>
+                <p className="text-slate-500 uppercase font-bold text-[10px]">
+                  {initialData.isInProgress ? "Remaining Time" : "Time Limit"}
+                </p>
                 <p className="text-slate-200 font-bold text-sm mt-0.5 flex items-center gap-1.5">
-                  <Clock className="w-4 h-4 text-emerald-500" /> {initialData.remainingSeconds / 60} Minutes
+                  <Clock className="w-4 h-4 text-emerald-500" />{" "}
+                  {initialData.isInProgress
+                    ? `${Math.max(1, Math.ceil(initialData.remainingSeconds / 60))} Minutes Remaining`
+                    : `${initialData.timeLimitMinutes || Math.ceil(initialData.remainingSeconds / 60)} Minutes`}
                 </p>
               </div>
               <div className="mt-2">
-                <p className="text-slate-500 uppercase font-bold text-[10px]">Total items</p>
+                <p className="text-slate-500 uppercase font-bold text-[10px]">Total Questions</p>
                 <p className="text-slate-200 font-bold text-sm mt-0.5">{initialData.questions.length} Questions</p>
               </div>
             </div>
@@ -564,13 +743,13 @@ export function TakeExamClient({
             {/* Lock-down Rules List */}
             <div className="space-y-3 bg-[#0F172A]/50 border border-slate-800/60 p-5 rounded-2xl">
               <h3 className="text-xs font-black text-rose-400 flex items-center gap-2 uppercase tracking-wider">
-                <ShieldAlert className="w-4 h-4 text-rose-500" /> Secure Environment Guidelines:
+                <ShieldAlert className="w-4 h-4 text-rose-500" /> Exam Rules:
               </h3>
               <ul className="text-slate-400 text-xs space-y-2 list-disc list-inside leading-relaxed font-semibold">
-                <li>Clicking outside this browser window or switching tabs will trigger security focus warnings.</li>
-                <li>Exiting Fullscreen mode constitutes a security violation.</li>
-                <li>You are allowed <span className="text-rose-400 font-bold">up to 2 warnings</span>. The 3rd violation triggers <span className="text-rose-500 font-black">immediate auto-submission</span> under Cheating Lockout status.</li>
-                <li>Periodic checkpoints automatically backup your progress; network glitches will not lose your answers.</li>
+                <li>Stay on this page: Switching tabs or opening other applications will give you a warning.</li>
+                <li>Stay in full screen: Exiting full screen is not allowed during the exam.</li>
+                <li>You get <span className="text-rose-400 font-bold">up to 2 warnings</span>. On the 3rd warning, your exam will <span className="text-rose-500 font-black">end and submit automatically</span>.</li>
+                <li>Your answers save automatically as you work, so your progress is safe.</li>
               </ul>
             </div>
 
@@ -579,14 +758,14 @@ export function TakeExamClient({
                 onClick={handleStartExam}
                 className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-rose-700 to-rose-600 hover:from-rose-800 hover:to-rose-700 text-white font-black text-sm px-6 py-4 rounded-xl shadow-lg transition-all transform hover:scale-[1.01] active:scale-[0.99] border border-rose-600"
               >
-                Enter Secure Exam Mode & Begin <ArrowRight className="w-5 h-5" />
+                {initialData.isInProgress ? "Resume Exam" : "Start Exam Now"} <ArrowRight className="w-5 h-5" />
               </button>
             </div>
           </div>
         </main>
 
         <footer className="py-4 border-t border-slate-800 text-center text-[10px] text-slate-500">
-          © {new Date().getFullYear()} Batanes State College. Locked-Down Terminal Pipeline.
+          © {new Date().getFullYear()} Batanes State College. Secure Exam Environment.
         </footer>
       </div>
     );
@@ -604,7 +783,7 @@ export function TakeExamClient({
           </div>
 
           <div className="space-y-2">
-            <h2 className="text-xl font-black text-white tracking-tight uppercase">Security Alert!</h2>
+            <h2 className="text-xl font-black text-white tracking-tight uppercase">Warning!</h2>
             <p className="text-xs text-rose-400 font-black uppercase bg-rose-500/10 py-1.5 px-3 rounded-full inline-block border border-rose-500/20 mt-1">
               Warning {violations} of 2
             </p>
@@ -612,12 +791,12 @@ export function TakeExamClient({
               We detected: <strong className="text-slate-200">{warningReason}</strong>
             </p>
             <div className="bg-rose-500/10 border border-rose-500/20 text-rose-300 p-4 rounded-2xl text-xs font-semibold max-w-sm mx-auto my-3 text-left space-y-1">
-              <p className="font-extrabold text-rose-400 flex items-center gap-1.5">⚠️ Automatic Penalty Executed:</p>
-              <p className="ml-1">Time reduction: <strong className="text-white">-{initialData.timePenaltySeconds} seconds</strong></p>
-              <p className="ml-1">Score deduction: <strong className="text-white">-{initialData.scorePenaltyPoints} points</strong> applied to final exam grade</p>
+              <p className="font-extrabold text-rose-400 flex items-center gap-1.5">⚠️ Penalty Applied:</p>
+              <p className="ml-1">Time lost: <strong className="text-white">-{initialData.timePenaltySeconds} seconds</strong> removed from timer</p>
+              <p className="ml-1">Score deduction: <strong className="text-white">-{initialData.scorePenaltyPoints} points</strong> on this exam</p>
             </div>
             <p className="text-slate-500 text-[11px] leading-relaxed mt-2 font-medium">
-              Academic honesty guidelines enforce a strict fullscreen window focus. On the next violation, your examination attempt will be closed and auto-submitted.
+              Please stay on this exam screen in full screen mode. On the next warning, your exam will end and submit automatically.
             </p>
           </div>
 
@@ -626,7 +805,7 @@ export function TakeExamClient({
               onClick={handleReEnterSecureMode}
               className="w-full flex items-center justify-center gap-2 bg-amber-600 hover:bg-amber-700 text-white font-black text-sm px-5 py-3 rounded-xl transition-all shadow-md"
             >
-              Re-enter Secure Mode & Resume
+              Return to Exam
             </button>
           </div>
         </div>
@@ -640,9 +819,9 @@ export function TakeExamClient({
       <div className="min-h-screen bg-[#0F172A] text-slate-100 flex flex-col items-center justify-center p-6 font-sans select-none">
         <div className="text-center space-y-4">
           <Loader2 className="w-12 h-12 animate-spin text-rose-500 mx-auto" />
-          <h2 className="text-lg font-bold">Submitting Examination</h2>
+          <h2 className="text-lg font-bold">Submitting Your Exam...</h2>
           <p className="text-slate-500 text-xs max-w-xs leading-normal">
-            Processing objective responses against the answer schema and writing secure audit trails. Please do not close this window...
+            Saving your answers and recording your score. Please wait a moment and do not close this window...
           </p>
         </div>
       </div>
@@ -661,14 +840,14 @@ export function TakeExamClient({
           </div>
 
           <div className="space-y-2">
-            <h2 className="text-xl font-black text-rose-500 tracking-tight uppercase">Lockout Triggered</h2>
+            <h2 className="text-xl font-black text-rose-500 tracking-tight uppercase">Exam Ended</h2>
             <p className="text-xs text-slate-400 font-semibold leading-relaxed mt-2">
-              Due to repeated security policy infractions (window changes, Alt+Tab, or leaving fullscreen mode), you have been locked out.
+              Your exam was automatically submitted because test rules were broken 3 times (such as switching tabs or leaving full screen).
             </p>
             <div className="bg-rose-950/20 border border-rose-900/30 text-rose-400 p-4 rounded-2xl text-xs font-semibold text-left space-y-1">
-              <p>● Max violation count exceeded (3/3 violations).</p>
-              <p>● Your exam attempt has been auto-submitted.</p>
-              <p>● Incident logged securely to the Audit Logs database.</p>
+              <p>● Maximum warnings reached (3 warnings).</p>
+              <p>● Your exam answers have been saved and submitted.</p>
+              <p>● Your teacher has been notified.</p>
             </div>
           </div>
 
@@ -681,7 +860,7 @@ export function TakeExamClient({
               }}
               className="w-full bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs px-5 py-3 rounded-xl transition-all"
             >
-              Exit to Student Dashboard
+              Back to Dashboard
             </button>
           </div>
         </div>
@@ -689,9 +868,56 @@ export function TakeExamClient({
     );
   }
 
-  // E. SUCCESS SUBMISSION SCREEN (SHOW SCORES DETAILED)
+  // E. TIMEOUT OFFLINE VIEW (Answers safely queued, awaiting connection)
+  if (mode === "timeout_offline") {
+    return (
+      <div className="min-h-screen bg-[#0F172A] text-slate-100 flex items-center justify-center p-6 font-sans select-none">
+        <div className="max-w-md w-full bg-[#1E293B] border border-slate-800 rounded-3xl p-8 shadow-2xl text-center space-y-6 relative">
+          <div className="absolute top-0 left-0 w-full h-1.5 bg-amber-500" />
+          
+          <div className="mx-auto w-16 h-16 bg-amber-500/10 rounded-2xl flex items-center justify-center text-amber-500 border border-amber-500/20">
+            <Clock className="w-9 h-9" />
+          </div>
+
+          <div className="space-y-2">
+            <h2 className="text-xl font-black text-amber-400 tracking-tight uppercase">Time Limit Reached</h2>
+            <p className="text-xs text-slate-300 font-semibold leading-relaxed mt-2">
+              Your examination time has expired. Further answer changes have been locked.
+            </p>
+            <div className="bg-amber-950/20 border border-amber-900/30 text-amber-300 p-4 rounded-2xl text-xs font-semibold text-left space-y-1.5">
+              <p className="flex items-center gap-1.5 font-bold text-amber-400">
+                <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                Answers Preserved Safely
+              </p>
+              <p className="text-slate-400 text-[11px] leading-relaxed">
+                Your responses are preserved safely on your device. We are waiting for an active internet connection to finalize your submission and record your final score.
+              </p>
+            </div>
+          </div>
+
+          <div className="pt-2 border-t border-slate-800 space-y-3">
+            <button
+              onClick={() => triggerTimeoutSubmission()}
+              className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-sm px-5 py-3 rounded-xl transition-all shadow-md cursor-pointer"
+            >
+              <ArrowRight className="w-4 h-4" /> Finalize Submission Now
+            </button>
+            <p className="text-[11px] text-slate-500">
+              This page will submit automatically as soon as your internet connection is restored.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // F. SUCCESS SUBMISSION SCREEN (SHOW SCORES DETAILED)
   if (mode === "success") {
-    const scorePct = totalQuestions > 0 ? Math.round(((finalScore ?? 0) / initialData.questions.reduce((sum, q) => sum + q.points, 0)) * 100) : 0;
+    const totalPossible = initialData.questions.reduce((sum, q) => sum + q.points, 0);
+    const scorePct = totalPossible > 0 ? Math.round(((finalScore ?? 0) / totalPossible) * 100) : 0;
+    const isTimeout = submissionResult?.trigger === "Timeout";
+    const hasPenalty = (submissionResult?.penaltyPoints ?? 0) > 0;
+    const hasEssay = initialData.questions.some((q) => q.question_type === "Essay");
     
     return (
       <div className="min-h-screen bg-[#0F172A] text-slate-100 flex items-center justify-center p-6 font-sans select-none">
@@ -703,34 +929,67 @@ export function TakeExamClient({
           </div>
 
           <div className="space-y-2">
-            <h2 className="text-xl font-black text-white tracking-tight uppercase">Exam Submitted</h2>
+            <h2 className="text-xl font-black text-white tracking-tight uppercase">
+              {isTimeout ? "Exam Time Expired" : "Exam Submitted!"}
+            </h2>
             <p className="text-slate-400 text-xs font-medium leading-relaxed">
-              Your exam has been parsed, graded, and uploaded successfully.
+              {isTimeout
+                ? "Your allocated exam time ran out. Your answers were automatically saved and submitted."
+                : "Your exam has been submitted and saved successfully."}
             </p>
           </div>
 
-          <div className="bg-[#0F172A]/50 border border-slate-800 p-4 rounded-2xl text-left space-y-2 text-xs font-medium">
+          <div className="bg-[#0F172A]/50 border border-slate-800 p-4 rounded-2xl text-left space-y-2.5 text-xs font-medium">
             <div className="flex justify-between border-b border-slate-800 pb-2">
-              <span className="text-slate-500">Grading Output</span>
-              <span className="text-emerald-400 font-bold font-mono">Auto-Graded</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-slate-500">Earned Score</span>
-              <span className="text-slate-200 font-black text-sm">
-                {finalScore} / {initialData.questions.reduce((sum, q) => sum + q.points, 0)} pts ({scorePct}%)
+              <span className="text-slate-400">Submission Status</span>
+              <span className={`font-bold font-mono ${isTimeout ? "text-amber-400" : "text-emerald-400"}`}>
+                {isTimeout ? "Auto-Submitted (Time Ran Out)" : "Submitted Successfully"}
               </span>
             </div>
+
+            {submissionResult?.rawScore !== undefined && hasPenalty && (
+              <div className="flex justify-between border-b border-slate-800 pb-2">
+                <span className="text-slate-400">Initial Score</span>
+                <span className="text-slate-300 font-bold font-mono">
+                  {submissionResult.rawScore} / {totalPossible} pts
+                </span>
+              </div>
+            )}
+
+            {hasPenalty && (
+              <div className="flex justify-between border-b border-slate-800 pb-2 text-rose-400">
+                <span>Security Penalties</span>
+                <span className="font-bold font-mono">
+                  -{submissionResult?.penaltyPoints} pts ({submissionResult?.violationsCount} warning{submissionResult?.violationsCount !== 1 ? "s" : ""})
+                </span>
+              </div>
+            )}
+
+            <div className="flex justify-between items-center pt-0.5">
+              <span className="text-slate-400 font-semibold">Final Score</span>
+              <span className="text-emerald-400 font-black text-base font-mono">
+                {finalScore} / {totalPossible} pts ({scorePct}%)
+              </span>
+            </div>
+
+            {hasEssay && (
+              <div className="pt-2 border-t border-slate-800 text-[11px] text-slate-400 leading-relaxed">
+                ℹ️ Objective questions were scored automatically. Any essay responses will be reviewed and graded by your instructor.
+              </div>
+            )}
           </div>
 
           <div className="pt-2 border-t border-slate-800">
             <button
               onClick={() => {
+                localStorage.removeItem(violationsKey);
+                localStorage.removeItem(localBackupKey);
                 router.push("/dashboard/student");
                 router.refresh();
               }}
-              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black text-sm px-5 py-3 rounded-xl transition-all shadow-md shadow-emerald-900/30"
+              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black text-sm px-5 py-3 rounded-xl transition-all shadow-md shadow-emerald-900/30 cursor-pointer"
             >
-              Exit to Student Dashboard
+              Back to Dashboard
             </button>
           </div>
         </div>
@@ -738,18 +997,18 @@ export function TakeExamClient({
     );
   }
 
-  // F. REGULAR CORE SECURE TAKING INTERFACE
+  // G. REGULAR CORE SECURE TAKING INTERFACE
   return (
     <div className="min-h-screen bg-[#0F172A] text-slate-100 flex flex-col font-sans select-none overflow-hidden">
       
       {/* 1. SECURE NAVBAR */}
-      <header className="bg-[#1E293B] border-b border-slate-800 py-3.5 px-6 flex items-center justify-between z-40 shadow-md">
+      <header className="bg-[#1E293B] border-b border-slate-800 py-3.5 px-4 sm:px-6 flex items-center justify-between z-40 shadow-md">
         <div className="flex items-center gap-3">
           <div className="bg-[#7A151A] text-white p-1.5 rounded-lg border border-rose-900/30">
             <Monitor className="w-4.5 h-4.5" />
           </div>
           <div className="min-w-0">
-            <h1 className="font-extrabold text-sm text-white truncate max-w-[180px] sm:max-w-xs leading-none">
+            <h1 className="font-extrabold text-sm text-white truncate max-w-[140px] sm:max-w-xs leading-none">
               {initialData.examTitle}
             </h1>
             <p className="text-[10px] text-slate-400 font-medium mt-0.5">
@@ -759,10 +1018,32 @@ export function TakeExamClient({
         </div>
 
         {/* Sync status & Timer */}
-        <div className="flex items-center gap-4">
-          <div className="hidden sm:flex items-center gap-1.5 text-[10px] text-slate-400 bg-slate-900 border border-slate-800 px-2.5 py-1 rounded-full">
-            <span className={`w-1.5 h-1.5 rounded-full ${isSaving ? "bg-sky-400 animate-ping" : "bg-emerald-500"}`} />
-            {isSaving ? "Saving..." : "All changes saved"}
+        <div className="flex items-center gap-2 sm:gap-4">
+          {/* Status Indicator */}
+          <div className={`flex items-center gap-1.5 text-[11px] font-semibold px-2.5 sm:px-3 py-1 rounded-full border transition-all ${
+            saveStatus === "saving"
+              ? "bg-sky-500/10 border-sky-500/30 text-sky-300"
+              : saveStatus === "offline"
+              ? "bg-amber-500/10 border-amber-500/30 text-amber-300"
+              : "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
+          }`}>
+            {saveStatus === "saving" ? (
+              <>
+                <Loader2 className="w-3 h-3 text-sky-400 animate-spin" />
+                <span>Saving...</span>
+              </>
+            ) : saveStatus === "offline" ? (
+              <>
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                <span className="hidden sm:inline">Offline (Saved on device)</span>
+                <span className="sm:hidden">Offline</span>
+              </>
+            ) : (
+              <>
+                <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                <span>Saved</span>
+              </>
+            )}
           </div>
 
           <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border transition-all ${
@@ -776,7 +1057,7 @@ export function TakeExamClient({
 
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="lg:hidden p-2 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700"
+            className="lg:hidden p-2 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700 cursor-pointer"
           >
             {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
@@ -891,6 +1172,7 @@ export function TakeExamClient({
                       type="text"
                       value={answers[currentQuestion.question_id] || ""}
                       onChange={(e) => handleAnswerChange(currentQuestion.question_id, e.target.value)}
+                      onBlur={handleTextBlur}
                       placeholder="Type your response here..."
                       className="w-full bg-slate-900 border border-slate-800 focus:bg-slate-900 focus:ring-2 focus:ring-rose-500/20 focus:border-rose-600 text-sm font-semibold text-slate-100 placeholder:text-slate-500 px-4 py-3 rounded-xl transition-all"
                     />
@@ -951,6 +1233,7 @@ export function TakeExamClient({
                       <textarea
                         value={essayText}
                         onChange={(e) => handleAnswerChange(currentQuestion.question_id, e.target.value)}
+                        onBlur={handleTextBlur}
                         placeholder="Write your detailed answer response here..."
                         rows={7}
                         className="w-full bg-slate-900 border border-slate-800 focus:bg-slate-900 focus:ring-2 focus:ring-rose-500/20 focus:border-rose-600 text-sm font-semibold text-slate-100 placeholder:text-slate-500 p-4 rounded-xl transition-all resize-y outline-none"
@@ -993,6 +1276,7 @@ export function TakeExamClient({
                                     value={val}
                                     placeholder={`Blank #${blankId} (${blankMeta?.points || 1} pt)`}
                                     onChange={(e) => handleBlankResponseChange(currentQuestion.question_id, blankId, e.target.value)}
+                                    onBlur={handleTextBlur}
                                     className="mx-1.5 px-3 py-1 bg-slate-950 border border-rose-500/40 focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20 text-rose-300 font-bold text-xs rounded-xl shadow-inner outline-none min-w-[130px] inline-block"
                                   />
                                 )}
@@ -1021,6 +1305,7 @@ export function TakeExamClient({
                                 value={val}
                                 placeholder="Type answer..."
                                 onChange={(e) => handleBlankResponseChange(currentQuestion.question_id, blankId, e.target.value)}
+                                onBlur={handleTextBlur}
                                 className="flex-1 bg-slate-950 border border-slate-800 focus:border-rose-500 text-xs font-semibold text-slate-100 px-3 py-2 rounded-lg"
                               />
                             </div>
@@ -1213,9 +1498,9 @@ export function TakeExamClient({
         </div>
       )}
 
-      {/* Mobile hidden save warning banner */}
+      {/* Mobile save status footer banner */}
       <div className="sm:hidden text-center text-[9px] text-slate-500 py-1 bg-slate-900 border-t border-slate-800">
-        ● {isSaving ? "Saving changes..." : "All changes saved to database"}
+        ● {saveStatus === "saving" ? "Saving changes..." : saveStatus === "offline" ? "Offline (Saved on device)" : "All changes saved to database"}
       </div>
 
     </div>

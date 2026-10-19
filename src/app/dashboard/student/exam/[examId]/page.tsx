@@ -89,7 +89,7 @@ export default async function ExamPage({ params }: PageProps) {
               <ShieldAlert className="w-8 h-8" />
             </div>
             <div className="space-y-2">
-              <h2 className="text-xl font-extrabold text-slate-900">Access Restricted</h2>
+              <h2 className="text-xl font-extrabold text-slate-900">Cannot Open Exam</h2>
               <p className="text-slate-500 text-sm leading-relaxed">
                 {result.error}
               </p>
@@ -135,23 +135,31 @@ export default async function ExamPage({ params }: PageProps) {
               <CheckCircle2 className="w-8 h-8 animate-bounce" />
             </div>
             <div className="space-y-2">
-              <h2 className="text-xl font-extrabold text-slate-900">Examination Completed</h2>
+              <h2 className="text-xl font-extrabold text-slate-900">Exam Already Finished</h2>
               <p className="text-slate-500 text-sm">
-                You have already submitted this examination. Re-attempts are strictly disallowed.
+                You have already submitted this exam and cannot take it again.
               </p>
             </div>
             
             <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 text-left space-y-2 text-xs">
               <div className="flex justify-between border-b border-slate-200/50 pb-2">
-                <span className="text-slate-400 font-semibold uppercase">Submitted Via</span>
-                <span className="text-slate-800 font-bold uppercase">{result.trigger}</span>
+                <span className="text-slate-400 font-semibold uppercase">Status</span>
+                <span className="text-slate-800 font-bold uppercase">{result.trigger === "Timeout" ? "Time Ran Out (Auto-Submitted)" : result.trigger === "Cheating_Lockout" ? "Rules Broken" : "Completed"}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400 font-semibold uppercase">Submitted At</span>
+              <div className="flex justify-between border-b border-slate-200/50 pb-2">
+                <span className="text-slate-400 font-semibold uppercase">Date & Time Submitted</span>
                 <span className="text-slate-800 font-bold">
                   {result.submittedAt ? new Date(result.submittedAt).toLocaleString() : "N/A"}
                 </span>
               </div>
+              {result.totalScore !== undefined && (
+                <div className="flex justify-between items-center pt-1">
+                  <span className="text-slate-400 font-semibold uppercase">Recorded Score</span>
+                  <span className="text-emerald-700 font-black text-sm">
+                    {result.totalScore} {(result as any).maxPoints ? `/ ${(result as any).maxPoints} pts` : "pts"}
+                  </span>
+                </div>
+              )}
             </div>
 
             <div className="pt-2 border-t border-slate-100">
@@ -184,6 +192,8 @@ export default async function ExamPage({ params }: PageProps) {
         courseCode: result.courseCode!,
         timePenaltySeconds: (result as any).timePenaltySeconds!,
         scorePenaltyPoints: (result as any).scorePenaltyPoints!,
+        timeLimitMinutes: (result as any).timeLimitMinutes || 60,
+        isInProgress: !!(result as any).isInProgress,
       }}
     />
   );

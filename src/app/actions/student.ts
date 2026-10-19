@@ -50,6 +50,35 @@ export async function startStudentExam(examId: number, studentId: number) {
       },
     });
 
+    // 2. Fetch the examination record to check approval and assigned student list
+    const examRecord = await db.examination.findUnique({
+      where: { exam_id: examId },
+      include: {
+        course: true,
+        examTargets: true,
+      },
+    });
+
+    if (!examRecord) {
+      return { error: "Examination not found." };
+    }
+
+    // Respect the exam's approval status
+    if (examRecord.current_status !== "Approved") {
+      return { error: `This exam is not available yet because it has not been approved by the school administrator.` };
+    }
+
+    // Make exam availability depend on the students selected by the instructor who created the examination
+    // Only students assigned to that specific exam should access it.
+    // Do not make an exam available to all students taking the same course unless they were actually assigned to that examination.
+    const selectedIds = examRecord.selected_student_ids;
+    const isExplicitlyAssigned = Array.isArray(selectedIds) && selectedIds.includes(studentId);
+    const hasActiveOverride = Boolean(override);
+
+    if (!isExplicitlyAssigned && !hasActiveOverride) {
+      return { error: "You are not assigned to this exam. Only students selected by the teacher can take this exam." };
+    }
+
     let exam: any;
     let examStart: Date;
     let examEnd: Date;
@@ -61,36 +90,16 @@ export async function startStudentExam(examId: number, studentId: number) {
       examStart = override.new_start_time;
       examEnd = override.new_end_time;
     } else {
-      // Fetch targeted approved exam targets to verify the schedule
-      const target = await db.examTarget.findFirst({
-        where: {
-          exam_id: examId,
-          program_id: student.program_id,
-          year_level: student.year_level,
-          exam: {
-            current_status: "Approved",
-          },
-        },
-        include: {
-          exam: {
-            include: {
-              course: true,
-            },
-          },
-        },
-      });
+      // Find target schedule for this exam
+      const target = examRecord.examTargets.find(
+        (t) => t.program_id === student.program_id && t.year_level === student.year_level
+      ) || examRecord.examTargets[0];
 
       if (!target) {
-        const examRecord = await db.examination.findUnique({
-          where: { exam_id: examId },
-        });
-        if (examRecord && examRecord.current_status === "Approved") {
-          return { error: "Examination has been approved by the Director for Instruction, but the examination schedule has not been set by the creator yet. Access is restricted until scheduled." };
-        }
-        return { error: "Examination is not active or targeted for your program and year level." };
+        return { error: "This exam is approved, but the date and time have not been set by your teacher yet. Please check back later." };
       }
 
-      exam = target.exam;
+      exam = examRecord;
 
       examStart = new Date(
         target.scheduled_date.getUTCFullYear(),
@@ -123,6 +132,7 @@ export async function startStudentExam(examId: number, studentId: number) {
     });
 
     let remainingSeconds = exam.time_limit_minutes * 60;
+    let isResumedAttempt = false;
 
     if (studentExam) {
       // If exam already completed, return completed status
@@ -132,16 +142,27 @@ export async function startStudentExam(examId: number, studentId: number) {
           totalScore: studentExam.total_score,
           submittedAt: studentExam.submitted_at,
           trigger: studentExam.submission_trigger,
+          violationsCount: studentExam.violations_count,
+          maxPoints: exam.questionBank.reduce((sum: number, q: any) => sum + q.points, 0),
         };
       }
 
-      // Resume attempt - countdown starts from when student started taking the exam
+      isResumedAttempt = true;
+
+      // Resume attempt:
+      // Keep the scheduled availability window separate from the individual student's attempt timer.
+      // Once the student starts the exam, record the attempt's start time and calculate the deadline
+      // based on the configured time limit and any applicable anti-cheating time deductions.
       const elapsedMs = now.getTime() - studentExam.started_at.getTime();
-      const limitMs = exam.time_limit_minutes * 60 * 1000;
-      remainingSeconds = Math.max(0, Math.floor((limitMs - elapsedMs) / 1000));
+      const timePenaltySeconds = (studentExam.violations_count || 0) * (exam.time_penalty_seconds ?? 60);
+      const totalAllowedSeconds = Math.max(0, (exam.time_limit_minutes * 60) - timePenaltySeconds);
+      const calculatedRemaining = totalAllowedSeconds - Math.floor(elapsedMs / 1000);
+
+      // Do not allow refreshing the page or reopening the browser to reset the timer.
+      remainingSeconds = Math.max(0, Math.min(calculatedRemaining, studentExam.remaining_seconds ?? calculatedRemaining));
 
       if (remainingSeconds <= 0) {
-        // Time limit exceeded, auto-submit exam
+        // Time limit reached zero: automatically submit attempt
         const submitResult = await submitStudentExam(studentExam.student_exam_id, "Timeout");
         if (submitResult.error) {
           return { error: submitResult.error };
@@ -151,27 +172,24 @@ export async function startStudentExam(examId: number, studentId: number) {
           totalScore: submitResult.totalScore,
           submittedAt: new Date(),
           trigger: "Timeout" as SubmissionType,
+          maxPoints: exam.questionBank.reduce((sum: number, q: any) => sum + q.points, 0),
         };
       }
     } else {
-      // Starting a NEW attempt: check testing window start and end bounds
+      // Starting a NEW attempt:
+      // Allow assigned students to start an examination only during its scheduled availability window.
       if (now < examStart) {
         const startTimeString = examStart.toLocaleTimeString([], { 
           hour: '2-digit', 
           minute: '2-digit'
         });
-        return { error: `Examination has not started yet. It is scheduled to start at ${startTimeString}.` };
+        return { error: `This exam has not started yet. It is scheduled to start at ${startTimeString}.` };
       }
 
-      // Cutoff rule: Examinations cannot be opened or taken within 15 minutes of the scheduled end time (or if schedule ended).
-      const totalWindowMs = examEnd.getTime() - examStart.getTime();
-      const cutoffTime = totalWindowMs > 15 * 60 * 1000
-        ? new Date(examEnd.getTime() - 15 * 60 * 1000)
-        : examEnd;
-
-      if (now >= cutoffTime || now > examEnd) {
+      // If the student has not started by the end of the scheduled availability window, mark as Missed
+      if (now >= examEnd) {
         return { 
-          error: "The examination entry window has closed. Examinations cannot be opened or taken within 15 minutes of the scheduled end time (or after the schedule has ended). You missed the scheduled examination window." 
+          error: "The scheduled time for this exam has passed. You missed this exam because you did not start before the examination schedule ended." 
         };
       }
 
@@ -222,6 +240,8 @@ export async function startStudentExam(examId: number, studentId: number) {
       courseCode: exam.course.course_code,
       timePenaltySeconds: exam.time_penalty_seconds ?? 60,
       scorePenaltyPoints: exam.score_penalty_points ?? 2,
+      timeLimitMinutes: exam.time_limit_minutes,
+      isInProgress: isResumedAttempt,
     };
   } catch (err: any) {
     console.error("Error starting exam:", err);
@@ -277,18 +297,42 @@ export async function saveStudentAnswers(
       }
     });
 
-    return { success: true };
+    return { success: true, savedCount: answers.length };
   } catch (err: any) {
     console.error("Error saving answers:", err);
     return { error: err.message || "Failed to save answers." };
   }
 }
 
+export type SubmitExamResult =
+  | {
+      success: true;
+      totalScore: number;
+      rawScore: number;
+      penaltyPoints: number;
+      violationsCount: number;
+      maxPoints: number;
+      trigger: SubmissionType;
+      submittedAt: string;
+      error?: undefined;
+    }
+  | {
+      success: false;
+      error: string;
+      totalScore?: undefined;
+      rawScore?: undefined;
+      penaltyPoints?: undefined;
+      violationsCount?: undefined;
+      maxPoints?: undefined;
+      trigger?: undefined;
+      submittedAt?: undefined;
+    };
+
 export async function submitStudentExam(
   studentExamId: number,
   trigger: SubmissionType,
   finalAnswers?: { question_id: number; submitted_response: string }[]
-) {
+): Promise<SubmitExamResult> {
   try {
     const studentExam = await db.studentExam.findUnique({
       where: { student_exam_id: studentExamId },
@@ -302,11 +346,11 @@ export async function submitStudentExam(
     });
 
     if (!studentExam) {
-      return { error: "Student examination record not found." };
+      return { success: false, error: "Student examination record not found." };
     }
 
     if (studentExam.submitted_at) {
-      return { error: "Examination has already been submitted." };
+      return { success: false, error: "Examination has already been submitted." };
     }
 
     const exam = studentExam.exam;
@@ -323,6 +367,10 @@ export async function submitStudentExam(
 
     const answersMap = new Map(studentAnswers.map((ans) => [ans.question_id, ans]));
     let totalScore = 0;
+    const violationsCount = studentExam.violations_count ?? 0;
+    const scorePenaltyPoints = exam.score_penalty_points ?? 2;
+    const totalPenalty = violationsCount * scorePenaltyPoints;
+    let penalizedScore = 0;
 
     await db.$transaction(async (tx) => {
       for (const q of exam.questionBank) {
@@ -454,10 +502,7 @@ export async function submitStudentExam(
       }
 
       // Apply security violation score penalty
-      const violationsCount = studentExam.violations_count ?? 0;
-      const scorePenaltyPoints = exam.score_penalty_points ?? 2;
-      const totalPenalty = violationsCount * scorePenaltyPoints;
-      const penalizedScore = Math.max(0, totalScore - totalPenalty);
+      penalizedScore = Math.max(0, totalScore - totalPenalty);
 
       // Update the student exam attempt to completed
       await tx.studentExam.update({
@@ -501,10 +546,19 @@ export async function submitStudentExam(
     }
 
     revalidatePath("/dashboard/student");
-    return { success: true, totalScore: Math.max(0, totalScore - ((studentExam.violations_count ?? 0) * (exam.score_penalty_points ?? 2))) };
+    return { 
+      success: true, 
+      totalScore: penalizedScore,
+      rawScore: totalScore,
+      penaltyPoints: totalPenalty,
+      violationsCount: violationsCount,
+      maxPoints: exam.questionBank.reduce((sum: number, q: any) => sum + q.points, 0),
+      trigger: trigger,
+      submittedAt: new Date().toISOString(),
+    };
   } catch (err: any) {
     console.error("Error submitting exam:", err);
-    return { error: err.message || "Failed to submit examination." };
+    return { success: false, error: err.message || "Failed to submit examination." };
   }
 }
 
@@ -599,6 +653,7 @@ export async function keepAliveStudentExam(
   try {
     const studentExam = await db.studentExam.findUnique({
       where: { student_exam_id: studentExamId },
+      include: { exam: true },
     });
 
     if (!studentExam) {
@@ -609,14 +664,27 @@ export async function keepAliveStudentExam(
       return { error: "Examination has already been submitted." };
     }
 
+    // Verify against actual elapsed time on server to prevent tampering
+    const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
+    const elapsedSeconds = Math.floor((now.getTime() - studentExam.started_at.getTime()) / 1000);
+    const penaltySeconds = (studentExam.violations_count || 0) * (studentExam.exam.time_penalty_seconds ?? 60);
+    const maxAllowedRemaining = Math.max(0, (studentExam.exam.time_limit_minutes * 60) - penaltySeconds - elapsedSeconds);
+
+    const safeRemaining = Math.max(0, Math.min(remainingSeconds, maxAllowedRemaining));
+
+    if (safeRemaining <= 0) {
+      await submitStudentExam(studentExamId, "Timeout");
+      return { success: true, isCompleted: true, remainingSeconds: 0 };
+    }
+
     await db.studentExam.update({
       where: { student_exam_id: studentExamId },
       data: {
-        remaining_seconds: Math.max(0, remainingSeconds),
+        remaining_seconds: safeRemaining,
       },
     });
 
-    return { success: true };
+    return { success: true, remainingSeconds: safeRemaining };
   } catch (err: any) {
     console.error("Error in keepAliveStudentExam server action:", err);
     return { error: err.message || "Failed to save timer state." };

@@ -57,8 +57,11 @@ interface CompletedExam {
   total_score: number;
   submitted_at: string | null;
   started_at: string;
+  submission_trigger?: string;
+  violations_count?: number;
   exam: {
     title: string;
+    course?: Course | null;
     questionBank: Array<{ points: number }>;
   };
 }
@@ -94,7 +97,7 @@ interface StudentDashboardClientProps {
   activeSemester?: number;
 }
 
-type TabType = "active" | "upcoming" | "completed" | "missed";
+type TabType = "upcoming" | "active" | "completed_missed";
 
 export function StudentDashboardClient({
   student,
@@ -124,8 +127,10 @@ export function StudentDashboardClient({
   const [activeTab, setActiveTab] = useState<TabType>(() => {
     if (activeExams && activeExams.length > 0) return "active";
     if (upcomingExams && upcomingExams.length > 0) return "upcoming";
-    return "active";
+    return "upcoming";
   });
+
+  const [completedMissedFilter, setCompletedMissedFilter] = useState<"all" | "completed" | "missed">("all");
 
   // Password Update Modal State
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(!!requirePasswordUpdate);
@@ -180,18 +185,9 @@ export function StudentDashboardClient({
     });
   }, [enrolledCourses, student, activeSemester]);
 
+  const totalCompletedAndMissed = completedExams.length + missedExams.length;
+
   const tabs = [
-    {
-      id: "active" as TabType,
-      label: "Active Exams",
-      count: activeExams.length,
-      icon: Clock,
-      badgeColor: activeExams.length > 0 ? "bg-rose-100 text-rose-700 border-rose-200" : "bg-slate-100 text-slate-500 border-slate-200",
-      activeColor: "bg-rose-50 border-rose-500 text-rose-700",
-      pulse: activeExams.length > 0,
-      dotColor: "bg-rose-500",
-      pingColor: "bg-rose-400",
-    },
     {
       id: "upcoming" as TabType,
       label: "Upcoming Exams",
@@ -204,26 +200,26 @@ export function StudentDashboardClient({
       pingColor: "bg-blue-400",
     },
     {
-      id: "completed" as TabType,
-      label: "Completed Exams",
-      count: completedExams.length,
+      id: "active" as TabType,
+      label: "Active Exams",
+      count: activeExams.length,
+      icon: Clock,
+      badgeColor: activeExams.length > 0 ? "bg-rose-100 text-rose-700 border-rose-200" : "bg-slate-100 text-slate-500 border-slate-200",
+      activeColor: "bg-rose-50 border-rose-500 text-rose-700",
+      pulse: activeExams.length > 0,
+      dotColor: "bg-rose-500",
+      pingColor: "bg-rose-400",
+    },
+    {
+      id: "completed_missed" as TabType,
+      label: "Completed / Missed Exams",
+      count: totalCompletedAndMissed,
       icon: Award,
-      badgeColor: completedExams.length > 0 ? "bg-emerald-100 text-emerald-700 border-emerald-200" : "bg-slate-100 text-slate-500 border-slate-200",
+      badgeColor: totalCompletedAndMissed > 0 ? "bg-emerald-100 text-emerald-700 border-emerald-200" : "bg-slate-100 text-slate-500 border-slate-200",
       activeColor: "bg-emerald-50 border-emerald-500 text-emerald-700",
       pulse: false,
       dotColor: "bg-emerald-500",
       pingColor: "bg-emerald-400",
-    },
-    {
-      id: "missed" as TabType,
-      label: "Missed Exams",
-      count: missedExams.length,
-      icon: ShieldAlert,
-      badgeColor: missedExams.length > 0 ? "bg-amber-100 text-amber-700 border-amber-200" : "bg-slate-100 text-slate-500 border-slate-200",
-      activeColor: "bg-amber-50 border-amber-500 text-amber-700",
-      pulse: missedExams.length > 0,
-      dotColor: "bg-amber-500",
-      pingColor: "bg-amber-400",
     },
   ];
 
@@ -234,15 +230,17 @@ export function StudentDashboardClient({
       <div className="lg:col-span-1 space-y-6">
         {/* Profile Card */}
         <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-6">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-            <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-              <span className="w-1.5 h-6 rounded-full" style={{ backgroundColor: deptTheme.colors.primary }} />
-              Academic Profile
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3 gap-2">
+            <h2 className="text-xs sm:text-sm font-extrabold text-slate-800 flex items-center gap-1.5 whitespace-nowrap min-w-0">
+              <span className="w-1.5 h-4 rounded-full shrink-0" style={{ backgroundColor: deptTheme.colors.primary }} />
+              <span>Academic Profile</span>
             </h2>
             <DepartmentBadge
               department={student?.program?.department?.department_name}
               programCode={student?.program?.program_code}
-              size="sm"
+              size="xs"
+              showPortalSuffix={true}
+              className="shrink-0"
             />
           </div>
           <div className="space-y-4">
@@ -317,7 +315,7 @@ export function StudentDashboardClient({
                 <span>Change Password</span>
               </button>
               <p className="text-[10.5px] text-slate-400 leading-tight">
-                Profile details & enrolled classes are restricted and managed exclusively by course faculty.
+                Profile details and enrolled subjects are managed by your school and teachers.
               </p>
             </div>
           </div>
@@ -366,52 +364,61 @@ export function StudentDashboardClient({
       <div className="lg:col-span-3 space-y-6 flex flex-col">
         {/* Quick Notification Alert Banner */}
         {(activeExams.length > 0 || upcomingExams.length > 0 || missedExams.length > 0) && (
-          <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-4 rounded-3xl border border-indigo-900/40 shadow-sm flex flex-wrap items-center justify-between gap-3 text-xs font-medium">
-            <div className="flex items-center gap-2.5 flex-wrap">
-              <div className="p-2 bg-indigo-600/30 rounded-xl border border-indigo-500/30 shrink-0">
-                <Bell className="w-4 h-4 text-indigo-300 animate-bounce" />
+          <div className="bg-white border border-slate-200/90 rounded-2xl p-4 shadow-xs flex flex-wrap items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center shrink-0 border border-slate-200">
+                <Bell className="w-4 h-4 text-slate-600" />
               </div>
-              <div className="space-y-0.5">
-                <p className="font-extrabold text-white text-xs flex items-center gap-2">
-                  <span>Examination Alerts</span>
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                </p>
-                <p className="text-slate-300 text-[11px] flex flex-wrap items-center gap-2">
+              <div>
+                <p className="font-bold text-slate-800 text-xs">Exam Reminders</p>
+                <p className="text-slate-500 text-[11px] flex flex-wrap items-center gap-2 mt-0.5">
                   {activeExams.length > 0 && (
-                    <span className="text-rose-300 font-bold">
-                      • {activeExams.length} Live Active Exam{activeExams.length === 1 ? "" : "s"}
+                    <span className="text-rose-600 font-semibold">
+                      • {activeExams.length} active exam{activeExams.length === 1 ? "" : "s"} ready to take
                     </span>
                   )}
                   {upcomingExams.length > 0 && (
-                    <span className="text-blue-300 font-bold">
-                      • {upcomingExams.length} Upcoming Exam{upcomingExams.length === 1 ? "" : "s"}
+                    <span className="text-blue-600 font-semibold">
+                      • {upcomingExams.length} upcoming exam{upcomingExams.length === 1 ? "" : "s"}
                     </span>
                   )}
                   {missedExams.length > 0 && (
-                    <span className="text-amber-300 font-bold">
-                      • {missedExams.length} Missed Exam{missedExams.length === 1 ? "" : "s"}
+                    <span className="text-slate-500 font-medium">
+                      • {missedExams.length} missed exam{missedExams.length === 1 ? "" : "s"}
                     </span>
                   )}
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               {activeExams.length > 0 && (
                 <button
                   type="button"
                   onClick={() => setActiveTab("active")}
-                  className="bg-rose-600 hover:bg-rose-500 text-white font-extrabold text-[11px] px-3 py-1.5 rounded-xl transition-all shadow-xs cursor-pointer"
+                  className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold text-[11px] px-3 py-1.5 rounded-xl transition-all cursor-pointer"
                 >
-                  View Active ({activeExams.length})
+                  Go to Active ({activeExams.length})
                 </button>
               )}
               {upcomingExams.length > 0 && (
                 <button
                   type="button"
                   onClick={() => setActiveTab("upcoming")}
-                  className="bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-[11px] px-3 py-1.5 rounded-xl transition-all shadow-xs cursor-pointer"
+                  className="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 font-bold text-[11px] px-3 py-1.5 rounded-xl transition-all cursor-pointer"
                 >
                   View Upcoming ({upcomingExams.length})
+                </button>
+              )}
+              {missedExams.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab("completed_missed");
+                    setCompletedMissedFilter("missed");
+                  }}
+                  className="bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 font-bold text-[11px] px-3 py-1.5 rounded-xl transition-all cursor-pointer"
+                >
+                  View Missed ({missedExams.length})
                 </button>
               )}
             </div>
@@ -455,84 +462,11 @@ export function StudentDashboardClient({
 
         {/* Tab Contents */}
         <div className="flex-1">
-          {activeTab === "active" && (
-            <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-6 h-full min-h-[300px]">
-              <h2 className="text-lg font-bold text-slate-800 border-b border-slate-100 pb-3 flex items-center gap-2">
-                <span className="w-1.5 h-6 bg-rose-500 rounded-full animate-pulse" />
-                Active Examinations
-              </h2>
-
-              {activeExams.length > 0 ? (
-                <div className="space-y-4">
-                  {activeExams.map((exam) => (
-                    <div
-                      key={exam.target?.target_id ?? exam.exam_id}
-                      className="flex flex-col sm:flex-row sm:items-center justify-between border border-slate-100 p-5 rounded-2xl bg-gradient-to-r from-rose-50/20 to-transparent hover:border-rose-100 transition-all gap-4"
-                    >
-                      <div className="space-y-1 flex-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-[10px] font-bold bg-rose-100 text-rose-700 px-2 py-0.5 rounded-full uppercase tracking-wider">
-                            Live Now
-                          </span>
-                          {exam.is_reopened && (
-                            <span className="text-[10px] font-bold bg-amber-100 text-amber-800 px-2.5 py-0.5 rounded-full uppercase tracking-wider border border-amber-200">
-                              Reopened for You
-                            </span>
-                          )}
-                        </div>
-                        <h4 className="font-bold text-slate-800 text-base mt-1">{exam.title}</h4>
-                        <p className="text-xs text-slate-400 flex items-center gap-1.5">
-                          <BookOpen className="w-3.5 h-3.5" /> {exam.course?.course_title || "Course"} {exam.course?.course_code ? `(${exam.course.course_code})` : ""}
-                        </p>
-                        <p className="text-xs text-slate-400 flex items-center gap-1.5">
-                          <Clock className="w-3.5 h-3.5" /> Time Limit: {exam.time_limit_minutes} minutes
-                        </p>
-                        
-                        {exam.is_reopened && (
-                          <div className="bg-amber-50/80 border border-amber-200/80 rounded-xl p-3 text-xs space-y-1.5 mt-2">
-                            {exam.official_schedule && (
-                              <p className="text-slate-600 font-medium text-[11px] flex items-center gap-1.5">
-                                <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                                <span className="font-bold text-slate-700">Official Exam Date:</span>{" "}
-                                {new Date(exam.official_schedule.scheduled_date).toLocaleDateString([], { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' })}
-                              </p>
-                            )}
-                            <p className="text-amber-900 font-bold text-[11px] flex items-center gap-1.5 pt-0.5 border-t border-amber-200/60">
-                              <span className="w-2 h-2 rounded-full bg-amber-500 inline-block animate-pulse"></span>
-                              <span>Your Individual Reopened Window:</span>{" "}
-                              <span>{exam.target ? new Date(exam.target.start_time).toLocaleDateString([], { month: 'short', day: 'numeric' }) : "N/A"} at {exam.target ? new Date(exam.target.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ""} - {exam.target ? new Date(exam.target.end_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ""}</span>
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                      <Link
-                        href={`/dashboard/student/exam/${exam.exam_id}`}
-                        className="bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs px-5 py-3 rounded-xl flex items-center gap-2 transition-all shadow-sm hover:shadow-md self-start sm:self-auto text-center"
-                      >
-                        {(exam as any).is_in_progress ? "Resume Exam" : "Start Exam"} <ArrowRight className="w-4 h-4" />
-                      </Link>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="flex flex-col items-center justify-center py-16 px-4 text-center border border-dashed border-slate-100 rounded-2xl h-full">
-                  <div className="bg-slate-50 p-3 rounded-full text-slate-400 mb-3">
-                    <Hourglass className="w-6 h-6" />
-                  </div>
-                  <h3 className="font-bold text-slate-700 text-sm">No live examinations</h3>
-                  <p className="text-slate-400 text-xs max-w-xs mt-1">
-                    There are no exams currently active for your program and year level.
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
-
           {activeTab === "upcoming" && (
             <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-6 h-full min-h-[300px]">
               <h2 className="text-lg font-bold text-slate-800 border-b border-slate-100 pb-3 flex items-center gap-2">
                 <Calendar className="w-5 h-5 text-blue-600" />
-                Upcoming Examinations
+                Upcoming Exams
               </h2>
 
               {upcomingExams.length > 0 ? (
@@ -543,11 +477,11 @@ export function StudentDashboardClient({
                         <h4 className="font-bold text-slate-900 text-base leading-snug">{exam.title}</h4>
                         {exam.is_schedule_pending ? (
                           <span className="text-[10px] font-extrabold bg-amber-100 text-amber-900 px-2.5 py-0.5 rounded-full uppercase tracking-wider border border-amber-300 whitespace-nowrap shadow-xs">
-                            Schedule Pending
+                            Schedule Coming Soon
                           </span>
                         ) : exam.is_reopened ? (
                           <span className="text-[10px] font-bold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full uppercase tracking-wider border border-amber-200 whitespace-nowrap">
-                            Reopened Window
+                            Special Schedule
                           </span>
                         ) : (
                           <span className="text-[10px] font-extrabold bg-blue-100 text-blue-900 px-2.5 py-0.5 rounded-full uppercase tracking-wider border border-blue-300 whitespace-nowrap shadow-xs">
@@ -564,11 +498,11 @@ export function StudentDashboardClient({
                           {exam.official_schedule?.scheduled_date && (
                             <p className="text-slate-700 font-semibold flex items-center gap-2">
                               <Calendar className="w-4 h-4 text-amber-700" />
-                              Expected Date: <span className="font-extrabold text-slate-800">{new Date(exam.official_schedule.scheduled_date).toLocaleDateString("en-US", { timeZone: "UTC", month: "short", day: "numeric", year: "numeric" })}</span>
+                              Target Date: <span className="font-extrabold text-slate-800">{new Date(exam.official_schedule.scheduled_date).toLocaleDateString("en-US", { timeZone: "UTC", month: "short", day: "numeric", year: "numeric" })}</span>
                             </p>
                           )}
                           <p className="text-slate-500 text-[11px] leading-relaxed pt-1 border-t border-amber-200/60">
-                            The exact schedule for this exam is currently being set. You cannot take the exam yet.
+                            Your teacher is setting the date and time. Check back soon.
                           </p>
                         </div>
                       ) : exam.is_reopened ? (
@@ -576,40 +510,40 @@ export function StudentDashboardClient({
                           {exam.official_schedule && (
                             <p className="text-slate-600 font-medium text-[11px] flex items-center gap-1.5">
                               <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                              <span className="font-bold text-slate-700">Official Exam Date:</span>{" "}
+                              <span className="font-bold text-slate-700">Exam Date:</span>{" "}
                               {new Date(exam.official_schedule.scheduled_date).toLocaleDateString([], { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' })}
                             </p>
                           )}
                           <p className="text-amber-900 font-bold text-[11px] pt-1 border-t border-amber-200/60">
-                            Reopened Access Window: {exam.target ? new Date(exam.target.start_time).toLocaleDateString([], { month: 'short', day: 'numeric' }) : "N/A"} ({exam.target ? new Date(exam.target.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ""} - {exam.target ? new Date(exam.target.end_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ""})
+                            Your Special Exam Schedule: {exam.target ? new Date(exam.target.start_time).toLocaleDateString([], { month: 'short', day: 'numeric' }) : "N/A"} ({exam.target ? new Date(exam.target.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ""} - {exam.target ? new Date(exam.target.end_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ""})
                           </p>
                         </div>
                       ) : (
                         <div className="bg-slate-50 p-3.5 rounded-xl text-xs space-y-2 border border-slate-100">
                           <p className="text-slate-700 font-semibold flex items-center gap-2">
                             <Calendar className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
-                            Official Date: <span className="font-extrabold text-slate-800">{exam.target ? new Date(exam.target.scheduled_date).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }) : "N/A"}</span>
+                            Exam Date: <span className="font-extrabold text-slate-800">{exam.target ? new Date(exam.target.scheduled_date).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }) : "N/A"}</span>
                           </p>
                           <p className="text-slate-600 flex items-center gap-2">
                             <Clock className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
-                            Time Window: <span className="font-bold text-slate-800">{exam.target ? new Date(exam.target.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' }) : ""} - {exam.target ? new Date(exam.target.end_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' }) : ""}</span>
+                            Available Time: <span className="font-bold text-slate-800">{exam.target ? new Date(exam.target.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' }) : ""} - {exam.target ? new Date(exam.target.end_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' }) : ""}</span>
                           </p>
                           <p className="text-slate-600 flex items-center gap-2 pt-1.5 border-t border-slate-200/60">
                             <Hourglass className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" />
-                            Exam Duration: <span className="font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/60">{exam.time_limit_minutes} minutes</span>
+                            Time Limit: <span className="font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/60">{exam.time_limit_minutes} minutes</span>
                           </p>
                         </div>
                       )}
 
                       <div className="pt-1 flex items-center justify-between text-xs font-semibold text-slate-400">
                         <span className="inline-flex items-center gap-1 text-[11px] text-slate-400">
-                          <Lock className="w-3.5 h-3.5" /> Not Takeable Yet
+                          <Lock className="w-3.5 h-3.5" /> Not available yet
                         </span>
                         <button
                           disabled
                           className="bg-slate-100 border border-slate-200 text-slate-400 font-bold text-xs px-3.5 py-2 rounded-xl cursor-not-allowed opacity-75"
                         >
-                          {exam.is_schedule_pending ? "Schedule Pending" : "Not Started Yet"}
+                          {exam.is_schedule_pending ? "Coming Soon" : "Not Started Yet"}
                         </button>
                       </div>
                     </div>
@@ -620,23 +554,99 @@ export function StudentDashboardClient({
                   <div className="bg-slate-50 p-3 rounded-full text-slate-400 mb-3">
                     <Calendar className="w-6 h-6" />
                   </div>
-                  <h3 className="font-bold text-slate-700 text-sm">No upcoming examinations</h3>
+                  <h3 className="font-bold text-slate-700 text-sm">No upcoming exams</h3>
                   <p className="text-slate-400 text-xs max-w-xs mt-1">
-                    There are no upcoming examinations scheduled at the moment.
+                    You do not have any upcoming exams scheduled right now.
                   </p>
                 </div>
               )}
             </div>
           )}
 
-
-
-          {activeTab === "completed" && (
+          {activeTab === "active" && (
             <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-6 h-full min-h-[300px]">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h2 className="text-lg font-bold text-slate-800 border-b border-slate-100 pb-3 flex items-center gap-2">
+                <span className="w-1.5 h-6 bg-rose-500 rounded-full animate-pulse" />
+                Active Exams
+              </h2>
+
+              {activeExams.length > 0 ? (
+                <div className="space-y-4">
+                  {activeExams.map((exam) => (
+                    <div
+                      key={exam.target?.target_id ?? exam.exam_id}
+                      className="flex flex-col sm:flex-row sm:items-center justify-between border border-slate-100 p-5 rounded-2xl bg-gradient-to-r from-rose-50/20 to-transparent hover:border-rose-100 transition-all gap-4"
+                    >
+                      <div className="space-y-1 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-[10px] font-bold bg-rose-100 text-rose-700 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                            Available Now
+                          </span>
+                          {(exam as any).is_in_progress && (
+                            <span className="text-[10px] font-bold bg-indigo-100 text-indigo-700 px-2.5 py-0.5 rounded-full uppercase tracking-wider border border-indigo-200">
+                              In Progress
+                            </span>
+                          )}
+                          {exam.is_reopened && (
+                            <span className="text-[10px] font-bold bg-amber-100 text-amber-800 px-2.5 py-0.5 rounded-full uppercase tracking-wider border border-amber-200">
+                              Special Schedule
+                            </span>
+                          )}
+                        </div>
+                        <h4 className="font-bold text-slate-800 text-base mt-1">{exam.title}</h4>
+                        <p className="text-xs text-slate-400 flex items-center gap-1.5">
+                          <BookOpen className="w-3.5 h-3.5" /> {exam.course?.course_title || "Course"} {exam.course?.course_code ? `(${exam.course.course_code})` : ""}
+                        </p>
+                        <p className="text-xs text-slate-400 flex items-center gap-1.5">
+                          <Clock className="w-3.5 h-3.5" /> Time Limit: {exam.time_limit_minutes} minutes
+                        </p>
+                        
+                        {exam.is_reopened && (
+                          <div className="bg-amber-50/80 border border-amber-200/80 rounded-xl p-3 text-xs space-y-1.5 mt-2">
+                            {exam.official_schedule && (
+                              <p className="text-slate-600 font-medium text-[11px] flex items-center gap-1.5">
+                                <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                                <span className="font-bold text-slate-700">Exam Date:</span>{" "}
+                                {new Date(exam.official_schedule.scheduled_date).toLocaleDateString([], { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' })}
+                              </p>
+                            )}
+                            <p className="text-amber-900 font-bold text-[11px] flex items-center gap-1.5 pt-0.5 border-t border-amber-200/60">
+                              <span className="w-2 h-2 rounded-full bg-amber-500 inline-block animate-pulse"></span>
+                              <span>Your Special Exam Time:</span>{" "}
+                              <span>{exam.target ? new Date(exam.target.start_time).toLocaleDateString([], { month: 'short', day: 'numeric' }) : "N/A"} at {exam.target ? new Date(exam.target.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ""} - {exam.target ? new Date(exam.target.end_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ""}</span>
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                      <Link
+                        href={`/dashboard/student/exam/${exam.exam_id}`}
+                        className="bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs px-5 py-3 rounded-xl flex items-center gap-2 transition-all shadow-sm hover:shadow-md self-start sm:self-auto text-center"
+                      >
+                        {(exam as any).is_in_progress ? "Continue Exam" : "Take Exam"} <ArrowRight className="w-4 h-4" />
+                      </Link>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-16 px-4 text-center border border-dashed border-slate-100 rounded-2xl h-full">
+                  <div className="bg-slate-50 p-3 rounded-full text-slate-400 mb-3">
+                    <Hourglass className="w-6 h-6" />
+                  </div>
+                  <h3 className="font-bold text-slate-700 text-sm">No active exams</h3>
+                  <p className="text-slate-400 text-xs max-w-xs mt-1">
+                    There are no exams available to take right now.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === "completed_missed" && (
+            <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-6 h-full min-h-[300px]">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-3 gap-3">
                 <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
                   <Award className="w-5 h-5 text-emerald-600" />
-                  Completed Examinations
+                  Completed / Missed Exams
                 </h2>
                 {completedExams.length > 0 && (
                   <button
@@ -644,101 +654,207 @@ export function StudentDashboardClient({
                       const rows = completedExams.map((se) => {
                         const examMaxPoints = se.exam.questionBank.reduce((sum, q) => sum + q.points, 0);
                         const percentage = examMaxPoints > 0 ? Math.round((se.total_score / examMaxPoints) * 100) : 0;
+                        let statusText = "Submitted";
+                        if (se.submission_trigger === "Timeout") statusText = "Auto-Submitted (Time Ran Out)";
+                        else if (se.submission_trigger === "Cheating_Lockout") statusText = "Closed (Rules Broken)";
                         return {
                           "Exam Title": se.exam.title,
+                          "Status": statusText,
                           "Score (pts)": se.total_score,
                           "Max Score (pts)": examMaxPoints,
                           "Percentage Grade": `${percentage}%`,
                           "Date Submitted": new Date(se.submitted_at || se.started_at).toLocaleString(),
-                          "Digital Verification": "Signed by Department Chair & Academic Director"
                         };
                       });
                       const workbook = XLSX.utils.book_new();
                       const worksheet = XLSX.utils.json_to_sheet(rows);
-                      worksheet["!cols"] = [{ wch: 30 }, { wch: 14 }, { wch: 16 }, { wch: 18 }, { wch: 22 }, { wch: 25 }];
+                      worksheet["!cols"] = [{ wch: 30 }, { wch: 25 }, { wch: 14 }, { wch: 16 }, { wch: 18 }, { wch: 22 }];
                       XLSX.utils.book_append_sheet(workbook, worksheet, "My Exam Scores");
                       XLSX.writeFile(workbook, `${student.last_name}_${student.first_name}_Exam_Scores.xlsx`);
                     }}
-                    className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs px-3.5 py-2 rounded-xl shadow-sm transition-all cursor-pointer"
+                    className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs px-3.5 py-2 rounded-xl shadow-xs transition-all cursor-pointer self-start sm:self-auto"
                   >
                     <Download className="w-4 h-4" />
-                    Download Scores Excel
+                    Download Scores (Excel)
                   </button>
                 )}
               </div>
 
-              {completedExams.length > 0 ? (
-                <div className="space-y-4">
-                  {completedExams.map((se) => {
-                    const examMaxPoints = se.exam.questionBank.reduce((sum, q) => sum + q.points, 0);
-                    const percentage = examMaxPoints > 0 ? Math.round((se.total_score / examMaxPoints) * 100) : 0;
-                    return (
-                      <div key={se.student_exam_id} className="border border-slate-100 hover:border-emerald-100 p-5 rounded-2xl flex flex-col sm:flex-row justify-between sm:items-center transition-all gap-4">
-                        <div className="space-y-1">
-                          <h4 className="font-bold text-slate-800 text-base">{se.exam.title}</h4>
-                          <p className="text-xs text-slate-400">
-                            Submitted: {new Date(se.submitted_at || se.started_at).toLocaleDateString()} at {new Date(se.submitted_at || se.started_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          </p>
-                        </div>
-                        <div className="self-start sm:self-auto">
-                          <span className="inline-flex items-center text-sm font-black bg-emerald-50 text-emerald-700 px-3.5 py-1.5 rounded-full border border-emerald-100">
-                            Score: {se.total_score} / {examMaxPoints} ({percentage}%)
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
+              {totalCompletedAndMissed === 0 ? (
                 <div className="flex flex-col items-center justify-center py-16 px-4 text-center border border-dashed border-slate-100 rounded-2xl h-full">
                   <div className="bg-slate-50 p-3 rounded-full text-slate-400 mb-3">
                     <Award className="w-6 h-6" />
                   </div>
-                  <h3 className="font-bold text-slate-700 text-sm">No completed examinations</h3>
+                  <h3 className="font-bold text-slate-700 text-sm">No completed or missed exams</h3>
                   <p className="text-slate-400 text-xs max-w-xs mt-1">
-                    Once you submit an examination, your scores and records will appear here.
+                    You haven't completed or missed any exams yet.
                   </p>
-                </div>
-              )}
-            </div>
-          )}
-
-          {activeTab === "missed" && (
-            <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-6 h-full min-h-[300px]">
-              <h2 className="text-lg font-bold text-slate-800 border-b border-slate-100 pb-3 flex items-center gap-2">
-                <ShieldAlert className="w-5 h-5 text-rose-600" />
-                Missed Examinations
-              </h2>
-
-              {missedExams.length > 0 ? (
-                <div className="space-y-4">
-                  {missedExams.map((exam) => (
-                    <div key={exam.target?.target_id ?? exam.exam_id} className="border border-slate-100 p-5 rounded-2xl space-y-3 bg-slate-50/50 opacity-90 hover:opacity-100 transition-all">
-                      <div className="flex justify-between items-start">
-                        <h4 className="font-bold text-slate-700 text-base line-through">{exam.title}</h4>
-                        <span className="text-[10px] font-bold bg-rose-100 text-rose-700 px-2.5 py-0.5 rounded-full uppercase tracking-wider border border-rose-200 shadow-sm">
-                          Missed
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-500">
-                        {exam.course?.course_title || "Course"} {exam.course?.course_code ? `(${exam.course.course_code})` : ""}
-                      </p>
-                      <div className="text-xs text-slate-500 flex items-center gap-2">
-                        <Calendar className="w-4 h-4 text-slate-400" />
-                        <span>Scheduled: {exam.target ? new Date(exam.target.scheduled_date).toLocaleDateString([], { timeZone: 'UTC' }) : "N/A"}</span>
-                      </div>
-                    </div>
-                  ))}
                 </div>
               ) : (
-                <div className="flex flex-col items-center justify-center py-16 px-4 text-center border border-dashed border-slate-100 rounded-2xl h-full">
-                  <div className="bg-emerald-50 p-3 rounded-full text-emerald-600 mb-3">
-                    <CheckCircle className="w-6 h-6" />
+                <div className="space-y-5">
+                  {/* Category Filter Chips */}
+                  <div className="flex items-center gap-2 border-b border-slate-100 pb-3 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => setCompletedMissedFilter("all")}
+                      className={`text-xs font-bold px-3 py-1.5 rounded-xl border transition-all cursor-pointer ${
+                        completedMissedFilter === "all"
+                          ? "bg-slate-900 text-white border-slate-900 shadow-xs"
+                          : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+                      }`}
+                    >
+                      All ({totalCompletedAndMissed})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCompletedMissedFilter("completed")}
+                      className={`text-xs font-bold px-3 py-1.5 rounded-xl border transition-all cursor-pointer ${
+                        completedMissedFilter === "completed"
+                          ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
+                          : "bg-emerald-50/60 text-emerald-800 border-emerald-200 hover:bg-emerald-100"
+                      }`}
+                    >
+                      Completed ({completedExams.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCompletedMissedFilter("missed")}
+                      className={`text-xs font-bold px-3 py-1.5 rounded-xl border transition-all cursor-pointer ${
+                        completedMissedFilter === "missed"
+                          ? "bg-rose-600 text-white border-rose-600 shadow-xs"
+                          : "bg-rose-50/60 text-rose-800 border-rose-200 hover:bg-rose-100"
+                      }`}
+                    >
+                      Missed ({missedExams.length})
+                    </button>
                   </div>
-                  <h3 className="font-bold text-slate-700 text-sm">No missed examinations!</h3>
-                  <p className="text-slate-400 text-xs max-w-xs mt-1">
-                    Great job keeping up with your schedule! You have not missed any examinations.
-                  </p>
+
+                  {/* Filtered Empty States */}
+                  {completedMissedFilter === "completed" && completedExams.length === 0 && (
+                    <div className="flex flex-col items-center justify-center py-12 px-4 text-center border border-dashed border-slate-100 rounded-2xl">
+                      <Award className="w-6 h-6 text-slate-300 mb-2" />
+                      <h4 className="font-bold text-slate-700 text-sm">No completed exams</h4>
+                      <p className="text-slate-400 text-xs mt-0.5">You haven't completed any exams yet.</p>
+                    </div>
+                  )}
+
+                  {completedMissedFilter === "missed" && missedExams.length === 0 && (
+                    <div className="flex flex-col items-center justify-center py-12 px-4 text-center border border-dashed border-slate-100 rounded-2xl">
+                      <CheckCircle className="w-6 h-6 text-emerald-500 mb-2" />
+                      <h4 className="font-bold text-slate-700 text-sm">No missed exams</h4>
+                      <p className="text-slate-400 text-xs mt-0.5">Great job! You haven't missed any exams.</p>
+                    </div>
+                  )}
+
+                  <div className="space-y-4">
+                    {/* Render Completed & Forced Submissions */}
+                    {(completedMissedFilter === "all" || completedMissedFilter === "completed") &&
+                      completedExams.map((se) => {
+                        const examMaxPoints = se.exam.questionBank.reduce((sum, q) => sum + q.points, 0);
+                        const percentage = examMaxPoints > 0 ? Math.round((se.total_score / examMaxPoints) * 100) : 0;
+                        const isLockout = se.submission_trigger === "Cheating_Lockout";
+                        const isTimeout = se.submission_trigger === "Timeout";
+
+                        return (
+                          <div
+                            key={se.student_exam_id}
+                            className={`border p-5 rounded-2xl flex flex-col sm:flex-row justify-between sm:items-center transition-all gap-4 ${
+                              isLockout
+                                ? "border-rose-200 bg-rose-50/30 hover:border-rose-300"
+                                : isTimeout
+                                ? "border-amber-200 bg-amber-50/20 hover:border-amber-300"
+                                : "border-slate-100 hover:border-emerald-100"
+                            }`}
+                          >
+                            <div className="space-y-1.5 flex-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                {isLockout ? (
+                                  <span className="text-[10px] font-extrabold bg-rose-100 text-rose-800 border border-rose-300 px-2.5 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1">
+                                    <ShieldAlert className="w-3 h-3 text-rose-600" />
+                                    Closed (Test Rules Broken)
+                                  </span>
+                                ) : isTimeout ? (
+                                  <span className="text-[10px] font-extrabold bg-amber-100 text-amber-800 border border-amber-300 px-2.5 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1">
+                                    <Clock className="w-3 h-3 text-amber-600" />
+                                    Time Ran Out (Auto-Submitted)
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300 px-2.5 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1">
+                                    <CheckCircle className="w-3 h-3 text-emerald-600" />
+                                    Completed
+                                  </span>
+                                )}
+                                {se.violations_count && se.violations_count > 0 ? (
+                                  <span className="text-[10px] font-semibold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-100">
+                                    Penalty applied for switching screens
+                                  </span>
+                                ) : null}
+                              </div>
+                              <h4 className="font-bold text-slate-800 text-base">{se.exam.title}</h4>
+                              <p className="text-xs text-slate-400">
+                                {se.exam.course ? `${se.exam.course.course_title} (${se.exam.course.course_code}) • ` : ""}
+                                Submitted: {new Date(se.submitted_at || se.started_at).toLocaleDateString()} at {new Date(se.submitted_at || se.started_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </p>
+                              {isLockout && (
+                                <p className="text-[11px] text-rose-700 font-medium">
+                                  Your exam was submitted automatically because test rules were broken (like switching tabs or leaving full screen).
+                                </p>
+                              )}
+                              {isTimeout && (
+                                <p className="text-[11px] text-amber-700 font-medium">
+                                  Your exam was submitted automatically because your exam time ran out.
+                                </p>
+                              )}
+                            </div>
+                            <div className="self-start sm:self-auto shrink-0">
+                              <span className={`inline-flex items-center text-sm font-black px-3.5 py-1.5 rounded-full border ${
+                                isLockout 
+                                  ? "bg-rose-100 text-rose-800 border-rose-200"
+                                  : isTimeout
+                                  ? "bg-amber-100 text-amber-800 border-amber-200"
+                                  : "bg-emerald-50 text-emerald-700 border-emerald-100"
+                              }`}>
+                                Score: {se.total_score} / {examMaxPoints} ({percentage}%)
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+
+                    {/* Render Missed Exams */}
+                    {(completedMissedFilter === "all" || completedMissedFilter === "missed") &&
+                      missedExams.map((exam) => (
+                        <div
+                          key={exam.target?.target_id ?? exam.exam_id}
+                          className="border border-slate-200/80 p-5 rounded-2xl space-y-2 bg-slate-50/60 opacity-90 hover:opacity-100 transition-all"
+                        >
+                          <div className="flex justify-between items-start gap-2 flex-wrap">
+                            <div>
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="text-[10px] font-extrabold bg-rose-100 text-rose-700 px-2.5 py-0.5 rounded-full uppercase tracking-wider border border-rose-200 shadow-xs flex items-center gap-1">
+                                  <ShieldAlert className="w-3 h-3" />
+                                  Missed Exam
+                                </span>
+                              </div>
+                              <h4 className="font-bold text-slate-800 text-base">{exam.title}</h4>
+                            </div>
+                          </div>
+                          <p className="text-xs text-slate-500">
+                            {exam.course?.course_title || "Course"} {exam.course?.course_code ? `(${exam.course.course_code})` : ""}
+                          </p>
+                          <div className="text-xs text-slate-500 flex items-center gap-2 pt-1 border-t border-slate-200/50">
+                            <Calendar className="w-4 h-4 text-slate-400" />
+                            <span>
+                              Scheduled: {exam.target ? new Date(exam.target.scheduled_date).toLocaleDateString([], { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' }) : "N/A"}{" "}
+                              {exam.target ? `@ ${new Date(exam.target.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })} - ${new Date(exam.target.end_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })}` : ""}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-rose-600 font-medium pt-0.5">
+                            The scheduled time for this exam has passed.
+                          </p>
+                        </div>
+                      ))}
+                  </div>
                 </div>
               )}
             </div>

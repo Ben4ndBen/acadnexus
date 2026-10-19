@@ -6,9 +6,10 @@ import { Sparkles, Shield, GraduationCap, Award, BookOpen } from "lucide-react";
 interface DepartmentBadgeProps {
   department?: string | null;
   programCode?: string | null;
-  size?: "sm" | "md" | "lg";
+  size?: "xs" | "sm" | "md" | "lg";
   showPulse?: boolean;
   showThemeLabel?: boolean;
+  showPortalSuffix?: boolean;
   className?: string;
 }
 
@@ -18,12 +19,14 @@ export function DepartmentBadge({
   size = "md",
   showPulse = false,
   showThemeLabel = false,
+  showPortalSuffix = true,
   className = "",
 }: DepartmentBadgeProps) {
   const theme = getDepartmentTheme(department || programCode);
   const { colors } = theme;
 
   const sizeClasses = {
+    xs: "px-2 py-0.5 text-[10px] font-bold gap-1",
     sm: "px-2.5 py-1 text-xs gap-1.5",
     md: "px-3.5 py-1.5 text-sm gap-2",
     lg: "px-4 py-2 text-base gap-2.5 font-bold",
@@ -31,24 +34,24 @@ export function DepartmentBadge({
 
   return (
     <span
-      className={`inline-flex items-center rounded-full border shadow-xs font-semibold ${colors.badgeBg} ${colors.badgeText} ${colors.badgeBorder} ${sizeClasses[size]} ${className}`}
+      className={`inline-flex items-center rounded-full border shadow-2xs font-semibold whitespace-nowrap shrink-0 ${colors.badgeBg} ${colors.badgeText} ${colors.badgeBorder} ${sizeClasses[size]} ${className}`}
       title={theme.fullName}
     >
       {showPulse && (
-        <span className="relative flex h-2 w-2">
+        <span className="relative flex h-1.5 w-1.5">
           <span
             className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75"
             style={{ backgroundColor: colors.primary }}
           />
           <span
-            className="relative inline-flex rounded-full h-2 w-2"
+            className="relative inline-flex rounded-full h-1.5 w-1.5"
             style={{ backgroundColor: colors.primary }}
           />
         </span>
       )}
-      <span>{theme.shortName} Portal</span>
+      <span>{theme.shortName}{showPortalSuffix ? " Portal" : ""}</span>
       {showThemeLabel && (
-        <span className="opacity-75 text-[10px] uppercase tracking-wider font-semibold border-l pl-2 border-current">
+        <span className="opacity-75 text-[10px] uppercase tracking-wider font-semibold border-l pl-1.5 border-current">
           {theme.themeLabel}
         </span>
       )}
