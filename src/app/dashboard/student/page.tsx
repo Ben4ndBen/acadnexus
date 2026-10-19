@@ -11,6 +11,7 @@ import { getCachedStudentUser, getActiveAcademicPeriodCached } from "@/lib/cache
 import { getExpectedYearAndSemForCourse } from "@/lib/bsitCurriculum";
 import { autoArchiveCompletedExams } from "@/app/actions/faculty";
 import { submitStudentExam } from "@/app/actions/student";
+import { parseExamResultSettings } from "@/lib/examResultSettings";
 
 export const dynamic = "force-dynamic";
 
@@ -93,6 +94,8 @@ export default async function StudentDashboard() {
         exam: {
           include: {
             course: true,
+            examTargets: true,
+            tableOfSpecifications: true,
             questionBank: {
               select: {
                 points: true,
@@ -398,11 +401,22 @@ export default async function StudentDashboard() {
     }
   });
 
-  const serializedCompletedExams = actualCompletedExams.map((se) => ({
-    ...se,
-    submitted_at: se.submitted_at ? se.submitted_at.toISOString() : null,
-    started_at: se.started_at.toISOString(),
-  }));
+  const serializedCompletedExams = actualCompletedExams.map((se) => {
+    const visibility = parseExamResultSettings({
+      tos_file_path: se.exam.tos_file_path,
+      tableOfSpecifications: (se.exam as any).tableOfSpecifications,
+      examTargets: (se.exam as any).examTargets,
+      current_status: se.exam.current_status,
+    });
+    return {
+      ...se,
+      submitted_at: se.submitted_at ? se.submitted_at.toISOString() : null,
+      started_at: se.started_at.toISOString(),
+      can_show_results: visibility.canShowResults,
+      result_status_label: visibility.statusLabel,
+      result_explanation: visibility.explanation,
+    };
+  });
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans">

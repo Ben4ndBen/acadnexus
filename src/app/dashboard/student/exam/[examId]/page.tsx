@@ -152,14 +152,26 @@ export default async function ExamPage({ params }: PageProps) {
                   {result.submittedAt ? new Date(result.submittedAt).toLocaleString() : "N/A"}
                 </span>
               </div>
-              {result.totalScore !== undefined && (
+              {(result as any).canShowResults === false ? (
+                <div className="pt-2 border-t border-slate-200/50 space-y-1">
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-400 font-semibold uppercase">Results</span>
+                    <span className="text-amber-800 font-bold text-xs bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-full">
+                      {(result as any).resultStatusLabel || "Results Pending Review"}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 pt-1">
+                    {(result as any).resultExplanation || "Initial scores are configured to remain hidden until reviewed and approved by your instructor."}
+                  </p>
+                </div>
+              ) : result.totalScore !== undefined ? (
                 <div className="flex justify-between items-center pt-1">
                   <span className="text-slate-400 font-semibold uppercase">Recorded Score</span>
                   <span className="text-emerald-700 font-black text-sm">
                     {result.totalScore} {(result as any).maxPoints ? `/ ${(result as any).maxPoints} pts` : "pts"}
                   </span>
                 </div>
-              )}
+              ) : null}
             </div>
 
             <div className="pt-2 border-t border-slate-100">

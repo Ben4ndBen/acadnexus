@@ -3,6 +3,7 @@
 import db from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { SubmissionType } from "@prisma/client";
+import { parseExamResultSettings } from "@/lib/examResultSettings";
 
 // Helper for deterministic shuffling using student_exam_id as seed
 function shuffleWithSeed<T>(array: T[], seed: number): T[] {
@@ -45,6 +46,11 @@ export async function startStudentExam(examId: number, studentId: number) {
         exam: {
           include: {
             course: true,
+            examTargets: true,
+            tableOfSpecifications: true,
+            questionBank: {
+              select: { points: true },
+            },
           },
         },
       },
@@ -56,6 +62,10 @@ export async function startStudentExam(examId: number, studentId: number) {
       include: {
         course: true,
         examTargets: true,
+        tableOfSpecifications: true,
+        questionBank: {
+          select: { points: true },
+        },
       },
     });
 
@@ -135,15 +145,28 @@ export async function startStudentExam(examId: number, studentId: number) {
     let isResumedAttempt = false;
 
     if (studentExam) {
-      // If exam already completed, return completed status
+      // If exam already completed, return completed status respecting exam result visibility settings
       if (studentExam.submitted_at) {
+        const resultVisibility = parseExamResultSettings({
+          tos_file_path: exam.tos_file_path,
+          tableOfSpecifications: exam.tableOfSpecifications,
+          examTargets: exam.examTargets,
+          current_status: exam.current_status,
+        });
+
+        const maxPoints = exam.questionBank ? exam.questionBank.reduce((sum: number, q: any) => sum + (q.points || 0), 0) : 0;
+
         return {
           isCompleted: true,
-          totalScore: studentExam.total_score,
+          totalScore: resultVisibility.canShowResults ? studentExam.total_score : undefined,
+          canShowResults: resultVisibility.canShowResults,
+          resultReleaseMode: resultVisibility.releaseMode,
+          resultStatusLabel: resultVisibility.statusLabel,
+          resultExplanation: resultVisibility.explanation,
           submittedAt: studentExam.submitted_at,
           trigger: studentExam.submission_trigger,
           violationsCount: studentExam.violations_count,
-          maxPoints: exam.questionBank.reduce((sum: number, q: any) => sum + q.points, 0),
+          maxPoints,
         };
       }
 
@@ -169,10 +192,14 @@ export async function startStudentExam(examId: number, studentId: number) {
         }
         return {
           isCompleted: true,
-          totalScore: submitResult.totalScore,
+          totalScore: submitResult.canShowResults ? submitResult.totalScore : undefined,
+          canShowResults: submitResult.canShowResults,
+          resultReleaseMode: submitResult.resultReleaseMode,
+          resultStatusLabel: submitResult.resultStatusLabel,
+          resultExplanation: submitResult.resultExplanation,
           submittedAt: new Date(),
           trigger: "Timeout" as SubmissionType,
-          maxPoints: exam.questionBank.reduce((sum: number, q: any) => sum + q.points, 0),
+          maxPoints: submitResult.maxPoints,
         };
       }
     } else {
@@ -310,10 +337,15 @@ export type SubmitExamResult =
       totalScore: number;
       rawScore: number;
       penaltyPoints: number;
+      scorePenaltyPoints: number;
       violationsCount: number;
       maxPoints: number;
       trigger: SubmissionType;
       submittedAt: string;
+      canShowResults: boolean;
+      resultReleaseMode: string;
+      resultStatusLabel: string;
+      resultExplanation: string;
       error?: undefined;
     }
   | {
@@ -322,10 +354,15 @@ export type SubmitExamResult =
       totalScore?: undefined;
       rawScore?: undefined;
       penaltyPoints?: undefined;
+      scorePenaltyPoints?: undefined;
       violationsCount?: undefined;
       maxPoints?: undefined;
       trigger?: undefined;
       submittedAt?: undefined;
+      canShowResults?: undefined;
+      resultReleaseMode?: undefined;
+      resultStatusLabel?: undefined;
+      resultExplanation?: undefined;
     };
 
 export async function submitStudentExam(
@@ -340,6 +377,8 @@ export async function submitStudentExam(
         exam: {
           include: {
             questionBank: true,
+            tableOfSpecifications: true,
+            examTargets: true,
           },
         },
       },
@@ -368,7 +407,8 @@ export async function submitStudentExam(
     const answersMap = new Map(studentAnswers.map((ans) => [ans.question_id, ans]));
     let totalScore = 0;
     const violationsCount = studentExam.violations_count ?? 0;
-    const scorePenaltyPoints = exam.score_penalty_points ?? 2;
+    // Follow the configured penalty dynamically: if 0, deduct 0; if 2, deduct 2; if any other value, follow that configuration
+    const scorePenaltyPoints = typeof exam.score_penalty_points === "number" ? exam.score_penalty_points : 2;
     const totalPenalty = violationsCount * scorePenaltyPoints;
     let penalizedScore = 0;
 
@@ -545,16 +585,29 @@ export async function submitStudentExam(
       console.error("Auto-archive check error on submit:", archiveErr);
     }
 
+    // 5. Evaluate examination result visibility settings
+    const resultVisibility = parseExamResultSettings({
+      tos_file_path: exam.tos_file_path,
+      tableOfSpecifications: exam.tableOfSpecifications,
+      examTargets: exam.examTargets,
+      current_status: exam.current_status,
+    });
+
     revalidatePath("/dashboard/student");
     return { 
       success: true, 
       totalScore: penalizedScore,
       rawScore: totalScore,
       penaltyPoints: totalPenalty,
+      scorePenaltyPoints: scorePenaltyPoints,
       violationsCount: violationsCount,
-      maxPoints: exam.questionBank.reduce((sum: number, q: any) => sum + q.points, 0),
+      maxPoints: exam.questionBank.reduce((sum: number, q: any) => sum + (q.points || 0), 0),
       trigger: trigger,
       submittedAt: new Date().toISOString(),
+      canShowResults: resultVisibility.canShowResults,
+      resultReleaseMode: resultVisibility.releaseMode,
+      resultStatusLabel: resultVisibility.statusLabel,
+      resultExplanation: resultVisibility.explanation,
     };
   } catch (err: any) {
     console.error("Error submitting exam:", err);
@@ -601,7 +654,8 @@ export async function logStudentWarning(
 
     if (studentExam) {
       const exam = studentExam.exam;
-      const timePenalty = exam.time_penalty_seconds ?? 60;
+      // Follow the configured time penalty dynamically: if 0, deduct 0s; if >0, deduct configured seconds
+      const timePenalty = typeof exam.time_penalty_seconds === "number" ? exam.time_penalty_seconds : 60;
       
       // Calculate new remaining seconds
       const currentRemaining = studentExam.remaining_seconds ?? (exam.time_limit_minutes * 60);

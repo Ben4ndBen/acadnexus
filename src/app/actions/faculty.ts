@@ -524,19 +524,23 @@ export async function saveExamConfig(formData: FormData) {
     if (tosDataJson && tosDataJson.trim() !== "") {
       try {
         const parsedTos = JSON.parse(tosDataJson);
+        const outcomesToSave = {
+          ...(parsedTos.learningOutcomes || {}),
+          __resultSettings: parsedTos.resultSettings,
+        };
         await db.tableOfSpecifications.upsert({
           where: { exam_id: examId },
           update: {
             target_total_items: Number(parsedTos.targetTotalItems) || 50,
             topic_plans_json: JSON.stringify(parsedTos.topicPlans || []),
-            learning_outcomes_json: JSON.stringify(parsedTos.learningOutcomes || {}),
+            learning_outcomes_json: JSON.stringify(outcomesToSave),
             tos_file_url: tosFilePath?.startsWith("/uploads/") ? tosFilePath : null,
           },
           create: {
             exam_id: examId,
             target_total_items: Number(parsedTos.targetTotalItems) || 50,
             topic_plans_json: JSON.stringify(parsedTos.topicPlans || []),
-            learning_outcomes_json: JSON.stringify(parsedTos.learningOutcomes || {}),
+            learning_outcomes_json: JSON.stringify(outcomesToSave),
             tos_file_url: tosFilePath?.startsWith("/uploads/") ? tosFilePath : null,
           },
         });
@@ -3010,6 +3014,91 @@ export async function assignCoursesToFacultyAction(facultyId: number, courseIds:
     return { error: err.message || "Failed to update course assignments." };
   }
 }
+
+export async function updateExamResultReleaseMode(
+  examId: number,
+  facultyId: number,
+  releaseMode: "immediate" | "hidden_until_approved" | "schedule_end"
+) {
+  try {
+    const exam = await db.examination.findUnique({
+      where: { exam_id: examId },
+      include: { tableOfSpecifications: true },
+    });
+
+    if (!exam) {
+      return { error: "Exam not found." };
+    }
+
+    if (exam.faculty_id !== facultyId) {
+      const facultyUser = await db.faculty.findUnique({
+        where: { faculty_id: facultyId },
+        include: { user: true },
+      });
+      const allowedRoles = ["Department_Chair", "Program_Chair", "Dean", "Director_of_Instruction", "Superadmin"];
+      if (!allowedRoles.includes(facultyUser?.user?.role || "")) {
+        return { error: "Unauthorized operation." };
+      }
+    }
+
+    let updatedTosFilePath = exam.tos_file_path;
+    if (exam.tos_file_path && exam.tos_file_path.trim().startsWith("{")) {
+      try {
+        const parsed = JSON.parse(exam.tos_file_path);
+        parsed.resultSettings = {
+          releaseMode,
+          showResultsImmediately: releaseMode === "immediate",
+        };
+        updatedTosFilePath = JSON.stringify(parsed);
+      } catch {}
+    } else {
+      updatedTosFilePath = JSON.stringify({
+        targetTotalItems: 50,
+        topicPlans: [],
+        learningOutcomes: {},
+        resultSettings: {
+          releaseMode,
+          showResultsImmediately: releaseMode === "immediate",
+        },
+      });
+    }
+
+    await db.examination.update({
+      where: { exam_id: examId },
+      data: { tos_file_path: updatedTosFilePath },
+    });
+
+    // Also sync to tableOfSpecifications if present
+    if (exam.tableOfSpecifications) {
+      try {
+        let existingOutcomes: Record<string, any> = {};
+        if (exam.tableOfSpecifications.learning_outcomes_json) {
+          existingOutcomes = JSON.parse(exam.tableOfSpecifications.learning_outcomes_json);
+        }
+        existingOutcomes.__resultSettings = {
+          releaseMode,
+          showResultsImmediately: releaseMode === "immediate",
+        };
+        await db.tableOfSpecifications.update({
+          where: { exam_id: examId },
+          data: {
+            learning_outcomes_json: JSON.stringify(existingOutcomes),
+          },
+        });
+      } catch (tosErr) {
+        console.error("Error updating tableOfSpecifications result settings:", tosErr);
+      }
+    }
+
+    revalidatePath("/dashboard/faculty");
+    revalidatePath("/dashboard/student");
+    return { success: true };
+  } catch (err: any) {
+    console.error("Error updating exam result release mode:", err);
+    return { error: err.message || "Failed to update exam result settings." };
+  }
+}
+
 
 
 

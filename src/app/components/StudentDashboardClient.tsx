@@ -59,6 +59,9 @@ interface CompletedExam {
   started_at: string;
   submission_trigger?: string;
   violations_count?: number;
+  can_show_results?: boolean;
+  result_status_label?: string;
+  result_explanation?: string;
   exam: {
     title: string;
     course?: Course | null;
@@ -97,7 +100,7 @@ interface StudentDashboardClientProps {
   activeSemester?: number;
 }
 
-type TabType = "upcoming" | "active" | "completed_missed";
+type TabType = "upcoming" | "active" | "completed" | "missed";
 
 export function StudentDashboardClient({
   student,
@@ -129,8 +132,6 @@ export function StudentDashboardClient({
     if (upcomingExams && upcomingExams.length > 0) return "upcoming";
     return "upcoming";
   });
-
-  const [completedMissedFilter, setCompletedMissedFilter] = useState<"all" | "completed" | "missed">("all");
 
   // Password Update Modal State
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(!!requirePasswordUpdate);
@@ -185,8 +186,6 @@ export function StudentDashboardClient({
     });
   }, [enrolledCourses, student, activeSemester]);
 
-  const totalCompletedAndMissed = completedExams.length + missedExams.length;
-
   const tabs = [
     {
       id: "upcoming" as TabType,
@@ -211,15 +210,26 @@ export function StudentDashboardClient({
       pingColor: "bg-rose-400",
     },
     {
-      id: "completed_missed" as TabType,
-      label: "Completed / Missed Exams",
-      count: totalCompletedAndMissed,
+      id: "completed" as TabType,
+      label: "Completed Exams",
+      count: completedExams.length,
       icon: Award,
-      badgeColor: totalCompletedAndMissed > 0 ? "bg-emerald-100 text-emerald-700 border-emerald-200" : "bg-slate-100 text-slate-500 border-slate-200",
+      badgeColor: completedExams.length > 0 ? "bg-emerald-100 text-emerald-700 border-emerald-200" : "bg-slate-100 text-slate-500 border-slate-200",
       activeColor: "bg-emerald-50 border-emerald-500 text-emerald-700",
       pulse: false,
       dotColor: "bg-emerald-500",
       pingColor: "bg-emerald-400",
+    },
+    {
+      id: "missed" as TabType,
+      label: "Missed Exams",
+      count: missedExams.length,
+      icon: AlertCircle,
+      badgeColor: missedExams.length > 0 ? "bg-rose-100 text-rose-700 border-rose-200" : "bg-slate-100 text-slate-500 border-slate-200",
+      activeColor: "bg-rose-50 border-rose-500 text-rose-700",
+      pulse: false,
+      dotColor: "bg-rose-500",
+      pingColor: "bg-rose-400",
     },
   ];
 
@@ -412,10 +422,7 @@ export function StudentDashboardClient({
               {missedExams.length > 0 && (
                 <button
                   type="button"
-                  onClick={() => {
-                    setActiveTab("completed_missed");
-                    setCompletedMissedFilter("missed");
-                  }}
+                  onClick={() => setActiveTab("missed")}
                   className="bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 font-bold text-[11px] px-3 py-1.5 rounded-xl transition-all cursor-pointer"
                 >
                   View Missed ({missedExams.length})
@@ -641,28 +648,29 @@ export function StudentDashboardClient({
             </div>
           )}
 
-          {activeTab === "completed_missed" && (
+          {activeTab === "completed" && (
             <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-6 h-full min-h-[300px]">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-3 gap-3">
                 <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
                   <Award className="w-5 h-5 text-emerald-600" />
-                  Completed / Missed Exams
+                  Completed Exams
                 </h2>
                 {completedExams.length > 0 && (
                   <button
                     onClick={() => {
                       const rows = completedExams.map((se) => {
                         const examMaxPoints = se.exam.questionBank.reduce((sum, q) => sum + q.points, 0);
-                        const percentage = examMaxPoints > 0 ? Math.round((se.total_score / examMaxPoints) * 100) : 0;
+                        const isResultsHidden = se.can_show_results === false;
+                        const percentage = isResultsHidden ? "Pending" : (examMaxPoints > 0 ? `${Math.round((se.total_score / examMaxPoints) * 100)}%` : "0%");
                         let statusText = "Submitted";
                         if (se.submission_trigger === "Timeout") statusText = "Auto-Submitted (Time Ran Out)";
                         else if (se.submission_trigger === "Cheating_Lockout") statusText = "Closed (Rules Broken)";
                         return {
                           "Exam Title": se.exam.title,
                           "Status": statusText,
-                          "Score (pts)": se.total_score,
+                          "Score (pts)": isResultsHidden ? (se.result_status_label || "Results Pending") : se.total_score,
                           "Max Score (pts)": examMaxPoints,
-                          "Percentage Grade": `${percentage}%`,
+                          "Percentage Grade": percentage,
                           "Date Submitted": new Date(se.submitted_at || se.started_at).toLocaleString(),
                         };
                       });
@@ -680,181 +688,153 @@ export function StudentDashboardClient({
                 )}
               </div>
 
-              {totalCompletedAndMissed === 0 ? (
+              {completedExams.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-16 px-4 text-center border border-dashed border-slate-100 rounded-2xl h-full">
                   <div className="bg-slate-50 p-3 rounded-full text-slate-400 mb-3">
                     <Award className="w-6 h-6" />
                   </div>
-                  <h3 className="font-bold text-slate-700 text-sm">No completed or missed exams</h3>
+                  <h3 className="font-bold text-slate-700 text-sm">No completed exams</h3>
                   <p className="text-slate-400 text-xs max-w-xs mt-1">
-                    You haven't completed or missed any exams yet.
+                    You haven't completed any exams yet.
                   </p>
                 </div>
               ) : (
-                <div className="space-y-5">
-                  {/* Category Filter Chips */}
-                  <div className="flex items-center gap-2 border-b border-slate-100 pb-3 flex-wrap">
-                    <button
-                      type="button"
-                      onClick={() => setCompletedMissedFilter("all")}
-                      className={`text-xs font-bold px-3 py-1.5 rounded-xl border transition-all cursor-pointer ${
-                        completedMissedFilter === "all"
-                          ? "bg-slate-900 text-white border-slate-900 shadow-xs"
-                          : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
-                      }`}
-                    >
-                      All ({totalCompletedAndMissed})
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setCompletedMissedFilter("completed")}
-                      className={`text-xs font-bold px-3 py-1.5 rounded-xl border transition-all cursor-pointer ${
-                        completedMissedFilter === "completed"
-                          ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
-                          : "bg-emerald-50/60 text-emerald-800 border-emerald-200 hover:bg-emerald-100"
-                      }`}
-                    >
-                      Completed ({completedExams.length})
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setCompletedMissedFilter("missed")}
-                      className={`text-xs font-bold px-3 py-1.5 rounded-xl border transition-all cursor-pointer ${
-                        completedMissedFilter === "missed"
-                          ? "bg-rose-600 text-white border-rose-600 shadow-xs"
-                          : "bg-rose-50/60 text-rose-800 border-rose-200 hover:bg-rose-100"
-                      }`}
-                    >
-                      Missed ({missedExams.length})
-                    </button>
-                  </div>
+                <div className="space-y-4">
+                  {completedExams.map((se) => {
+                    const examMaxPoints = se.exam.questionBank.reduce((sum, q) => sum + q.points, 0);
+                    const percentage = examMaxPoints > 0 ? Math.round((se.total_score / examMaxPoints) * 100) : 0;
+                    const isLockout = se.submission_trigger === "Cheating_Lockout";
+                    const isTimeout = se.submission_trigger === "Timeout";
 
-                  {/* Filtered Empty States */}
-                  {completedMissedFilter === "completed" && completedExams.length === 0 && (
-                    <div className="flex flex-col items-center justify-center py-12 px-4 text-center border border-dashed border-slate-100 rounded-2xl">
-                      <Award className="w-6 h-6 text-slate-300 mb-2" />
-                      <h4 className="font-bold text-slate-700 text-sm">No completed exams</h4>
-                      <p className="text-slate-400 text-xs mt-0.5">You haven't completed any exams yet.</p>
-                    </div>
-                  )}
-
-                  {completedMissedFilter === "missed" && missedExams.length === 0 && (
-                    <div className="flex flex-col items-center justify-center py-12 px-4 text-center border border-dashed border-slate-100 rounded-2xl">
-                      <CheckCircle className="w-6 h-6 text-emerald-500 mb-2" />
-                      <h4 className="font-bold text-slate-700 text-sm">No missed exams</h4>
-                      <p className="text-slate-400 text-xs mt-0.5">Great job! You haven't missed any exams.</p>
-                    </div>
-                  )}
-
-                  <div className="space-y-4">
-                    {/* Render Completed & Forced Submissions */}
-                    {(completedMissedFilter === "all" || completedMissedFilter === "completed") &&
-                      completedExams.map((se) => {
-                        const examMaxPoints = se.exam.questionBank.reduce((sum, q) => sum + q.points, 0);
-                        const percentage = examMaxPoints > 0 ? Math.round((se.total_score / examMaxPoints) * 100) : 0;
-                        const isLockout = se.submission_trigger === "Cheating_Lockout";
-                        const isTimeout = se.submission_trigger === "Timeout";
-
-                        return (
-                          <div
-                            key={se.student_exam_id}
-                            className={`border p-5 rounded-2xl flex flex-col sm:flex-row justify-between sm:items-center transition-all gap-4 ${
-                              isLockout
-                                ? "border-rose-200 bg-rose-50/30 hover:border-rose-300"
-                                : isTimeout
-                                ? "border-amber-200 bg-amber-50/20 hover:border-amber-300"
-                                : "border-slate-100 hover:border-emerald-100"
-                            }`}
-                          >
-                            <div className="space-y-1.5 flex-1">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                {isLockout ? (
-                                  <span className="text-[10px] font-extrabold bg-rose-100 text-rose-800 border border-rose-300 px-2.5 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1">
-                                    <ShieldAlert className="w-3 h-3 text-rose-600" />
-                                    Closed (Test Rules Broken)
-                                  </span>
-                                ) : isTimeout ? (
-                                  <span className="text-[10px] font-extrabold bg-amber-100 text-amber-800 border border-amber-300 px-2.5 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1">
-                                    <Clock className="w-3 h-3 text-amber-600" />
-                                    Time Ran Out (Auto-Submitted)
-                                  </span>
-                                ) : (
-                                  <span className="text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300 px-2.5 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1">
-                                    <CheckCircle className="w-3 h-3 text-emerald-600" />
-                                    Completed
-                                  </span>
-                                )}
-                                {se.violations_count && se.violations_count > 0 ? (
-                                  <span className="text-[10px] font-semibold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-100">
-                                    Penalty applied for switching screens
-                                  </span>
-                                ) : null}
-                              </div>
-                              <h4 className="font-bold text-slate-800 text-base">{se.exam.title}</h4>
-                              <p className="text-xs text-slate-400">
-                                {se.exam.course ? `${se.exam.course.course_title} (${se.exam.course.course_code}) • ` : ""}
-                                Submitted: {new Date(se.submitted_at || se.started_at).toLocaleDateString()} at {new Date(se.submitted_at || se.started_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                              </p>
-                              {isLockout && (
-                                <p className="text-[11px] text-rose-700 font-medium">
-                                  Your exam was submitted automatically because test rules were broken (like switching tabs or leaving full screen).
-                                </p>
-                              )}
-                              {isTimeout && (
-                                <p className="text-[11px] text-amber-700 font-medium">
-                                  Your exam was submitted automatically because your exam time ran out.
-                                </p>
-                              )}
-                            </div>
-                            <div className="self-start sm:self-auto shrink-0">
-                              <span className={`inline-flex items-center text-sm font-black px-3.5 py-1.5 rounded-full border ${
-                                isLockout 
-                                  ? "bg-rose-100 text-rose-800 border-rose-200"
-                                  : isTimeout
-                                  ? "bg-amber-100 text-amber-800 border-amber-200"
-                                  : "bg-emerald-50 text-emerald-700 border-emerald-100"
-                              }`}>
-                                Score: {se.total_score} / {examMaxPoints} ({percentage}%)
+                    return (
+                      <div
+                        key={se.student_exam_id}
+                        className={`border p-5 rounded-2xl flex flex-col sm:flex-row justify-between sm:items-center transition-all gap-4 ${
+                          isLockout
+                            ? "border-rose-200 bg-rose-50/30 hover:border-rose-300"
+                            : isTimeout
+                            ? "border-amber-200 bg-amber-50/20 hover:border-amber-300"
+                            : "border-slate-100 hover:border-emerald-100"
+                        }`}
+                      >
+                        <div className="space-y-1.5 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {isLockout ? (
+                              <span className="text-[10px] font-extrabold bg-rose-100 text-rose-800 border border-rose-300 px-2.5 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1">
+                                <ShieldAlert className="w-3 h-3 text-rose-600" />
+                                Closed (Test Rules Broken)
                               </span>
-                            </div>
+                            ) : isTimeout ? (
+                              <span className="text-[10px] font-extrabold bg-amber-100 text-amber-800 border border-amber-300 px-2.5 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1">
+                                <Clock className="w-3 h-3 text-amber-600" />
+                                Time Ran Out (Auto-Submitted)
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300 px-2.5 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1">
+                                <CheckCircle className="w-3 h-3 text-emerald-600" />
+                                Completed
+                              </span>
+                            )}
+                            {se.violations_count && se.violations_count > 0 ? (
+                              <span className="text-[10px] font-semibold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-100">
+                                Penalty applied for switching screens
+                              </span>
+                            ) : null}
                           </div>
-                        );
-                      })}
-
-                    {/* Render Missed Exams */}
-                    {(completedMissedFilter === "all" || completedMissedFilter === "missed") &&
-                      missedExams.map((exam) => (
-                        <div
-                          key={exam.target?.target_id ?? exam.exam_id}
-                          className="border border-slate-200/80 p-5 rounded-2xl space-y-2 bg-slate-50/60 opacity-90 hover:opacity-100 transition-all"
-                        >
-                          <div className="flex justify-between items-start gap-2 flex-wrap">
-                            <div>
-                              <div className="flex items-center gap-2 mb-1">
-                                <span className="text-[10px] font-extrabold bg-rose-100 text-rose-700 px-2.5 py-0.5 rounded-full uppercase tracking-wider border border-rose-200 shadow-xs flex items-center gap-1">
-                                  <ShieldAlert className="w-3 h-3" />
-                                  Missed Exam
-                                </span>
-                              </div>
-                              <h4 className="font-bold text-slate-800 text-base">{exam.title}</h4>
-                            </div>
-                          </div>
-                          <p className="text-xs text-slate-500">
-                            {exam.course?.course_title || "Course"} {exam.course?.course_code ? `(${exam.course.course_code})` : ""}
+                          <h4 className="font-bold text-slate-800 text-base">{se.exam.title}</h4>
+                          <p className="text-xs text-slate-400">
+                            {se.exam.course ? `${se.exam.course.course_title} (${se.exam.course.course_code}) • ` : ""}
+                            Submitted: {new Date(se.submitted_at || se.started_at).toLocaleDateString()} at {new Date(se.submitted_at || se.started_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                           </p>
-                          <div className="text-xs text-slate-500 flex items-center gap-2 pt-1 border-t border-slate-200/50">
-                            <Calendar className="w-4 h-4 text-slate-400" />
-                            <span>
-                              Scheduled: {exam.target ? new Date(exam.target.scheduled_date).toLocaleDateString([], { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' }) : "N/A"}{" "}
-                              {exam.target ? `@ ${new Date(exam.target.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })} - ${new Date(exam.target.end_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })}` : ""}
+                          {isLockout && (
+                            <p className="text-[11px] text-rose-700 font-medium">
+                              Your exam was submitted automatically because test rules were broken (like switching tabs or leaving full screen).
+                            </p>
+                          )}
+                          {isTimeout && (
+                            <p className="text-[11px] text-amber-700 font-medium">
+                              Your exam was submitted automatically because your exam time ran out.
+                            </p>
+                          )}
+                        </div>
+                        <div className="self-start sm:self-auto shrink-0">
+                          {se.can_show_results === false ? (
+                            <span className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full border bg-amber-50 text-amber-800 border-amber-200">
+                              <Clock className="w-3.5 h-3.5 text-amber-600" />
+                              {se.result_status_label || "Results Pending Review"}
+                            </span>
+                          ) : (
+                            <span className={`inline-flex items-center text-sm font-black px-3.5 py-1.5 rounded-full border ${
+                              isLockout 
+                                ? "bg-rose-100 text-rose-800 border-rose-200"
+                                : isTimeout
+                                ? "bg-amber-100 text-amber-800 border-amber-200"
+                                : "bg-emerald-50 text-emerald-700 border-emerald-100"
+                            }`}>
+                              Score: {se.total_score} / {examMaxPoints} ({percentage}%)
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === "missed" && (
+            <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-6 h-full min-h-[300px]">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-3 gap-3">
+                <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                  <AlertCircle className="w-5 h-5 text-rose-600" />
+                  Missed Exams
+                </h2>
+              </div>
+
+              {missedExams.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 px-4 text-center border border-dashed border-slate-100 rounded-2xl h-full">
+                  <div className="bg-emerald-50 p-3 rounded-full text-emerald-600 mb-3">
+                    <CheckCircle className="w-6 h-6" />
+                  </div>
+                  <h3 className="font-bold text-slate-700 text-sm">No missed exams</h3>
+                  <p className="text-slate-400 text-xs max-w-xs mt-1">
+                    Great job! You haven't missed any exams.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {missedExams.map((exam) => (
+                    <div
+                      key={exam.target?.target_id ?? exam.exam_id}
+                      className="border border-slate-200/80 p-5 rounded-2xl space-y-2 bg-slate-50/60 opacity-90 hover:opacity-100 transition-all"
+                    >
+                      <div className="flex justify-between items-start gap-2 flex-wrap">
+                        <div>
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-[10px] font-extrabold bg-rose-100 text-rose-700 px-2.5 py-0.5 rounded-full uppercase tracking-wider border border-rose-200 shadow-xs flex items-center gap-1">
+                              <ShieldAlert className="w-3 h-3" />
+                              Missed Exam
                             </span>
                           </div>
-                          <p className="text-[11px] text-rose-600 font-medium pt-0.5">
-                            The scheduled time for this exam has passed.
-                          </p>
+                          <h4 className="font-bold text-slate-800 text-base">{exam.title}</h4>
                         </div>
-                      ))}
-                  </div>
+                      </div>
+                      <p className="text-xs text-slate-500">
+                        {exam.course?.course_title || "Course"} {exam.course?.course_code ? `(${exam.course.course_code})` : ""}
+                      </p>
+                      <div className="text-xs text-slate-500 flex items-center gap-2 pt-1 border-t border-slate-200/50">
+                        <Calendar className="w-4 h-4 text-slate-400" />
+                        <span>
+                          Scheduled: {exam.target ? new Date(exam.target.scheduled_date).toLocaleDateString([], { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' }) : "N/A"}{" "}
+                          {exam.target ? `@ ${new Date(exam.target.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })} - ${new Date(exam.target.end_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })}` : ""}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-rose-600 font-medium pt-0.5">
+                        The scheduled time for this exam has passed.
+                      </p>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>

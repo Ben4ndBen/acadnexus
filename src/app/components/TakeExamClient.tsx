@@ -62,9 +62,14 @@ export function TakeExamClient({
     totalScore: number;
     rawScore?: number;
     penaltyPoints?: number;
+    scorePenaltyPoints?: number;
     violationsCount?: number;
     maxPoints?: number;
     trigger?: string;
+    canShowResults?: boolean;
+    resultReleaseMode?: string;
+    resultStatusLabel?: string;
+    resultExplanation?: string;
   } | null>(null);
 
   // Answers State: Record<question_id, response>
@@ -481,9 +486,14 @@ export function TakeExamClient({
           totalScore: res.totalScore,
           rawScore: res.rawScore,
           penaltyPoints: res.penaltyPoints,
+          scorePenaltyPoints: res.scorePenaltyPoints,
           violationsCount: res.violationsCount,
           maxPoints: res.maxPoints,
           trigger: "Timeout",
+          canShowResults: res.canShowResults,
+          resultReleaseMode: res.resultReleaseMode,
+          resultStatusLabel: res.resultStatusLabel,
+          resultExplanation: res.resultExplanation,
         });
         localStorage.removeItem(violationsKey);
         localStorage.removeItem(localBackupKey);
@@ -543,9 +553,14 @@ export function TakeExamClient({
           totalScore: res.totalScore,
           rawScore: res.rawScore,
           penaltyPoints: res.penaltyPoints,
+          scorePenaltyPoints: res.scorePenaltyPoints,
           violationsCount: res.violationsCount,
           maxPoints: res.maxPoints,
           trigger: "Manual",
+          canShowResults: res.canShowResults,
+          resultReleaseMode: res.resultReleaseMode,
+          resultStatusLabel: res.resultStatusLabel,
+          resultExplanation: res.resultExplanation,
         });
         localStorage.removeItem(violationsKey);
         localStorage.removeItem(localBackupKey);
@@ -911,12 +926,16 @@ export function TakeExamClient({
     );
   }
 
-  // F. SUCCESS SUBMISSION SCREEN (SHOW SCORES DETAILED)
+  // F. SUCCESS SUBMISSION SCREEN (SHOW INITIAL SCORES OR RESPECT HIDDEN RESULT SETTINGS)
   if (mode === "success") {
     const totalPossible = initialData.questions.reduce((sum, q) => sum + q.points, 0);
     const scorePct = totalPossible > 0 ? Math.round(((finalScore ?? 0) / totalPossible) * 100) : 0;
     const isTimeout = submissionResult?.trigger === "Timeout";
-    const hasPenalty = (submissionResult?.penaltyPoints ?? 0) > 0;
+    const canShowResults = submissionResult?.canShowResults !== false;
+    const penaltyPoints = submissionResult?.penaltyPoints ?? 0;
+    const scorePenaltyRate = submissionResult?.scorePenaltyPoints ?? initialData.scorePenaltyPoints;
+    const violationsCount = submissionResult?.violationsCount ?? 0;
+    const hasPenalty = penaltyPoints > 0;
     const hasEssay = initialData.questions.some((q) => q.question_type === "Essay");
     
     return (
@@ -947,34 +966,73 @@ export function TakeExamClient({
               </span>
             </div>
 
-            {submissionResult?.rawScore !== undefined && hasPenalty && (
-              <div className="flex justify-between border-b border-slate-800 pb-2">
-                <span className="text-slate-400">Initial Score</span>
-                <span className="text-slate-300 font-bold font-mono">
-                  {submissionResult.rawScore} / {totalPossible} pts
-                </span>
+            {!canShowResults ? (
+              // Results configured to remain hidden until a later time or approval
+              <div className="space-y-2.5">
+                <div className="flex justify-between border-b border-slate-800 pb-2">
+                  <span className="text-slate-400">Results Status</span>
+                  <span className="font-bold font-mono text-amber-400">
+                    {submissionResult?.resultStatusLabel || "Results Pending Review"}
+                  </span>
+                </div>
+
+                {violationsCount > 0 && (
+                  <div className="flex justify-between border-b border-slate-800 pb-2 text-slate-400">
+                    <span>Security Warnings</span>
+                    <span className="font-bold font-mono text-slate-300">
+                      {violationsCount} warning{violationsCount !== 1 ? "s" : ""} recorded
+                    </span>
+                  </div>
+                )}
+
+                <div className="pt-1 text-[11px] text-slate-400 leading-relaxed">
+                  🔒 {submissionResult?.resultExplanation || "Scores are configured to remain hidden until reviewed and approved by your instructor."}
+                </div>
               </div>
-            )}
+            ) : (
+              // Results configured to display initial scores immediately
+              <div className="space-y-2.5">
+                {submissionResult?.rawScore !== undefined && hasPenalty && (
+                  <div className="flex justify-between border-b border-slate-800 pb-2">
+                    <span className="text-slate-400">Initial Score</span>
+                    <span className="text-slate-300 font-bold font-mono">
+                      {submissionResult.rawScore} / {totalPossible} pts
+                    </span>
+                  </div>
+                )}
 
-            {hasPenalty && (
-              <div className="flex justify-between border-b border-slate-800 pb-2 text-rose-400">
-                <span>Security Penalties</span>
-                <span className="font-bold font-mono">
-                  -{submissionResult?.penaltyPoints} pts ({submissionResult?.violationsCount} warning{submissionResult?.violationsCount !== 1 ? "s" : ""})
-                </span>
-              </div>
-            )}
+                {hasPenalty && (
+                  <div className="flex justify-between border-b border-slate-800 pb-2 text-rose-400">
+                    <span>Security Penalties</span>
+                    <span className="font-bold font-mono">
+                      -{penaltyPoints} pts ({violationsCount} warning{violationsCount !== 1 ? "s" : ""} × {scorePenaltyRate} pts)
+                    </span>
+                  </div>
+                )}
 
-            <div className="flex justify-between items-center pt-0.5">
-              <span className="text-slate-400 font-semibold">Final Score</span>
-              <span className="text-emerald-400 font-black text-base font-mono">
-                {finalScore} / {totalPossible} pts ({scorePct}%)
-              </span>
-            </div>
+                {violationsCount > 0 && !hasPenalty && (
+                  <div className="flex justify-between border-b border-slate-800 pb-2 text-slate-400">
+                    <span>Security Warnings</span>
+                    <span className="font-bold font-mono text-slate-300">
+                      {violationsCount} warning{violationsCount !== 1 ? "s" : ""} (0 pts deducted — time penalty only)
+                    </span>
+                  </div>
+                )}
 
-            {hasEssay && (
-              <div className="pt-2 border-t border-slate-800 text-[11px] text-slate-400 leading-relaxed">
-                ℹ️ Objective questions were scored automatically. Any essay responses will be reviewed and graded by your instructor.
+                <div className="flex justify-between items-center pt-0.5">
+                  <span className="text-slate-400 font-semibold">
+                    {hasEssay ? "Initial Objective Score" : "Initial Score"}
+                  </span>
+                  <span className="text-emerald-400 font-black text-base font-mono">
+                    {finalScore} / {totalPossible} pts ({scorePct}%)
+                  </span>
+                </div>
+
+                {hasEssay && (
+                  <div className="pt-2 border-t border-slate-800 text-[11px] text-slate-400 leading-relaxed">
+                    ℹ️ Objective questions were scored automatically. Any essay responses will be reviewed and graded by your instructor.
+                  </div>
+                )}
               </div>
             )}
           </div>
