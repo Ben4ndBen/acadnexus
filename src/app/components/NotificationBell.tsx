@@ -17,7 +17,9 @@ import {
   GraduationCap, 
   FileCheck, 
   AlertTriangle, 
-  FileText 
+  FileText,
+  Award,
+  Eye
 } from "lucide-react";
 
 interface Notification {
@@ -127,6 +129,28 @@ export function NotificationBell({ userId }: NotificationBellProps) {
     await markAllNotificationsReadAction(userId);
   };
 
+  const handleNotificationClick = async (notif: Notification) => {
+    // Optimistic mark read
+    if (!notif.is_read) {
+      setNotifications((prev) =>
+        prev.map((n) => (n.notification_id === notif.notification_id ? { ...n, is_read: true } : n))
+      );
+      markNotificationReadAction(notif.notification_id).catch(console.error);
+    }
+
+    // Check if notification contains an exam reference
+    const examMatch = notif.message ? notif.message.match(/\[ref:exam:(\d+)\]/) : null;
+    if (examMatch && examMatch[1]) {
+      const studentExamId = parseInt(examMatch[1], 10);
+      window.dispatchEvent(
+        new CustomEvent("acadnexus:open-exam-result", {
+          detail: { studentExamId },
+        })
+      );
+      setIsOpen(false);
+    }
+  };
+
   const unreadCount = notifications.filter((n) => !n.is_read).length;
 
   // Helper to get relative time
@@ -148,6 +172,13 @@ export function NotificationBell({ userId }: NotificationBellProps) {
   // Helper to pick notification icon based on title
   const getNotificationIcon = (title: string) => {
     const t = title.toLowerCase();
+    if (t.includes("score updated") || t.includes("grade") || t.includes("result")) {
+      return (
+        <div className="p-2 bg-emerald-50 text-emerald-700 rounded-xl">
+          <Award className="w-5 h-5" />
+        </div>
+      );
+    }
     if (t.includes("upcoming") || t.includes("exam scheduled") || t.includes("test")) {
       return (
         <div className="p-2 bg-blue-50 text-blue-600 rounded-xl">
@@ -240,52 +271,75 @@ export function NotificationBell({ userId }: NotificationBellProps) {
                 </div>
               </div>
             ) : (
-              notifications.map((notif) => (
-                <div
-                  key={notif.notification_id}
-                  className={`flex gap-3.5 p-4 transition-colors relative hover:bg-slate-50/60 group ${
-                    !notif.is_read ? "bg-amber-50/15" : ""
-                  }`}
-                >
-                  {/* Status Indicator Bar */}
-                  {!notif.is_read && (
-                    <span className="absolute left-0 top-0 bottom-0 w-1 bg-[#7A151A]" />
-                  )}
+              notifications.map((notif) => {
+                const examMatch = notif.message ? notif.message.match(/\[ref:exam:(\d+)\]/) : null;
+                const isExamUpdate = !!examMatch;
+                const cleanMessage = notif.message
+                  ? notif.message
+                      .replace(/\s*\[ref:exam:\d+\]/g, "")
+                      .replace(/\.?\s*Comments:\s*No comments provided\.?/gi, ".")
+                      .replace(/\.?\s*Comments:\s*\{.*$/gi, ".")
+                      .replace(/\.\.+/g, ".")
+                      .trim()
+                  : "";
 
-                  {/* Icon */}
-                  <div className="flex-shrink-0 mt-0.5">
-                    {getNotificationIcon(notif.title)}
-                  </div>
+                return (
+                  <div
+                    key={notif.notification_id}
+                    onClick={() => handleNotificationClick(notif)}
+                    className={`flex gap-3.5 p-4 transition-colors relative hover:bg-slate-50/80 group ${
+                      isExamUpdate ? "cursor-pointer" : ""
+                    } ${!notif.is_read ? "bg-amber-50/15" : ""}`}
+                  >
+                    {/* Status Indicator Bar */}
+                    {!notif.is_read && (
+                      <span className="absolute left-0 top-0 bottom-0 w-1 bg-[#7A151A]" />
+                    )}
 
-                  {/* Text Details */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-2">
-                      <p className={`text-xs font-bold leading-snug ${!notif.is_read ? "text-slate-900" : "text-slate-600"}`}>
-                        {notif.title}
+                    {/* Icon */}
+                    <div className="flex-shrink-0 mt-0.5">
+                      {getNotificationIcon(notif.title)}
+                    </div>
+
+                    {/* Text Details */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className={`text-xs font-bold leading-snug ${!notif.is_read ? "text-slate-900" : "text-slate-600"}`}>
+                          {notif.title}
+                        </p>
+                        <span className="text-[10px] text-slate-400 whitespace-nowrap">
+                          {getRelativeTime(notif.created_at)}
+                        </span>
+                      </div>
+                      <p className={`text-xs mt-1 leading-relaxed ${!notif.is_read ? "text-slate-800" : "text-slate-500"}`}>
+                        {cleanMessage}
                       </p>
-                      <span className="text-[10px] text-slate-400 whitespace-nowrap">
-                        {getRelativeTime(notif.created_at)}
-                      </span>
+                      {isExamUpdate && (
+                        <div className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 group-hover:text-emerald-800 group-hover:underline">
+                          <Eye className="w-3.5 h-3.5" />
+                          <span>Click to view your updated result</span>
+                        </div>
+                      )}
                     </div>
-                    <p className={`text-xs mt-1 leading-relaxed ${!notif.is_read ? "text-slate-800" : "text-slate-500"}`}>
-                      {notif.message ? notif.message.replace(/\.?\s*Comments:\s*No comments provided\.?/gi, ".").replace(/\.?\s*Comments:\s*\{.*$/gi, ".").replace(/\.\.+/g, ".").trim() : ""}
-                    </p>
-                  </div>
 
-                  {/* Quick Actions (Mark as Read) */}
-                  {!notif.is_read && (
-                    <div className="flex-shrink-0 self-center opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button
-                        onClick={(e) => handleMarkAsRead(e, notif.notification_id)}
-                        className="p-1 text-slate-400 hover:text-[#7A151A] bg-slate-100 hover:bg-amber-50 border border-slate-200 hover:border-amber-200 rounded-lg transition-all"
-                        title="Mark as read"
-                      >
-                        <Check className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ))
+                    {/* Quick Actions (Mark as Read) */}
+                    {!notif.is_read && (
+                      <div className="flex-shrink-0 self-center opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleMarkAsRead(e, notif.notification_id);
+                          }}
+                          className="p-1 text-slate-400 hover:text-[#7A151A] bg-slate-100 hover:bg-amber-50 border border-slate-200 hover:border-amber-200 rounded-lg transition-all"
+                          title="Mark as read"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })
             )}
           </div>
         </div>

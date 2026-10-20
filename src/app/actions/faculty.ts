@@ -1074,10 +1074,15 @@ export async function gradeEssayAnswer(
       include: {
         studentExam: {
           include: {
-            exam: true
-          }
-        }
-      }
+            exam: {
+              include: {
+                questionBank: true,
+              },
+            },
+            student: true,
+          },
+        },
+      },
     });
 
     if (!answer) {
@@ -1087,7 +1092,7 @@ export async function gradeEssayAnswer(
     if (answer.studentExam.exam.faculty_id !== facultyId) {
       const facultyUser = await db.faculty.findUnique({
         where: { faculty_id: facultyId },
-        include: { user: true }
+        include: { user: true },
       });
       const allowedRoles = ["Department_Chair", "Program_Chair", "Dean", "Director_of_Instruction", "Superadmin"];
       if (!allowedRoles.includes(facultyUser?.user?.role || "")) {
@@ -1095,51 +1100,114 @@ export async function gradeEssayAnswer(
       }
     }
 
+    const previousPointsAwarded = answer.points_awarded;
+    const previousTotalScore = answer.studentExam.total_score;
+    const examTitle = answer.studentExam.exam.title;
+    const studentUserId = answer.studentExam.student_id;
+    const studentExamId = answer.student_exam_id;
+
+    let updatedPenalizedScore = previousTotalScore;
+    let allGradingComplete = false;
+    let studentNotified = false;
+
     await db.$transaction(async (tx) => {
+      // 1. Update this specific answer
       await tx.studentAnswer.update({
         where: { answer_id: answerId },
         data: {
           is_correct: isCorrect,
           points_awarded: pointsAwarded,
-          last_updated_at: new Date()
-        }
+          last_updated_at: new Date(),
+        },
       });
 
+      // 2. Fetch all answers for this attempt to recalculate total score
       const allAnswers = await tx.studentAnswer.findMany({
-        where: { student_exam_id: answer.student_exam_id },
-        include: { question: true }
+        where: { student_exam_id: studentExamId },
+        include: { question: true },
       });
 
-      const totalScore = allAnswers.reduce((sum, ans) => {
+      const totalRawScore = allAnswers.reduce((sum, ans) => {
         let points = ans.points_awarded;
         if (points === null && ans.is_correct === true) {
-           points = ans.question.points;
+          points = ans.question.points;
         } else if (points === null) {
-           points = 0;
+          points = 0;
         }
         return sum + (points || 0);
       }, 0);
 
-      // Fetch student exam and apply penalty configurations
+      // 3. Apply penalty configurations
       const studentExam = await tx.studentExam.findUnique({
-        where: { student_exam_id: answer.student_exam_id },
-        include: { exam: true }
+        where: { student_exam_id: studentExamId },
+        include: { exam: true },
       });
 
       const violationsCount = studentExam?.violations_count ?? 0;
       const scorePenaltyPoints = studentExam?.exam.score_penalty_points ?? 2;
       const totalPenalty = violationsCount * scorePenaltyPoints;
-      const penalizedScore = Math.max(0, totalScore - totalPenalty);
+      updatedPenalizedScore = Math.max(0, totalRawScore - totalPenalty);
 
+      // 4. Save updated score to the database
       await tx.studentExam.update({
-        where: { student_exam_id: answer.student_exam_id },
-        data: { total_score: penalizedScore }
+        where: { student_exam_id: studentExamId },
+        data: { total_score: updatedPenalizedScore },
       });
 
+      // 5. Determine if all required grading is now complete
+      const essayQuestionIds = new Set(
+        answer.studentExam.exam.questionBank
+          .filter((q) => q.question_type === "Essay")
+          .map((q) => q.question_id)
+      );
+
+      const remainingPendingCount = allAnswers.filter(
+        (a) => essayQuestionIds.has(a.question_id) && a.points_awarded === null
+      ).length;
+
+      allGradingComplete = remainingPendingCount === 0;
+
+      // 6. Notify student if there is a meaningful grading or score change
+      // "Do not notify students repeatedly for the same unchanged score. Send an update when a meaningful grading or score change is saved."
+      const isMeaningfulChange =
+        previousPointsAwarded === null ||
+        previousPointsAwarded !== pointsAwarded ||
+        updatedPenalizedScore !== previousTotalScore;
+
+      if (isMeaningfulChange) {
+        // Guard against duplicate notifications within 5 seconds
+        const recentNotif = await tx.notification.findFirst({
+          where: {
+            user_id: studentUserId,
+            title: `Score Updated: ${examTitle}`,
+            created_at: {
+              gte: new Date(Date.now() - 5000),
+            },
+          },
+        });
+
+        if (!recentNotif) {
+          const notifMessage = allGradingComplete
+            ? `Your score for ${examTitle} has been updated. Your instructor has finished grading the remaining questions. Click to view your updated result. [ref:exam:${studentExamId}]`
+            : `Your score for ${examTitle} has been updated. Some questions are still awaiting grading. Click to view your updated result. [ref:exam:${studentExamId}]`;
+
+          await tx.notification.create({
+            data: {
+              user_id: studentUserId,
+              title: `Score Updated: ${examTitle}`,
+              message: notifMessage,
+              is_read: false,
+            },
+          });
+          studentNotified = true;
+        }
+      }
+
+      // 7. Audit log
       await tx.auditLog.create({
         data: {
           user_id: facultyId,
-          action_performed: `Manually graded essay answer (ID: ${answerId}) with ${pointsAwarded} points.`,
+          action_performed: `Manually graded essay answer (ID: ${answerId}) with ${pointsAwarded} points. Updated total score: ${updatedPenalizedScore} pts (${allGradingComplete ? "Final" : "Provisional"}). ${studentNotified ? "Student notified." : ""}`,
           ip_address: "127.0.0.1",
         },
       });
@@ -1148,7 +1216,13 @@ export async function gradeEssayAnswer(
     revalidatePath("/dashboard/faculty");
     revalidatePath("/dashboard/chair");
     revalidatePath("/dashboard/student");
-    return { success: true };
+
+    return {
+      success: true,
+      updatedTotalScore: updatedPenalizedScore,
+      allGradingComplete,
+      studentNotified,
+    };
   } catch (err: any) {
     console.error("Error grading essay answer:", err);
     return { error: err.message || "Failed to grade essay answer." };

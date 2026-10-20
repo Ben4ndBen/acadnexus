@@ -152,6 +152,37 @@ export function StudentDashboardClient({
   // Selected completed exam attempt for viewing full result details
   const [selectedCompletedExamId, setSelectedCompletedExamId] = useState<number | null>(null);
 
+  // Listen for notification clicks or external triggers to open updated exam results
+  useEffect(() => {
+    const handleOpenExamResult = (event: Event) => {
+      const customEvent = event as CustomEvent<{ studentExamId: number }>;
+      if (customEvent.detail?.studentExamId) {
+        setActiveTab("completed");
+        setSelectedCompletedExamId(customEvent.detail.studentExamId);
+      }
+    };
+
+    window.addEventListener("acadnexus:open-exam-result", handleOpenExamResult);
+    return () => {
+      window.removeEventListener("acadnexus:open-exam-result", handleOpenExamResult);
+    };
+  }, []);
+
+  // Deep-link query param support (e.g. ?viewResult=123)
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const viewResultId = params.get("viewResult");
+      if (viewResultId) {
+        const parsed = parseInt(viewResultId, 10);
+        if (!isNaN(parsed)) {
+          setActiveTab("completed");
+          setSelectedCompletedExamId(parsed);
+        }
+      }
+    }
+  }, []);
+
   const handlePasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setPasswordError(null);
