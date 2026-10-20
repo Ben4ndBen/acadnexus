@@ -22,7 +22,8 @@ import {
   filterCoursesForDepartment, 
   isCourseInDepartmentOrProgram,
   getDepartmentKeyForProgram,
-  resolveDepartmentKey
+  resolveDepartmentKey,
+  determineProgramCodeFromCourseOrExam
 } from "@/lib/courseDepartmentMapping";
 import { getExpectedYearAndSemForCourse } from "@/lib/bsitCurriculum";
 
@@ -1148,10 +1149,20 @@ export function DirectorDashboardClient({
                   <div key={approval.workflow_id} className="py-4 flex flex-col md:flex-row justify-between md:items-center gap-4 first:pt-0 last:pb-0">
                     <div className="space-y-1">
                       <h3 className="text-base font-bold text-slate-800">{approval.exam.title}</h3>
-                      <p className="text-xs text-slate-500 font-medium">
-                        Course: <strong className="text-slate-700">{approval.exam?.course?.course_code || "Course"}</strong> &bull; 
-                        Author: <strong className="text-slate-700">{approval.exam?.faculty?.first_name || ""} {approval.exam?.faculty?.last_name || ""}</strong>
-                      </p>
+                      <div className="text-xs text-slate-500 font-medium flex flex-wrap items-center gap-1.5">
+                        <span>Course: <strong className="text-slate-700">{approval.exam?.course?.course_code || "Course"}</strong></span>
+                        <span>&bull;</span>
+                        <span>Author: <strong className="text-slate-700">{approval.exam?.faculty?.first_name || ""} {approval.exam?.faculty?.last_name || ""}</strong></span>
+                        {(() => {
+                          const pCode = determineProgramCodeFromCourseOrExam(approval.exam);
+                          return pCode ? (
+                            <>
+                              <span>&bull;</span>
+                              <span>Target Program: <strong className="text-emerald-700 font-bold">{pCode}</strong></span>
+                            </>
+                          ) : null;
+                        })()}
+                      </div>
                       <p className="text-[11px] text-emerald-600 font-bold bg-emerald-50 inline-block px-2 py-0.5 rounded-full mt-1 border border-emerald-100">
                         Chair Review: {approval.chair_review_status}
                       </p>
@@ -2874,7 +2885,7 @@ export function DirectorDashboardClient({
                             courseCode={activePreviewApproval.exam.course?.course_code || ""}
                             courseTitle={activePreviewApproval.exam.course?.course_title || activePreviewApproval.exam.title}
                             departmentName={activePreviewApproval.exam.faculty?.department?.department_name || "Batanes State College"}
-                            programCode={activePreviewApproval.exam.course?.course_code || activePreviewApproval.exam.faculty?.department?.department_name}
+                            programCode={determineProgramCodeFromCourseOrExam(activePreviewApproval.exam) || activePreviewApproval.exam.faculty?.department?.department_name}
                             term={activePreviewApproval.exam.term || "Prelim"}
                             semester={activePreviewApproval.exam.semester || "1st Semester"}
                             academicYear={activePreviewApproval.exam.academic_year || "2026-2027"}
@@ -2929,7 +2940,7 @@ export function DirectorDashboardClient({
                           courseCode={activePreviewApproval.exam.course?.course_code || ""}
                           courseTitle={activePreviewApproval.exam.course?.course_title || activePreviewApproval.exam.title}
                           departmentName={activePreviewApproval.exam.faculty?.department?.department_name || "Batanes State College"}
-                          programCode={activePreviewApproval.exam.course?.course_code || activePreviewApproval.exam.faculty?.department?.department_name}
+                          programCode={determineProgramCodeFromCourseOrExam(activePreviewApproval.exam) || activePreviewApproval.exam.faculty?.department?.department_name}
                           term={activePreviewApproval.exam.term || "Prelim"}
                           semester={activePreviewApproval.exam.semester || "1st Semester"}
                           academicYear={activePreviewApproval.exam.academic_year || "2026-2027"}

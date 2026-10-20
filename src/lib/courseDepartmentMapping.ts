@@ -270,3 +270,263 @@ export function filterCoursesForDepartment<T extends { course_code: string; cour
     return true;
   });
 }
+
+import { ALL_CURRICULUMS } from "./bsitCurriculum";
+
+/**
+ * Normalizes program codes (e.g. BSINFOTECH -> BSInfoTech, BSINDTECH -> BSIT)
+ */
+export function normalizeProgramCode(code?: string | null): string {
+  if (!code) return "BSInfoTech";
+  const upper = code.trim().toUpperCase();
+  if (upper === "BSINFOTECH" || upper === "INFOTECH") return "BSInfoTech";
+  if (upper === "BSIT" || upper === "BSINDTECH" || upper === "INDTECH") return "BSIT";
+  if (upper === "BEED") return "BEED";
+  if (upper === "BSED") return "BSED";
+  if (upper === "BSA" || upper === "AGRI") return "BSA";
+  if (upper === "BSHM" || upper === "HM") return "BSHM";
+  if (upper === "BSTM" || upper === "TM") return "BSTM";
+  if (upper === "PEU") return "PEU";
+  return code.trim();
+}
+
+/**
+ * Resolves the official Academic Program Code (e.g. "BSInfoTech", "BSIT", "BSA", "BEED", "BSED", "BSHM", "BSTM")
+ * from an examination, course, student roster, or department context.
+ * Guaranteed to match the Program determined during Exam Creation.
+ */
+export function determineProgramCodeFromCourseOrExam(
+  input?: {
+    course?: { course_code?: string; course_title?: string } | null;
+    course_code?: string;
+    course_title?: string;
+    title?: string;
+    selected_student_ids?: number[] | null;
+    examTargets?: Array<{ program_id?: number; program?: { program_code?: string } | null }> | null;
+    faculty?: any;
+    department_name?: string | null;
+    [key: string]: any;
+  } | null,
+  context?: {
+    students?: Array<{ student_id?: number; program_code?: string; program?: { program_code?: string } }>;
+    studentExams?: Array<any>;
+    facultyDepartment?: string;
+  }
+): string {
+  if (!input) return "BSInfoTech";
+
+  const courseCode = (
+    input.course?.course_code ||
+    input.course_code ||
+    ""
+  ).trim().toUpperCase();
+
+  const courseTitle = (
+    input.course?.course_title ||
+    input.course_title ||
+    input.title ||
+    ""
+  ).trim().toUpperCase();
+
+  // 1. Check students in selected_student_ids or context students
+  const selectedIds = input.selected_student_ids || [];
+  if (Array.isArray(selectedIds) && selectedIds.length > 0 && context) {
+    if (context.students && context.students.length > 0) {
+      const match = context.students.find(s => s.student_id && selectedIds.includes(s.student_id));
+      const pCode = match?.program_code || match?.program?.program_code;
+      if (pCode) return normalizeProgramCode(pCode);
+    }
+    if (context.studentExams && context.studentExams.length > 0) {
+      const match = context.studentExams.find(se => {
+        const sId = se.student_id || se.student?.student_id;
+        return sId && selectedIds.includes(sId);
+      });
+      const pCode = match?.student?.program?.program_code || match?.student?.program_code;
+      if (pCode) return normalizeProgramCode(pCode);
+    }
+  }
+
+  // 2. Explicit course code & title matching (Exact match with Exam Creation Wizard)
+  // BSInfoTech (Bachelor of Science in Information Technology - CITD/ICT)
+  if (
+    courseCode.startsWith("ITC") ||
+    courseCode.startsWith("ITE") ||
+    courseCode.startsWith("ITM") ||
+    courseCode.startsWith("ITD") ||
+    courseCode === "ENT 403" ||
+    courseCode.includes("INFOTECH") ||
+    courseCode === "BSINFOTECH" ||
+    courseTitle.includes("INFORMATION TECHNOLOGY") ||
+    courseTitle.includes("COMPUTING") ||
+    courseTitle.includes("CAPSTONE")
+  ) {
+    return "BSInfoTech";
+  }
+
+  // BSIT (Bachelor of Science in Industrial Technology - CITD/ITD)
+  if (
+    courseCode.startsWith("IND") ||
+    courseCode.startsWith("BIT") ||
+    courseCode === "BSIT" ||
+    courseCode === "BSINDTECH" ||
+    courseTitle.includes("INDUSTRIAL TECHNOLOGY") ||
+    courseTitle.includes("AUTOMOTIVE") ||
+    courseTitle.includes("ELECTRONICS") ||
+    courseTitle.includes("ARCHITECTURE")
+  ) {
+    return "BSIT";
+  }
+
+  // BSA (Bachelor of Science in Agriculture)
+  if (
+    courseCode.startsWith("AGRI") ||
+    courseCode.startsWith("AG EXT") ||
+    courseCode.startsWith("AGB") ||
+    courseCode.startsWith("AME") ||
+    courseCode.startsWith("ANSCI") ||
+    courseCode.startsWith("CROP PROT") ||
+    courseCode.startsWith("CROP SCI") ||
+    courseCode.startsWith("SOIL SCI") ||
+    courseCode.startsWith("THESIS") ||
+    courseCode === "PRACTICUM" ||
+    courseCode.startsWith("SEM ") ||
+    courseCode === "CA" ||
+    courseCode === "BSA" ||
+    courseTitle.includes("AGRICULTURE") ||
+    courseTitle.includes("AGRICULTURAL")
+  ) {
+    return "BSA";
+  }
+
+  // BEED (Bachelor of Elementary Education)
+  if (
+    courseCode.startsWith("BEED") ||
+    courseTitle.includes("ELEMENTARY EDUCATION") ||
+    courseTitle.includes("ELEMENTARY")
+  ) {
+    return "BEED";
+  }
+
+  // BSED (Bachelor of Secondary Education)
+  if (
+    courseCode.startsWith("BSED") ||
+    courseTitle.includes("SECONDARY EDUCATION") ||
+    courseTitle.includes("SECONDARY")
+  ) {
+    return "BSED";
+  }
+
+  // EDUC prefix
+  if (courseCode.startsWith("EDUC") || courseTitle.includes("EDUCATION")) {
+    const isSec =
+      courseTitle.includes("SEC") ||
+      courseTitle.includes("SECONDARY") ||
+      courseTitle.includes("HIGH SCHOOL");
+    return isSec ? "BSED" : "BEED";
+  }
+
+  // BSHM (Hospitality Management)
+  if (
+    courseCode.startsWith("HPC") ||
+    courseCode.startsWith("HMPE") ||
+    courseCode === "PRAC" ||
+    courseCode === "BSHM" ||
+    courseTitle.includes("HOSPITALITY")
+  ) {
+    return "BSHM";
+  }
+
+  // BSTM (Tourism Management)
+  if (
+    courseCode.startsWith("TPC") ||
+    courseCode.startsWith("TPE") ||
+    courseCode.startsWith("ITRM") ||
+    courseCode === "OJT" ||
+    courseCode === "BSTM" ||
+    courseTitle.includes("TOURISM")
+  ) {
+    return "BSTM";
+  }
+
+  // Check official curriculum
+  if (courseCode) {
+    const cleanNoSpaces = courseCode.replace(/\s+/g, "");
+    const curItem = ALL_CURRICULUMS.find(
+      (item) => item.code.replace(/\s+/g, "").toUpperCase() === cleanNoSpaces
+    );
+    if (curItem) {
+      if (curItem.programCode === "BSIT") {
+        if (
+          courseCode.startsWith("ITC") ||
+          courseCode.startsWith("ITE") ||
+          courseCode.startsWith("ITM") ||
+          courseCode.startsWith("ITD") ||
+          courseCode === "ENT 403"
+        ) {
+          return "BSInfoTech";
+        }
+        return "BSIT";
+      }
+      if (curItem.programCode === "BSHM") return "BSHM";
+      if (curItem.programCode === "BSA") return "BSA";
+      if (curItem.programCode === "BSTM") return "BSTM";
+    }
+  }
+
+  // 3. Fallback to department if provided
+  const dept = input.faculty?.department?.department_name || input.department_name || context?.facultyDepartment;
+  if (dept) {
+    const deptKey = resolveDepartmentKey(dept);
+    if (deptKey === "CITD" || deptKey === "ICT") return "BSInfoTech";
+    if (deptKey === "ITD") return "BSIT";
+    if (deptKey === "AGRI") return "BSA";
+    if (deptKey === "TED") return "BEED";
+    if (deptKey === "HTM") return "BSHM";
+  }
+
+  return "BSInfoTech";
+}
+
+/**
+ * Resolves the full AcademicProgram record for an examination matching what was on exam creation.
+ */
+export function resolveTargetProgramForExam(
+  exam: any,
+  programs: Array<{ program_id: number; program_code: string; program_name: string; department_id?: number }>,
+  studentExams?: any[],
+  facultyDepartment?: string
+): { program_id: number; program_code: string; program_name: string } | null {
+  if (!programs || programs.length === 0) return null;
+
+  const targetCode = determineProgramCodeFromCourseOrExam(exam, {
+    studentExams,
+    facultyDepartment
+  });
+
+  const normalizedTargetCode = normalizeProgramCode(targetCode).toUpperCase();
+
+  // 1. Exact match on normalized program code
+  const exactMatch = programs.find(
+    p => normalizeProgramCode(p.program_code).toUpperCase() === normalizedTargetCode
+  );
+  if (exactMatch) return exactMatch;
+
+  // 2. Contains match
+  const containsMatch = programs.find(
+    p => p.program_code.toUpperCase().includes(normalizedTargetCode) ||
+         normalizedTargetCode.includes(p.program_code.toUpperCase())
+  );
+  if (containsMatch) return containsMatch;
+
+  // 3. Fallback to department programs
+  if (facultyDepartment) {
+    const deptProgs = getProgramsForDepartment(facultyDepartment);
+    for (const dp of deptProgs) {
+      const match = programs.find(p => p.program_code.toUpperCase() === dp.code.toUpperCase());
+      if (match) return match;
+    }
+  }
+
+  return programs[0] || null;
+}
+

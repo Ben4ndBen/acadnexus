@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { 
   Activity, Users, ClipboardCheck, CheckCircle, 
@@ -15,12 +15,14 @@ import { getDepartmentTheme } from "@/lib/departmentThemes";
 import { DepartmentBadge } from "@/app/components/DepartmentBadge";
 import { 
   getProgramsForDepartment, 
-  filterCoursesForDepartment 
+  filterCoursesForDepartment,
+  determineProgramCodeFromCourseOrExam
 } from "@/lib/courseDepartmentMapping";
 import { getExpectedYearAndSemForCourse } from "@/lib/bsitCurriculum";
 import { FacultyDashboardClient } from "@/app/components/FacultyDashboardClient";
 import { BSCTableOfSpecificationsView, formatFullExamDate } from "@/app/components/BSCTableOfSpecificationsView";
 import { getProgramHeaderImage } from "@/lib/programHeader";
+import { EditableExamTitle } from "@/app/components/EditableExamTitle";
 
 function toRomanNumeral(num: number): string {
   const romanMap: [number, string][] = [
@@ -204,6 +206,12 @@ export function ChairDashboardClient({
   const [activeTab, setActiveTab] = useState<"overview" | "faculty" | "queue" | "my_teaching">("overview");
   const deptTheme = getDepartmentTheme(departmentName);
 
+  // Approvals list with local optimistic updates for renamed examinations
+  const [approvalsList, setApprovalsList] = useState(pendingApprovals);
+  useEffect(() => {
+    setApprovalsList(pendingApprovals);
+  }, [pendingApprovals]);
+
   // State for Review Queue
   const [isSubmittingReview, setIsSubmittingReview] = useState<number | null>(null);
   const [reviewComments, setReviewComments] = useState<Record<number, string>>({});
@@ -322,7 +330,7 @@ export function ChairDashboardClient({
     const qStatuses = questionStatuses[workflowId] || {};
     
     // For each question in the pending approval, compile its status and comment
-    const approval = pendingApprovals.find(a => a.workflow_id === workflowId);
+    const approval = approvalsList.find(a => a.workflow_id === workflowId) || pendingApprovals.find(a => a.workflow_id === workflowId);
     const questionsFeedback: Record<string, { status: "Approved" | "Revision"; comment: string }> = {};
     
     if (approval && approval.exam.questionBank) {
@@ -782,9 +790,9 @@ export function ChairDashboardClient({
         >
           <ClipboardCheck className="w-4 h-4" />
           Pending Review Queue
-          {pendingApprovals.length > 0 && (
+          {approvalsList.length > 0 && (
             <span className="bg-amber-100 text-amber-900 text-xs px-2 py-0.5 rounded-full font-extrabold ml-1">
-              {pendingApprovals.length}
+              {approvalsList.length}
             </span>
           )}
         </button>
@@ -877,7 +885,7 @@ export function ChairDashboardClient({
                 </div>
                 <div>
                   <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-wider">Pending Reviews</p>
-                  <p className="text-xl font-extrabold text-amber-600 mt-0.5">{pendingApprovals.length}</p>
+                  <p className="text-xl font-extrabold text-amber-600 mt-0.5">{approvalsList.length}</p>
                 </div>
               </div>
             </div>
@@ -1022,7 +1030,7 @@ export function ChairDashboardClient({
           </div>
 
           <div className="max-h-[650px] overflow-y-auto pr-2 space-y-6 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
-            {pendingApprovals.map(approval => {
+            {approvalsList.map(approval => {
               const hasTosFile = Boolean(approval.exam.tos_file_path && approval.exam.tos_file_path.trim() !== "");
 
               return (
@@ -1033,7 +1041,27 @@ export function ChairDashboardClient({
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
                         <div>
                           <div className="flex flex-wrap items-center gap-2">
-                            <h3 className="text-lg font-bold text-slate-900">{approval.exam.title}</h3>
+                            <EditableExamTitle
+                              examId={approval.exam_id}
+                              initialTitle={approval.exam.title}
+                              userId={chairUserId}
+                              tag="h3"
+                              className="text-lg font-bold text-slate-900"
+                              onTitleUpdated={(newTitle) => {
+                                setApprovalsList((prev) =>
+                                  prev.map((app) =>
+                                    app.exam_id === approval.exam_id
+                                      ? { ...app, exam: { ...app.exam, title: newTitle } }
+                                      : app
+                                  )
+                                );
+                                if (activeSplitApproval?.exam_id === approval.exam_id) {
+                                  setActiveSplitApproval((prev: any) =>
+                                    prev ? { ...prev, exam: { ...prev.exam, title: newTitle } } : null
+                                  );
+                                }
+                              }}
+                            />
                             <span className="inline-flex items-center gap-1 text-[11px] bg-amber-100 text-amber-950 border border-amber-300 font-extrabold px-2.5 py-0.5 rounded-md">
                               {isProgramChair ? "Reviewed by (Program Chairperson)" : "Recommended by (Department Chairperson)"}
                             </span>
@@ -1047,10 +1075,19 @@ export function ChairDashboardClient({
                               </span>
                             )}
                           </div>
-                          <div className="flex items-center gap-2 text-xs text-slate-500 font-medium mt-1">
+                          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 font-medium mt-1">
                             <span>Course: <strong className="text-slate-700">{approval.exam?.course?.course_code || "Course"} {approval.exam?.course?.course_title ? `- ${approval.exam.course.course_title}` : ""}</strong></span>
                             <span>•</span>
                             <span>Instructor: <strong className="text-slate-700">{approval.exam?.faculty?.first_name || ""} {approval.exam?.faculty?.last_name || ""}</strong></span>
+                            {(() => {
+                              const pCode = determineProgramCodeFromCourseOrExam(approval.exam);
+                              return pCode ? (
+                                <>
+                                  <span>•</span>
+                                  <span>Target Program: <strong className="text-emerald-700 font-bold">{pCode}</strong></span>
+                                </>
+                              ) : null;
+                            })()}
                           </div>
                         </div>
 
@@ -1101,7 +1138,7 @@ export function ChairDashboardClient({
               );
             })}
 
-            {pendingApprovals.length === 0 && (
+            {approvalsList.length === 0 && (
               <div className="flex flex-col items-center justify-center py-20 text-center border-2 border-dashed border-slate-100 rounded-3xl bg-slate-50/50">
                 <CheckCircle className="w-10 h-10 text-emerald-500 mb-4" />
                 <h3 className="font-extrabold text-slate-800 text-lg">Inbox Zero!</h3>
@@ -1125,15 +1162,38 @@ export function ChairDashboardClient({
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h2 className="text-base sm:text-lg font-bold text-white tracking-tight">
-                    {activeSplitApproval.exam.title}
-                  </h2>
+                  <EditableExamTitle
+                    examId={activeSplitApproval.exam_id}
+                    initialTitle={activeSplitApproval.exam.title}
+                    userId={chairUserId}
+                    isDarkBg={true}
+                    tag="h2"
+                    className="text-base sm:text-lg font-bold text-white tracking-tight"
+                    onTitleUpdated={(newTitle) => {
+                      setActiveSplitApproval((prev: any) =>
+                        prev ? { ...prev, exam: { ...prev.exam, title: newTitle } } : null
+                      );
+                      setApprovalsList((prev) =>
+                        prev.map((app) =>
+                          app.exam_id === activeSplitApproval.exam_id
+                            ? { ...app, exam: { ...app.exam, title: newTitle } }
+                            : app
+                        )
+                      );
+                    }}
+                  />
                   <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded-full font-bold uppercase">
                     Split Review Mode
                   </span>
                 </div>
                 <p className="text-xs text-slate-400 mt-0.5">
                   Course: <strong className="text-slate-200">{activeSplitApproval.exam?.course?.course_code || "Course"} {activeSplitApproval.exam?.course?.course_title ? `- ${activeSplitApproval.exam.course.course_title}` : ""}</strong> • Faculty: <strong className="text-slate-200">{activeSplitApproval.exam?.faculty?.first_name || ""} {activeSplitApproval.exam?.faculty?.last_name || ""}</strong>
+                  {(() => {
+                    const pCode = determineProgramCodeFromCourseOrExam(activeSplitApproval.exam);
+                    return pCode ? (
+                      <> • Target Program: <strong className="text-emerald-400 font-bold">{pCode}</strong></>
+                    ) : null;
+                  })()}
                 </p>
               </div>
             </div>
@@ -1258,7 +1318,7 @@ export function ChairDashboardClient({
                             courseCode={activeSplitApproval.exam.course?.course_code || ""}
                             courseTitle={activeSplitApproval.exam.course?.course_title || activeSplitApproval.exam.title}
                             departmentName={departmentName}
-                            programCode={programCode || activeSplitApproval.exam.course?.course_code || departmentName}
+                            programCode={determineProgramCodeFromCourseOrExam(activeSplitApproval.exam) || programCode || activeSplitApproval.exam.course?.course_code || departmentName}
                             term={activeSplitApproval.exam.term || "Prelim"}
                             semester={activeSplitApproval.exam.semester || "1st Semester"}
                             academicYear={activeSplitApproval.exam.academic_year || "2026-2027"}
@@ -1313,7 +1373,7 @@ export function ChairDashboardClient({
                           courseCode={activeSplitApproval.exam.course?.course_code || ""}
                           courseTitle={activeSplitApproval.exam.course?.course_title || activeSplitApproval.exam.title}
                           departmentName={departmentName}
-                          programCode={programCode || activeSplitApproval.exam.course?.course_code || departmentName}
+                          programCode={determineProgramCodeFromCourseOrExam(activeSplitApproval.exam) || programCode || activeSplitApproval.exam.course?.course_code || departmentName}
                           term={activeSplitApproval.exam.term || "Prelim"}
                           semester={activeSplitApproval.exam.semester || "1st Semester"}
                           academicYear={activeSplitApproval.exam.academic_year || "2026-2027"}

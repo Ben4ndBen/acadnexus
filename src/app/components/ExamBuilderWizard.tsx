@@ -14,6 +14,7 @@ import { Latex } from "@/app/components/Latex";
 import { formatFullExamDate } from "@/app/components/BSCTableOfSpecificationsView";
 import { DatePicker } from "@/app/components/DatePicker";
 import { getProgramHeaderImage } from "@/lib/programHeader";
+import { EditableExamTitle } from "@/app/components/EditableExamTitle";
 
 interface Course {
   course_id: number;
@@ -2585,7 +2586,19 @@ export function ExamBuilderWizard({
               <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" />
             </button>
             <div>
-              <h1 className="text-base sm:text-lg font-extrabold text-slate-900 tracking-tight">Exam Creator Wizard</h1>
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-base sm:text-lg font-extrabold text-slate-900 tracking-tight">Exam Creator Wizard:</h1>
+                <EditableExamTitle
+                  examId={exam.exam_id}
+                  initialTitle={title}
+                  userId={facultyId}
+                  tag="span"
+                  className="text-sm sm:text-base font-extrabold text-emerald-800"
+                  onTitleUpdated={(newTitle) => {
+                    setTitle(newTitle);
+                  }}
+                />
+              </div>
               <p className="text-[11px] text-slate-500 font-medium hidden sm:block">Real-time Auto-Save enabled for configuration, TOS, and questions</p>
             </div>
           </div>
@@ -2831,6 +2844,28 @@ export function ExamBuilderWizard({
                       required
                     />
                   </div>
+                </div>
+
+                {/* Direct Inline Editable Examination Name */}
+                <div className="bg-slate-50/80 border border-slate-200/80 rounded-2xl p-4 space-y-1.5 mt-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-extrabold text-slate-700 block">
+                      Examination Name <span className="text-rose-500">*</span>
+                    </label>
+                    <span className="text-[10px] font-bold text-slate-400">
+                      Click title or text to edit
+                    </span>
+                  </div>
+                  <EditableExamTitle
+                    examId={exam.exam_id}
+                    initialTitle={title}
+                    userId={facultyId}
+                    tag="h3"
+                    className="text-base font-extrabold text-slate-900"
+                    onTitleUpdated={(newTitle) => {
+                      setTitle(newTitle);
+                    }}
+                  />
                 </div>
               </div>
 

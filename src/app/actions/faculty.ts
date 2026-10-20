@@ -4,7 +4,7 @@ import db from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { ExamStatus } from "@prisma/client";
 import { getExpectedYearLevelForCourse, getExpectedYearAndSemForCourse } from "@/lib/bsitCurriculum";
-import { getProgramsForDepartment } from "@/lib/courseDepartmentMapping";
+import { getProgramsForDepartment, determineProgramCodeFromCourseOrExam, normalizeProgramCode } from "@/lib/courseDepartmentMapping";
 import { getActiveAcademicPeriodCached } from "@/lib/cache";
 
 export async function updateFacultyProfile(facultyId: number, firstName: string, lastName: string, middleName?: string) {
@@ -927,6 +927,18 @@ export async function scheduleExamTarget(
 
     const targetSection = section?.trim() || "All Sections";
 
+    // Validate / auto-resolve programId if missing or unmapped
+    let finalProgramId = programId;
+    if (!finalProgramId || isNaN(finalProgramId) || finalProgramId <= 0) {
+      const resolvedCode = determineProgramCodeFromCourseOrExam(exam);
+      const dbProg = await db.academicProgram.findFirst({
+        where: { program_code: { equals: resolvedCode, mode: "insensitive" } },
+      });
+      if (dbProg) {
+        finalProgramId = dbProg.program_id;
+      }
+    }
+
     // Check if an ExamTarget already exists for this exam
     const existingTarget = await db.examTarget.findFirst({
       where: { exam_id: examId }
@@ -936,7 +948,7 @@ export async function scheduleExamTarget(
       await db.examTarget.update({
         where: { target_id: existingTarget.target_id },
         data: {
-          program_id: programId,
+          program_id: finalProgramId,
           year_level: yearLevel,
           section: targetSection,
           scheduled_date: dateObj,
@@ -948,7 +960,7 @@ export async function scheduleExamTarget(
       await db.examTarget.create({
         data: {
           exam_id: examId,
-          program_id: programId,
+          program_id: finalProgramId,
           year_level: yearLevel,
           section: targetSection,
           scheduled_date: dateObj,
@@ -957,6 +969,14 @@ export async function scheduleExamTarget(
         },
       });
     }
+
+    // Keep examination exam_date synchronized with schedule target date
+    await db.examination.update({
+      where: { exam_id: examId },
+      data: {
+        exam_date: dateObj,
+      },
+    });
 
     // Query matching students by selected_student_ids if assigned, or by program and year level
     const selectedIds = exam.selected_student_ids as number[] | null;
@@ -975,7 +995,7 @@ export async function scheduleExamTarget(
 
       targetStudents = await db.student.findMany({
         where: {
-          program_id: programId,
+          program_id: finalProgramId,
           year_level: yearLevel,
           ...(!isTargetingAll
             ? {
@@ -996,7 +1016,7 @@ export async function scheduleExamTarget(
       if (targetStudents.length === 0) {
         targetStudents = await db.student.findMany({
           where: {
-            program_id: programId,
+            program_id: finalProgramId,
             year_level: yearLevel,
           },
           include: {
@@ -1725,9 +1745,15 @@ export async function getMissedStudentsForExam(facultyId: number, examId: number
       }
 
       // 3. Include students matching exam targets
+      const targetProgCode = determineProgramCodeFromCourseOrExam(exam);
+      const dbTargetProg = await db.academicProgram.findFirst({
+        where: { program_code: { equals: targetProgCode, mode: "insensitive" } },
+      });
+
       for (const target of exam.examTargets) {
+        const effectiveProgramId = dbTargetProg?.program_id || target.program_id;
         const targetFilter: any = {
-          program_id: target.program_id,
+          program_id: effectiveProgramId,
           year_level: target.year_level,
         };
         if (target.section && target.section !== "All Sections") {
@@ -3173,6 +3199,99 @@ export async function updateExamResultReleaseMode(
     return { error: err.message || "Failed to update exam result settings." };
   }
 }
+
+export async function updateExamTitleAction(
+  examId: number,
+  newTitle: string,
+  userId: number
+) {
+  try {
+    if (!examId || !newTitle || !userId) {
+      return { error: "Missing required fields." };
+    }
+
+    const trimmedTitle = newTitle.trim();
+    if (trimmedTitle.length === 0) {
+      return { error: "Examination name cannot be empty." };
+    }
+
+    if (trimmedTitle.length > 150) {
+      return { error: "Examination name cannot exceed 150 characters." };
+    }
+
+    // Verify user existence and authorization
+    const user = await db.user.findUnique({
+      where: { user_id: userId },
+      include: {
+        faculty: true,
+        chair: true,
+        director: true,
+      },
+    });
+
+    if (!user) {
+      return { error: "User not found or unauthenticated." };
+    }
+
+    // Verify examination existence
+    const exam = await db.examination.findUnique({
+      where: { exam_id: examId },
+      include: {
+        faculty: { include: { department: true } },
+        course: true,
+      },
+    });
+
+    if (!exam) {
+      return { error: "Examination not found." };
+    }
+
+    // Check authorization:
+    // 1. Faculty owner can edit
+    // 2. Chair or ProgramChair can edit
+    // 3. Director can edit
+    const isOwner = exam.faculty_id === userId;
+    const isChair = user.role === "Chair" || user.role === "ProgramChair" || !!user.chair;
+    const isDirector = user.role === "Director" || !!user.director;
+
+    if (!isOwner && !isChair && !isDirector) {
+      return { error: "Unauthorized to edit this examination name." };
+    }
+
+    const oldTitle = exam.title;
+
+    // Directly update the examination title without creating a duplicate examination.
+    // Preserves existing examination records, questions, TOS, approval history, and student attempts.
+    const updatedExam = await db.examination.update({
+      where: { exam_id: examId },
+      data: {
+        title: trimmedTitle,
+      },
+    });
+
+    // Create audit log entry
+    await db.auditLog.create({
+      data: {
+        user_id: userId,
+        action_performed: `Renamed examination ID ${examId} from "${oldTitle}" to "${trimmedTitle}"`,
+        ip_address: "127.0.0.1",
+      },
+    });
+
+    // Revalidate affected dashboard routes
+    revalidatePath("/dashboard/faculty");
+    revalidatePath("/dashboard/chair");
+    revalidatePath("/dashboard/director");
+    revalidatePath("/dashboard/student");
+    revalidatePath(`/dashboard/faculty/exams/${examId}/builder`);
+
+    return { success: true, exam: updatedExam };
+  } catch (err: any) {
+    console.error("Error updating examination title:", err);
+    return { error: err.message || "Failed to update examination title." };
+  }
+}
+
 
 
 

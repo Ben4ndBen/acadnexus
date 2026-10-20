@@ -23,10 +23,12 @@ import {
   exportExamSubmissionsToExcel, 
   exportMissedStudentsToExcel 
 } from "@/lib/exportExcel";
-import { getProgramsForDepartment } from "@/lib/courseDepartmentMapping";
+import { getProgramsForDepartment, resolveTargetProgramForExam, determineProgramCodeFromCourseOrExam, normalizeProgramCode } from "@/lib/courseDepartmentMapping";
+import { getExpectedYearLevelForCourse } from "@/lib/bsitCurriculum";
 import { formatStudentName, getStudentMiddleInitial, getSubmissionScheduleTiming, formatStudentProgramAndYear } from "@/lib/academicUtils";
 import { DatePicker } from "@/app/components/DatePicker";
 import { getProgramHeaderImage } from "@/lib/programHeader";
+import { EditableExamTitle } from "@/app/components/EditableExamTitle";
 
 interface FacultyDashboardClientProps {
   faculty: {
@@ -543,6 +545,9 @@ export function FacultyDashboardClient({
   const [academicYearInput, setAcademicYearInput] = useState("");
   const [isArchiving, setIsArchiving] = useState(false);
 
+  // Dynamic overrides for locally edited exam titles
+  const [customExamTitles, setCustomExamTitles] = useState<Record<number, string>>({});
+
   const getExamDisplayTitle = (
     exam: {
       exam_id?: number;
@@ -553,8 +558,11 @@ export function FacultyDashboardClient({
     },
     fallbackIndex?: number
   ): string => {
-    if (exam.title && exam.title !== "New Examination Draft") {
-      return exam.title;
+    const effectiveTitle = (exam.exam_id && customExamTitles[exam.exam_id])
+      ? customExamTitles[exam.exam_id]
+      : exam.title;
+    if (effectiveTitle && effectiveTitle !== "New Examination Draft") {
+      return effectiveTitle;
     }
     const termStr = exam.term || "Prelim";
     const courseTitleStr = exam.course?.course_title || exam.course?.course_code || "";
@@ -1192,6 +1200,7 @@ export function FacultyDashboardClient({
   const [scheduleSuccessModalOpen, setScheduleSuccessModalOpen] = useState(false);
   const [scheduleSuccessInfo, setScheduleSuccessInfo] = useState<{
     examTitle: string;
+    programName?: string;
     date: string;
     startTime: string;
     endTime: string;
@@ -1205,6 +1214,15 @@ export function FacultyDashboardClient({
     const targetExam = faculty.examinations.find(e => e.exam_id === examId);
     const existingTarget = targetExam?.examTargets?.[0];
 
+    // Accurately resolve target program directly matching exam creation
+    const resolvedProg = resolveTargetProgramForExam(
+      targetExam,
+      programs,
+      studentExams,
+      faculty.department?.department_name
+    );
+    const defaultProgramId = resolvedProg?.program_id ? String(resolvedProg.program_id) : (programs[0] ? String(programs[0].program_id) : "");
+
     let initialDate = "";
     if (existingTarget?.scheduled_date) {
       initialDate = typeof existingTarget.scheduled_date === "string"
@@ -1217,31 +1235,38 @@ export function FacultyDashboardClient({
         : new Date(examDateVal).toISOString().split("T")[0];
     }
 
-    if (existingTarget) {
-      const formatTime = (timeStr: string) => {
-        try {
-          if (timeStr.includes("T")) {
-            return timeStr.split("T")[1].slice(0, 5);
-          }
-          return timeStr.slice(0, 5);
-        } catch {
-          return "09:00";
+    const formatTime = (timeStr: string) => {
+      try {
+        if (timeStr.includes("T")) {
+          return timeStr.split("T")[1].slice(0, 5);
         }
-      };
+        return timeStr.slice(0, 5);
+      } catch {
+        return "09:00";
+      }
+    };
 
+    const expectedYear = getExpectedYearLevelForCourse(
+      targetExam?.course?.course_code || "",
+      targetExam?.course?.course_title || ""
+    );
+
+    // Always default to the target program determined during exam creation
+    const effectiveProgramId = defaultProgramId || (existingTarget ? String(existingTarget.program_id) : "");
+
+    if (existingTarget) {
       setScheduleForm({
-        program_id: String(existingTarget.program_id),
-        year_level: String(existingTarget.year_level),
+        program_id: effectiveProgramId,
+        year_level: String(existingTarget.year_level || expectedYear || 1),
         section: existingTarget.section || "All Sections",
         scheduled_date: initialDate,
         start_time: formatTime(existingTarget.start_time),
         end_time: formatTime(existingTarget.end_time)
       });
     } else {
-      const progId = (targetExam as any)?.course?.program_id || (programs.length > 0 ? programs[0].program_id : "");
       setScheduleForm({
-        program_id: String(progId),
-        year_level: "1",
+        program_id: effectiveProgramId,
+        year_level: String(expectedYear || 1),
         section: "All Sections",
         scheduled_date: initialDate,
         start_time: "09:00",
@@ -1271,8 +1296,10 @@ export function FacultyDashboardClient({
       alert(res.error);
     } else {
       setScheduleModalOpen(false);
+      const targetProgObj = programs.find(p => String(p.program_id) === String(scheduleForm.program_id));
       setScheduleSuccessInfo({
         examTitle: selectedExamForSchedule.title,
+        programName: targetProgObj ? `${targetProgObj.program_code} - ${targetProgObj.program_name}` : undefined,
         date: scheduleForm.scheduled_date,
         startTime: scheduleForm.start_time,
         endTime: scheduleForm.end_time,
@@ -1996,7 +2023,18 @@ export function FacultyDashboardClient({
                       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-100 pb-4">
                         <div className="flex-1 w-full">
                           <div className="space-y-1.5">
-                            <h3 className="text-base font-extrabold text-slate-900">{getExamDisplayTitle(exam)}</h3>
+                            <EditableExamTitle
+                              examId={exam.exam_id}
+                              initialTitle={getExamDisplayTitle(exam)}
+                              userId={faculty.faculty_id}
+                              tag="h3"
+                              className="text-base font-extrabold text-slate-900"
+                              onTitleUpdated={(newTitle) => {
+                                setCustomExamTitles((prev) => ({ ...prev, [exam.exam_id]: newTitle }));
+                                const target = faculty.examinations?.find((e) => e.exam_id === exam.exam_id);
+                                if (target) target.title = newTitle;
+                              }}
+                            />
                             <div>
                               {renderStatusBadge(exam.current_status, exam)}
                             </div>
@@ -2010,12 +2048,38 @@ export function FacultyDashboardClient({
                             <span>{exam._count?.questionBank ?? 0} Questions</span>
                           </p>
 
-                          {exam.current_status === "Approved" && (
-                            <div className="mt-2.5 flex items-center gap-1.5 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-2.5 py-1 rounded-lg w-fit shadow-sm">
-                              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                              Digitally Signed
-                            </div>
-                          )}
+                          <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                            {(() => {
+                              const resolvedProg = resolveTargetProgramForExam(exam, programs, studentExams, faculty.department?.department_name);
+                              return resolvedProg ? (
+                                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200/80 px-2.5 py-1 rounded-lg shadow-2xs">
+                                  <GraduationCap className="w-3.5 h-3.5 text-emerald-600" />
+                                  Target: {resolvedProg.program_code}
+                                </span>
+                              ) : null;
+                            })()}
+                            {exam.current_status === "Approved" && (
+                              <div className="flex items-center gap-1.5 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-2.5 py-1 rounded-lg shadow-2xs">
+                                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                                Digitally Signed
+                              </div>
+                            )}
+                            {(() => {
+                              const target = exam.examTargets?.[0];
+                              if (!target?.scheduled_date) return null;
+                              return (
+                                <div className="flex items-center gap-1.5 text-[11px] font-bold text-blue-800 bg-blue-50 border border-blue-200/80 px-2.5 py-1 rounded-lg shadow-2xs">
+                                  <Calendar className="w-3.5 h-3.5 text-blue-600" />
+                                  <span>{new Date(target.scheduled_date).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" })}</span>
+                                  {target.start_time && target.end_time && (
+                                    <span className="text-blue-600 font-semibold">
+                                      ({new Date(target.start_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} - {new Date(target.end_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })})
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })()}
+                          </div>
                         </div>
 
                         {/* Interactive Primary Actions */}
@@ -3145,14 +3209,32 @@ export function FacultyDashboardClient({
                               )}
                             </div>
 
-                            <h4 className="text-sm font-extrabold text-slate-900 group-hover:text-amber-700 transition-colors line-clamp-2">
-                              {getExamDisplayTitle(exam)}
-                            </h4>
+                            <EditableExamTitle
+                              examId={exam.exam_id}
+                              initialTitle={getExamDisplayTitle(exam)}
+                              userId={faculty.faculty_id}
+                              tag="h4"
+                              className="text-sm font-extrabold text-slate-900 group-hover:text-amber-700 transition-colors line-clamp-2"
+                              onTitleUpdated={(newTitle) => {
+                                setCustomExamTitles((prev) => ({ ...prev, [exam.exam_id]: newTitle }));
+                                const target = faculty.examinations?.find((e) => e.exam_id === exam.exam_id);
+                                if (target) target.title = newTitle;
+                              }}
+                            />
                             <p className="text-xs text-slate-500 font-medium line-clamp-1">
                               {exam.course?.course_title || ""}
                             </p>
 
                             <div className="pt-2 border-t border-slate-100 space-y-1.5 text-[11px] text-slate-600">
+                              {(() => {
+                                const resolvedProg = resolveTargetProgramForExam(exam, programs, studentExams, faculty.department?.department_name);
+                                return (
+                                  <div className="flex items-center gap-1.5">
+                                    <GraduationCap className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                    <span>Target Program: <strong className="text-emerald-700 font-bold">{resolvedProg ? resolvedProg.program_code : "Standard"}</strong></span>
+                                  </div>
+                                );
+                              })()}
                               <div className="flex items-center gap-1.5">
                                 <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                                 <span className="font-semibold">{dateStr} {timeStr ? `• ${timeStr}` : ""}</span>
@@ -3197,11 +3279,21 @@ export function FacultyDashboardClient({
                         </h3>
                         {(() => {
                           const exam = faculty.examinations.find(e => e.exam_id === selectedOverrideExamId);
-                          return exam ? (
-                            <span className="text-[11px] font-bold text-blue-900 bg-blue-50 px-2.5 py-1 rounded-xl border border-blue-200/80">
-                              {exam.course?.course_code || "Course"} • {exam.title}
-                            </span>
-                          ) : null;
+                          if (!exam) return null;
+                          const resolvedProg = resolveTargetProgramForExam(exam, programs, studentExams, faculty.department?.department_name);
+                          return (
+                            <>
+                              <span className="text-[11px] font-bold text-blue-900 bg-blue-50 px-2.5 py-1 rounded-xl border border-blue-200/80">
+                                {exam.course?.course_code || "Course"} • {customExamTitles[exam.exam_id] ?? exam.title}
+                              </span>
+                              {resolvedProg && (
+                                <span className="text-[11px] font-bold text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-xl border border-emerald-200/80 flex items-center gap-1 shadow-2xs">
+                                  <GraduationCap className="w-3.5 h-3.5 text-emerald-600" />
+                                  Target: {resolvedProg.program_code}
+                                </span>
+                              )}
+                            </>
+                          );
                         })()}
                         <button
                           type="button"
@@ -3770,16 +3862,35 @@ export function FacultyDashboardClient({
 
                 {/* Main Body Content */}
                 <div className="overflow-y-auto space-y-4 pr-1">
-                  {/* Original Schedule Banner */}
-                  <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3.5 text-xs space-y-1">
-                    <p className="text-slate-600 font-bold uppercase tracking-wider text-[10px] flex items-center gap-1.5">
-                      <Calendar className="w-3.5 h-3.5 text-blue-600" /> Original Exam Schedule
-                    </p>
-                    <p className="text-slate-800 font-semibold text-xs">
-                      {officialExamScheduleText || "Original exam schedule"}
-                    </p>
-                    <p className="text-[10px] text-slate-500 leading-relaxed pt-0.5">
-                      ✓ Rescheduling only applies to the selected students. The original exam schedule and Table of Specifications (TOS) stay the same for everyone else.
+                  {/* Original Schedule & Target Program Banner */}
+                  <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3.5 text-xs space-y-2">
+                    {(() => {
+                      const exam = faculty.examinations.find(e => e.exam_id === selectedOverrideExamId);
+                      const resolvedProg = exam ? resolveTargetProgramForExam(exam, programs, studentExams, faculty.department?.department_name) : null;
+                      return (
+                        <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-200/60">
+                          <span className="text-slate-900 font-extrabold text-xs">
+                            {exam ? `${exam.course?.course_code || "Course"} • ${customExamTitles[exam.exam_id] ?? exam.title}` : "Selected Examination"}
+                          </span>
+                          {resolvedProg && (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-800 bg-emerald-100/80 border border-emerald-300 px-2.5 py-0.5 rounded-lg shadow-2xs">
+                              <GraduationCap className="w-3 h-3 text-emerald-700" />
+                              Target Program: {resolvedProg.program_code} - {resolvedProg.program_name}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })()}
+                    <div>
+                      <p className="text-slate-600 font-bold uppercase tracking-wider text-[10px] flex items-center gap-1.5">
+                        <Calendar className="w-3.5 h-3.5 text-blue-600" /> Original Exam Schedule
+                      </p>
+                      <p className="text-slate-800 font-semibold text-xs mt-0.5">
+                        {officialExamScheduleText || "Original exam schedule"}
+                      </p>
+                    </div>
+                    <p className="text-[10px] text-slate-500 leading-relaxed pt-0.5 border-t border-slate-200/40">
+                      ✓ Rescheduling only applies to the selected students. The original exam schedule, target program, and Table of Specifications (TOS) stay preserved.
                     </p>
                   </div>
 
@@ -4160,19 +4271,17 @@ export function FacultyDashboardClient({
 
             <form onSubmit={handleScheduleSubmit} className="space-y-4">
               <div>
-                <label className="text-xs font-bold text-slate-600 block mb-1">Target Program</label>
-                {(() => {
-                  const pObj = programs.find(p => String(p.program_id) === String(scheduleForm.program_id));
-                  return (
-                    <input 
-                      type="text"
-                      disabled
-                      readOnly
-                      value={pObj ? `${pObj.program_code} - ${pObj.program_name}` : (scheduleForm.program_id ? `Program ID: ${scheduleForm.program_id}` : "Program set from exam creation")}
-                      className="w-full bg-slate-100 border border-slate-200 text-slate-700 font-medium text-sm px-4 py-2.5 rounded-xl cursor-not-allowed select-none"
-                    />
-                  );
-                })()}
+                <label className="text-xs font-bold text-slate-700 block mb-1">Target Program</label>
+                <input
+                  type="text"
+                  disabled
+                  readOnly
+                  value={(() => {
+                    const prog = programs.find(p => String(p.program_id) === String(scheduleForm.program_id));
+                    return prog ? `${prog.program_code} - ${prog.program_name}` : "";
+                  })()}
+                  className="w-full bg-slate-50 border border-slate-200 text-sm font-medium text-slate-800 px-4 py-2.5 rounded-xl cursor-default"
+                />
               </div>
 
               <div>
@@ -4250,6 +4359,12 @@ export function FacultyDashboardClient({
                 <span className="font-semibold text-slate-500 block">Examination</span>
                 <span className="font-bold text-slate-900 text-sm line-clamp-1">{scheduleSuccessInfo.examTitle}</span>
               </div>
+              {scheduleSuccessInfo.programName && (
+                <div className="text-xs pt-2 border-t border-emerald-100">
+                  <span className="font-semibold text-slate-500 block text-[11px]">Target Program</span>
+                  <span className="font-bold text-emerald-950 text-xs">{scheduleSuccessInfo.programName}</span>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-3 pt-2.5 border-t border-emerald-100">
                 <div>
                   <span className="font-semibold text-slate-500 block text-[11px]">Scheduled Date</span>
@@ -4515,7 +4630,18 @@ export function FacultyDashboardClient({
                         {exam._count?.questionBank ?? 0} Items
                       </span>
                     </div>
-                    <h3 className="font-extrabold text-slate-850 text-sm leading-snug">{getExamDisplayTitle(exam)}</h3>
+                    <EditableExamTitle
+                      examId={exam.exam_id}
+                      initialTitle={getExamDisplayTitle(exam)}
+                      userId={faculty.faculty_id}
+                      tag="h3"
+                      className="font-extrabold text-slate-850 text-sm leading-snug"
+                      onTitleUpdated={(newTitle) => {
+                        setCustomExamTitles((prev) => ({ ...prev, [exam.exam_id]: newTitle }));
+                        const target = archivedExams.find((e) => e.exam_id === exam.exam_id);
+                        if (target) target.title = newTitle;
+                      }}
+                    />
                     <p className="text-xs text-emerald-700 font-semibold leading-normal">
                       {exam.course?.course_code || "Course"} {exam.course?.course_title ? `- ${exam.course.course_title}` : ""}
                     </p>
