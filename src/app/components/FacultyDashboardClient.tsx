@@ -4729,6 +4729,22 @@ export function FacultyDashboardClient({
                 </button>
                 <button
                   type="button"
+                  onClick={() => {
+                    if (courses.length === 0 || assignedCourses.length === 0) {
+                      setUnassignedActionText("bulk adding students to the class roster");
+                      setUnassignedWarningModalOpen(true);
+                      return;
+                    }
+                    setBulkResult(null);
+                    setBulkEnrollModalOpen(true);
+                  }}
+                  className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs"
+                >
+                  <Users className="w-4 h-4 text-emerald-600" />
+                  <span>Bulk Add</span>
+                </button>
+                <button
+                  type="button"
                   onClick={() => fetchRoster(selectedRosterCourseId)}
                   disabled={loadingClassRoster || courses.length === 0}
                   title="Refresh Class List"
@@ -5067,6 +5083,141 @@ export function FacultyDashboardClient({
                   </>
                 ) : (
                   <span>Add Student to Class</span>
+                )}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* BULK ENROLL STUDENT MODAL */}
+      {bulkEnrollModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <form
+            onSubmit={handleBulkEnroll}
+            className="bg-white border border-slate-200 rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl space-y-4 relative max-h-[90vh] overflow-y-auto"
+          >
+            <div className="flex justify-between items-start border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+                  <Users className="w-5 h-5 text-emerald-600" />
+                  Bulk Add Students to Class
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Paste student ID numbers to assign multiple students to this class roster
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setBulkEnrollModalOpen(false)}
+                className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-400 hover:text-slate-700"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Helper Notice */}
+            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-600 space-y-1">
+              <span className="font-bold text-slate-800">Supported Formats (one per line):</span>
+              <ul className="list-disc list-inside text-[11px] text-slate-500 space-y-0.5 pl-1">
+                <li><span className="font-mono text-slate-700">2023-0001</span> (Student ID only)</li>
+                <li><span className="font-mono text-slate-700">2023-0002, Juan, Dela Cruz</span> (Comma or tab separated)</li>
+              </ul>
+            </div>
+
+            {/* Status Feedback */}
+            {bulkResult && (
+              <div
+                className={`p-3.5 rounded-xl text-xs font-bold border space-y-1.5 ${
+                  bulkResult.errors && bulkResult.errors.length > 0 && (!bulkResult.message || bulkResult.message.includes("Error") || bulkResult.message.includes("skipped"))
+                    ? "bg-amber-50 border-amber-200 text-amber-900"
+                    : "bg-emerald-50 border-emerald-200 text-emerald-900"
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  {bulkResult.errors && bulkResult.errors.length > 0 ? (
+                    <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                  ) : (
+                    <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                  )}
+                  <span>{bulkResult.message}</span>
+                </div>
+                {bulkResult.errors && bulkResult.errors.length > 0 && (
+                  <ul className="text-[11px] font-normal text-amber-800 list-disc list-inside pl-1 pt-1 border-t border-amber-200/60">
+                    {bulkResult.errors.map((err, i) => (
+                      <li key={i}>{err}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-extrabold text-slate-700 block mb-1">
+                  Student List <span className="text-rose-500">*</span>
+                </label>
+                <textarea
+                  required
+                  rows={6}
+                  placeholder={`2023-0001\n2023-0002, Maria, Santos\n2023-0003, Juan, Dela Cruz`}
+                  value={bulkInput}
+                  onChange={(e) => setBulkInput(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 focus:bg-white text-xs font-mono font-medium text-slate-900 p-3 rounded-xl transition-all placeholder:font-sans placeholder:text-slate-400 focus:outline-emerald-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-extrabold text-slate-700 block mb-1">
+                    Year Level
+                  </label>
+                  <select
+                    value={bulkYearLevel}
+                    onChange={(e) => setBulkYearLevel(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 focus:bg-white text-xs font-bold text-slate-900 px-3 py-2 rounded-xl transition-all"
+                  >
+                    <option value="1">1st Year</option>
+                    <option value="2">2nd Year</option>
+                    <option value="3">3rd Year</option>
+                    <option value="4">4th Year</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-extrabold text-slate-700 block mb-1">
+                    Section
+                  </label>
+                  <input
+                    type="text"
+                    value={bulkSection}
+                    onChange={(e) => setBulkSection(e.target.value)}
+                    placeholder="e.g. A"
+                    className="w-full bg-slate-50 border border-slate-200 focus:bg-white text-xs font-bold text-slate-900 px-3 py-2 rounded-xl transition-all"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="border-t border-slate-100 pt-3 flex justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setBulkEnrollModalOpen(false)}
+                className="px-4 py-2.5 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isSubmittingBulk}
+                className="flex items-center gap-2 px-5 py-2.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-sm transition-all disabled:opacity-75"
+              >
+                {isSubmittingBulk ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Enrolling Students...</span>
+                  </>
+                ) : (
+                  <span>Bulk Enroll to Class</span>
                 )}
               </button>
             </div>

@@ -465,6 +465,7 @@ export async function saveExamConfig(formData: FormData) {
         parsedStudentIds = selectedStudentIdsRaw.split(",").map(Number).filter(n => !isNaN(n));
       }
     }
+    parsedStudentIds = Array.from(new Set(parsedStudentIds.filter(n => typeof n === "number" && !isNaN(n) && n > 0)));
 
     if (!examId || !facultyId || !title || !courseId || !timeLimitMinutes) {
       return { error: "Missing required configuration fields." };
@@ -681,53 +682,53 @@ async function syncAndGetYearLevelEnrolledStudents(courseId: number, facultyId?:
 
 export async function getAssignedStudentsForCourse(courseId: number, facultyId?: number) {
   try {
-    // Fetch all students across all programs and year levels
-    const allStudents = await db.student.findMany({
+    if (!courseId) {
+      return { success: true, students: [] };
+    }
+
+    // Fetch strictly students who are enrolled in this class (StudentCourse)
+    const enrollments = await db.studentCourse.findMany({
+      where: { course_id: courseId },
       include: {
-        user: true,
-        program: true,
+        student: {
+          include: {
+            user: true,
+            program: true,
+          },
+        },
       },
       orderBy: [
-        { program: { program_code: "asc" } },
-        { year_level: "asc" },
-        { last_name: "asc" },
+        { student: { program: { program_code: "asc" } } },
+        { student: { year_level: "asc" } },
+        { student: { last_name: "asc" } },
+        { student: { first_name: "asc" } },
       ],
     });
 
-    // Auto-sync all students into studentCourse for this course if missing
-    if (allStudents.length > 0) {
-      const existingEnrollments = await db.studentCourse.findMany({
-        where: { course_id: courseId },
-        select: { student_id: true },
+    const seenStudentIds = new Set<number>();
+    const students: any[] = [];
+
+    for (const e of enrollments) {
+      if (!e.student || !e.student.user) continue;
+      if (seenStudentIds.has(e.student.student_id)) continue;
+      seenStudentIds.add(e.student.student_id);
+
+      students.push({
+        student_id: e.student.student_id,
+        institutional_id: e.student.user.institutional_id,
+        first_name: e.student.first_name,
+        middle_name: e.student.middle_name,
+        last_name: e.student.last_name,
+        program_code: e.student.program?.program_code || "GEN",
+        program_name: e.student.program?.program_name || "General Program",
+        year_level: e.student.year_level,
+        section: e.student.section,
       });
-
-      const existingSet = new Set(existingEnrollments.map((e) => e.student_id));
-      const missingIds = allStudents.map((s) => s.student_id).filter((id) => !existingSet.has(id));
-
-      if (missingIds.length > 0) {
-        await db.studentCourse.createMany({
-          data: missingIds.map((studentId) => ({
-            student_id: studentId,
-            course_id: courseId,
-          })),
-          skipDuplicates: true,
-        });
-      }
     }
 
     return {
       success: true,
-      students: allStudents.map((s) => ({
-        student_id: s.student_id,
-        institutional_id: s.user.institutional_id,
-        first_name: s.first_name,
-        middle_name: s.middle_name,
-        last_name: s.last_name,
-        program_code: s.program.program_code,
-        program_name: s.program.program_name,
-        year_level: s.year_level,
-        section: s.section,
-      })),
+      students,
     };
   } catch (err: any) {
     console.error("Error getting assigned students for course:", err);
@@ -982,9 +983,10 @@ export async function scheduleExamTarget(
     const selectedIds = exam.selected_student_ids as number[] | null;
     let targetStudents: any[] = [];
     if (selectedIds && Array.isArray(selectedIds) && selectedIds.length > 0) {
+      const uniqueSelectedIds = Array.from(new Set(selectedIds));
       targetStudents = await db.student.findMany({
         where: {
-          student_id: { in: selectedIds }
+          student_id: { in: uniqueSelectedIds }
         },
         include: {
           user: true,
@@ -1049,16 +1051,40 @@ export async function scheduleExamTarget(
     const courseCodeStr = exam.course?.course_code ? ` (${exam.course.course_code})` : "";
     const durationStr = `Duration: ${exam.time_limit_minutes} minutes`;
 
-    // Create notifications for all targeted students
+    // Create notifications for all eligible targeted students without duplicates
     if (targetStudents.length > 0) {
-      await db.notification.createMany({
-        data: targetStudents.map((s) => ({
-          user_id: s.student_id,
+      const uniqueStudentIds = Array.from(new Set(targetStudents.map((s) => s.student_id)));
+
+      // Avoid creating duplicate notification if already sent recently (within last 60 seconds)
+      const recentNotifications = await db.notification.findMany({
+        where: {
+          user_id: { in: uniqueStudentIds },
           title: "Upcoming Examination Scheduled",
-          message: `The examination "${exam.title}"${courseCodeStr} has been scheduled for ${formattedDate} from ${timeRangeStr} (${durationStr}).`,
-          is_read: false,
-        })),
+          created_at: {
+            gte: new Date(Date.now() - 60000),
+          },
+        },
+        select: { user_id: true, message: true },
       });
+
+      const alreadyNotifiedUserIds = new Set(
+        recentNotifications
+          .filter((n) => n.message.includes(`"${exam.title}"`))
+          .map((n) => n.user_id)
+      );
+
+      const toNotify = uniqueStudentIds.filter((uid) => !alreadyNotifiedUserIds.has(uid));
+
+      if (toNotify.length > 0) {
+        await db.notification.createMany({
+          data: toNotify.map((uid) => ({
+            user_id: uid,
+            title: "Upcoming Examination Scheduled",
+            message: `The examination "${exam.title}"${courseCodeStr} has been scheduled for ${formattedDate} from ${timeRangeStr} (${durationStr}).`,
+            is_read: false,
+          })),
+        });
+      }
     }
 
     await db.auditLog.create({
@@ -2608,6 +2634,24 @@ export async function getFacultyEnrolledStudentsAndGrades(facultyId: number) {
         }
       }
 
+      // Include all students enrolled in this class roster
+      const courseEnrollees = await db.studentCourse.findMany({
+        where: { course_id: courseId },
+        include: {
+          student: {
+            include: {
+              user: true,
+              program: true,
+            },
+          },
+        },
+      });
+      for (const e of courseEnrollees) {
+        if (e.student && !studentsMap.has(e.student.student_id)) {
+          studentsMap.set(e.student.student_id, e.student);
+        }
+      }
+
       for (const ex of courseExams) {
         for (const se of ex.studentExams) {
           if (!studentsMap.has(se.student.student_id)) {
@@ -2629,7 +2673,9 @@ export async function getFacultyEnrolledStudentsAndGrades(facultyId: number) {
 
           const target = ex.examTargets.find(
             t => t.program_id === student.program_id && t.year_level === student.year_level && t.section === student.section
-          );
+          ) || ex.examTargets.find(
+            t => t.program_id === student.program_id && t.year_level === student.year_level
+          ) || ex.examTargets[0];
 
           const scheduledDate = target ? target.scheduled_date : null;
           const endTime = target ? target.end_time : null;
@@ -2717,25 +2763,9 @@ export async function getCourseRoster(courseId: number, facultyId?: number) {
         return { success: true, students: [] };
       }
     }
-    const { course, targetYearLevel, targetPrograms } = await syncAndGetYearLevelEnrolledStudents(courseId, facultyId);
-
-    const studentFilter: any = {};
-    if (targetYearLevel) {
-      studentFilter.year_level = targetYearLevel;
-    }
-    if (targetPrograms.length > 0) {
-      studentFilter.program = {
-        program_code: { in: targetPrograms },
-      };
-    }
-
-    const whereCondition: any = { course_id: courseId };
-    if (Object.keys(studentFilter).length > 0) {
-      whereCondition.student = studentFilter;
-    }
 
     const enrollments = await db.studentCourse.findMany({
-      where: whereCondition,
+      where: { course_id: courseId },
       include: {
         student: {
           include: {
@@ -2744,26 +2774,34 @@ export async function getCourseRoster(courseId: number, facultyId?: number) {
           },
         },
       },
-      orderBy: {
-        student: {
-          last_name: "asc",
-        },
-      },
+      orderBy: [
+        { student: { last_name: "asc" } },
+        { student: { first_name: "asc" } },
+      ],
     });
 
-    const students = enrollments.map((e) => ({
-      student_id: e.student.student_id,
-      institutional_id: e.student.user.institutional_id,
-      first_name: e.student.first_name,
-      middle_name: e.student.middle_name,
-      last_name: e.student.last_name,
-      program_id: e.student.program_id,
-      program_code: e.student.program.program_code,
-      program_name: e.student.program.program_name,
-      year_level: e.student.year_level,
-      section: e.student.section,
-      enrolled_at: e.enrolled_at.toISOString(),
-    }));
+    const seenStudentIds = new Set<number>();
+    const students: any[] = [];
+
+    for (const e of enrollments) {
+      if (!e.student || !e.student.user) continue;
+      if (seenStudentIds.has(e.student.student_id)) continue;
+      seenStudentIds.add(e.student.student_id);
+
+      students.push({
+        student_id: e.student.student_id,
+        institutional_id: e.student.user.institutional_id,
+        first_name: e.student.first_name,
+        middle_name: e.student.middle_name,
+        last_name: e.student.last_name,
+        program_id: e.student.program_id,
+        program_code: e.student.program?.program_code || "GEN",
+        program_name: e.student.program?.program_name || "General Program",
+        year_level: e.student.year_level,
+        section: e.student.section,
+        enrolled_at: e.enrolled_at.toISOString(),
+      });
+    }
 
     return { success: true, students };
   } catch (err: any) {
@@ -2862,14 +2900,34 @@ export async function enrollStudentInCourse(
         },
       });
 
-      // Update student profile details if provided
-      if (data.firstName?.trim() || data.lastName?.trim()) {
+      // Ensure student profile details exist or update them if provided
+      if (!existingUser.student) {
+        let programId = data.programId ? Number(data.programId) : undefined;
+        if (!programId) {
+          const defaultProg = await db.academicProgram.findFirst({
+            orderBy: { program_id: "asc" },
+          });
+          programId = defaultProg?.program_id || 1;
+        }
+
+        await db.student.create({
+          data: {
+            student_id: targetStudentId,
+            first_name: data.firstName?.trim() || "Student",
+            middle_name: data.middleName?.trim() || null,
+            last_name: data.lastName?.trim() || formattedId,
+            program_id: programId,
+            year_level: Number(data.yearLevel) || defaultYear,
+            section: data.section?.trim() || "A",
+          },
+        });
+      } else if (data.firstName?.trim() || data.lastName?.trim() || data.yearLevel || data.section) {
         await db.student.update({
           where: { student_id: targetStudentId },
           data: {
-            first_name: data.firstName.trim() || undefined,
+            first_name: data.firstName?.trim() || undefined,
             middle_name: data.middleName?.trim() || undefined,
-            last_name: data.lastName.trim() || undefined,
+            last_name: data.lastName?.trim() || undefined,
             year_level: data.yearLevel ? Number(data.yearLevel) : undefined,
             section: data.section ? data.section.trim() : undefined,
           },
@@ -2971,6 +3029,7 @@ export async function bulkEnrollStudentsInCourse(
     let enrolledCount = 0;
     let skippedCount = 0;
     const errors: string[] = [];
+    const seenBatchIds = new Set<string>();
 
     for (const line of lines) {
       // Support comma, tab, or pipe separated values: ID, FirstName, LastName
@@ -2980,6 +3039,11 @@ export async function bulkEnrollStudentsInCourse(
       const lName = parts[2] || "";
 
       if (!instId) continue;
+      if (seenBatchIds.has(instId)) {
+        skippedCount++;
+        continue;
+      }
+      seenBatchIds.add(instId);
 
       const res = await enrollStudentInCourse(facultyId, courseId, {
         institutionalId: instId,

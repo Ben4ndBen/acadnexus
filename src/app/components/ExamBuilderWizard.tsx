@@ -567,7 +567,12 @@ export function ExamBuilderWizard({
 
   // 3. Assigned Students Selection with Sort & Filter
   const [assignedStudents, setAssignedStudents] = useState<StudentItem[]>(initialAssignedStudents);
-  const [selectedStudentIds, setSelectedStudentIds] = useState<number[]>([]);
+  const [selectedStudentIds, setSelectedStudentIds] = useState<number[]>(() => {
+    if (Array.isArray(exam.selected_student_ids) && exam.selected_student_ids.length > 0) {
+      return Array.from(new Set(exam.selected_student_ids));
+    }
+    return [];
+  });
   const [loadingStudents, setLoadingStudents] = useState<boolean>(false);
 
   // Filter & Sort State for Assigned Students
@@ -864,11 +869,15 @@ export function ExamBuilderWizard({
   };
 
   const handleToggleStudent = (studentId: number) => {
-    setSelectedStudentIds(prev =>
-      prev.includes(studentId)
-        ? prev.filter(id => id !== studentId)
-        : [...prev, studentId]
-    );
+    setSelectedStudentIds(prev => {
+      const set = new Set(prev);
+      if (set.has(studentId)) {
+        set.delete(studentId);
+      } else {
+        set.add(studentId);
+      }
+      return Array.from(set);
+    });
   };
 
   // Select all students currently matching active search, filters, or sorting
@@ -3058,8 +3067,8 @@ export function ExamBuilderWizard({
                   </div>
                 ) : assignedStudents.length === 0 ? (
                   <div className="p-6 text-center bg-amber-50/60 border border-amber-200/80 rounded-2xl space-y-1">
-                    <p className="text-xs font-bold text-amber-800">No class students currently registered for this subject.</p>
-                    <p className="text-[11px] text-amber-600">Students who register or enroll in this course code will automatically become eligible.</p>
+                    <p className="text-xs font-bold text-amber-800">No class students currently enrolled in this subject.</p>
+                    <p className="text-[11px] text-amber-600">Students added to this class in the Student Class tab will appear here and become eligible for exam assignment.</p>
                   </div>
                 ) : filteredAndSortedStudents.length === 0 ? (
                   <div className="p-6 text-center bg-slate-50 border border-slate-200 rounded-2xl">
