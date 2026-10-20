@@ -346,6 +346,9 @@ export type SubmitExamResult =
       resultReleaseMode: string;
       resultStatusLabel: string;
       resultExplanation: string;
+      hasManualGrading?: boolean;
+      isProvisional?: boolean;
+      pendingNotice?: string | null;
       error?: undefined;
     }
   | {
@@ -363,6 +366,9 @@ export type SubmitExamResult =
       resultReleaseMode?: undefined;
       resultStatusLabel?: undefined;
       resultExplanation?: undefined;
+      hasManualGrading?: undefined;
+      isProvisional?: undefined;
+      pendingNotice?: undefined;
     };
 
 export async function submitStudentExam(
@@ -593,6 +599,12 @@ export async function submitStudentExam(
       current_status: exam.current_status,
     });
 
+    const hasManualGrading = exam.questionBank.some((q: any) => q.question_type === "Essay");
+    const isProvisional = hasManualGrading;
+    const pendingNotice = hasManualGrading
+      ? "Your initial score is available. Essay questions and other items requiring manual grading have not yet been included. Your score will be updated after your instructor finishes grading."
+      : null;
+
     revalidatePath("/dashboard/student");
     return { 
       success: true, 
@@ -608,6 +620,9 @@ export async function submitStudentExam(
       resultReleaseMode: resultVisibility.releaseMode,
       resultStatusLabel: resultVisibility.statusLabel,
       resultExplanation: resultVisibility.explanation,
+      hasManualGrading,
+      isProvisional,
+      pendingNotice,
     };
   } catch (err: any) {
     console.error("Error submitting exam:", err);
@@ -881,6 +896,10 @@ export interface StudentExamResultData {
   pendingQuestionsCount: number;
   allQuestionsGraded: boolean;
 
+  hasManualGrading: boolean;
+  isProvisional: boolean;
+  pendingNotice: string | null;
+
   canShowResults: boolean;
   resultStatusLabel: string;
   resultExplanation: string;
@@ -1112,6 +1131,12 @@ export async function getStudentExamResultDetails({
 
         pendingQuestionsCount,
         allQuestionsGraded: pendingQuestionsCount === 0,
+
+        hasManualGrading: questions.some((q) => q.question_type === "Essay"),
+        isProvisional: pendingQuestionsCount > 0,
+        pendingNotice: pendingQuestionsCount > 0
+          ? "Your initial score is available. Essay questions and other items requiring manual grading have not yet been included. Your score will be updated after your instructor finishes grading."
+          : null,
 
         canShowResults: visibility.canShowResults,
         resultStatusLabel: visibility.statusLabel,

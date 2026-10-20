@@ -1020,8 +1020,17 @@ export function TakeExamClient({
                 )}
 
                 <div className="flex justify-between items-center pt-0.5">
-                  <span className="text-slate-400 font-semibold">
-                    {hasEssay ? "Initial Objective Score" : "Initial Score"}
+                  <span className="text-slate-400 font-semibold flex items-center gap-1.5">
+                    {hasEssay ? "Provisional Initial Score" : "Final Score"}
+                    {hasEssay ? (
+                      <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.2 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                        Provisional
+                      </span>
+                    ) : (
+                      <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.2 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                        Final
+                      </span>
+                    )}
                   </span>
                   <span className="text-emerald-400 font-black text-base font-mono">
                     {finalScore} / {totalPossible} pts ({scorePct}%)
@@ -1029,8 +1038,8 @@ export function TakeExamClient({
                 </div>
 
                 {hasEssay && (
-                  <div className="pt-2 border-t border-slate-800 text-[11px] text-slate-400 leading-relaxed">
-                    ℹ️ Objective questions were scored automatically. Any essay responses will be reviewed and graded by your instructor.
+                  <div className="pt-2 border-t border-slate-800 text-[11px] text-amber-200/90 leading-relaxed bg-amber-950/25 border border-amber-800/40 p-3 rounded-xl text-left">
+                    Your initial score is available. Essay questions and other items requiring manual grading have not yet been included. Your score will be updated after your instructor finishes grading.
                   </div>
                 )}
               </div>

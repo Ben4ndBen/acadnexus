@@ -99,8 +99,15 @@ export default async function StudentDashboard() {
             questionBank: {
               select: {
                 points: true,
+                question_type: true,
               },
             },
+          },
+        },
+        studentAnswers: {
+          select: {
+            question_id: true,
+            points_awarded: true,
           },
         },
       },
@@ -408,6 +415,14 @@ export default async function StudentDashboard() {
       examTargets: (se.exam as any).examTargets,
       current_status: se.exam.current_status,
     });
+
+    const hasEssay = se.exam.questionBank.some((q: any) => q.question_type === "Essay");
+    const hasPendingEssay = hasEssay && (
+      !se.studentAnswers || 
+      se.studentAnswers.length === 0 || 
+      se.studentAnswers.some((a: any) => a.points_awarded === null)
+    );
+
     return {
       ...se,
       submitted_at: se.submitted_at ? se.submitted_at.toISOString() : null,
@@ -415,6 +430,11 @@ export default async function StudentDashboard() {
       can_show_results: visibility.canShowResults,
       result_status_label: visibility.statusLabel,
       result_explanation: visibility.explanation,
+      has_manual_grading: hasEssay,
+      is_provisional: hasPendingEssay,
+      pending_notice: hasPendingEssay
+        ? "Your initial score is available. Essay questions and other items requiring manual grading have not yet been included. Your score will be updated after your instructor finishes grading."
+        : null,
     };
   });
 

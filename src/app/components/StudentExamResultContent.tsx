@@ -106,6 +106,28 @@ export function StudentExamResultContent({
         </div>
       </div>
 
+      {/* Notice for examinations with pending manual grading (Requirement 9) */}
+      {data.pendingNotice && (
+        <div className="bg-amber-50 border border-amber-300/90 rounded-2xl p-4.5 sm:p-5 flex items-start gap-3.5 text-amber-950 shadow-xs">
+          <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center shrink-0 border border-amber-300 mt-0.5">
+            <Clock className="w-5 h-5 text-amber-700" />
+          </div>
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-extrabold text-xs sm:text-sm uppercase tracking-wider text-amber-900">
+                Notice on Essay & Manual Grading
+              </span>
+              <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-amber-200 text-amber-900 border border-amber-300">
+                Provisional Score
+              </span>
+            </div>
+            <p className="text-xs sm:text-sm text-amber-900 leading-relaxed font-medium">
+              {data.pendingNotice}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Score & Evaluation Overview Cards */}
       {!data.canShowResults ? (
         // Hidden Results View (Requirement 7)
@@ -123,9 +145,13 @@ export function StudentExamResultContent({
           {/* Card 1: Initial Score & Deductions */}
           <div className="border border-slate-200 rounded-2xl p-5 bg-white shadow-xs space-y-3">
             <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Initial Score</span>
-              <span className="text-[10px] font-bold text-slate-400 bg-slate-50 px-2 py-0.5 rounded-full border">
-                At Submission
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                {data.hasManualGrading ? "Provisional Initial Score" : "Initial Score"}
+              </span>
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                data.hasManualGrading ? "bg-amber-50 text-amber-800 border-amber-200" : "bg-slate-50 text-slate-400 border-slate-200"
+              }`}>
+                {data.hasManualGrading ? "Provisional" : "At Submission"}
               </span>
             </div>
             <div className="space-y-1">
@@ -165,15 +191,21 @@ export function StudentExamResultContent({
               : "border-slate-200 bg-white"
           }`}>
             <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Latest Score</span>
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                {data.isProvisional ? "Current Provisional Score" : "Final Score"}
+              </span>
               {data.hasInstructorGraded ? (
                 <span className="text-[10px] font-extrabold text-emerald-800 bg-emerald-100 border border-emerald-300 px-2 py-0.5 rounded-full flex items-center gap-1">
                   <Sparkles className="w-3 h-3 text-emerald-600" />
                   Teacher Graded
                 </span>
+              ) : data.isProvisional ? (
+                <span className="text-[10px] font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+                  Provisional
+                </span>
               ) : (
-                <span className="text-[10px] font-semibold text-slate-400 bg-slate-50 px-2 py-0.5 rounded-full border">
-                  Latest Saved
+                <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                  Final Score
                 </span>
               )}
             </div>

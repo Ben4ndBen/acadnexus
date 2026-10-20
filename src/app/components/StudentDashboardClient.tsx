@@ -63,6 +63,9 @@ interface CompletedExam {
   can_show_results?: boolean;
   result_status_label?: string;
   result_explanation?: string;
+  has_manual_grading?: boolean;
+  is_provisional?: boolean;
+  pending_notice?: string | null;
   exam: {
     title: string;
     course?: Course | null;
@@ -727,16 +730,28 @@ export function StudentDashboardClient({
                       const rows = completedExams.map((se) => {
                         const examMaxPoints = se.exam.questionBank.reduce((sum, q) => sum + q.points, 0);
                         const isResultsHidden = se.can_show_results === false;
-                        const percentage = isResultsHidden ? "Pending" : (examMaxPoints > 0 ? `${Math.round((se.total_score / examMaxPoints) * 100)}%` : "0%");
+                        const isProvisional = !isResultsHidden && se.is_provisional;
+                        const percentage = isResultsHidden 
+                          ? "Pending" 
+                          : (examMaxPoints > 0 ? `${Math.round((se.total_score / examMaxPoints) * 100)}%` : "0%");
                         let statusText = "Submitted";
                         if (se.submission_trigger === "Timeout") statusText = "Auto-Submitted (Time Ran Out)";
                         else if (se.submission_trigger === "Cheating_Lockout") statusText = "Closed (Rules Broken)";
+
+                        if (isProvisional) {
+                          statusText += " (Provisional - Pending Essay Grading)";
+                        }
+
                         return {
                           "Exam Title": se.exam.title,
                           "Status": statusText,
-                          "Score (pts)": isResultsHidden ? (se.result_status_label || "Results Pending") : se.total_score,
+                          "Score (pts)": isResultsHidden 
+                            ? (se.result_status_label || "Results Pending") 
+                            : isProvisional 
+                            ? `${se.total_score} (Provisional)` 
+                            : se.total_score,
                           "Max Score (pts)": examMaxPoints,
-                          "Percentage Grade": percentage,
+                          "Percentage Grade": isProvisional ? `${percentage} (Provisional)` : percentage,
                           "Date Submitted": new Date(se.submitted_at || se.started_at).toLocaleString(),
                         };
                       });
@@ -833,15 +848,26 @@ export function StudentDashboardClient({
                               {se.result_status_label || "Results Pending Review"}
                             </span>
                           ) : (
-                            <span className={`inline-flex items-center text-sm font-black px-3.5 py-1.5 rounded-full border ${
-                              isLockout 
-                                ? "bg-rose-100 text-rose-800 border-rose-200"
-                                : isTimeout
-                                ? "bg-amber-100 text-amber-800 border-amber-200"
-                                : "bg-emerald-50 text-emerald-700 border-emerald-100"
-                            }`}>
-                              Score: {se.total_score} / {examMaxPoints} ({percentage}%)
-                            </span>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className={`inline-flex items-center text-sm font-black px-3.5 py-1.5 rounded-full border ${
+                                se.is_provisional
+                                  ? "bg-amber-50 text-amber-900 border-amber-300"
+                                  : isLockout 
+                                  ? "bg-rose-100 text-rose-800 border-rose-200"
+                                  : isTimeout
+                                  ? "bg-amber-100 text-amber-800 border-amber-200"
+                                  : "bg-emerald-50 text-emerald-700 border-emerald-100"
+                              }`}>
+                                {se.is_provisional ? "Provisional Score: " : "Score: "}
+                                {se.total_score} / {examMaxPoints} ({percentage}%)
+                              </span>
+                              {se.is_provisional && (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 border border-amber-300">
+                                  <Clock className="w-3 h-3 text-amber-600" />
+                                  Pending Essay Grading
+                                </span>
+                              )}
+                            </div>
                           )}
 
                           <button

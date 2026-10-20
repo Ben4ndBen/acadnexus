@@ -1147,6 +1147,7 @@ export async function gradeEssayAnswer(
 
     revalidatePath("/dashboard/faculty");
     revalidatePath("/dashboard/chair");
+    revalidatePath("/dashboard/student");
     return { success: true };
   } catch (err: any) {
     console.error("Error grading essay answer:", err);
