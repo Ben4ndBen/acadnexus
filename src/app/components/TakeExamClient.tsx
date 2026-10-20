@@ -50,7 +50,26 @@ export function TakeExamClient({
   const [mode, setMode] = useState<"gate" | "exam" | "warning" | "lockout" | "success" | "submitting" | "timeout_offline">("gate");
   
   const [currentQuestionIdx, setCurrentQuestionIdx] = useState<number>(0);
-  const [remainingSeconds, setRemainingSeconds] = useState<number>(initialData.remainingSeconds);
+  const timerBackupKey = `exam_timer_${initialData.studentExamId}`;
+  const [remainingSeconds, setRemainingSeconds] = useState<number>(() => {
+    let initialSec = initialData.remainingSeconds;
+    try {
+      if (typeof window !== "undefined") {
+        const stored = localStorage.getItem(`exam_timer_${initialData.studentExamId}`);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (parsed && typeof parsed.remainingSeconds === "number") {
+            // Protect against clock manipulation: local remaining time can only be restored
+            // if it is less than or equal to initialSec from the trusted server.
+            if (parsed.remainingSeconds > 0 && parsed.remainingSeconds <= initialSec) {
+              initialSec = parsed.remainingSeconds;
+            }
+          }
+        }
+      }
+    } catch {}
+    return initialSec;
+  });
   const [violations, setViolations] = useState<number>(0);
   const [warningReason, setWarningReason] = useState<string>("");
   const [lastViolationNotice, setLastViolationNotice] = useState<string>("");
@@ -102,6 +121,7 @@ export function TakeExamClient({
   const [flagged, setFlagged] = useState<Record<number, boolean>>({});
 
   const remainingSecondsRef = useRef(remainingSeconds);
+  const lastTickRef = useRef<number>(typeof performance !== "undefined" ? performance.now() : Date.now());
   const autoSaveDebounceRef = useRef<NodeJS.Timeout | null>(null);
   const answersRef = useRef<Record<number, string>>(answers);
   const lastSavedAnswersRef = useRef<Record<number, string>>(lastSavedAnswers);
@@ -165,9 +185,33 @@ export function TakeExamClient({
     }
   }, [localBackupKey]);
 
+  // Reconcile client timer with trusted server-side attempt state upon reconnection
+  const reconcileTimerWithServer = async () => {
+    try {
+      const res = await keepAliveStudentExam(initialData.studentExamId, remainingSecondsRef.current);
+      if (res?.success) {
+        if (res.isCompleted || res.remainingSeconds === 0) {
+          triggerTimeoutSubmission();
+        } else if (typeof res.remainingSeconds === "number") {
+          // Reconcile client countdown with trusted server state
+          setRemainingSeconds(res.remainingSeconds);
+          remainingSecondsRef.current = res.remainingSeconds;
+          try {
+            localStorage.setItem(timerBackupKey, JSON.stringify({
+              remainingSeconds: res.remainingSeconds,
+              savedAt: Date.now(),
+            }));
+          } catch {}
+        }
+      }
+    } catch (err) {
+      console.warn("Failed to reconcile timer upon reconnection:", err);
+    }
+  };
+
   // 0.5 Network connectivity monitor for resilient offline handling & sync
   useEffect(() => {
-    const handleOnline = () => {
+    const handleOnline = async () => {
       setIsOnline(true);
       isOnlineRef.current = true;
       reconnectedAtRef.current = Date.now();
@@ -176,6 +220,9 @@ export function TakeExamClient({
         triggerTimeoutSubmission();
       } else {
         setSaveStatus("syncing");
+        // 1. Immediately reconcile timer with trusted server-side attempt state upon reconnection
+        await reconcileTimerWithServer();
+        // 2. Synchronize unsaved answers with server without overwriting newer answers
         triggerBackgroundSave(answersRef.current, true);
       }
     };
@@ -214,38 +261,78 @@ export function TakeExamClient({
     }
   }, [violationsKey]);
 
-  // 2. Countdown Timer Loop
+  // 2. Countdown Timer Loop (Monotonic & Resilient to Clock Tampering)
   useEffect(() => {
     if (mode !== "exam" && mode !== "warning") return;
 
+    lastTickRef.current = typeof performance !== "undefined" ? performance.now() : Date.now();
+
     const timer = setInterval(() => {
+      const nowPerf = typeof performance !== "undefined" ? performance.now() : Date.now();
+      const elapsedSec = Math.max(1, Math.round((nowPerf - lastTickRef.current) / 1000));
+      lastTickRef.current = nowPerf;
+
       setRemainingSeconds((prev) => {
-        if (prev <= 1) {
+        const next = Math.max(0, prev - elapsedSec);
+        remainingSecondsRef.current = next;
+
+        try {
+          localStorage.setItem(timerBackupKey, JSON.stringify({
+            remainingSeconds: next,
+            savedAt: Date.now(),
+          }));
+        } catch {}
+
+        if (next <= 0) {
           clearInterval(timer);
           triggerTimeoutSubmission();
           return 0;
         }
-        return prev - 1;
+        return next;
       });
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [mode]);
+  }, [mode, timerBackupKey]);
 
   // 2.5 Heartbeat Timer Sync Loop (Every 10 Seconds)
   useEffect(() => {
     if (mode !== "exam" && mode !== "warning") return;
 
     const heartbeat = setInterval(async () => {
+      // While offline, skip heartbeat network call without treating it as cheating or auto-submitting
+      if (!isOnlineRef.current || (typeof navigator !== "undefined" && !navigator.onLine)) {
+        return;
+      }
+
       try {
-        await keepAliveStudentExam(initialData.studentExamId, remainingSecondsRef.current);
+        const res = await keepAliveStudentExam(initialData.studentExamId, remainingSecondsRef.current);
+        if (res?.success) {
+          if (res.isCompleted || res.remainingSeconds === 0) {
+            triggerTimeoutSubmission();
+          } else if (typeof res.remainingSeconds === "number") {
+            // Reconcile with trusted server-side attempt state if drift is detected (> 3s)
+            const drift = Math.abs(remainingSecondsRef.current - res.remainingSeconds);
+            if (drift > 3) {
+              setRemainingSeconds(res.remainingSeconds);
+              remainingSecondsRef.current = res.remainingSeconds;
+              try {
+                localStorage.setItem(timerBackupKey, JSON.stringify({
+                  remainingSeconds: res.remainingSeconds,
+                  savedAt: Date.now(),
+                }));
+              } catch {}
+            }
+          }
+        }
       } catch (err) {
-        console.error("Timer heartbeat sync failed:", err);
+        // Network error during heartbeat: DO NOT submit exam or penalize student!
+        console.warn("Timer heartbeat sync failed temporarily due to network:", err);
       }
     }, 10000);
 
     return () => clearInterval(heartbeat);
-  }, [mode]);
+  }, [mode, timerBackupKey]);
 
   // 3. Periodic Background Auto-Save Loop (Every 10 Seconds)
   useEffect(() => {
@@ -641,6 +728,7 @@ export function TakeExamClient({
         });
         localStorage.removeItem(violationsKey);
         localStorage.removeItem(localBackupKey);
+        localStorage.removeItem(timerBackupKey);
         setMode("success");
       } else {
         // Network or server submission issue: handle safely with offline retry
@@ -664,6 +752,7 @@ export function TakeExamClient({
     try {
       await submitStudentExam(initialData.studentExamId, "Cheating_Lockout", currentAnswersArray);
       localStorage.removeItem(localBackupKey);
+      localStorage.removeItem(timerBackupKey);
     } catch (err) {
       console.error("Lockout submission failed:", err);
     }
@@ -720,6 +809,7 @@ export function TakeExamClient({
         });
         localStorage.removeItem(violationsKey);
         localStorage.removeItem(localBackupKey);
+        localStorage.removeItem(timerBackupKey);
         setMode("success");
       } else {
         alert(res.error || "Submission failed. Please check your internet connection and try again.");
