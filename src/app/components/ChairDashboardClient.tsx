@@ -9,13 +9,12 @@ import {
   Tag, Layers, BookOpen, Search, Plus, UserCog
 } from "lucide-react";
 import { reviewExamByChair, updateChairNameAction } from "@/app/actions/chair";
-import { assignCoursesToFacultyAction, createExamDraft } from "@/app/actions/faculty";
+import { createExamDraft } from "@/app/actions/faculty";
 import { Latex } from "@/app/components/Latex";
 import { getDepartmentTheme } from "@/lib/departmentThemes";
 import { DepartmentBadge } from "@/app/components/DepartmentBadge";
 import { 
   getProgramsForDepartment, 
-  filterCoursesForDepartment,
   determineProgramCodeFromCourseOrExam
 } from "@/lib/courseDepartmentMapping";
 import { getExpectedYearAndSemForCourse } from "@/lib/bsitCurriculum";
@@ -229,17 +228,7 @@ export function ChairDashboardClient({
   const [activeSplitApproval, setActiveSplitApproval] = useState<any | null>(null);
   const [splitViewMode, setSplitViewMode] = useState<"split" | "tos_only" | "questions_only">("split");
 
-  // State for Managing existing instructor's courses
-  const [assignModalOpen, setAssignModalOpen] = useState(false);
-  const [assignFacultyTarget, setAssignFacultyTarget] = useState<any | null>(null);
-  const [editProgramCode, setEditProgramCode] = useState("");
-  const [editIncludeGE, setEditIncludeGE] = useState(false);
-  const [editYearLevel, setEditYearLevel] = useState<number>(0);
-  const [editSemester, setEditSemester] = useState<number>(0);
-  const [editCourseIds, setEditCourseIds] = useState<number[]>([]);
-  const [editCourseSearchQuery, setEditCourseSearchQuery] = useState("");
-  const [isSavingAssignedCourses, setIsSavingAssignedCourses] = useState(false);
-  const [assignMessage, setAssignMessage] = useState<string | null>(null);
+
 
   // State for Editing Chairperson's Personal Profile Name
   const [chairProfileModalOpen, setChairProfileModalOpen] = useState(false);
@@ -274,48 +263,7 @@ export function ChairDashboardClient({
     }
   };
 
-  // Filtered courses for Assign / Edit Modal based on Chair's Department, Program, Year & Sem
-  const availableChairEditCourses = useMemo(() => {
-    return filterCoursesForDepartment(courses || [], departmentId || departmentName, {
-      programCode: editProgramCode,
-      includeGeneralEducation: editIncludeGE,
-      searchQuery: editCourseSearchQuery,
-      yearLevel: editYearLevel || null,
-      semester: editSemester || null,
-    });
-  }, [courses, departmentId, departmentName, editProgramCode, editIncludeGE, editCourseSearchQuery, editYearLevel, editSemester]);
 
-  const handleOpenAssignModal = (faculty: any) => {
-    setAssignFacultyTarget(faculty);
-    const currentCourseIds = faculty.facultyCourses?.filter((fc: any) => fc?.course).map((fc: any) => fc.course.course_id) || [];
-    setEditCourseIds(currentCourseIds);
-    setEditCourseSearchQuery("");
-    
-    const deptProgs = getProgramsForDepartment(departmentId, departmentName);
-    if (deptProgs.length > 0) {
-      setEditProgramCode(deptProgs[0].code);
-    } else {
-      setEditProgramCode("");
-    }
-    
-    setEditIncludeGE(false);
-    setAssignMessage(null);
-    setAssignModalOpen(true);
-  };
-
-  const handleSaveAssignedCourses = async () => {
-    if (!assignFacultyTarget) return;
-    setIsSavingAssignedCourses(true);
-    setAssignMessage(null);
-    const res = await assignCoursesToFacultyAction(assignFacultyTarget.faculty_id, editCourseIds);
-    setIsSavingAssignedCourses(false);
-    if (res.error) {
-      setAssignMessage(res.error);
-    } else {
-      setAssignModalOpen(false);
-      router.refresh();
-    }
-  };
 
   const hasReviewerComments = (workflowId: number) => {
     const general = (reviewComments[workflowId] || "").trim();
@@ -994,14 +942,7 @@ export function ChairDashboardClient({
                         <span className="text-[10px] text-slate-400 italic">None assigned</span>
                       )}
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => handleOpenAssignModal(faculty)}
-                      className="px-3 py-1.5 text-xs font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-xl transition-colors flex items-center gap-1.5 shrink-0 self-end sm:self-auto cursor-pointer"
-                    >
-                      <BookOpen className="w-3.5 h-3.5" />
-                      <span>Assign / Edit Subjects</span>
-                    </button>
+
                   </div>
                 </div>
               )
@@ -1508,238 +1449,7 @@ export function ChairDashboardClient({
 
 
 
-      {/* ASSIGN / EDIT COURSES MODAL */}
-      {assignModalOpen && assignFacultyTarget && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4 sm:p-6">
-          <div className="bg-white rounded-3xl max-w-3xl sm:max-w-4xl w-full shadow-2xl border border-slate-200 flex flex-col max-h-[90vh] overflow-hidden my-auto">
-            {/* Modal Header (Fixed Top) */}
-            <div className="flex justify-between items-center px-6 py-5 border-b border-slate-100 shrink-0 bg-white">
-              <div className="flex items-center gap-3">
-                <div className="bg-amber-100 text-amber-800 p-2.5 rounded-2xl">
-                  <BookOpen className="w-6 h-6" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-extrabold text-slate-900">
-                    Assign Teaching Load
-                  </h3>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Instructor: <strong className="text-slate-800">{assignFacultyTarget.first_name} {assignFacultyTarget.last_name}</strong>
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setAssignModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 p-2 rounded-full hover:bg-slate-100 transition-colors cursor-pointer"
-              >
-                <X className="w-6 h-6" />
-              </button>
-            </div>
 
-            {/* Modal Body (Scrollable) */}
-            <div className="p-6 sm:p-8 space-y-5 overflow-y-auto flex-1 font-sans">
-              {assignMessage && (
-                <div className="bg-rose-50 border border-rose-200 text-rose-700 p-3 rounded-xl text-xs flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 shrink-0" />
-                  <span>{assignMessage}</span>
-                </div>
-              )}
-
-              {(() => {
-                const deptProgs = getProgramsForDepartment(departmentId, departmentName);
-
-                return (
-                  <div className="bg-amber-50/60 border border-amber-200/80 rounded-xl p-3 flex flex-wrap items-center justify-between gap-3 text-xs">
-                    <div className="flex items-center gap-3 flex-wrap">
-                      <div>
-                        <span className="text-slate-500">Department:</span>{" "}
-                        <strong className="text-amber-950 font-bold">{departmentName}</strong>
-                      </div>
-
-                      {deptProgs.length === 1 ? (
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-slate-500 font-medium">Academic Program:</span>
-                          <span className="text-[11px] font-bold text-slate-800 bg-white border border-slate-200 rounded-lg px-2.5 py-1 select-none">
-                            {deptProgs[0].name} ({deptProgs[0].code})
-                          </span>
-                        </div>
-                      ) : deptProgs.length > 1 ? (
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-slate-500 font-medium">Academic Program:</span>
-                          <select
-                            value={editProgramCode}
-                            onChange={(e) => setEditProgramCode(e.target.value)}
-                            className="bg-white border border-slate-200 text-[11px] font-semibold text-slate-800 rounded-lg px-2 py-1 outline-none cursor-pointer focus:ring-2 focus:ring-amber-500/20"
-                          >
-                            {deptProgs.map((p) => (
-                              <option key={p.code} value={p.code}>
-                                {p.name} ({p.code})
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      ) : null}
-                    </div>
-
-                    <div className="flex items-center gap-3 flex-wrap">
-                      <label className="flex items-center gap-1.5 text-[11px] font-medium text-slate-600 cursor-pointer select-none bg-white border border-slate-200/80 px-2 py-1 rounded-lg hover:border-slate-300">
-                        <input
-                          type="checkbox"
-                          checked={editIncludeGE}
-                          onChange={(e) => setEditIncludeGE(e.target.checked)}
-                          className="rounded border-slate-300 text-amber-600 focus:ring-amber-500 w-3.5 h-3.5 cursor-pointer"
-                        />
-                        <span>Include GE Subjects</span>
-                      </label>
-
-                      <div className="flex items-center gap-1 text-[11px] font-bold text-slate-600">
-                        <span>Year:</span>
-                        <select
-                          value={editYearLevel}
-                          onChange={(e) => setEditYearLevel(Number(e.target.value))}
-                          className="bg-white border border-slate-200 text-[11px] font-semibold text-slate-800 rounded-lg px-1.5 py-1 outline-none cursor-pointer"
-                        >
-                          <option value={0}>All Years</option>
-                          <option value={1}>1st Year</option>
-                          <option value={2}>2nd Year</option>
-                          <option value={3}>3rd Year</option>
-                          <option value={4}>4th Year</option>
-                        </select>
-                      </div>
-
-                      <div className="flex items-center gap-1 text-[11px] font-bold text-slate-600">
-                        <span>Sem:</span>
-                        <select
-                          value={editSemester}
-                          onChange={(e) => setEditSemester(Number(e.target.value))}
-                          className="bg-white border border-slate-200 text-[11px] font-semibold text-slate-800 rounded-lg px-1.5 py-1 outline-none cursor-pointer"
-                        >
-                          <option value={0}>All Semesters</option>
-                          <option value={1}>1st Sem</option>
-                          <option value={2}>2nd Sem</option>
-                        </select>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })()}
-
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-700">
-                    Select Department Courses to Assign
-                  </span>
-                  <span className="text-[10px] font-black bg-amber-50 text-amber-800 px-2 py-0.5 rounded-full border border-amber-200">
-                    {editCourseIds.length} Selected
-                  </span>
-                </div>
-
-                {/* Search box */}
-                <div className="relative">
-                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
-                  <input
-                    type="text"
-                    placeholder="Filter department subjects by code or title..."
-                    value={editCourseSearchQuery}
-                    onChange={(e) => setEditCourseSearchQuery(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-8 pr-3 py-2 text-xs text-slate-800 outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
-                  />
-                </div>
-
-                {/* Selected chips */}
-                {editCourseIds.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 max-h-20 overflow-y-auto py-1">
-                    {editCourseIds.map((cId) => {
-                      const c = courses.find((item) => item.course_id === cId);
-                      if (!c) return null;
-                      return (
-                        <span
-                          key={cId}
-                          className="inline-flex items-center gap-1 text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded-lg"
-                        >
-                          <span className="font-mono">{c.course_code}</span>
-                          <button
-                            type="button"
-                            onClick={() => setEditCourseIds((prev) => prev.filter((id) => id !== cId))}
-                            className="hover:text-rose-600 cursor-pointer ml-0.5"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        </span>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {/* List of courses (Scrollable) */}
-                <div className="border border-slate-200 rounded-xl overflow-hidden bg-slate-50/50">
-                  <div className="max-h-72 overflow-y-auto p-2 space-y-1.5 scrollbar-thin scrollbar-thumb-slate-300">
-                    {availableChairEditCourses.map((c) => {
-                      const isChecked = editCourseIds.includes(c.course_id);
-                      return (
-                        <label
-                          key={c.course_id}
-                          className={`flex items-center gap-2 p-2 rounded-xl text-xs cursor-pointer transition-colors ${
-                            isChecked ? "bg-amber-50 font-bold text-amber-900 border border-amber-200" : "bg-white hover:bg-slate-100/80 text-slate-700 font-medium border border-transparent"
-                          }`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={isChecked}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setEditCourseIds((prev) => [...prev, c.course_id]);
-                              } else {
-                                setEditCourseIds((prev) => prev.filter((id) => id !== c.course_id));
-                              }
-                            }}
-                            className="rounded border-slate-300 text-amber-600 focus:ring-amber-500 w-3.5 h-3.5"
-                          />
-                          <span className="font-mono text-[11px] font-black text-slate-900 bg-slate-100 px-1.5 py-0.5 rounded shrink-0">
-                            {c.course_code}
-                          </span>
-                          <span className="truncate">{c.course_title}</span>
-                        </label>
-                      );
-                    })}
-                    {availableChairEditCourses.length === 0 && (
-                      <p className="text-xs text-slate-400 text-center py-4">No subjects found matching this department / program.</p>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Modal Footer (Fixed Bottom) */}
-            <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/90 flex justify-end gap-3 shrink-0">
-              <button
-                type="button"
-                onClick={() => setAssignModalOpen(false)}
-                className="px-5 py-2.5 text-xs font-bold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 rounded-xl transition-colors cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={isSavingAssignedCourses}
-                onClick={handleSaveAssignedCourses}
-                className="px-5 py-2.5 text-xs font-extrabold text-white bg-amber-600 hover:bg-amber-700 rounded-xl shadow-md transition-all flex items-center gap-2 disabled:opacity-50 cursor-pointer"
-              >
-                {isSavingAssignedCourses ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Saving...</span>
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle className="w-4 h-4" />
-                    <span>Save Course Allocations</span>
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* EDIT CHAIRPERSON PROFILE / NAME MODAL */}
       {chairProfileModalOpen && (

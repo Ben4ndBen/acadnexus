@@ -398,12 +398,9 @@ export default async function ChairDashboard() {
   // Fetch courses for assignment using cached query
   const courses = await getCoursesCached();
 
-  let assignedCourses = chairFacultyRecord?.facultyCourses
+  const assignedCourses = chairFacultyRecord?.facultyCourses
     ? chairFacultyRecord.facultyCourses.map(fc => fc.course).filter((c): c is NonNullable<typeof c> => Boolean(c && c.course_id && c.course_code))
     : [];
-  if (assignedCourses.length === 0) {
-    assignedCourses = filterCoursesForDepartment(courses, department.department_id);
-  }
 
   const chairFullName = [
     chairFacultyRecord?.first_name,
@@ -474,7 +471,7 @@ export default async function ChairDashboard() {
           chairExaminations={chairExaminations as any}
           programs={programs as any}
           assignedCourses={assignedCourses as any}
-          courses={courses}
+          courses={assignedCourses as any}
           faculty={sanitizedChairFaculty as any}
           institutionalId={institutionalId}
           hasSeenCourseAssignment={chairFacultyRecord?.has_seen_course_assignment || false}

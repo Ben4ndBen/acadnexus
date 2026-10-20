@@ -3141,9 +3141,16 @@ export async function assignCoursesToFacultyAction(facultyId: number, courseIds:
     const { data: { user: currentUser } } = await supabase.auth.getUser();
     if (!currentUser) return { error: "Unauthorized. Please log in first." };
 
-    const currentRole = currentUser.user_metadata?.role;
-    if (currentRole !== "Director" && currentRole !== "Chair" && currentRole !== "ProgramChair") {
-      return { error: "Unauthorized. Only Director or Chair can assign courses to faculty." };
+    // Strictly verify in database that caller is the Director for Instruction
+    const dbUser = await db.user.findUnique({
+      where: { institutional_id: currentUser.user_metadata?.institutional_id },
+      select: { user_id: true, role: true },
+    });
+
+    if (!dbUser || dbUser.role !== "Director") {
+      return {
+        error: "UNAUTHORIZED: Only the Director for Instruction is authorized to assign, modify, or reassign subjects or courses.",
+      };
     }
 
     await db.$transaction(async (tx) => {
