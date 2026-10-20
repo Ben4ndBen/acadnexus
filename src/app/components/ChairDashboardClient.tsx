@@ -22,6 +22,7 @@ import { FacultyDashboardClient } from "@/app/components/FacultyDashboardClient"
 import { BSCTableOfSpecificationsView, formatFullExamDate } from "@/app/components/BSCTableOfSpecificationsView";
 import { getProgramHeaderImage } from "@/lib/programHeader";
 import { EditableExamTitle } from "@/app/components/EditableExamTitle";
+import { ExamSignatorySection } from "@/app/components/ExamSignatorySection";
 
 function toRomanNumeral(num: number): string {
   const romanMap: [number, string][] = [
@@ -178,6 +179,7 @@ interface ChairDashboardClientProps {
   requirePasswordUpdate?: boolean;
   username?: string;
   studentExams?: any[];
+  directorName?: string;
 }
 
 export function ChairDashboardClient({ 
@@ -199,7 +201,8 @@ export function ChairDashboardClient({
   hasSeenCourseAssignment = false,
   requirePasswordUpdate = false,
   username,
-  studentExams = []
+  studentExams = [],
+  directorName = "",
 }: ChairDashboardClientProps) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<"overview" | "faculty" | "queue" | "my_teaching">("overview");
@@ -676,6 +679,36 @@ export function ChairDashboardClient({
             );
           })}
         </div>
+
+        {/* SIGNATORY SECTION ACCORDING TO DEPARTMENT RULES */}
+        {(() => {
+          const isAuthorPC = Boolean(
+            (approval.exam as any)?.faculty?.first_name?.includes("Program Chair") ||
+            (approval.exam as any)?.faculty?.last_name?.includes("Chairperson") ||
+            approval.exam?.faculty?.first_name?.toLowerCase().includes("pc-") ||
+            approval.exam?.faculty?.first_name?.toLowerCase().includes("progchair")
+          );
+          const authorFullName = approval.exam?.faculty
+            ? `${approval.exam.faculty.first_name || ""} ${approval.exam.faculty.last_name || ""}`.trim()
+            : "";
+          const chairFullName = `${chairFirstName} ${chairLastName}`.trim();
+
+          return (
+            <ExamSignatorySection
+              departmentName={deptName}
+              programCode={approval.exam?.program_code || determineProgramCodeFromCourseOrExam(approval.exam) || programCode}
+              courseCode={courseCode}
+              courseTitle={courseTitle}
+              facultyAuthorName={authorFullName}
+              facultyAuthorRank={approval.exam?.faculty?.academic_rank || ""}
+              programChairName={isProgramChair ? chairFullName : undefined}
+              departmentChairName={!isProgramChair ? chairFullName : undefined}
+              directorName={directorName}
+              isProgramChairAuthor={isAuthorPC}
+              isEditable={false}
+            />
+          );
+        })()}
 
         {/* BSC FOOTER */}
         <div className="pt-6 border-t border-slate-300">

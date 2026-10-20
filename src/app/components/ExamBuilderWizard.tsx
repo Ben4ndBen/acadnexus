@@ -15,6 +15,7 @@ import { formatFullExamDate } from "@/app/components/BSCTableOfSpecificationsVie
 import { DatePicker } from "@/app/components/DatePicker";
 import { getProgramHeaderImage } from "@/lib/programHeader";
 import { EditableExamTitle } from "@/app/components/EditableExamTitle";
+import { ExamSignatorySection } from "@/app/components/ExamSignatorySection";
 
 interface Course {
   course_id: number;
@@ -1365,7 +1366,7 @@ export function ExamBuilderWizard({
   const previewPages = useMemo(() => {
     interface PreviewBlock {
       id: string;
-      type: "type-header" | "chapter-header" | "question-item";
+      type: "type-header" | "chapter-header" | "question-item" | "signatory-section";
       qType?: string;
       testNum?: number;
       count?: number;
@@ -1473,10 +1474,17 @@ export function ExamBuilderWizard({
         });
     }
 
+    // Append institutional signatory section at the end of the Test Questions
+    blocks.push({
+      id: "block-tq-signatories",
+      type: "signatory-section",
+      height: 150,
+    });
+
     const pages: PreviewBlock[][] = [];
     let currentPage: PreviewBlock[] = [];
     let currentHeight = 0;
-    const PAGE_1_CAPACITY = 680;
+    const PAGE_1_CAPACITY = 720;
     const PAGE_N_CAPACITY = 850;
 
     blocks.forEach((block) => {
@@ -4568,8 +4576,8 @@ export function ExamBuilderWizard({
                             </div>
                           </div>
                         </>
-                      ) : (
-                        /* PAGE 2+: COMPACT PAGE HEADER */
+                      ) : !pageBlocks.some((b) => b.type === "signatory-section") ? (
+                        /* PAGE 2+: COMPACT PAGE HEADER (OMITTED IF PAGE CONTAINS SIGNATORIES) */
                         <div className="flex items-center justify-between border-b border-slate-200 pb-2 text-xs font-bold text-slate-600">
                           <span className="uppercase tracking-wide font-black text-slate-900">
                             {term.toUpperCase()} EXAMINATION PAPER — {selectedCourse.course_code}
@@ -4578,7 +4586,7 @@ export function ExamBuilderWizard({
                             Page {pageIdx + 1} of {previewPages.length}
                           </span>
                         </div>
-                      )}
+                      ) : null}
 
                       {/* BLOCKS ON THIS A4 PAGE */}
                       <div className="space-y-4 pt-1">
@@ -4758,6 +4766,31 @@ export function ExamBuilderWizard({
                                 )}
 
                               </div>
+                            );
+                          }
+
+                          if (block.type === "signatory-section") {
+                            return (
+                              <ExamSignatorySection
+                                key={block.id}
+                                departmentName={dynamicDepartmentName || facultyDepartment}
+                                programCode={selectedCourse?.course_code}
+                                courseCode={selectedCourse?.course_code}
+                                courseTitle={selectedCourse?.course_title}
+                                facultyAuthorName={signatoryFacultyName}
+                                facultyAuthorRank={signatoryFacultyRank}
+                                programChairName={signatoryProgChairName}
+                                departmentChairName={signatoryDeptChairName}
+                                directorName={signatoryDirectorName}
+                                isProgramChairAuthor={isPcOrChairAuthor}
+                                forcedLayoutMode={signatoryLayoutMode}
+                                isEditable={true}
+                                onFacultyNameChange={setSignatoryFacultyName}
+                                onFacultyRankChange={setSignatoryFacultyRank}
+                                onProgramChairNameChange={setSignatoryProgChairName}
+                                onDepartmentChairNameChange={setSignatoryDeptChairName}
+                                onDirectorNameChange={setSignatoryDirectorName}
+                              />
                             );
                           }
 

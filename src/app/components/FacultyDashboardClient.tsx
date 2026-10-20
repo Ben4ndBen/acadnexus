@@ -29,6 +29,7 @@ import { formatStudentName, getStudentMiddleInitial, getSubmissionScheduleTiming
 import { DatePicker } from "@/app/components/DatePicker";
 import { getProgramHeaderImage } from "@/lib/programHeader";
 import { EditableExamTitle } from "@/app/components/EditableExamTitle";
+import { ExamSignatorySection } from "@/app/components/ExamSignatorySection";
 
 interface FacultyDashboardClientProps {
   faculty: {
@@ -6228,6 +6229,17 @@ export function FacultyDashboardClient({
                           );
                         })}
                       </div>
+
+                      {/* SIGNATORY SECTION ACCORDING TO DEPARTMENT RULES */}
+                      <ExamSignatorySection
+                        departmentName={faculty.department?.department_name}
+                        programCode={student.program_code || exam.course?.course_code}
+                        courseCode={exam.course?.course_code}
+                        courseTitle={exam.course?.course_title}
+                        facultyAuthorName={`${faculty.first_name || ""} ${faculty.last_name || ""}`.trim()}
+                        facultyAuthorRank={(faculty as any).academic_rank || ""}
+                        isEditable={false}
+                      />
 
                       {/* BSC OFFICIAL FOOTER IMAGE */}
                       <div className="w-full mt-8 relative overflow-hidden leading-none block shrink-0 border-t border-slate-200 pt-3">

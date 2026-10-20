@@ -240,6 +240,13 @@ export default async function ChairDashboard() {
   // Extract all department exams
   const departmentExams = allFaculty.flatMap(f => f.examinations);
 
+  // Fetch Director for Instruction profile name for signatories
+  const directorRecord = await db.director.findFirst();
+  const directorName = [directorRecord?.title, directorRecord?.first_name, directorRecord?.last_name]
+    .filter(Boolean)
+    .join(" ")
+    .trim();
+
   // Fetch Chair's own faculty profile for faculty dashboard functions
   let chairFacultyRecord = await db.faculty.findUnique({
     where: { faculty_id: dbUser.user_id },
@@ -478,6 +485,7 @@ export default async function ChairDashboard() {
           requirePasswordUpdate={dbUser.require_password_update || false}
           username={dbUser.username || undefined}
           studentExams={sanitizedStudentExams as any}
+          directorName={directorName}
         />
       </main>
 

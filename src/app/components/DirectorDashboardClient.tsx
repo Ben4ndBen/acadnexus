@@ -12,6 +12,7 @@ import {
 import { BSCTableOfSpecificationsView } from "@/app/components/BSCTableOfSpecificationsView";
 import { getProgramHeaderImage } from "@/lib/programHeader";
 import { Latex } from "@/app/components/Latex";
+import { ExamSignatorySection } from "@/app/components/ExamSignatorySection";
 import { reviewExamByDirector, toggleGlobalHold, toggleIndividualHold, saveActiveAcademicPeriod, updateDirectorNameAction } from "@/app/actions/director";
 import type { AcademicPeriodSettings } from "@/lib/academicUtils";
 import { registerInstructorByAdminAction } from "@/app/actions/auth";
@@ -1157,6 +1158,44 @@ export function DirectorDashboardClient({
               </div>
             );
           })}
+        </div>
+
+        {/* SIGNATORY SECTION ACCORDING TO DEPARTMENT RULES */}
+        {(() => {
+          const isAuthorPC = Boolean(
+            (approval.exam as any)?.faculty?.first_name?.includes("Program Chair") ||
+            (approval.exam as any)?.faculty?.last_name?.includes("Chairperson") ||
+            approval.exam?.faculty?.first_name?.toLowerCase().includes("pc-") ||
+            approval.exam?.faculty?.first_name?.toLowerCase().includes("progchair")
+          );
+          const authorFullName = approval.exam?.faculty
+            ? `${approval.exam.faculty.first_name || ""} ${approval.exam.faculty.last_name || ""}`.trim()
+            : "";
+          const resolvedDept = getExaminationDepartmentName(approval.exam);
+          const directorName = [dirTitle, dirFirstName, dirMiddleName, dirLastName].filter(Boolean).join(" ").trim() || "NAME OF DIRECTOR FOR INSTRUCTION";
+
+          return (
+            <ExamSignatorySection
+              departmentName={resolvedDept}
+              programCode={determineProgramCodeFromCourseOrExam(approval.exam)}
+              courseCode={courseCode}
+              courseTitle={courseTitle}
+              facultyAuthorName={authorFullName}
+              facultyAuthorRank={approval.exam?.faculty?.academic_rank || ""}
+              directorName={directorName}
+              isProgramChairAuthor={isAuthorPC}
+              isEditable={false}
+            />
+          );
+        })()}
+
+        {/* BSC FOOTER */}
+        <div className="pt-6 border-t border-slate-300">
+          <img
+            src="/bsc-footer.png"
+            alt="Batanes State College Footer"
+            className="w-full h-auto object-contain mx-auto max-h-[100px]"
+          />
         </div>
       </div>
     );
