@@ -514,7 +514,7 @@ export async function submitStudentExam(
         hasManualGrading: hasEssay,
         isProvisional: hasEssay,
         pendingNotice: hasEssay
-          ? "Your initial score is available. Essay questions and other items requiring manual grading have not yet been included. Your score will be updated after your instructor finishes grading."
+          ? "Your initial score is shown above. Total score will be available once your instructor completes scoring the essay questions."
           : null,
       };
     }
@@ -724,7 +724,7 @@ export async function submitStudentExam(
     const hasManualGrading = exam.questionBank.some((q: any) => q.question_type === "Essay");
     const isProvisional = hasManualGrading;
     const pendingNotice = hasManualGrading
-      ? "Your initial score is available. Essay questions and other items requiring manual grading have not yet been included. Your score will be updated after your instructor finishes grading."
+      ? "Your initial score is shown above. Total score will be available once your instructor completes scoring the essay questions."
       : null;
 
     revalidatePath("/dashboard/student");
@@ -1337,7 +1337,7 @@ export async function getStudentExamResultDetails({
         hasManualGrading: questions.some((q) => q.question_type === "Essay"),
         isProvisional: pendingQuestionsCount > 0,
         pendingNotice: pendingQuestionsCount > 0
-          ? "Your initial score is available. Essay questions and other items requiring manual grading have not yet been included. Your score will be updated after your instructor finishes grading."
+          ? "Your initial score is shown above. Total score will be available once your instructor completes scoring the essay questions."
           : null,
 
         canShowResults: visibility.canShowResults,

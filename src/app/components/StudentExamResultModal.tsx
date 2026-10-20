@@ -187,48 +187,65 @@ export function StudentExamResultModal({
                 </div>
               </div>
 
-              {/* Score & Evaluation Overview Cards */}
-              {!data.canShowResults ? (
-                // Hidden Results View (Requirement 7)
-                <div className="bg-amber-50/80 border border-amber-200 rounded-2xl p-5 space-y-2">
-                  <div className="flex items-center gap-2 text-amber-900 font-bold text-sm">
+              {/* Notice for examinations with pending manual grading */}
+              {data.hasManualGrading && (
+                <div className="bg-amber-50 border border-amber-300/90 rounded-2xl p-4 sm:p-5 flex items-start gap-3 text-amber-950 shadow-xs">
+                  <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center shrink-0 border border-amber-300 mt-0.5">
                     <Clock className="w-4 h-4 text-amber-700" />
-                    <span>{data.resultStatusLabel || "Results Pending Review"}</span>
                   </div>
-                  <p className="text-xs text-slate-600 leading-relaxed">
-                    {data.resultExplanation || "Scores are configured to remain hidden until reviewed and released by your instructor."}
-                  </p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {/* Card 1: Initial Score & Deductions */}
-                  <div className="border border-slate-200 rounded-2xl p-4.5 bg-white shadow-xs space-y-3">
-                    <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                      <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Initial Score</span>
-                      <span className="text-[10px] font-semibold text-slate-400 bg-slate-50 px-2 py-0.5 rounded-full border">
-                        At Submission
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-extrabold text-xs uppercase tracking-wider text-amber-900">
+                        Notice on Essay Grading
+                      </span>
+                      <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-200 text-amber-900 border border-amber-300">
+                        Initial Score
                       </span>
                     </div>
-                    <div className="space-y-1">
-                      <div className="flex items-baseline justify-between">
-                        <span className="text-2xl font-black text-slate-800">
-                          {data.initialNetScore} <span className="text-xs font-semibold text-slate-400">/ {data.maxPoints} pts</span>
-                        </span>
-                        <span className="text-xs font-bold text-slate-500">
-                          {data.maxPoints > 0 ? `${Math.round((data.initialNetScore / data.maxPoints) * 100)}%` : "0%"}
-                        </span>
-                      </div>
+                    <p className="text-xs text-amber-900 leading-relaxed font-medium">
+                      Your initial score is shown below. Total score will be available once your instructor completes scoring the essay questions.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Score & Evaluation Overview Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* Card 1: Initial Score & Deductions */}
+                <div className="border border-slate-200 rounded-2xl p-4.5 bg-white shadow-xs space-y-3">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                    <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                      {data.hasManualGrading ? "Initial Score" : "Total Score"}
+                    </span>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                      data.hasManualGrading ? "bg-amber-50 text-amber-800 border-amber-200" : "bg-emerald-50 text-emerald-800 border-emerald-200"
+                    }`}>
+                      {data.hasManualGrading ? "Initial" : "Total"}
+                    </span>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-baseline justify-between">
+                      <span className="text-2xl font-black text-slate-800">
+                        {data.initialNetScore} <span className="text-xs font-semibold text-slate-400">/ {data.maxPoints} pts</span>
+                      </span>
+                      <span className="text-xs font-bold text-slate-500">
+                        {data.maxPoints > 0 ? `${Math.round((data.initialNetScore / data.maxPoints) * 100)}%` : "0%"}
+                      </span>
+                    </div>
+                    {data.totalDeductions > 0 && (
                       <p className="text-[11px] text-slate-500">
                         Auto-graded raw points: <span className="font-bold text-slate-700">{data.initialRawScore} pts</span>
                       </p>
-                    </div>
+                    )}
+                  </div>
 
-                    {/* Deductions applied */}
+                  {/* Deductions applied: show ONLY if there is a deduction */}
+                  {data.totalDeductions > 0 && (
                     <div className="pt-2 border-t border-slate-100 text-[11px] space-y-1">
                       <div className="flex justify-between items-center text-slate-600">
                         <span>Security Deductions:</span>
-                        <span className={`font-bold ${data.totalDeductions > 0 ? "text-rose-600" : "text-slate-500"}`}>
-                          {data.totalDeductions > 0 ? `-${data.totalDeductions} pts` : "0 pts (None)"}
+                        <span className="font-bold text-rose-600">
+                          -{data.totalDeductions} pts
                         </span>
                       </div>
                       {data.violationsCount > 0 && (
@@ -237,53 +254,60 @@ export function StudentExamResultModal({
                         </p>
                       )}
                     </div>
+                  )}
+                </div>
+
+                {/* Card 2: Total / Updated Score */}
+                <div className={`border rounded-2xl p-4.5 shadow-xs space-y-3 ${
+                  data.isScoreUpdated
+                    ? "border-emerald-200 bg-emerald-50/20"
+                    : "border-slate-200 bg-white"
+                }`}>
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                    <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Total Score</span>
+                    {data.hasInstructorGraded ? (
+                      <span className="text-[10px] font-extrabold text-emerald-800 bg-emerald-100 border border-emerald-300 px-2 py-0.5 rounded-full flex items-center gap-1">
+                        <Sparkles className="w-3 h-3 text-emerald-600" />
+                        Teacher Graded
+                      </span>
+                    ) : data.hasManualGrading ? (
+                      <span className="text-[10px] font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+                        Pending Review
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                        Finalized
+                      </span>
+                    )}
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-baseline justify-between">
+                      <span className="text-2xl font-black text-emerald-700">
+                        {data.latestTotalScore} <span className="text-xs font-semibold text-slate-400">/ {data.maxPoints} pts</span>
+                      </span>
+                      <span className="text-xs font-bold text-emerald-700">
+                        {data.maxPoints > 0 ? `${Math.round((data.latestTotalScore / data.maxPoints) * 100)}%` : "0%"}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-500">
+                      {data.hasInstructorGraded
+                        ? `Includes +${data.instructorGradedPoints} pts awarded from manual grading`
+                        : data.hasManualGrading
+                        ? "Total score will be finalized once instructor completes essay scoring"
+                        : "All questions scored and finalized"}
+                    </p>
                   </div>
 
-                  {/* Card 2: Updated Score */}
-                  <div className={`border rounded-2xl p-4.5 shadow-xs space-y-3 ${
-                    data.isScoreUpdated
-                      ? "border-emerald-200 bg-emerald-50/20"
-                      : "border-slate-200 bg-white"
-                  }`}>
-                    <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                      <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Latest Score</span>
-                      {data.hasInstructorGraded ? (
-                        <span className="text-[10px] font-extrabold text-emerald-800 bg-emerald-100 border border-emerald-300 px-2 py-0.5 rounded-full flex items-center gap-1">
-                          <Sparkles className="w-3 h-3 text-emerald-600" />
-                          Teacher Graded
-                        </span>
-                      ) : (
-                        <span className="text-[10px] font-semibold text-slate-400 bg-slate-50 px-2 py-0.5 rounded-full border">
-                          Initial Record
-                        </span>
-                      )}
-                    </div>
-                    <div className="space-y-1">
-                      <div className="flex items-baseline justify-between">
-                        <span className="text-2xl font-black text-emerald-700">
-                          {data.latestTotalScore} <span className="text-xs font-semibold text-slate-400">/ {data.maxPoints} pts</span>
-                        </span>
-                        <span className="text-xs font-bold text-emerald-700">
-                          {data.maxPoints > 0 ? `${Math.round((data.latestTotalScore / data.maxPoints) * 100)}%` : "0%"}
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-slate-500">
-                        {data.hasInstructorGraded
-                          ? `Includes +${data.instructorGradedPoints} pts awarded from manual grading`
-                          : "No subsequent manual grading applied yet"}
-                      </p>
-                    </div>
-
-                    <div className="pt-2 border-t border-slate-100 text-[11px] text-slate-500">
-                      {data.isScoreUpdated ? (
-                        <span className="text-emerald-700 font-semibold">
-                          Score increased by +{data.latestTotalScore - data.initialNetScore} pts after teacher review
-                        </span>
-                      ) : (
-                        <span>Retrieved live from latest saved database record</span>
-                      )}
-                    </div>
+                  <div className="pt-2 border-t border-slate-100 text-[11px] text-slate-500">
+                    {data.isScoreUpdated ? (
+                      <span className="text-emerald-700 font-semibold">
+                        Score increased by +{data.latestTotalScore - data.initialNetScore} pts after teacher review
+                      </span>
+                    ) : (
+                      <span>Retrieved live from latest saved database record</span>
+                    )}
                   </div>
+                </div>
 
                   {/* Card 3: Pending Questions Status */}
                   <div className={`border rounded-2xl p-4.5 shadow-xs space-y-3 ${
@@ -330,7 +354,6 @@ export function StudentExamResultModal({
                     </div>
                   </div>
                 </div>
-              )}
 
               {/* Questions & Responses Breakdown */}
               <div className="space-y-4">

@@ -1043,7 +1043,8 @@ export function TakeExamClient({
   // F. SUCCESS SUBMISSION SCREEN (SHOW INITIAL SCORES OR RESPECT HIDDEN RESULT SETTINGS)
   if (mode === "success") {
     const totalPossible = initialData.questions.reduce((sum, q) => sum + q.points, 0);
-    const scorePct = totalPossible > 0 ? Math.round(((finalScore ?? 0) / totalPossible) * 100) : 0;
+    const effectiveScore = submissionResult?.totalScore ?? (finalScore ?? 0);
+    const scorePct = totalPossible > 0 ? Math.round((effectiveScore / totalPossible) * 100) : 0;
     const isTimeout = submissionResult?.trigger === "Timeout";
     const canShowResults = submissionResult?.canShowResults !== false;
     const penaltyPoints = submissionResult?.penaltyPoints ?? 0;
@@ -1080,82 +1081,47 @@ export function TakeExamClient({
               </span>
             </div>
 
-            {!canShowResults ? (
-              // Results configured to remain hidden until a later time or approval
-              <div className="space-y-2.5">
+            {/* Deductions: show ONLY if there is a deduction */}
+            {hasPenalty && (
+              <>
                 <div className="flex justify-between border-b border-slate-800 pb-2">
-                  <span className="text-slate-400">Results Status</span>
-                  <span className="font-bold font-mono text-amber-400">
-                    {submissionResult?.resultStatusLabel || "Results Pending Review"}
+                  <span className="text-slate-400">Raw Score</span>
+                  <span className="text-slate-300 font-bold font-mono">
+                    {submissionResult?.rawScore ?? (effectiveScore + penaltyPoints)} / {totalPossible} pts
                   </span>
                 </div>
-
-                {violationsCount > 0 && (
-                  <div className="flex justify-between border-b border-slate-800 pb-2 text-slate-400">
-                    <span>Security Warnings</span>
-                    <span className="font-bold font-mono text-slate-300">
-                      {violationsCount} warning{violationsCount !== 1 ? "s" : ""} recorded
-                    </span>
-                  </div>
-                )}
-
-                <div className="pt-1 text-[11px] text-slate-400 leading-relaxed">
-                  🔒 {submissionResult?.resultExplanation || "Scores are configured to remain hidden until reviewed and approved by your instructor."}
-                </div>
-              </div>
-            ) : (
-              // Results configured to display initial scores immediately
-              <div className="space-y-2.5">
-                {submissionResult?.rawScore !== undefined && hasPenalty && (
-                  <div className="flex justify-between border-b border-slate-800 pb-2">
-                    <span className="text-slate-400">Initial Score</span>
-                    <span className="text-slate-300 font-bold font-mono">
-                      {submissionResult.rawScore} / {totalPossible} pts
-                    </span>
-                  </div>
-                )}
-
-                {hasPenalty && (
-                  <div className="flex justify-between border-b border-slate-800 pb-2 text-rose-400">
-                    <span>Security Penalties</span>
-                    <span className="font-bold font-mono">
-                      -{penaltyPoints} pts ({violationsCount} warning{violationsCount !== 1 ? "s" : ""} × {scorePenaltyRate} pts)
-                    </span>
-                  </div>
-                )}
-
-                {violationsCount > 0 && !hasPenalty && (
-                  <div className="flex justify-between border-b border-slate-800 pb-2 text-slate-400">
-                    <span>Security Warnings</span>
-                    <span className="font-bold font-mono text-slate-300">
-                      {violationsCount} warning{violationsCount !== 1 ? "s" : ""} (0 pts deducted — time penalty only)
-                    </span>
-                  </div>
-                )}
-
-                <div className="flex justify-between items-center pt-0.5">
-                  <span className="text-slate-400 font-semibold flex items-center gap-1.5">
-                    {hasEssay ? "Provisional Initial Score" : "Final Score"}
-                    {hasEssay ? (
-                      <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.2 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                        Provisional
-                      </span>
-                    ) : (
-                      <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.2 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                        Final
-                      </span>
-                    )}
-                  </span>
-                  <span className="text-emerald-400 font-black text-base font-mono">
-                    {finalScore} / {totalPossible} pts ({scorePct}%)
+                <div className="flex justify-between border-b border-slate-800 pb-2 text-rose-400">
+                  <span>Security Penalties</span>
+                  <span className="font-bold font-mono">
+                    -{penaltyPoints} pts ({violationsCount} warning{violationsCount !== 1 ? "s" : ""} × {scorePenaltyRate} pts)
                   </span>
                 </div>
+              </>
+            )}
 
-                {hasEssay && (
-                  <div className="pt-2 border-t border-slate-800 text-[11px] text-amber-200/90 leading-relaxed bg-amber-950/25 border border-amber-800/40 p-3 rounded-xl text-left">
-                    Your initial score is available. Essay questions and other items requiring manual grading have not yet been included. Your score will be updated after your instructor finishes grading.
-                  </div>
+            {/* Score display: Initial Score if hasEssay, Total Score otherwise */}
+            <div className="flex justify-between items-center pt-0.5">
+              <span className="text-slate-400 font-semibold flex items-center gap-1.5">
+                {hasEssay ? "Initial Score" : "Total Score"}
+                {hasEssay ? (
+                  <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                    Initial
+                  </span>
+                ) : (
+                  <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                    Total
+                  </span>
                 )}
+              </span>
+              <span className="text-emerald-400 font-black text-base font-mono">
+                {effectiveScore} / {totalPossible} pts ({scorePct}%)
+              </span>
+            </div>
+
+            {/* If essay type exists, explain that total score will be available later */}
+            {hasEssay && (
+              <div className="pt-2 border-t border-slate-800 text-[11px] text-amber-200/90 leading-relaxed bg-amber-950/25 border border-amber-800/40 p-3 rounded-xl text-left">
+                Your initial score is shown above. Total score will be available once your instructor completes scoring the essay questions.
               </div>
             )}
           </div>

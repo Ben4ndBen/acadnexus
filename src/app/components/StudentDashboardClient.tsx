@@ -770,7 +770,7 @@ export function StudentDashboardClient({
                         else if (se.submission_trigger === "Cheating_Lockout") statusText = "Closed (Rules Broken)";
 
                         if (isProvisional) {
-                          statusText += " (Provisional - Pending Essay Grading)";
+                          statusText += " (Pending Essay Grading)";
                         }
 
                         return {
@@ -779,10 +779,10 @@ export function StudentDashboardClient({
                           "Score (pts)": isResultsHidden 
                             ? (se.result_status_label || "Results Pending") 
                             : isProvisional 
-                            ? `${se.total_score} (Provisional)` 
+                            ? `${se.total_score} (Initial)` 
                             : se.total_score,
                           "Max Score (pts)": examMaxPoints,
-                          "Percentage Grade": isProvisional ? `${percentage} (Provisional)` : percentage,
+                          "Percentage Grade": isProvisional ? `${percentage} (Initial)` : percentage,
                           "Date Submitted": new Date(se.submitted_at || se.started_at).toLocaleString(),
                         };
                       });
@@ -889,7 +889,7 @@ export function StudentDashboardClient({
                                   ? "bg-amber-100 text-amber-800 border-amber-200"
                                   : "bg-emerald-50 text-emerald-700 border-emerald-100"
                               }`}>
-                                {se.is_provisional ? "Provisional Score: " : "Score: "}
+                                {se.is_provisional ? "Initial Score: " : "Total Score: "}
                                 {se.total_score} / {examMaxPoints} ({percentage}%)
                               </span>
                               {se.is_provisional && (
