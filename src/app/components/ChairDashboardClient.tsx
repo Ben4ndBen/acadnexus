@@ -1026,7 +1026,7 @@ export function ChairDashboardClient({
                               return pCode ? (
                                 <>
                                   <span>•</span>
-                                  <span>Target Program: <strong className="text-emerald-700 font-bold">{pCode}</strong></span>
+                                  <span>Program: <strong className="text-emerald-700 font-bold">{pCode}</strong></span>
                                 </>
                               ) : null;
                             })()}
@@ -1133,7 +1133,7 @@ export function ChairDashboardClient({
                   {(() => {
                     const pCode = determineProgramCodeFromCourseOrExam(activeSplitApproval.exam);
                     return pCode ? (
-                      <> • Target Program: <strong className="text-emerald-400 font-bold">{pCode}</strong></>
+                      <> • Program: <strong className="text-emerald-400 font-bold">{pCode}</strong></>
                     ) : null;
                   })()}
                 </p>

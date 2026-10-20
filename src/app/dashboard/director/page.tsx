@@ -95,6 +95,15 @@ export default async function DirectorDashboard() {
             },
             course: true,
             questionBank: true,
+            examTargets: {
+              include: {
+                program: {
+                  include: {
+                    department: true,
+                  },
+                },
+              },
+            },
           },
         },
       },
@@ -112,6 +121,15 @@ export default async function DirectorDashboard() {
         course: true,
         approvalWorkflow: true,
         questionBank: true,
+        examTargets: {
+          include: {
+            program: {
+              include: {
+                department: true,
+              },
+            },
+          },
+        },
       },
       orderBy: {
         exam_id: "desc",

@@ -530,3 +530,87 @@ export function resolveTargetProgramForExam(
   return programs[0] || null;
 }
 
+/**
+ * Official canonical full names for Batanes State College academic departments.
+ */
+export const OFFICIAL_DEPARTMENT_NAMES: Record<string, string> = {
+  CITD: "Computing and Industrial Technology Department",
+  AGRI: "Agriculture Department",
+  HTM: "Hospitality and Tourism Management Department",
+  TED: "Teacher Education Department",
+};
+
+/**
+ * Resolves the official, canonical department name for an examination
+ * using established database relationships:
+ * 1. The examination creator's department (exam.faculty.department)
+ * 2. The targeted academic program's department (exam.examTargets[...].program.department)
+ * 3. The official course/subject academic hierarchy (exam.course)
+ */
+export function getExaminationDepartmentName(exam: any): string {
+  if (!exam) return "General Academic Department";
+
+  // 1. Direct database relationship: Examination Creator's Department
+  const facultyDept = exam.faculty?.department?.department_name;
+  if (facultyDept) {
+    const key = resolveDepartmentKey(facultyDept);
+    if (key && OFFICIAL_DEPARTMENT_NAMES[key]) {
+      return OFFICIAL_DEPARTMENT_NAMES[key];
+    }
+    if (facultyDept.toUpperCase() === "CITD") {
+      return "Computing and Industrial Technology Department";
+    }
+    return facultyDept;
+  }
+
+  // 2. Direct database relationship: Targeted Academic Program's Department
+  if (exam.examTargets && Array.isArray(exam.examTargets) && exam.examTargets.length > 0) {
+    for (const target of exam.examTargets) {
+      const targetDept = target.program?.department?.department_name;
+      if (targetDept) {
+        const key = resolveDepartmentKey(targetDept);
+        if (key && OFFICIAL_DEPARTMENT_NAMES[key]) {
+          return OFFICIAL_DEPARTMENT_NAMES[key];
+        }
+        if (targetDept.toUpperCase() === "CITD") {
+          return "Computing and Industrial Technology Department";
+        }
+        return targetDept;
+      }
+    }
+  }
+
+  // 3. Database relationship to Course and curriculum hierarchy
+  const courseCode = exam.course?.course_code || "";
+  if (courseCode) {
+    const code = courseCode.trim().toUpperCase();
+    if (
+      code.startsWith("ITC") || code.startsWith("ITE") || code.startsWith("ITM") ||
+      code.startsWith("ITD") || code === "ENT 403" || code.startsWith("IND") ||
+      (code.startsWith("IT") && !code.startsWith("ITCH"))
+    ) {
+      return "Computing and Industrial Technology Department";
+    }
+    if (
+      code.startsWith("AGRI") || code.startsWith("AG EXT") || code.startsWith("AGB") ||
+      code.startsWith("AME") || code.startsWith("ANSCI") || code.startsWith("CROP PROT") ||
+      code.startsWith("CROP SCI") || code.startsWith("SOIL SCI") || code.startsWith("THESIS") ||
+      code === "PRACTICUM" || code.startsWith("SEM ") || code === "CA"
+    ) {
+      return "Agriculture Department";
+    }
+    if (
+      code.startsWith("HPC") || code.startsWith("HMPE") || code === "PRAC" ||
+      code.startsWith("TPC") || code.startsWith("TPE") || code.startsWith("ITRM") ||
+      code === "OJT" || code.startsWith("THC") || code.startsWith("BME")
+    ) {
+      return "Hospitality and Tourism Management Department";
+    }
+    if (code.startsWith("EDUC")) {
+      return "Teacher Education Department";
+    }
+  }
+
+  return "Computing and Industrial Technology Department";
+}
+

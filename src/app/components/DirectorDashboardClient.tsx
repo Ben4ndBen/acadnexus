@@ -23,7 +23,8 @@ import {
   isCourseInDepartmentOrProgram,
   getDepartmentKeyForProgram,
   resolveDepartmentKey,
-  determineProgramCodeFromCourseOrExam
+  determineProgramCodeFromCourseOrExam,
+  getExaminationDepartmentName
 } from "@/lib/courseDepartmentMapping";
 import { getExpectedYearAndSemForCourse } from "@/lib/bsitCurriculum";
 
@@ -1147,7 +1148,7 @@ export function DirectorDashboardClient({
               <div className="divide-y divide-slate-100">
                 {pendingApprovals.map((approval) => (
                   <div key={approval.workflow_id} className="py-4 flex flex-col md:flex-row justify-between md:items-center gap-4 first:pt-0 last:pb-0">
-                    <div className="space-y-1">
+                    <div className="space-y-1.5">
                       <h3 className="text-base font-bold text-slate-800">{approval.exam.title}</h3>
                       <div className="text-xs text-slate-500 font-medium flex flex-wrap items-center gap-1.5">
                         <span>Course: <strong className="text-slate-700">{approval.exam?.course?.course_code || "Course"}</strong></span>
@@ -1158,10 +1159,14 @@ export function DirectorDashboardClient({
                           return pCode ? (
                             <>
                               <span>&bull;</span>
-                              <span>Target Program: <strong className="text-emerald-700 font-bold">{pCode}</strong></span>
+                              <span>Program: <strong className="text-emerald-700 font-bold">{pCode}</strong></span>
                             </>
                           ) : null;
                         })()}
+                      </div>
+                      <div className="text-xs text-slate-600 font-medium flex items-center gap-1.5 pt-0.5">
+                        <Building2 className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                        <span>Department: <strong className="text-slate-900 font-bold">{getExaminationDepartmentName(approval.exam)}</strong></span>
                       </div>
                       <p className="text-[11px] text-emerald-600 font-bold bg-emerald-50 inline-block px-2 py-0.5 rounded-full mt-1 border border-emerald-100">
                         Chair Review: {approval.chair_review_status}
@@ -1292,6 +1297,10 @@ export function DirectorDashboardClient({
                         <div className="flex flex-col">
                           <span className="font-bold text-slate-800 text-sm">{exam.title}</span>
                           <span className="text-xs text-slate-400 mt-0.5">{exam.course?.course_code || "Course"} {exam.course?.course_title ? `- ${exam.course.course_title}` : ""}</span>
+                          <span className="text-[11px] text-slate-600 font-medium mt-1 flex items-center gap-1">
+                            <Building2 className="w-3 h-3 text-indigo-600 shrink-0" />
+                            Department: <strong className="text-slate-800 font-bold">{getExaminationDepartmentName(exam)}</strong>
+                          </span>
                           {exam.current_status === "Approved" && (
                             <div className="mt-1.5 flex items-center gap-1 text-[10px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded w-fit shadow-sm">
                               <ShieldCheck className="w-3 h-3 text-emerald-600" />
@@ -2779,8 +2788,12 @@ export function DirectorDashboardClient({
                     Director Review & Preview
                   </span>
                 </div>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  Course: <strong className="text-slate-200">{activePreviewApproval.exam?.course?.course_code || "Course"} {activePreviewApproval.exam?.course?.course_title ? `- ${activePreviewApproval.exam.course.course_title}` : ""}</strong> • Faculty: <strong className="text-slate-200">{activePreviewApproval.exam?.faculty?.first_name || ""} {activePreviewApproval.exam?.faculty?.last_name || ""}</strong>
+                <p className="text-xs text-slate-400 mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <span>Course: <strong className="text-slate-200">{activePreviewApproval.exam?.course?.course_code || "Course"} {activePreviewApproval.exam?.course?.course_title ? `- ${activePreviewApproval.exam.course.course_title}` : ""}</strong></span>
+                  <span>•</span>
+                  <span>Faculty: <strong className="text-slate-200">{activePreviewApproval.exam?.faculty?.first_name || ""} {activePreviewApproval.exam?.faculty?.last_name || ""}</strong></span>
+                  <span>•</span>
+                  <span>Department: <strong className="text-slate-200">{getExaminationDepartmentName(activePreviewApproval.exam)}</strong></span>
                 </p>
               </div>
             </div>
@@ -2884,7 +2897,7 @@ export function DirectorDashboardClient({
                             examTitle={activePreviewApproval.exam.title}
                             courseCode={activePreviewApproval.exam.course?.course_code || ""}
                             courseTitle={activePreviewApproval.exam.course?.course_title || activePreviewApproval.exam.title}
-                            departmentName={activePreviewApproval.exam.faculty?.department?.department_name || "Batanes State College"}
+                            departmentName={getExaminationDepartmentName(activePreviewApproval.exam)}
                             programCode={determineProgramCodeFromCourseOrExam(activePreviewApproval.exam) || activePreviewApproval.exam.faculty?.department?.department_name}
                             term={activePreviewApproval.exam.term || "Prelim"}
                             semester={activePreviewApproval.exam.semester || "1st Semester"}
@@ -2939,7 +2952,7 @@ export function DirectorDashboardClient({
                           examTitle={activePreviewApproval.exam.title}
                           courseCode={activePreviewApproval.exam.course?.course_code || ""}
                           courseTitle={activePreviewApproval.exam.course?.course_title || activePreviewApproval.exam.title}
-                          departmentName={activePreviewApproval.exam.faculty?.department?.department_name || "Batanes State College"}
+                          departmentName={getExaminationDepartmentName(activePreviewApproval.exam)}
                           programCode={determineProgramCodeFromCourseOrExam(activePreviewApproval.exam) || activePreviewApproval.exam.faculty?.department?.department_name}
                           term={activePreviewApproval.exam.term || "Prelim"}
                           semester={activePreviewApproval.exam.semester || "1st Semester"}
