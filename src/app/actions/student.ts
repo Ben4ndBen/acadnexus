@@ -26,6 +26,27 @@ function shuffleWithSeed<T>(array: T[], seed: number): T[] {
 
 export async function startStudentExam(examId: number, studentId: number) {
   try {
+    // 0. Authenticate caller and verify ownership
+    const { createClient } = await import("@/lib/supabase/server");
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      return { error: "Authentication required to access the examination." };
+    }
+
+    if (user.user_metadata?.role === "Student") {
+      const dbUser = await db.user.findUnique({
+        where: { institutional_id: user.user_metadata?.institutional_id },
+        include: { student: true },
+      });
+      if (!dbUser?.student || dbUser.student.student_id !== studentId) {
+        return { error: "Unauthorized access. You can only start your own assigned exams." };
+      }
+    }
+
     // 1. Fetch student details to get their program, year, and section
     const student = await db.student.findUnique({
       where: { student_id: studentId },
@@ -177,7 +198,8 @@ export async function startStudentExam(examId: number, studentId: number) {
       // Once the student starts the exam, record the attempt's start time and calculate the deadline
       // based on the configured time limit and any applicable anti-cheating time deductions.
       const elapsedMs = now.getTime() - studentExam.started_at.getTime();
-      const timePenaltySeconds = (studentExam.violations_count || 0) * (exam.time_penalty_seconds ?? 60);
+      const penaltyPerViolation = typeof exam.time_penalty_seconds === "number" ? exam.time_penalty_seconds : 0;
+      const timePenaltySeconds = (studentExam.violations_count || 0) * penaltyPerViolation;
       const totalAllowedSeconds = Math.max(0, (exam.time_limit_minutes * 60) - timePenaltySeconds);
       const calculatedRemaining = totalAllowedSeconds - Math.floor(elapsedMs / 1000);
 
@@ -233,6 +255,16 @@ export async function startStudentExam(examId: number, studentId: number) {
           studentAnswers: true,
         },
       });
+
+      // Keep an accurate record of exam start time and deadline in attempt history
+      const examDeadline = new Date(now.getTime() + exam.time_limit_minutes * 60000);
+      await db.auditLog.create({
+        data: {
+          user_id: studentId,
+          action_performed: `Started Examination (Exam ID: ${examId}, Attempt ID: ${studentExam.student_exam_id}) at ${now.toISOString()}. Deadline: ${examDeadline.toISOString()}. Duration: ${exam.time_limit_minutes} mins. Scheduled availability: ${examStart.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${examEnd.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.`,
+          ip_address: "127.0.0.1",
+        },
+      });
     }
 
     // 5. Fetch questions from question bank (exclude correct_answer to prevent inspection)
@@ -265,7 +297,7 @@ export async function startStudentExam(examId: number, studentId: number) {
       examTitle: exam.title,
       courseTitle: exam.course.course_title,
       courseCode: exam.course.course_code,
-      timePenaltySeconds: exam.time_penalty_seconds ?? 60,
+      timePenaltySeconds: typeof exam.time_penalty_seconds === "number" ? exam.time_penalty_seconds : 0,
       scorePenaltyPoints: exam.score_penalty_points ?? 2,
       timeLimitMinutes: exam.time_limit_minutes,
       isInProgress: isResumedAttempt,
@@ -283,14 +315,50 @@ export async function saveStudentAnswers(
   try {
     const studentExam = await db.studentExam.findUnique({
       where: { student_exam_id: studentExamId },
+      include: { exam: true },
     });
 
     if (!studentExam) {
       return { error: "Student examination record not found." };
     }
 
+    // Authenticate caller and verify ownership
+    const { createClient } = await import("@/lib/supabase/server");
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      return { error: "Authentication required to save answers." };
+    }
+
+    if (user.user_metadata?.role === "Student") {
+      const dbUser = await db.user.findUnique({
+        where: { institutional_id: user.user_metadata?.institutional_id },
+        include: { student: true },
+      });
+      if (!dbUser?.student || dbUser.student.student_id !== studentExam.student_id) {
+        return { error: "Unauthorized operation. You cannot modify answers for another student." };
+      }
+    }
+
     if (studentExam.submitted_at) {
       return { error: "Examination has already been submitted. Modifications are locked." };
+    }
+
+    // Server-side deadline enforcement:
+    // Do not allow students to extend their deadline through browser manipulation or clock tampering
+    const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
+    const elapsedSeconds = Math.floor((now.getTime() - studentExam.started_at.getTime()) / 1000);
+    const timePenalty = typeof studentExam.exam.time_penalty_seconds === "number" ? studentExam.exam.time_penalty_seconds : 0;
+    const penaltySeconds = (studentExam.violations_count || 0) * timePenalty;
+    const totalAllowedSeconds = Math.max(0, (studentExam.exam.time_limit_minutes * 60) - penaltySeconds);
+
+    // 15 seconds grace period for network transit
+    if (elapsedSeconds > totalAllowedSeconds + 15) {
+      await submitStudentExam(studentExamId, "Timeout");
+      return { error: "Examination deadline has expired. Answers are locked and submitted." };
     }
 
     await db.$transaction(async (tx) => {
@@ -394,8 +462,61 @@ export async function submitStudentExam(
       return { success: false, error: "Student examination record not found." };
     }
 
+    // Authenticate caller & verify ownership
+    const { createClient } = await import("@/lib/supabase/server");
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (user && user.user_metadata?.role === "Student") {
+      const dbUser = await db.user.findUnique({
+        where: { institutional_id: user.user_metadata?.institutional_id },
+        include: { student: true },
+      });
+
+      if (!dbUser?.student || dbUser.student.student_id !== studentExam.student_id) {
+        return { success: false, error: "Unauthorized operation. You cannot submit an exam for another student." };
+      }
+    }
+
+    // Prevent duplicate submissions and duplicate penalties:
+    // If the attempt is already submitted, return the saved result immediately without re-calculating or re-penalizing
     if (studentExam.submitted_at) {
-      return { success: false, error: "Examination has already been submitted." };
+      const resultVisibility = parseExamResultSettings({
+        tos_file_path: studentExam.exam.tos_file_path,
+        tableOfSpecifications: studentExam.exam.tableOfSpecifications,
+        examTargets: studentExam.exam.examTargets,
+        current_status: studentExam.exam.current_status,
+      });
+
+      const maxPoints = studentExam.exam.questionBank.reduce((sum, q) => sum + (q.points || 0), 0);
+      const violationsCount = studentExam.violations_count ?? 0;
+      const scorePenaltyPoints = typeof studentExam.exam.score_penalty_points === "number" ? studentExam.exam.score_penalty_points : 2;
+      const penaltyPoints = violationsCount * scorePenaltyPoints;
+      const rawScore = studentExam.total_score + penaltyPoints;
+      const hasEssay = studentExam.exam.questionBank.some((q) => q.question_type === "Essay");
+
+      return {
+        success: true,
+        totalScore: studentExam.total_score,
+        rawScore,
+        penaltyPoints,
+        scorePenaltyPoints,
+        violationsCount,
+        maxPoints,
+        trigger: studentExam.submission_trigger,
+        submittedAt: studentExam.submitted_at.toISOString(),
+        canShowResults: resultVisibility.canShowResults,
+        resultReleaseMode: resultVisibility.releaseMode,
+        resultStatusLabel: resultVisibility.statusLabel,
+        resultExplanation: resultVisibility.explanation,
+        hasManualGrading: hasEssay,
+        isProvisional: hasEssay,
+        pendingNotice: hasEssay
+          ? "Your initial score is available. Essay questions and other items requiring manual grading have not yet been included. Your score will be updated after your instructor finishes grading."
+          : null,
+      };
     }
 
     const exam = studentExam.exam;
@@ -574,10 +695,11 @@ export async function submitStudentExam(
       });
 
       // 4. Log audit event
+      const examDeadline = new Date(studentExam.started_at.getTime() + exam.time_limit_minutes * 60000);
       await tx.auditLog.create({
         data: {
           user_id: studentExam.student_id,
-          action_performed: `Submitted Examination (Exam ID: ${exam.exam_id}, Trigger: ${trigger}, Raw Score: ${totalScore}, Penalty: -${totalPenalty} for ${violationsCount} violations, Net Score: ${penalizedScore})`,
+          action_performed: `Submitted Examination (Exam ID: ${exam.exam_id}, Attempt ID: ${studentExam.student_exam_id}, Trigger: ${trigger}, Started At: ${studentExam.started_at.toISOString()}, Deadline: ${examDeadline.toISOString()}, Submitted At: ${new Date().toISOString()}, Violations: ${violationsCount}, Deductions: -${totalPenalty} pts, Raw Score: ${totalScore}, Net Score: ${penalizedScore})`,
           ip_address: "127.0.0.1",
         },
       });
@@ -638,6 +760,23 @@ export async function logStudentWarning(
   studentExamId?: number
 ) {
   try {
+    // Authenticate caller and verify ownership
+    const { createClient } = await import("@/lib/supabase/server");
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (user && user.user_metadata?.role === "Student") {
+      const dbUser = await db.user.findUnique({
+        where: { institutional_id: user.user_metadata?.institutional_id },
+        include: { student: true },
+      });
+      if (!dbUser?.student || dbUser.student.student_id !== studentId) {
+        return { error: "Unauthorized: You can only record violations for your own examination attempt." };
+      }
+    }
+
     // 1. Fetch student exam and apply penalty configurations
     let studentExam = null;
     if (studentExamId) {
@@ -660,6 +799,14 @@ export async function logStudentWarning(
       return { error: "Student examination attempt not found." };
     }
 
+    if (studentExam.student_id !== studentId) {
+      return { error: "Unauthorized: Attempt does not belong to this student." };
+    }
+
+    if (studentExam.submitted_at) {
+      return { error: "Examination has already been submitted." };
+    }
+
     const exam = studentExam.exam;
     // Use actual deduction configured for that exam
     const timePenalty = typeof exam.time_penalty_seconds === "number" ? exam.time_penalty_seconds : 0;
@@ -675,7 +822,7 @@ export async function logStudentWarning(
       };
     }
 
-    // Calculate new remaining seconds
+    // Calculate new remaining seconds using server-side record
     const currentRemaining = studentExam.remaining_seconds ?? (exam.time_limit_minutes * 60);
     const newRemaining = Math.max(0, currentRemaining - timePenalty);
 
@@ -695,10 +842,15 @@ export async function logStudentWarning(
     await db.auditLog.create({
       data: {
         user_id: studentId,
-        action_performed: `Security Warning ${warningNumber}/2 for Exam (ID: ${examId}): ${reason}. Deductions: ${timeNote}, ${scoreNote}.`,
+        action_performed: `Security Warning ${warningNumber}/2 for Exam (Exam ID: ${examId}, Attempt ID: ${studentExam.student_exam_id}): ${reason}. Deductions: ${timeNote}, ${scoreNote}.`,
         ip_address: "127.0.0.1",
       },
     });
+
+    // If deduction causes time to expire, auto-submit
+    if (newRemaining <= 0 && timePenalty > 0) {
+      await submitStudentExam(studentExam.student_exam_id, "Timeout");
+    }
 
     // Create real-time notification record for exam author (instructor)
     const student = await db.student.findUnique({
@@ -746,14 +898,34 @@ export async function keepAliveStudentExam(
       return { error: "Student examination record not found." };
     }
 
+    // Authenticate caller and verify ownership
+    const { createClient } = await import("@/lib/supabase/server");
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (user && user.user_metadata?.role === "Student") {
+      const dbUser = await db.user.findUnique({
+        where: { institutional_id: user.user_metadata?.institutional_id },
+        include: { student: true },
+      });
+      if (!dbUser?.student || dbUser.student.student_id !== studentExam.student_id) {
+        return { error: "Unauthorized: You can only update your own examination timer." };
+      }
+    }
+
     if (studentExam.submitted_at) {
       return { error: "Examination has already been submitted." };
     }
 
     // Verify against actual elapsed time on server to prevent tampering
+    // Do not rely solely on the student's device clock.
+    // Do not allow students to change the exam duration or extend their deadline through browser manipulation.
     const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
     const elapsedSeconds = Math.floor((now.getTime() - studentExam.started_at.getTime()) / 1000);
-    const penaltySeconds = (studentExam.violations_count || 0) * (studentExam.exam.time_penalty_seconds ?? 60);
+    const timePenalty = typeof studentExam.exam.time_penalty_seconds === "number" ? studentExam.exam.time_penalty_seconds : 0;
+    const penaltySeconds = (studentExam.violations_count || 0) * timePenalty;
     const maxAllowedRemaining = Math.max(0, (studentExam.exam.time_limit_minutes * 60) - penaltySeconds - elapsedSeconds);
 
     const safeRemaining = Math.max(0, Math.min(remainingSeconds, maxAllowedRemaining));
@@ -936,38 +1108,42 @@ export async function getStudentExamResultDetails({
   studentId?: number;
 }): Promise<{ success?: boolean; data?: StudentExamResultData; error?: string }> {
   try {
-    let resolvedStudentId = studentId;
+    const { createClient } = await import("@/lib/supabase/server");
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-    if (!resolvedStudentId) {
-      const { createClient } = await import("@/lib/supabase/server");
-      const supabase = await createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+    let callerStudentId: number | null = null;
+    let isStudentUser = false;
 
-      if (!user) {
-        return { error: "Authentication required to view exam results." };
-      }
-
+    if (user) {
       const institutionalId = user.user_metadata?.institutional_id;
+      const role = user.user_metadata?.role;
       const dbUser = await db.user.findUnique({
         where: { institutional_id: institutionalId },
         include: { student: true },
       });
 
-      if (!dbUser?.student) {
-        return { error: "Student profile not found." };
+      if (role === "Student" || dbUser?.student) {
+        if (!dbUser?.student) {
+          return { error: "Student profile not found." };
+        }
+        isStudentUser = true;
+        callerStudentId = dbUser.student.student_id;
       }
-
-      resolvedStudentId = dbUser.student.student_id;
     }
+
+    const resolvedStudentId = callerStudentId ?? studentId;
 
     const whereClause: any = {};
     if (studentExamId) {
       whereClause.student_exam_id = studentExamId;
     } else if (examId) {
       whereClause.exam_id = examId;
-      whereClause.student_id = resolvedStudentId;
+      if (resolvedStudentId) {
+        whereClause.student_id = resolvedStudentId;
+      }
     } else {
       return { error: "Either studentExamId or examId must be provided." };
     }
@@ -1004,7 +1180,12 @@ export async function getStudentExamResultDetails({
       return { error: "Examination attempt record not found." };
     }
 
-    if (resolvedStudentId && studentExam.student_id !== resolvedStudentId) {
+    // Ensure students can only view their own examination answers and results
+    if (isStudentUser && callerStudentId) {
+      if (studentExam.student_id !== callerStudentId) {
+        return { error: "Unauthorized: You can only view your own examination answers and results." };
+      }
+    } else if (resolvedStudentId && studentExam.student_id !== resolvedStudentId) {
       return { error: "You are not authorized to view results for this student attempt." };
     }
 
