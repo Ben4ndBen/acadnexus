@@ -14,6 +14,7 @@ import { getDepartmentTheme } from "@/lib/departmentThemes";
 import { DepartmentBadge } from "@/app/components/DepartmentBadge";
 import { updateStudentPassword } from "@/app/actions/student";
 import { getExpectedYearAndSemForCourse } from "@/lib/bsitCurriculum";
+import { StudentExamResultModal } from "@/app/components/StudentExamResultModal";
 
 interface Course {
   course_id: number;
@@ -144,6 +145,9 @@ export function StudentDashboardClient({
   const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
   const [isSavingPassword, setIsSavingPassword] = useState(false);
   const [mustUpdatePassword, setMustUpdatePassword] = useState(!!requirePasswordUpdate);
+
+  // Selected completed exam attempt for viewing full result details
+  const [selectedCompletedExamId, setSelectedCompletedExamId] = useState<number | null>(null);
 
   const handlePasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -374,27 +378,78 @@ export function StudentDashboardClient({
       <div className="lg:col-span-3 space-y-6 flex flex-col">
         {/* Quick Notification Alert Banner */}
         {(activeExams.length > 0 || upcomingExams.length > 0 || missedExams.length > 0) && (
-          <div className="bg-white border border-slate-200/90 rounded-2xl p-4 shadow-xs flex flex-wrap items-center justify-between gap-3 text-xs">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center shrink-0 border border-slate-200">
-                <Bell className="w-4 h-4 text-slate-600" />
-              </div>
-              <div>
-                <p className="font-bold text-slate-800 text-xs">Exam Reminders</p>
-                <p className="text-slate-500 text-[11px] flex flex-wrap items-center gap-2 mt-0.5">
+          <div
+            className={`rounded-2xl p-4 sm:p-4.5 shadow-xs flex flex-wrap items-center justify-between gap-3 text-xs border transition-all ${
+              activeExams.length > 0
+                ? "bg-gradient-to-r from-rose-50/90 via-white to-amber-50/30 border-rose-200 border-l-4 border-l-rose-500 shadow-rose-100/30"
+                : missedExams.length > 0
+                ? "bg-gradient-to-r from-amber-50/90 via-white to-rose-50/30 border-amber-200 border-l-4 border-l-amber-500 shadow-amber-100/30"
+                : "bg-gradient-to-r from-blue-50/90 via-white to-indigo-50/30 border-blue-200 border-l-4 border-l-blue-500 shadow-blue-100/30"
+            }`}
+          >
+            <div className="flex items-center gap-3.5">
+              <div className="relative shrink-0">
+                <div
+                  className={`w-10 h-10 rounded-xl flex items-center justify-center border shadow-xs ${
+                    activeExams.length > 0
+                      ? "bg-rose-100 text-rose-600 border-rose-200"
+                      : missedExams.length > 0
+                      ? "bg-amber-100 text-amber-700 border-amber-200"
+                      : "bg-blue-100 text-blue-700 border-blue-200"
+                  }`}
+                >
+                  <Bell className="w-5 h-5" />
+                </div>
+                {/* Notification indicator dot */}
+                <span className="absolute -top-1 -right-1 flex h-3 w-3">
                   {activeExams.length > 0 && (
-                    <span className="text-rose-600 font-semibold">
-                      • {activeExams.length} active exam{activeExams.length === 1 ? "" : "s"} ready to take
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75" />
+                  )}
+                  <span
+                    className={`relative inline-flex rounded-full h-3 w-3 border-2 border-white ${
+                      activeExams.length > 0
+                        ? "bg-rose-500"
+                        : missedExams.length > 0
+                        ? "bg-amber-500"
+                        : "bg-blue-500"
+                    }`}
+                  />
+                </span>
+              </div>
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <p className="font-extrabold text-slate-800 text-sm">Exam Reminders</p>
+                  {activeExams.length > 0 ? (
+                    <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 border border-rose-200 uppercase tracking-wider">
+                      Live Now
+                    </span>
+                  ) : missedExams.length > 0 ? (
+                    <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200 uppercase tracking-wider">
+                      Attention
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200 uppercase tracking-wider">
+                      Notice
+                    </span>
+                  )}
+                </div>
+                <p className="text-slate-600 text-xs flex flex-wrap items-center gap-2 font-medium">
+                  {activeExams.length > 0 && (
+                    <span className="text-rose-600 font-bold flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-rose-500 inline-block" />
+                      {activeExams.length} active exam{activeExams.length === 1 ? "" : "s"} ready to take
                     </span>
                   )}
                   {upcomingExams.length > 0 && (
-                    <span className="text-blue-600 font-semibold">
-                      • {upcomingExams.length} upcoming exam{upcomingExams.length === 1 ? "" : "s"}
+                    <span className="text-blue-700 font-semibold flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-blue-500 inline-block" />
+                      {upcomingExams.length} upcoming exam{upcomingExams.length === 1 ? "" : "s"}
                     </span>
                   )}
                   {missedExams.length > 0 && (
-                    <span className="text-slate-500 font-medium">
-                      • {missedExams.length} missed exam{missedExams.length === 1 ? "" : "s"}
+                    <span className="text-rose-700 font-semibold flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-rose-500 inline-block" />
+                      {missedExams.length} missed exam{missedExams.length === 1 ? "" : "s"}
                     </span>
                   )}
                 </p>
@@ -405,27 +460,38 @@ export function StudentDashboardClient({
                 <button
                   type="button"
                   onClick={() => setActiveTab("active")}
-                  className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold text-[11px] px-3 py-1.5 rounded-xl transition-all cursor-pointer"
+                  className="bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs px-3.5 py-2 rounded-xl shadow-xs hover:shadow-sm transition-all cursor-pointer flex items-center gap-1.5"
                 >
-                  Go to Active ({activeExams.length})
+                  <span>Go to Active</span>
+                  <span className="bg-rose-700/60 text-white text-[10px] px-1.5 py-0.5 rounded-full">
+                    {activeExams.length}
+                  </span>
+                  <ArrowRight className="w-3.5 h-3.5" />
                 </button>
               )}
               {upcomingExams.length > 0 && (
                 <button
                   type="button"
                   onClick={() => setActiveTab("upcoming")}
-                  className="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 font-bold text-[11px] px-3 py-1.5 rounded-xl transition-all cursor-pointer"
+                  className="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 font-bold text-xs px-3.5 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-1.5"
                 >
-                  View Upcoming ({upcomingExams.length})
+                  <span>View Upcoming</span>
+                  <span className="bg-blue-200/60 text-blue-800 text-[10px] px-1.5 py-0.5 rounded-full">
+                    {upcomingExams.length}
+                  </span>
                 </button>
               )}
               {missedExams.length > 0 && (
                 <button
                   type="button"
                   onClick={() => setActiveTab("missed")}
-                  className="bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 font-bold text-[11px] px-3 py-1.5 rounded-xl transition-all cursor-pointer"
+                  className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 font-bold text-xs px-3.5 py-2 rounded-xl shadow-2xs hover:shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
                 >
-                  View Missed ({missedExams.length})
+                  <span>View Missed</span>
+                  <span className="bg-rose-200/80 text-rose-800 text-[10px] px-1.5 py-0.5 rounded-full font-extrabold">
+                    {missedExams.length}
+                  </span>
+                  <ArrowRight className="w-3.5 h-3.5" />
                 </button>
               )}
             </div>
@@ -709,12 +775,13 @@ export function StudentDashboardClient({
                     return (
                       <div
                         key={se.student_exam_id}
-                        className={`border p-5 rounded-2xl flex flex-col sm:flex-row justify-between sm:items-center transition-all gap-4 ${
+                        onClick={() => setSelectedCompletedExamId(se.student_exam_id)}
+                        className={`border p-5 rounded-2xl flex flex-col sm:flex-row justify-between sm:items-center transition-all gap-4 cursor-pointer hover:shadow-md hover:border-emerald-300 group ${
                           isLockout
                             ? "border-rose-200 bg-rose-50/30 hover:border-rose-300"
                             : isTimeout
                             ? "border-amber-200 bg-amber-50/20 hover:border-amber-300"
-                            : "border-slate-100 hover:border-emerald-100"
+                            : "border-slate-100 hover:border-emerald-200 hover:bg-slate-50/40"
                         }`}
                       >
                         <div className="space-y-1.5 flex-1">
@@ -741,7 +808,9 @@ export function StudentDashboardClient({
                               </span>
                             ) : null}
                           </div>
-                          <h4 className="font-bold text-slate-800 text-base">{se.exam.title}</h4>
+                          <h4 className="font-bold text-slate-800 text-base group-hover:text-emerald-800 transition-colors">
+                            {se.exam.title}
+                          </h4>
                           <p className="text-xs text-slate-400">
                             {se.exam.course ? `${se.exam.course.course_title} (${se.exam.course.course_code}) • ` : ""}
                             Submitted: {new Date(se.submitted_at || se.started_at).toLocaleDateString()} at {new Date(se.submitted_at || se.started_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -757,7 +826,7 @@ export function StudentDashboardClient({
                             </p>
                           )}
                         </div>
-                        <div className="self-start sm:self-auto shrink-0">
+                        <div className="flex items-center gap-2.5 self-start sm:self-auto shrink-0 flex-wrap">
                           {se.can_show_results === false ? (
                             <span className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full border bg-amber-50 text-amber-800 border-amber-200">
                               <Clock className="w-3.5 h-3.5 text-amber-600" />
@@ -774,6 +843,18 @@ export function StudentDashboardClient({
                               Score: {se.total_score} / {examMaxPoints} ({percentage}%)
                             </span>
                           )}
+
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedCompletedExamId(se.student_exam_id);
+                            }}
+                            className="inline-flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs px-3.5 py-2 rounded-xl transition-all shadow-xs cursor-pointer group-hover:bg-[#7A151A]"
+                          >
+                            <Eye className="w-4 h-4 text-emerald-400" />
+                            <span>View Results</span>
+                          </button>
                         </div>
                       </div>
                     );
@@ -1001,6 +1082,14 @@ export function StudentDashboardClient({
             </form>
           </div>
         </div>
+      )}
+      {/* EXAM RESULT DETAILS MODAL */}
+      {selectedCompletedExamId !== null && (
+        <StudentExamResultModal
+          isOpen={true}
+          studentExamId={selectedCompletedExamId}
+          onClose={() => setSelectedCompletedExamId(null)}
+        />
       )}
     </div>
   );

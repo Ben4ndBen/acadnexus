@@ -830,3 +830,299 @@ export async function updateStudentPassword(
   }
 }
 
+export interface StudentExamResultQuestionDetail {
+  answerId: number;
+  questionId: number;
+  questionNumber: number;
+  questionText: string;
+  questionType: string;
+  pointsPossible: number;
+  submittedResponse: string;
+  pointsAwarded: number | null;
+  isCorrect: boolean | null;
+  isPending: boolean;
+  isInstructorGraded: boolean;
+}
+
+export interface StudentExamResultData {
+  studentExamId: number;
+  examId: number;
+  examTitle: string;
+  courseTitle: string;
+  courseCode: string;
+  programName: string;
+  departmentName: string;
+  yearLevel: number;
+  timeLimitMinutes: number;
+  totalQuestions: number;
+  maxPoints: number;
+
+  submittedAt: string | null;
+  startedAt: string;
+  durationMinutes: number;
+  submissionTrigger: SubmissionType;
+  submissionStatusLabel: string;
+  submissionStatusDescription: string;
+  isManual: boolean;
+  isTimeout: boolean;
+  isLockout: boolean;
+
+  violationsCount: number;
+  scorePenaltyPerViolation: number;
+  totalDeductions: number;
+  initialRawScore: number;
+  initialNetScore: number;
+
+  latestTotalScore: number;
+  hasInstructorGraded: boolean;
+  instructorGradedPoints: number;
+  isScoreUpdated: boolean;
+
+  pendingQuestionsCount: number;
+  allQuestionsGraded: boolean;
+
+  canShowResults: boolean;
+  resultStatusLabel: string;
+  resultExplanation: string;
+
+  answers: StudentExamResultQuestionDetail[];
+}
+
+export async function getStudentExamResultDetails({
+  studentExamId,
+  examId,
+  studentId,
+}: {
+  studentExamId?: number;
+  examId?: number;
+  studentId?: number;
+}): Promise<{ success?: boolean; data?: StudentExamResultData; error?: string }> {
+  try {
+    let resolvedStudentId = studentId;
+
+    if (!resolvedStudentId) {
+      const { createClient } = await import("@/lib/supabase/server");
+      const supabase = await createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        return { error: "Authentication required to view exam results." };
+      }
+
+      const institutionalId = user.user_metadata?.institutional_id;
+      const dbUser = await db.user.findUnique({
+        where: { institutional_id: institutionalId },
+        include: { student: true },
+      });
+
+      if (!dbUser?.student) {
+        return { error: "Student profile not found." };
+      }
+
+      resolvedStudentId = dbUser.student.student_id;
+    }
+
+    const whereClause: any = {};
+    if (studentExamId) {
+      whereClause.student_exam_id = studentExamId;
+    } else if (examId) {
+      whereClause.exam_id = examId;
+      whereClause.student_id = resolvedStudentId;
+    } else {
+      return { error: "Either studentExamId or examId must be provided." };
+    }
+
+    const studentExam = await db.studentExam.findFirst({
+      where: whereClause,
+      include: {
+        exam: {
+          include: {
+            course: true,
+            examTargets: true,
+            tableOfSpecifications: true,
+            questionBank: true,
+          },
+        },
+        studentAnswers: {
+          include: {
+            question: true,
+          },
+        },
+        student: {
+          include: {
+            program: {
+              include: {
+                department: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!studentExam) {
+      return { error: "Examination attempt record not found." };
+    }
+
+    if (resolvedStudentId && studentExam.student_id !== resolvedStudentId) {
+      return { error: "You are not authorized to view results for this student attempt." };
+    }
+
+    if (!studentExam.submitted_at) {
+      return { error: "This examination has not been submitted yet." };
+    }
+
+    const exam = studentExam.exam;
+    const questions = exam.questionBank || [];
+    const maxPoints = questions.reduce((sum, q) => sum + (q.points || 0), 0);
+
+    const visibility = parseExamResultSettings({
+      tos_file_path: exam.tos_file_path,
+      tableOfSpecifications: exam.tableOfSpecifications,
+      examTargets: exam.examTargets,
+      current_status: exam.current_status,
+    });
+
+    const trigger = studentExam.submission_trigger;
+    const isManual = trigger === "Manual";
+    const isTimeout = trigger === "Timeout";
+    const isLockout = trigger === "Cheating_Lockout";
+
+    let submissionStatusLabel = "Submitted Manually";
+    let submissionStatusDescription = "You completed and submitted this examination manually.";
+    if (isTimeout) {
+      submissionStatusLabel = "Auto-Submitted (Time Ran Out)";
+      submissionStatusDescription = "Your exam was submitted automatically when your allocated exam time limit reached zero.";
+    } else if (isLockout) {
+      submissionStatusLabel = "Auto-Submitted (Security Lockout)";
+      submissionStatusDescription = "Your exam was submitted automatically because test security rules were violated (e.g. switching tabs or leaving full screen).";
+    }
+
+    const answerMap = new Map(studentExam.studentAnswers.map((a) => [a.question_id, a]));
+
+    let initialRawScore = 0;
+    let instructorGradedPoints = 0;
+    let hasInstructorGraded = false;
+    let pendingQuestionsCount = 0;
+
+    const answersDetail: StudentExamResultQuestionDetail[] = questions.map((q, idx) => {
+      const ans = answerMap.get(q.question_id);
+      const isEssay = q.question_type === "Essay";
+      const isPending = isEssay && (ans?.points_awarded === null || ans?.points_awarded === undefined);
+      const isInstructorGraded = isEssay && ans?.points_awarded !== null && ans?.points_awarded !== undefined;
+
+      if (isPending) {
+        pendingQuestionsCount += 1;
+      } else if (isInstructorGraded) {
+        hasInstructorGraded = true;
+        instructorGradedPoints += ans.points_awarded || 0;
+      } else {
+        if (ans?.points_awarded !== null && ans?.points_awarded !== undefined) {
+          initialRawScore += ans.points_awarded;
+        } else if (ans?.is_correct === true) {
+          initialRawScore += q.points;
+        }
+      }
+
+      return {
+        answerId: ans?.answer_id || 0,
+        questionId: q.question_id,
+        questionNumber: idx + 1,
+        questionText: q.question_text,
+        questionType: q.question_type,
+        pointsPossible: q.points,
+        submittedResponse: ans?.submitted_response || "",
+        pointsAwarded: ans?.points_awarded ?? null,
+        isCorrect: ans?.is_correct ?? null,
+        isPending,
+        isInstructorGraded,
+      };
+    });
+
+    const scorePenaltyPerViolation = typeof exam.score_penalty_points === "number" ? exam.score_penalty_points : 2;
+    const violationsCount = studentExam.violations_count || 0;
+    const totalDeductions = violationsCount * scorePenaltyPerViolation;
+    let initialNetScore = Math.max(0, initialRawScore - totalDeductions);
+
+    try {
+      const submitAudit = await db.auditLog.findFirst({
+        where: {
+          action_performed: {
+            contains: `Submitted Examination (Exam ID: ${exam.exam_id}`,
+          },
+        },
+        orderBy: { timestamp: "desc" },
+      });
+
+      if (submitAudit) {
+        const rawMatch = submitAudit.action_performed.match(/Raw Score:\s*(\d+)/i);
+        const netMatch = submitAudit.action_performed.match(/Net Score:\s*(\d+)/i);
+        if (rawMatch) initialRawScore = parseInt(rawMatch[1], 10);
+        if (netMatch) initialNetScore = parseInt(netMatch[1], 10);
+        else initialNetScore = Math.max(0, initialRawScore - totalDeductions);
+      }
+    } catch {
+      // Fallback already calculated above
+    }
+
+    const latestTotalScore = studentExam.total_score;
+    const isScoreUpdated = hasInstructorGraded && latestTotalScore !== initialNetScore;
+
+    const startedAtTime = new Date(studentExam.started_at).getTime();
+    const submittedAtTime = studentExam.submitted_at ? new Date(studentExam.submitted_at).getTime() : startedAtTime;
+    const durationMinutes = Math.max(1, Math.round((submittedAtTime - startedAtTime) / 60000));
+
+    return {
+      success: true,
+      data: {
+        studentExamId: studentExam.student_exam_id,
+        examId: exam.exam_id,
+        examTitle: exam.title,
+        courseTitle: exam.course?.course_title || "Course",
+        courseCode: exam.course?.course_code || "",
+        programName: studentExam.student?.program?.program_name || "",
+        departmentName: studentExam.student?.program?.department?.department_name || "",
+        yearLevel: studentExam.student?.year_level || 1,
+        timeLimitMinutes: exam.time_limit_minutes,
+        totalQuestions: questions.length,
+        maxPoints,
+
+        submittedAt: studentExam.submitted_at ? studentExam.submitted_at.toISOString() : null,
+        startedAt: studentExam.started_at.toISOString(),
+        durationMinutes,
+        submissionTrigger: trigger,
+        submissionStatusLabel,
+        submissionStatusDescription,
+        isManual,
+        isTimeout,
+        isLockout,
+
+        violationsCount,
+        scorePenaltyPerViolation,
+        totalDeductions,
+        initialRawScore,
+        initialNetScore,
+
+        latestTotalScore,
+        hasInstructorGraded,
+        instructorGradedPoints,
+        isScoreUpdated,
+
+        pendingQuestionsCount,
+        allQuestionsGraded: pendingQuestionsCount === 0,
+
+        canShowResults: visibility.canShowResults,
+        resultStatusLabel: visibility.statusLabel,
+        resultExplanation: visibility.explanation,
+
+        answers: answersDetail,
+      },
+    };
+  } catch (err: any) {
+    console.error("Error in getStudentExamResultDetails:", err);
+    return { error: err.message || "Failed to retrieve examination results." };
+  }
+}
+
