@@ -6,7 +6,7 @@ import {
   Activity, Users, ClipboardCheck, CheckCircle, 
   XCircle, Send, AlertCircle, RefreshCw, FileText, Check, X,
   Columns, ExternalLink, Download, Loader2, Eye, EyeOff,
-  Tag, Layers, BookOpen, Search, Plus, UserCog
+  Tag, Layers, BookOpen, Search, Plus, UserCog, Clock
 } from "lucide-react";
 import { reviewExamByChair, updateChairNameAction } from "@/app/actions/chair";
 import { createExamDraft } from "@/app/actions/faculty";
@@ -517,12 +517,43 @@ export function ChairDashboardClient({
                     const itemComment = questionComments[approval.workflow_id]?.[q.question_id] || "";
                     const isItemCommented = Boolean(itemComment.trim());
 
+                    // Check for preserved feedback from prior review rounds
+                    const getPreviousQuestionFeedback = (appr: any, questionId: number, num?: number) => {
+                      if (!appr) return null;
+                      const raw = isProgramChair ? appr.prog_chair_comments : (appr.chair_comments || appr.prog_chair_comments);
+                      if (!raw) return null;
+                      try {
+                        const trimmed = String(raw).trim();
+                        if (trimmed.startsWith("{")) {
+                          const parsedJson = JSON.parse(trimmed);
+                          const qFeedback = parsedJson.questions || parsedJson;
+                          if (qFeedback && typeof qFeedback === "object") {
+                            const val = qFeedback[String(questionId)] || qFeedback[`q-${questionId}`] || (num ? qFeedback[String(num)] : null);
+                            if (val) {
+                              const comment = typeof val === "string" ? val : (val.comment || "");
+                              if (comment.trim()) {
+                                return {
+                                  comment: comment.trim(),
+                                  status: val.status || "Revision",
+                                };
+                              }
+                            }
+                          }
+                        }
+                      } catch {}
+                      return null;
+                    };
+
+                    const prevFeedback = getPreviousQuestionFeedback(approval, q.question_id, itemNum);
+
                     return (
                       <div
                         key={q.question_id}
                         className={`border rounded-xl p-4 space-y-3 transition-all ${
                           isItemCommented
                             ? "bg-rose-50/50 border-rose-300 ring-1 ring-rose-300"
+                            : prevFeedback
+                            ? "bg-amber-50/30 border-amber-300 ring-1 ring-amber-200/60"
                             : "bg-white border-slate-200 hover:border-slate-300"
                         }`}
                       >
@@ -635,15 +666,40 @@ export function ChairDashboardClient({
                           const hasComment = Boolean(itemComment.trim());
                           return (
                             <div className="pt-2 border-t border-slate-200/80 space-y-2">
+                              {prevFeedback && (
+                                <div className="bg-amber-50/90 border border-amber-300 rounded-xl p-3 text-amber-950 space-y-1.5 shadow-2xs">
+                                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                                    <div className="flex items-center gap-1.5 text-[11px] font-black uppercase text-amber-900 tracking-wider">
+                                      <Clock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                                      <span>Awaiting Re-Review (Corrected by Creator)</span>
+                                    </div>
+                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-200/80 text-amber-900 border border-amber-300">
+                                      Previous Feedback
+                                    </span>
+                                  </div>
+                                  <p className="text-xs text-amber-900 font-bold italic leading-relaxed pl-5">
+                                    "{prevFeedback.comment}"
+                                  </p>
+                                  <p className="text-[10px] text-amber-700 italic pl-5">
+                                    • Leave the remark below empty to confirm and approve this correction.
+                                  </p>
+                                </div>
+                              )}
+
                               <div className="flex items-center justify-between flex-wrap gap-2">
                                 <span className="text-[11px] font-extrabold text-slate-700 uppercase tracking-wider">
                                   Item Feedback / Revision Remark:
                                 </span>
-                                {hasComment && (
+                                {hasComment ? (
                                   <span className="bg-rose-100 text-rose-800 border border-rose-200 text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase">
                                     Marked for Revision
                                   </span>
-                                )}
+                                ) : prevFeedback ? (
+                                  <span className="bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase flex items-center gap-1 shadow-2xs">
+                                    <Clock className="w-3 h-3 text-amber-600" />
+                                    Awaiting Re-Review
+                                  </span>
+                                ) : null}
                               </div>
 
                               <div>

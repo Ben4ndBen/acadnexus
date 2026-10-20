@@ -2412,6 +2412,28 @@ export function FacultyDashboardClient({
                         </div>
                       )}
 
+                      {/* Awaiting Re-Review Banner for Resubmitted Exams */}
+                      {exam.current_status !== "Returned" && 
+                       (exam.current_status === "Pending_Program_Chair" || exam.current_status === "Pending_Chair" || exam.current_status === "Pending_DI") && 
+                       Boolean(exam.approvalWorkflow?.chair_comments || exam.approvalWorkflow?.prog_chair_comments || (exam.approvalWorkflow?.di_comments && exam.current_status === "Pending_DI")) && (
+                        <div className="bg-amber-50/80 border border-amber-300/80 rounded-2xl p-4 flex gap-3.5 items-start mt-3 shadow-2xs">
+                          <Clock className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                          <div className="space-y-1.5 flex-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-xs font-bold text-amber-950">
+                                Corrections Submitted — Awaiting Re-Review
+                              </span>
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300">
+                                Reviewer: {exam.current_status === "Pending_Program_Chair" ? "Program Chairperson" : (exam.current_status === "Pending_Chair" ? "Department Chairperson" : "Director of Instruction")}
+                              </span>
+                            </div>
+                            <p className="text-xs text-amber-800 leading-relaxed font-medium">
+                              Your corrections have been submitted back to the reviewer for re-review. The previous comments and revision history remain preserved below for your reference.
+                            </p>
+                          </div>
+                        </div>
+                      )}
+
                       {/* Administrative Hold Remarks (when not in Returned status) */}
                       {exam.current_status !== "Returned" && exam.approvalWorkflow?.di_comments && (
                         <div className="bg-[#7A151A]/5 border border-[#7A151A]/20 rounded-xl p-4 flex gap-3 items-start mt-3">

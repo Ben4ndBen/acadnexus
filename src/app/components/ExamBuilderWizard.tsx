@@ -2809,21 +2809,41 @@ export function ExamBuilderWizard({
       }
 
       const isProgChairAuthor = userRole === "ProgramChair" || userRole === "Program Chair" || returnUrl === "/dashboard/chair";
-      const reviewTarget = isProgChairAuthor ? "Department Chairperson" : (hasProgramChair ? "Program Chairperson" : "Department Chairperson");
-      setSaveStatus({ type: "success", message: `Examination successfully submitted to ${reviewTarget} for review!` });
+      const fallbackTarget = isProgChairAuthor ? "Department Chairperson" : (hasProgramChair ? "Program Chairperson" : "Department Chairperson");
+      const reviewTarget = (statusRes as any).reviewTarget || fallbackTarget;
+      const isRevision = Boolean((statusRes as any).isRevision || isReturnedForRevision);
+
+      const successTitle = isRevision
+        ? "Corrections Submitted for Re-Review!"
+        : "Examination Submitted Successfully!";
+
+      const successMessage = isRevision
+        ? `Your corrections for examination "${title}" have been successfully submitted back to the ${reviewTarget} for re-review.`
+        : `Your examination "${title}" has been successfully submitted to the ${reviewTarget} for review.`;
+
+      const detailsList = isRevision
+        ? [
+            `Approval Stage: Kept at ${reviewTarget} (Stage Preserved)`,
+            `Reviewer: ${reviewTarget}`,
+            `Questions Corrected: ${questionsNeedingRevision.length} items awaiting re-review`,
+            `Status: Pending Re-Review`
+          ]
+        : [
+            `Review Target: ${reviewTarget}`,
+            `Total Items: ${questions.length} questions`,
+            `Status: Pending Review`
+          ];
+
+      setSaveStatus({ type: "success", message: `Examination successfully submitted to ${reviewTarget} for ${isRevision ? "re-review" : "review"}!` });
       setIsSubmitting(false);
 
       // Display Submission Success Modal
       setPopupModal({
         isOpen: true,
         type: "success",
-        title: "Examination Submitted Successfully!",
-        message: `Your examination "${title}" has been successfully submitted to the ${reviewTarget} for review.`,
-        details: [
-          `Review Target: ${reviewTarget}`,
-          `Total Items: ${questions.length} questions`,
-          `Status: Pending Review`
-        ],
+        title: successTitle,
+        message: successMessage,
+        details: detailsList,
         confirmText: "Return to Dashboard",
         onConfirm: () => {
           router.push(returnUrl || "/dashboard/faculty");
@@ -4077,8 +4097,9 @@ export function ExamBuilderWizard({
                                             Revision Requested for Question #{origItemNum || displayItemNum} by {itemFeedback.reviewer}
                                           </span>
                                           {isAddressed ? (
-                                            <span className="bg-emerald-600 text-white text-[9px] font-black uppercase px-2 py-0.5 rounded-full flex items-center gap-1">
-                                              ✓ Addressed / Revised
+                                            <span className="bg-amber-600 text-white text-[9px] font-black uppercase px-2 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
+                                              <Check className="w-2.5 h-2.5" />
+                                              Corrected — Awaiting Re-Review
                                             </span>
                                           ) : (
                                             <span className="bg-rose-600 text-white text-[9px] font-black uppercase px-2 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
@@ -4093,11 +4114,11 @@ export function ExamBuilderWizard({
                                             onClick={() => toggleQuestionAddressed(qKey)}
                                             className={`text-[10px] font-bold px-2.5 py-0.5 rounded-md border transition-colors cursor-pointer ${
                                               isAddressed
-                                                ? "bg-white text-emerald-700 border-emerald-300 hover:bg-emerald-50"
+                                                ? "bg-white text-amber-800 border-amber-300 hover:bg-amber-50"
                                                 : "bg-white text-rose-700 border-rose-300 hover:bg-rose-50"
                                             }`}
                                           >
-                                            {isAddressed ? "Mark as Needs Revision" : "Mark as Addressed"}
+                                            {isAddressed ? "Mark as Needs Revision" : "Mark as Corrected (Awaiting Re-Review)"}
                                           </button>
                                           <button
                                             type="button"
@@ -5240,11 +5261,18 @@ export function ExamBuilderWizard({
                                     </p>
                                   </div>
                                   {isRevisionRequired && (
-                                    <div className="shrink-0 flex items-center gap-1.5 print:border print:border-rose-600">
-                                      <span className="bg-rose-600 text-white text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
-                                        <AlertCircle className="w-3 h-3 text-rose-100" />
-                                        Needs Revision: Question #{origItemNum || itemNumLabel}
-                                      </span>
+                                    <div className="shrink-0 flex items-center gap-1.5 print:border print:border-amber-600">
+                                      {Boolean(addressedQuestions[String(q.question_id || origItemNum || itemNumLabel)]) ? (
+                                        <span className="bg-amber-600 text-white text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
+                                          <Check className="w-3 h-3 text-white" />
+                                          Corrected — Awaiting Re-Review: Question #{origItemNum || itemNumLabel}
+                                        </span>
+                                      ) : (
+                                        <span className="bg-rose-600 text-white text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
+                                          <AlertCircle className="w-3 h-3 text-rose-100" />
+                                          Needs Revision: Question #{origItemNum || itemNumLabel}
+                                        </span>
+                                      )}
                                     </div>
                                   )}
                                 </div>

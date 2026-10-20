@@ -56,6 +56,9 @@ export async function updateExamStatus(examId: number, status: ExamStatus, userI
         return { error: "Unauthorized operation." };
       }
 
+      let reviewTargetRole = "Department Chairperson";
+      let isRevisionWorkflow = false;
+
       // Allow submission for Chair review with integrated TOS matrix
       // Add or update ApprovalWorkflow record if needed
       if (status === "Pending_Chair") {
@@ -203,90 +206,171 @@ export async function updateExamStatus(examId: number, status: ExamStatus, userI
           return { error: "No chairperson found for your department/program. Cannot submit exam for review." };
         }
 
-        // Determine submission reviewer states
-        const globalHoldSetting = await tx.systemSetting.findUnique({
-          where: { key: "global_administrative_hold" },
-        });
-        const isGlobalHoldActive = globalHoldSetting?.value === "true";
-
-        const authorChairRecord = await tx.chair.findFirst({ where: { chair_id: userId } });
-        const authorUserRecord = await tx.user.findUnique({ where: { user_id: userId } });
-
-        const isAuthorProgChair = Boolean(
-          (progChair && progChair.chair_id === userId) ||
-          (authorChairRecord && authorChairRecord.is_program_chair) ||
-          (authorUserRecord && ((authorUserRecord.role as string) === "ProgramChair" || (authorUserRecord.role as string) === "Program Chair"))
-        );
-
-        const isAuthorDeptChair = Boolean(
-          (deptChair && deptChair.chair_id === userId) ||
-          (authorChairRecord && !authorChairRecord.is_program_chair) ||
-          (authorUserRecord && ((authorUserRecord.role as string) === "Chair" || (authorUserRecord.role as string) === "Department Chair"))
-        );
-
-        let progChairStatus = progChair ? "Pending" : null;
-        let progChairComments: string | null = null;
-        let progChairTimestamp: Date | null = null;
-        let chairReviewStatus = "Pending";
-        let chairComments: string | null = null;
-        let chairTimestamp: Date | null = null;
-        let diReviewStatus = "Hold";
-
-        if (isAuthorProgChair || !isTedOrCitdDept) {
-          // If authored by Program Chairperson OR under departments with NO Program Chairperson (HTM, AGRI),
-          // route directly to Department Chairperson
-          progChairStatus = isAuthorProgChair ? "Approved" : null;
-          progChairComments = isAuthorProgChair ? "Authored and recommended by Program Chairperson." : null;
-          progChairTimestamp = isAuthorProgChair ? new Date() : null;
-          status = "Pending_Chair";
-        } else if (progChair) {
-          status = "Pending_Program_Chair";
-        } else {
-          status = "Pending_Chair";
-        }
-
-        if (isAuthorDeptChair) {
-          chairReviewStatus = "Approved";
-          chairComments = "Authored and verified by Department Chairperson.";
-          chairTimestamp = new Date();
-          if (isGlobalHoldActive) {
-            status = "Pending_DI";
-            diReviewStatus = "Hold";
-          } else {
-            status = "Approved";
-            diReviewStatus = "Pass_Through_Approved";
-          }
-        }
-
-        await tx.approvalWorkflow.upsert({
+        // Check if this is a resubmission of an examination returned for revision
+        const existingWorkflow = await tx.approvalWorkflow.findUnique({
           where: { exam_id: examId },
-          update: {
-            reviewed_by_prog_chair_id: progChair ? progChair.chair_id : (isAuthorProgChair ? userId : null),
-            prog_chair_review_status: progChairStatus as any,
-            prog_chair_comments: progChairComments,
-            prog_chair_action_timestamp: progChairTimestamp,
-            reviewed_by_chair_id: deptChair ? deptChair.chair_id : null,
-            chair_review_status: chairReviewStatus as any,
-            chair_comments: chairComments,
-            chair_action_timestamp: chairTimestamp,
-            di_review_status: diReviewStatus as any,
-            di_action_timestamp: isAuthorDeptChair && !isGlobalHoldActive ? new Date() : null,
-            reviewed_by_di_id: null,
-          },
-          create: {
-            exam_id: examId,
-            reviewed_by_prog_chair_id: progChair ? progChair.chair_id : (isAuthorProgChair ? userId : null),
-            prog_chair_review_status: progChairStatus as any,
-            prog_chair_comments: progChairComments,
-            prog_chair_action_timestamp: progChairTimestamp,
-            reviewed_by_chair_id: deptChair ? deptChair.chair_id : null,
-            chair_review_status: chairReviewStatus as any,
-            chair_comments: chairComments,
-            chair_action_timestamp: chairTimestamp,
-            di_review_status: diReviewStatus as any,
-            di_action_timestamp: isAuthorDeptChair && !isGlobalHoldActive ? new Date() : null,
-          },
         });
+
+        const isProgChairReturned = existingWorkflow?.prog_chair_review_status === "Returned";
+        const isChairReturned = existingWorkflow?.chair_review_status === "Returned";
+        const isDiReturned = Boolean(
+          existingWorkflow?.di_comments &&
+          (exam.current_status === "Returned" || existingWorkflow?.di_review_status === "Hold") &&
+          existingWorkflow?.chair_review_status === "Approved"
+        );
+        const isReturnedExam = exam.current_status === "Returned" || isProgChairReturned || isChairReturned || isDiReturned;
+
+        reviewTargetRole = "Department Chairperson";
+        isRevisionWorkflow = false;
+
+        if (isReturnedExam && existingWorkflow) {
+          isRevisionWorkflow = true;
+
+          // 1. Returned by Director of Instruction -> Keep at Director Stage
+          if (isDiReturned) {
+            status = "Pending_DI";
+            reviewTargetRole = "Director of Instruction";
+
+            await tx.approvalWorkflow.update({
+              where: { exam_id: examId },
+              data: {
+                di_review_status: "Hold",
+                di_action_timestamp: null,
+                // Preserve previous comments and revision history completely:
+                di_comments: existingWorkflow.di_comments,
+                chair_comments: existingWorkflow.chair_comments,
+                prog_chair_comments: existingWorkflow.prog_chair_comments,
+              },
+            });
+          }
+          // 2. Returned by Department Chairperson -> Keep at Department Chair Stage
+          else if (isChairReturned || !isProgChairReturned) {
+            status = "Pending_Chair";
+            reviewTargetRole = "Department Chairperson";
+
+            await tx.approvalWorkflow.update({
+              where: { exam_id: examId },
+              data: {
+                chair_review_status: "Pending",
+                chair_action_timestamp: null,
+                // Retain prior Program Chair approval if it existed:
+                prog_chair_review_status: existingWorkflow.prog_chair_review_status,
+                prog_chair_action_timestamp: existingWorkflow.prog_chair_action_timestamp,
+                // Preserve previous comments and revision history completely:
+                chair_comments: existingWorkflow.chair_comments,
+                prog_chair_comments: existingWorkflow.prog_chair_comments,
+                di_comments: existingWorkflow.di_comments,
+              },
+            });
+          }
+          // 3. Returned by Program Chairperson -> Keep at Program Chair Stage
+          else {
+            status = "Pending_Program_Chair";
+            reviewTargetRole = "Program Chairperson";
+
+            await tx.approvalWorkflow.update({
+              where: { exam_id: examId },
+              data: {
+                prog_chair_review_status: "Pending",
+                prog_chair_action_timestamp: null,
+                // Preserve previous comments and revision history completely:
+                prog_chair_comments: existingWorkflow.prog_chair_comments,
+                chair_comments: existingWorkflow.chair_comments,
+                di_comments: existingWorkflow.di_comments,
+              },
+            });
+          }
+        } else {
+          // Determine fresh submission reviewer states
+          const globalHoldSetting = await tx.systemSetting.findUnique({
+            where: { key: "global_administrative_hold" },
+          });
+          const isGlobalHoldActive = globalHoldSetting?.value === "true";
+
+          const authorChairRecord = await tx.chair.findFirst({ where: { chair_id: userId } });
+          const authorUserRecord = await tx.user.findUnique({ where: { user_id: userId } });
+
+          const isAuthorProgChair = Boolean(
+            (progChair && progChair.chair_id === userId) ||
+            (authorChairRecord && authorChairRecord.is_program_chair) ||
+            (authorUserRecord && ((authorUserRecord.role as string) === "ProgramChair" || (authorUserRecord.role as string) === "Program Chair"))
+          );
+
+          const isAuthorDeptChair = Boolean(
+            (deptChair && deptChair.chair_id === userId) ||
+            (authorChairRecord && !authorChairRecord.is_program_chair) ||
+            (authorUserRecord && ((authorUserRecord.role as string) === "Chair" || (authorUserRecord.role as string) === "Department Chair"))
+          );
+
+          let progChairStatus = progChair ? "Pending" : null;
+          let progChairComments: string | null = null;
+          let progChairTimestamp: Date | null = null;
+          let chairReviewStatus = "Pending";
+          let chairComments: string | null = null;
+          let chairTimestamp: Date | null = null;
+          let diReviewStatus = "Hold";
+
+          if (isAuthorProgChair || !isTedOrCitdDept) {
+            // If authored by Program Chairperson OR under departments with NO Program Chairperson (HTM, AGRI),
+            // route directly to Department Chairperson
+            progChairStatus = isAuthorProgChair ? "Approved" : null;
+            progChairComments = isAuthorProgChair ? "Authored and recommended by Program Chairperson." : null;
+            progChairTimestamp = isAuthorProgChair ? new Date() : null;
+            status = "Pending_Chair";
+            reviewTargetRole = "Department Chairperson";
+          } else if (progChair) {
+            status = "Pending_Program_Chair";
+            reviewTargetRole = "Program Chairperson";
+          } else {
+            status = "Pending_Chair";
+            reviewTargetRole = "Department Chairperson";
+          }
+
+          if (isAuthorDeptChair) {
+            chairReviewStatus = "Approved";
+            chairComments = "Authored and verified by Department Chairperson.";
+            chairTimestamp = new Date();
+            if (isGlobalHoldActive) {
+              status = "Pending_DI";
+              diReviewStatus = "Hold";
+              reviewTargetRole = "Director of Instruction";
+            } else {
+              status = "Approved";
+              diReviewStatus = "Pass_Through_Approved";
+              reviewTargetRole = "Approved";
+            }
+          }
+
+          await tx.approvalWorkflow.upsert({
+            where: { exam_id: examId },
+            update: {
+              reviewed_by_prog_chair_id: progChair ? progChair.chair_id : (isAuthorProgChair ? userId : null),
+              prog_chair_review_status: progChairStatus as any,
+              prog_chair_comments: progChairComments,
+              prog_chair_action_timestamp: progChairTimestamp,
+              reviewed_by_chair_id: deptChair ? deptChair.chair_id : null,
+              chair_review_status: chairReviewStatus as any,
+              chair_comments: chairComments,
+              chair_action_timestamp: chairTimestamp,
+              di_review_status: diReviewStatus as any,
+              di_action_timestamp: isAuthorDeptChair && !isGlobalHoldActive ? new Date() : null,
+              reviewed_by_di_id: null,
+            },
+            create: {
+              exam_id: examId,
+              reviewed_by_prog_chair_id: progChair ? progChair.chair_id : (isAuthorProgChair ? userId : null),
+              prog_chair_review_status: progChairStatus as any,
+              prog_chair_comments: progChairComments,
+              prog_chair_action_timestamp: progChairTimestamp,
+              reviewed_by_chair_id: deptChair ? deptChair.chair_id : null,
+              chair_review_status: chairReviewStatus as any,
+              chair_comments: chairComments,
+              chair_action_timestamp: chairTimestamp,
+              di_review_status: diReviewStatus as any,
+              di_action_timestamp: isAuthorDeptChair && !isGlobalHoldActive ? new Date() : null,
+            },
+          });
+        }
       }
 
       // Update the examination status
@@ -299,7 +383,9 @@ export async function updateExamStatus(examId: number, status: ExamStatus, userI
       await tx.auditLog.create({
         data: {
           user_id: userId,
-          action_performed: `Updated exam (${exam.title}) status to ${status}`,
+          action_performed: isRevisionWorkflow
+            ? `Creator resubmitted corrected exam (${exam.title}) to ${reviewTargetRole} for re-review (Stage: ${status})`
+            : `Updated exam (${exam.title}) status to ${status}`,
           ip_address: "127.0.0.1",
         },
       });
@@ -308,7 +394,12 @@ export async function updateExamStatus(examId: number, status: ExamStatus, userI
       revalidatePath("/dashboard/chair");
       revalidatePath("/dashboard/director");
       revalidatePath("/dashboard/faculty/exams");
-      return { success: true };
+      return { 
+        success: true, 
+        targetStatus: status, 
+        reviewTarget: reviewTargetRole, 
+        isRevision: isRevisionWorkflow 
+      };
     });
   } catch (err: any) {
     console.error("Error updating exam status:", err);
