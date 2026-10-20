@@ -177,9 +177,16 @@ export function StudentExamResultContent({
                 </span>
               </div>
               {data.violationsCount > 0 && (
-                <p className="text-[10px] text-slate-400">
-                  {data.violationsCount} security warning{data.violationsCount !== 1 ? "s" : ""} × {data.scorePenaltyPerViolation} pts penalty
-                </p>
+                <div className="space-y-0.5 pt-0.5 text-[10px] text-slate-400">
+                  <p>
+                    Score penalty: {data.violationsCount} warning{data.violationsCount !== 1 ? "s" : ""} × {data.scorePenaltyPerViolation} pts = -{data.totalDeductions} pts
+                  </p>
+                  {(data.timePenaltyPerViolation ?? 0) > 0 && (
+                    <p>
+                      Timer penalty: {data.violationsCount} warning{data.violationsCount !== 1 ? "s" : ""} × {data.timePenaltyPerViolation}s = -{(data.totalTimeDeductedSeconds ?? (data.violationsCount * (data.timePenaltyPerViolation || 0)))}s deducted
+                    </p>
+                  )}
+                </div>
               )}
             </div>
           </div>

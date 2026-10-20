@@ -53,6 +53,7 @@ export function TakeExamClient({
   const [remainingSeconds, setRemainingSeconds] = useState<number>(initialData.remainingSeconds);
   const [violations, setViolations] = useState<number>(0);
   const [warningReason, setWarningReason] = useState<string>("");
+  const [lastViolationNotice, setLastViolationNotice] = useState<string>("");
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "offline">("saved");
   const [isOnline, setIsOnline] = useState<boolean>(true);
   const [showConfirmSubmit, setShowConfirmSubmit] = useState<boolean>(false);
@@ -99,6 +100,8 @@ export function TakeExamClient({
   const lastSavedAnswersRef = useRef<Record<number, string>>(lastSavedAnswers);
   const isSavingRef = useRef<boolean>(false);
   const pendingSaveQueuedRef = useRef<boolean>(false);
+  const isProcessingViolationRef = useRef<boolean>(false);
+  const lastViolationTimestampRef = useRef<number>(0);
 
   const violationsKey = `exam_violations_${initialData.studentExamId}`;
   const localBackupKey = `exam_answers_backup_${initialData.studentExamId}`;
@@ -295,22 +298,68 @@ export function TakeExamClient({
         await docEl.requestFullscreen();
       }
       setMode("exam");
+      lastViolationTimestampRef.current = Date.now();
+      isProcessingViolationRef.current = false;
     } catch (err) {
       console.error("Re-entering fullscreen failed:", err);
       setMode("exam");
+      lastViolationTimestampRef.current = Date.now();
+      isProcessingViolationRef.current = false;
     }
   };
 
   // Log and increment violation attempts
   const triggerViolation = async (reason: string) => {
+    // 1. Guard against duplicate events (blur + visibilitychange + fullscreenchange in rapid succession)
+    if (mode !== "exam" || isProcessingViolationRef.current || (Date.now() - lastViolationTimestampRef.current < 2500)) {
+      return;
+    }
+    isProcessingViolationRef.current = true;
+    lastViolationTimestampRef.current = Date.now();
+
     const currentCount = Number(localStorage.getItem(violationsKey) || "0");
     const nextCount = currentCount + 1;
     localStorage.setItem(violationsKey, String(nextCount));
     setViolations(nextCount);
 
+    const timePenalty = typeof initialData.timePenaltySeconds === "number" ? initialData.timePenaltySeconds : 0;
+    const scorePenalty = typeof initialData.scorePenaltyPoints === "number" ? initialData.scorePenaltyPoints : 0;
+
+    // 2. Update the visible countdown timer IMMEDIATELY
+    const currentRemaining = remainingSecondsRef.current;
+    const immediateRemaining = Math.max(0, currentRemaining - timePenalty);
+    setRemainingSeconds(immediateRemaining);
+    remainingSecondsRef.current = immediateRemaining;
+
+    // 3. Format readable reason
+    let cleanReason = "you left the examination screen";
+    if (reason.toLowerCase().includes("tab") || reason.toLowerCase().includes("window") || reason.toLowerCase().includes("away")) {
+      cleanReason = "you left the examination screen";
+    } else if (reason.toLowerCase().includes("full screen") || reason.toLowerCase().includes("fullscreen")) {
+      cleanReason = "you exited full screen mode";
+    } else if (reason) {
+      cleanReason = reason.toLowerCase().replace(/\.$/, "");
+    }
+
+    // 4. Construct notification matching Requirement 11
+    // Example: "Warning: 10 seconds have been deducted from your remaining time because you left the examination screen. Time remaining: 24:50."
+    let notificationText = "";
+    if (timePenalty > 0) {
+      notificationText = `Warning: ${timePenalty} seconds have been deducted from your remaining time because ${cleanReason}. Time remaining: ${formatTime(immediateRemaining)}.`;
+      if (scorePenalty > 0) {
+        notificationText += ` (${scorePenalty} point penalty applied to your final score)`;
+      }
+    } else if (scorePenalty > 0) {
+      notificationText = `Warning: ${scorePenalty} point(s) will be deducted from your examination score because ${cleanReason}. Time remaining: ${formatTime(immediateRemaining)}.`;
+    } else {
+      notificationText = `Warning: A violation was recorded because ${cleanReason}. Time remaining: ${formatTime(immediateRemaining)}.`;
+    }
+
+    setLastViolationNotice(notificationText);
+
     if (nextCount < 3) {
       setMode("warning");
-      setWarningReason(reason);
+      setWarningReason(cleanReason);
       if (document.fullscreenElement) {
         document.exitFullscreen().catch(() => {});
       }
@@ -322,6 +371,8 @@ export function TakeExamClient({
         }
       } catch (err) {
         console.error("Failed to log warning / apply penalty on server:", err);
+      } finally {
+        isProcessingViolationRef.current = false;
       }
     } else {
       // 3rd violation triggers lockout
@@ -788,6 +839,9 @@ export function TakeExamClient({
 
   // B. SECURITY VIOLATION WARNING MODAL (LOCAL MODAL SCREEN)
   if (mode === "warning") {
+    const timePenalty = typeof initialData.timePenaltySeconds === "number" ? initialData.timePenaltySeconds : 0;
+    const scorePenalty = typeof initialData.scorePenaltyPoints === "number" ? initialData.scorePenaltyPoints : 0;
+
     return (
       <div className="min-h-screen bg-[#0F172A] text-slate-100 flex items-center justify-center p-6 font-sans select-none">
         <div className="max-w-md w-full bg-[#1E293B] border border-slate-800 rounded-3xl p-8 shadow-2xl text-center space-y-6 relative">
@@ -797,28 +851,88 @@ export function TakeExamClient({
             <AlertTriangle className="w-9 h-9 animate-pulse" />
           </div>
 
-          <div className="space-y-2">
-            <h2 className="text-xl font-black text-white tracking-tight uppercase">Warning!</h2>
-            <p className="text-xs text-rose-400 font-black uppercase bg-rose-500/10 py-1.5 px-3 rounded-full inline-block border border-rose-500/20 mt-1">
-              Warning {violations} of 2
-            </p>
-            <p className="text-slate-400 text-sm leading-relaxed mt-3">
-              We detected: <strong className="text-slate-200">{warningReason}</strong>
-            </p>
-            <div className="bg-rose-500/10 border border-rose-500/20 text-rose-300 p-4 rounded-2xl text-xs font-semibold max-w-sm mx-auto my-3 text-left space-y-1">
-              <p className="font-extrabold text-rose-400 flex items-center gap-1.5">⚠️ Penalty Applied:</p>
-              <p className="ml-1">Time lost: <strong className="text-white">-{initialData.timePenaltySeconds} seconds</strong> removed from timer</p>
-              <p className="ml-1">Score deduction: <strong className="text-white">-{initialData.scorePenaltyPoints} points</strong> on this exam</p>
+          <div className="space-y-3">
+            <div className="flex items-center justify-center gap-2">
+              <span className="text-xs text-rose-400 font-black uppercase bg-rose-500/10 py-1.5 px-3 rounded-full border border-rose-500/20">
+                Warning {violations} of 2
+              </span>
             </div>
-            <p className="text-slate-500 text-[11px] leading-relaxed mt-2 font-medium">
-              Please stay on this exam screen in full screen mode. On the next warning, your exam will end and submit automatically.
+
+            <h2 className="text-xl font-black text-white tracking-tight uppercase">Security Violation</h2>
+
+            {/* Requirement 11 Notice Banner */}
+            <div className="bg-rose-950/40 border border-rose-500/40 text-rose-200 p-4 rounded-2xl text-xs font-bold leading-relaxed text-left space-y-2 shadow-inner">
+              <div className="flex items-center gap-2 text-rose-400 font-black text-xs uppercase tracking-wider">
+                <ShieldAlert className="w-4 h-4 shrink-0" />
+                <span>Violation Recorded</span>
+              </div>
+              <p className="text-white text-xs sm:text-sm font-semibold leading-relaxed">
+                {lastViolationNotice || (
+                  timePenalty > 0
+                    ? `Warning: ${timePenalty} seconds have been deducted from your remaining time because ${warningReason || "you left the examination screen"}. Time remaining: ${formatTime(remainingSeconds)}.`
+                    : `Warning: A penalty of ${scorePenalty} point(s) will be deducted from your score because ${warningReason || "you left the examination screen"}. Time remaining: ${formatTime(remainingSeconds)}.`
+                )}
+              </p>
+            </div>
+
+            {/* Live Remaining Time Display after Deduction */}
+            <div className="bg-[#0F172A] border border-slate-800 p-4 rounded-2xl flex items-center justify-between">
+              <div className="text-left">
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Time Remaining After Deduction</span>
+                <div className="text-2xl font-black text-amber-400 flex items-center gap-2 mt-0.5">
+                  <Clock className="w-5 h-5 text-amber-500" />
+                  <span>{formatTime(remainingSeconds)}</span>
+                </div>
+              </div>
+              {timePenalty > 0 ? (
+                <div className="text-right">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-rose-400">Timer Deduction</span>
+                  <p className="text-sm font-black text-rose-400 bg-rose-500/20 border border-rose-500/30 px-2.5 py-1 rounded-lg mt-0.5">
+                    -{timePenalty}s
+                  </p>
+                </div>
+              ) : (
+                <div className="text-right">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Timer Deduction</span>
+                  <p className="text-xs font-bold text-slate-400 bg-slate-800 px-2.5 py-1 rounded-lg mt-0.5">
+                    None (0s)
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Configured Penalties Explanation */}
+            <div className="bg-slate-900/60 border border-slate-800 text-slate-300 p-3.5 rounded-2xl text-xs space-y-1 text-left">
+              <p className="font-bold text-slate-400 text-[11px] uppercase tracking-wider">Exam Penalty Configuration:</p>
+              {timePenalty > 0 ? (
+                <p className="text-slate-300">
+                  • Timer Penalty: <strong className="text-white">-{timePenalty} seconds</strong> deducted immediately
+                </p>
+              ) : (
+                <p className="text-slate-400">
+                  • Timer Penalty: <strong className="text-slate-300">0 seconds</strong> (No time deduction configured)
+                </p>
+              )}
+              {scorePenalty > 0 ? (
+                <p className="text-slate-300">
+                  • Score Penalty: <strong className="text-white">-{scorePenalty} points</strong> per violation on final score
+                </p>
+              ) : (
+                <p className="text-slate-400">
+                  • Score Penalty: <strong className="text-slate-300">0 points</strong> (No score deduction configured)
+                </p>
+              )}
+            </div>
+
+            <p className="text-slate-500 text-[11px] leading-relaxed font-medium">
+              Please stay on this exam screen in full screen mode. On the 3rd warning, your exam will end and submit automatically.
             </p>
           </div>
 
           <div className="pt-2 border-t border-slate-800">
             <button
               onClick={handleReEnterSecureMode}
-              className="w-full flex items-center justify-center gap-2 bg-amber-600 hover:bg-amber-700 text-white font-black text-sm px-5 py-3 rounded-xl transition-all shadow-md"
+              className="w-full flex items-center justify-center gap-2 bg-amber-600 hover:bg-amber-700 text-white font-black text-sm px-5 py-3.5 rounded-xl transition-all shadow-md cursor-pointer"
             >
               Return to Exam
             </button>
@@ -1130,6 +1244,23 @@ export function TakeExamClient({
           </button>
         </div>
       </header>
+
+      {/* Anti-Cheating Violation Alert Banner */}
+      {lastViolationNotice && (
+        <div className="bg-rose-950/90 border-b border-rose-800 text-rose-200 px-4 py-2.5 text-xs font-semibold flex items-center justify-between gap-3 shadow-md z-30">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+            <span>{lastViolationNotice}</span>
+          </div>
+          <button
+            onClick={() => setLastViolationNotice("")}
+            className="text-rose-400 hover:text-white p-1 rounded-lg hover:bg-rose-900/50 transition-colors cursor-pointer"
+            title="Dismiss notice"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* 2. BODY GRID */}
       <div className="flex-1 flex overflow-hidden relative">

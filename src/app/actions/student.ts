@@ -638,16 +638,7 @@ export async function logStudentWarning(
   studentExamId?: number
 ) {
   try {
-    // 1. Log audit warning event
-    await db.auditLog.create({
-      data: {
-        user_id: studentId,
-        action_performed: `Security Warning ${warningNumber}/2 for Exam (ID: ${examId}): ${reason}`,
-        ip_address: "127.0.0.1",
-      },
-    });
-
-    // 2. Fetch student exam and apply penalty configurations
+    // 1. Fetch student exam and apply penalty configurations
     let studentExam = null;
     if (studentExamId) {
       studentExam = await db.studentExam.findUnique({
@@ -665,50 +656,76 @@ export async function logStudentWarning(
       });
     }
 
-    let updatedRemainingSeconds = undefined;
-
-    if (studentExam) {
-      const exam = studentExam.exam;
-      // Follow the configured time penalty dynamically: if 0, deduct 0s; if >0, deduct configured seconds
-      const timePenalty = typeof exam.time_penalty_seconds === "number" ? exam.time_penalty_seconds : 60;
-      
-      // Calculate new remaining seconds
-      const currentRemaining = studentExam.remaining_seconds ?? (exam.time_limit_minutes * 60);
-      const newRemaining = Math.max(0, currentRemaining - timePenalty);
-      updatedRemainingSeconds = newRemaining;
-
-      // Update session state
-      await db.studentExam.update({
-        where: { student_exam_id: studentExam.student_exam_id },
-        data: {
-          violations_count: {
-            increment: 1,
-          },
-          remaining_seconds: newRemaining,
-        },
-      });
-
-      // 3. Create real-time notification record for the exam author (instructor)
-      const student = await db.student.findUnique({
-        where: { student_id: studentId },
-        include: { user: true },
-      });
-
-      if (student) {
-        const studentName = `${student.first_name} ${student.last_name}`;
-        const studentInstId = student.user.institutional_id;
-
-        await db.notification.create({
-          data: {
-            user_id: exam.faculty_id,
-            title: "Exam Security Violation",
-            message: `Student ${studentName} (ID: ${studentInstId}) triggered a warning (${warningNumber}/2) for exam "${exam.title}". Reason: ${reason}. A time penalty of -${timePenalty} seconds was applied.`,
-          },
-        });
-      }
+    if (!studentExam) {
+      return { error: "Student examination attempt not found." };
     }
 
-    return { success: true, remainingSeconds: updatedRemainingSeconds };
+    const exam = studentExam.exam;
+    // Use actual deduction configured for that exam
+    const timePenalty = typeof exam.time_penalty_seconds === "number" ? exam.time_penalty_seconds : 0;
+    const scorePenalty = typeof exam.score_penalty_points === "number" ? exam.score_penalty_points : 2;
+
+    // Guard against duplicate events or page refreshes deducting time multiple times
+    if (studentExam.violations_count >= warningNumber) {
+      return {
+        success: true,
+        remainingSeconds: studentExam.remaining_seconds ?? (exam.time_limit_minutes * 60),
+        deductedSeconds: 0,
+        isDuplicate: true,
+      };
+    }
+
+    // Calculate new remaining seconds
+    const currentRemaining = studentExam.remaining_seconds ?? (exam.time_limit_minutes * 60);
+    const newRemaining = Math.max(0, currentRemaining - timePenalty);
+
+    // Update session state
+    await db.studentExam.update({
+      where: { student_exam_id: studentExam.student_exam_id },
+      data: {
+        violations_count: warningNumber,
+        remaining_seconds: newRemaining,
+      },
+    });
+
+    // Record violation and deduction in attempt history (AuditLog)
+    const timeNote = timePenalty > 0 ? `-${timePenalty}s time deducted (Remaining: ${newRemaining}s)` : "No time deducted (0s)";
+    const scoreNote = scorePenalty > 0 ? `-${scorePenalty} pts score penalty configured` : "No score penalty";
+
+    await db.auditLog.create({
+      data: {
+        user_id: studentId,
+        action_performed: `Security Warning ${warningNumber}/2 for Exam (ID: ${examId}): ${reason}. Deductions: ${timeNote}, ${scoreNote}.`,
+        ip_address: "127.0.0.1",
+      },
+    });
+
+    // Create real-time notification record for exam author (instructor)
+    const student = await db.student.findUnique({
+      where: { student_id: studentId },
+      include: { user: true },
+    });
+
+    if (student) {
+      const studentName = `${student.first_name} ${student.last_name}`;
+      const studentInstId = student.user.institutional_id;
+
+      await db.notification.create({
+        data: {
+          user_id: exam.faculty_id,
+          title: "Exam Security Violation",
+          message: `Student ${studentName} (ID: ${studentInstId}) triggered warning ${warningNumber}/2 for exam "${exam.title}". Reason: ${reason}. Deductions applied: ${timeNote}, ${scoreNote}.`,
+        },
+      });
+    }
+
+    return {
+      success: true,
+      remainingSeconds: newRemaining,
+      deductedSeconds: timePenalty,
+      scorePenaltyPoints: scorePenalty,
+      violationsCount: warningNumber,
+    };
   } catch (err: any) {
     console.error("Error logging warning:", err);
     return { error: err.message || "Failed to log security warning." };
@@ -885,6 +902,8 @@ export interface StudentExamResultData {
   violationsCount: number;
   scorePenaltyPerViolation: number;
   totalDeductions: number;
+  timePenaltyPerViolation?: number;
+  totalTimeDeductedSeconds?: number;
   initialRawScore: number;
   initialNetScore: number;
 
@@ -1121,6 +1140,8 @@ export async function getStudentExamResultDetails({
         violationsCount,
         scorePenaltyPerViolation,
         totalDeductions,
+        timePenaltyPerViolation: typeof exam.time_penalty_seconds === "number" ? exam.time_penalty_seconds : 0,
+        totalTimeDeductedSeconds: violationsCount * (typeof exam.time_penalty_seconds === "number" ? exam.time_penalty_seconds : 0),
         initialRawScore,
         initialNetScore,
 
