@@ -416,13 +416,26 @@ export function ExamBuilderWizard({
 }: ExamBuilderWizardProps) {
   const router = useRouter();
 
+  // Automatically open Step 2: Test Questions / Question Bank when exam is returned for revision
+  const isReturnedExam = Boolean(
+    exam.current_status === "Returned" ||
+    exam.approvalWorkflow?.chair_review_status === "Returned" ||
+    exam.approvalWorkflow?.prog_chair_review_status === "Returned"
+  );
+
   // Steps: 1 = Config, 2 = Questions, 3 = Preview & Submit
   const [step, setStep] = useState<number>(() => {
-    if (exam.current_status === "Returned") {
+    if (isReturnedExam) {
       return 2;
     }
     return 1;
   });
+
+  useEffect(() => {
+    if (isReturnedExam) {
+      setStep(2);
+    }
+  }, [isReturnedExam]);
 
   // 1. Examination Term (Selectable by Faculty / Chairs) & Date
   const [term, setTerm] = useState<string>(
@@ -1018,6 +1031,29 @@ export function ExamBuilderWizard({
       }
     }
   }, [isReturnedForRevision, questionsNeedingRevision]);
+
+  // Auto-scroll to the first question marked for revision upon opening returned exam
+  const hasAutoScrolledToRevisionRef = useRef(false);
+
+  useEffect(() => {
+    if (isReturnedExam && questionsNeedingRevision.length > 0 && !hasAutoScrolledToRevisionRef.current) {
+      hasAutoScrolledToRevisionRef.current = true;
+      const firstFlagged = questionsNeedingRevision[0];
+      const targetId = `q-builder-${firstFlagged.q.question_id || firstFlagged.itemNum}`;
+      
+      const topicName = firstFlagged.q.topic?.trim() || "Unassigned Topic";
+      setOpenTopics((prev) => ({ ...prev, [topicName]: true }));
+
+      const timer = setTimeout(() => {
+        const el = document.getElementById(targetId);
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+      }, 400);
+
+      return () => clearTimeout(timer);
+    }
+  }, [isReturnedExam, questionsNeedingRevision]);
 
   // Interactive Popup Modal State for Submission & Save Draft feedback
   interface ModalState {
