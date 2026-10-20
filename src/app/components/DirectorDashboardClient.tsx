@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, Fragment } from "react";
 import { useRouter } from "next/navigation";
 import { 
   BarChart3, ShieldCheck, Map, List, CheckCircle, 
   XCircle, Clock, AlertCircle, RefreshCw, Search, Building2,
   UserPlus, X, Loader2, Eye, EyeOff, Award, Calendar, Sparkles,
-  Users, BookOpen, UserCog, Columns, FileText
+  Users, BookOpen, UserCog, Columns, FileText,
+  ArrowUp, ArrowDown, ArrowUpDown, SlidersHorizontal, Filter
 } from "lucide-react";
 import { BSCTableOfSpecificationsView } from "@/app/components/BSCTableOfSpecificationsView";
 import { getProgramHeaderImage } from "@/lib/programHeader";
@@ -27,6 +28,100 @@ import {
   getExaminationDepartmentName
 } from "@/lib/courseDepartmentMapping";
 import { getExpectedYearAndSemForCourse } from "@/lib/bsitCurriculum";
+
+export type ApprovalSortField = "exam_date" | "submission_date" | "department" | "exam_name" | "status";
+export type SortDirection = "asc" | "desc";
+
+export const SORT_FIELD_LABELS: Record<ApprovalSortField, string> = {
+  exam_date: "Examination Date",
+  submission_date: "Submission Date",
+  department: "Department",
+  exam_name: "Examination Name",
+  status: "Current Workflow Status",
+};
+
+export const DEPARTMENT_FILTER_OPTIONS = [
+  "Computing and Industrial Technology Department",
+  "Agriculture Department",
+  "Hospitality and Tourism Management Department",
+  "Teacher Education Department",
+];
+
+function getSortOrderLabel(field: ApprovalSortField, order: SortDirection): string {
+  if (field === "exam_date" || field === "submission_date") {
+    return order === "desc" ? "Newest to Oldest" : "Oldest to Newest";
+  }
+  return order === "asc" ? "A → Z" : "Z → A";
+}
+
+function formatExamDate(dateVal?: Date | string | null): string {
+  if (!dateVal) return "Not set";
+  try {
+    const d = new Date(dateVal);
+    if (isNaN(d.getTime())) return "Not set";
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  } catch {
+    return "Not set";
+  }
+}
+
+function getSubmissionTimestamp(item: any): number {
+  if (item.chair_action_timestamp) {
+    const t = new Date(item.chair_action_timestamp).getTime();
+    if (!isNaN(t)) return t;
+  }
+  if (item.approvalWorkflow?.chair_action_timestamp) {
+    const t = new Date(item.approvalWorkflow.chair_action_timestamp).getTime();
+    if (!isNaN(t)) return t;
+  }
+  const tosCreated = item.exam?.tableOfSpecifications?.created_at || item.tableOfSpecifications?.created_at;
+  if (tosCreated) {
+    const t = new Date(tosCreated).getTime();
+    if (!isNaN(t)) return t;
+  }
+  return item.workflow_id || item.exam?.exam_id || item.exam_id || 0;
+}
+
+function compareApprovals(
+  a: any,
+  b: any,
+  sortBy: ApprovalSortField,
+  sortOrder: SortDirection
+): number {
+  let result = 0;
+
+  if (sortBy === "exam_date") {
+    const examA = a.exam || a;
+    const examB = b.exam || b;
+    const timeA = examA.exam_date ? new Date(examA.exam_date).getTime() : 0;
+    const timeB = examB.exam_date ? new Date(examB.exam_date).getTime() : 0;
+    result = timeA - timeB;
+  } else if (sortBy === "submission_date") {
+    const timeA = getSubmissionTimestamp(a);
+    const timeB = getSubmissionTimestamp(b);
+    result = timeA - timeB;
+  } else if (sortBy === "department") {
+    const deptA = getExaminationDepartmentName(a.exam || a);
+    const deptB = getExaminationDepartmentName(b.exam || b);
+    result = deptA.localeCompare(deptB, undefined, { sensitivity: "base" });
+  } else if (sortBy === "exam_name") {
+    const titleA = (a.exam?.title || a.title || "").trim();
+    const titleB = (b.exam?.title || b.title || "").trim();
+    result = titleA.localeCompare(titleB, undefined, { sensitivity: "base" });
+  } else if (sortBy === "status") {
+    const statusA = (a.current_status || a.chair_review_status || a.exam?.current_status || "").trim();
+    const statusB = (b.current_status || b.chair_review_status || b.exam?.current_status || "").trim();
+    result = statusA.localeCompare(statusB, undefined, { sensitivity: "base" });
+  }
+
+  if (result === 0) {
+    const idA = a.workflow_id || a.exam_id || a.exam?.exam_id || 0;
+    const idB = b.workflow_id || b.exam_id || b.exam?.exam_id || 0;
+    result = idA - idB;
+  }
+
+  return sortOrder === "asc" ? result : -result;
+}
 
 const QUESTION_TYPE_ORDER: Record<string, number> = {
   Multiple_Choice: 1,
@@ -137,6 +232,7 @@ interface DirectorDashboardClientProps {
     workflow_id: number;
     exam_id: number;
     chair_review_status: string;
+    chair_action_timestamp?: Date | string | null;
     exam: {
       title: string;
       term?: string | null;
@@ -146,6 +242,9 @@ interface DirectorDashboardClientProps {
       document_reference?: string | null;
       tos_file_path?: string | null;
       time_limit_minutes?: number | null;
+      tableOfSpecifications?: {
+        created_at: Date | string;
+      } | null;
       faculty: {
         first_name: string;
         last_name: string;
@@ -188,6 +287,9 @@ interface DirectorDashboardClientProps {
     document_reference?: string | null;
     tos_file_path?: string | null;
     time_limit_minutes?: number | null;
+    tableOfSpecifications?: {
+      created_at: Date | string;
+    } | null;
     faculty: {
       first_name: string;
       last_name: string;
@@ -202,6 +304,7 @@ interface DirectorDashboardClientProps {
     approvalWorkflow: {
       workflow_id: number;
       chair_review_status?: string | null;
+      chair_action_timestamp?: Date | string | null;
       di_review_status: string;
       reviewed_by_di_id: number | null;
       di_comments: string | null;
@@ -422,9 +525,17 @@ export function DirectorDashboardClient({
   const [holdTriggerType, setHoldTriggerType] = useState<"review" | "toggle" | null>(null);
   const [holdRemarks, setHoldRemarks] = useState("");
 
-  // State for Manage Exams Search & Filter
+  // State for Final Institutional Approval Queue Filter & Sort
+  const [approvalDeptFilter, setApprovalDeptFilter] = useState("ALL");
+  const [approvalSortBy, setApprovalSortBy] = useState<ApprovalSortField>("submission_date");
+  const [approvalSortOrder, setApprovalSortOrder] = useState<SortDirection>("desc");
+
+  // State for Manage Exams Search, Filter & Sort
   const [examSearchQuery, setExamSearchQuery] = useState("");
   const [examStatusFilter, setExamStatusFilter] = useState("ALL");
+  const [examDeptFilter, setExamDeptFilter] = useState("ALL");
+  const [examSortBy, setExamSortBy] = useState<ApprovalSortField>("exam_date");
+  const [examSortOrder, setExamSortOrder] = useState<SortDirection>("desc");
 
   // State for Logs Search
   const [searchQuery, setSearchQuery] = useState("");
@@ -722,17 +833,78 @@ export function DirectorDashboardClient({
     log.user.role.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const filteredExams = allExaminations.filter(exam => {
-    const matchesSearch = 
-      exam.title.toLowerCase().includes(examSearchQuery.toLowerCase()) ||
-      (exam.course?.course_code || "").toLowerCase().includes(examSearchQuery.toLowerCase()) ||
-      (exam.course?.course_title || "").toLowerCase().includes(examSearchQuery.toLowerCase()) ||
-      `${exam.faculty?.first_name || ""} ${exam.faculty?.last_name || ""}`.toLowerCase().includes(examSearchQuery.toLowerCase());
+  // Memoized filtered & sorted approvals for Final Institutional Approval Queue
+  const filteredAndSortedApprovals = useMemo(() => {
+    const filtered = pendingApprovals.filter((approval) => {
+      const deptName = getExaminationDepartmentName(approval.exam);
+      return approvalDeptFilter === "ALL" || deptName === approvalDeptFilter;
+    });
 
-    const matchesStatus = examStatusFilter === "ALL" || exam.current_status === examStatusFilter;
+    return [...filtered].sort((a, b) => compareApprovals(a, b, approvalSortBy, approvalSortOrder));
+  }, [pendingApprovals, approvalDeptFilter, approvalSortBy, approvalSortOrder]);
 
-    return matchesSearch && matchesStatus;
-  });
+  // Grouped approvals by Department when sorting by department
+  const groupedApprovalsByDept = useMemo<{ departmentName: string; items: typeof filteredAndSortedApprovals }[] | null>(() => {
+    if (approvalSortBy !== "department") return null;
+
+    const groups: Record<string, typeof filteredAndSortedApprovals> = {};
+    filteredAndSortedApprovals.forEach((item) => {
+      const dept = getExaminationDepartmentName(item.exam);
+      if (!groups[dept]) {
+        groups[dept] = [];
+      }
+      groups[dept].push(item);
+    });
+
+    return Object.entries(groups).map(([departmentName, items]) => ({
+      departmentName,
+      items,
+    }));
+  }, [filteredAndSortedApprovals, approvalSortBy]);
+
+  // Memoized filtered & sorted examinations for Manage All Examinations Tab
+  const filteredAndSortedExams = useMemo(() => {
+    const filtered = allExaminations.filter((exam) => {
+      const q = examSearchQuery.trim().toLowerCase();
+      const matchesSearch =
+        !q ||
+        exam.title.toLowerCase().includes(q) ||
+        (exam.course?.course_code || "").toLowerCase().includes(q) ||
+        (exam.course?.course_title || "").toLowerCase().includes(q) ||
+        `${exam.faculty?.first_name || ""} ${exam.faculty?.last_name || ""}`.toLowerCase().includes(q) ||
+        getExaminationDepartmentName(exam).toLowerCase().includes(q);
+
+      const matchesStatus = examStatusFilter === "ALL" || exam.current_status === examStatusFilter;
+      const deptName = getExaminationDepartmentName(exam);
+      const matchesDept = examDeptFilter === "ALL" || deptName === examDeptFilter;
+
+      return matchesSearch && matchesStatus && matchesDept;
+    });
+
+    return [...filtered].sort((a, b) => compareApprovals(a, b, examSortBy, examSortOrder));
+  }, [allExaminations, examSearchQuery, examStatusFilter, examDeptFilter, examSortBy, examSortOrder]);
+
+  // Keep filteredExams alias for existing references
+  const filteredExams = filteredAndSortedExams;
+
+  // Grouped examinations by Department when sorting by department
+  const groupedExamsByDept = useMemo<{ departmentName: string; items: typeof filteredAndSortedExams }[] | null>(() => {
+    if (examSortBy !== "department") return null;
+
+    const groups: Record<string, typeof filteredAndSortedExams> = {};
+    filteredAndSortedExams.forEach((item) => {
+      const dept = getExaminationDepartmentName(item);
+      if (!groups[dept]) {
+        groups[dept] = [];
+      }
+      groups[dept].push(item);
+    });
+
+    return Object.entries(groups).map(([departmentName, items]) => ({
+      departmentName,
+      items,
+    }));
+  }, [filteredAndSortedExams, examSortBy]);
 
   const renderOfficialExamPaperForDirector = (approval: any) => {
     const qBank = approval.exam?.questionBank || [];
@@ -1137,91 +1309,284 @@ export function DirectorDashboardClient({
           </div>
 
 
-          {/* Action Panel */}
-          <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-6">
-            <h2 className="text-lg font-bold text-slate-800 border-b border-slate-100 pb-3 flex items-center gap-2">
-              <span className="w-1.5 h-6 bg-indigo-600 rounded-full" />
-              Final Institutional Approval Queue
-            </h2>
+          {/* Action Panel: Final Institutional Approval Queue with Sorting and Filtering */}
+          <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-5">
+            <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-slate-100 pb-4 gap-3">
+              <div>
+                <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                  <span className="w-1.5 h-6 bg-indigo-600 rounded-full" />
+                  Final Institutional Approval Queue
+                  <span className="text-xs font-bold text-slate-500 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full">
+                    {filteredAndSortedApprovals.length}
+                  </span>
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Review and clear pending examinations submitted by academic departments.
+                </p>
+              </div>
+
+              {/* Sorting and Filtering Controls - single line */}
+              <div className="flex items-center gap-2 shrink-0">
+                {/* Department Filter */}
+                <select
+                  value={approvalDeptFilter}
+                  onChange={(e) => setApprovalDeptFilter(e.target.value)}
+                  className="bg-slate-50 border border-slate-200 text-xs font-bold text-slate-700 px-3 py-2 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none cursor-pointer"
+                  title="Filter by Department"
+                >
+                  <option value="ALL">All Departments</option>
+                  {DEPARTMENT_FILTER_OPTIONS.map((dept) => (
+                    <option key={dept} value={dept}>{dept}</option>
+                  ))}
+                </select>
+
+                {/* Sort Field Select */}
+                <select
+                  value={approvalSortBy}
+                  onChange={(e) => setApprovalSortBy(e.target.value as ApprovalSortField)}
+                  className="bg-slate-50 border border-slate-200 text-xs font-bold text-slate-700 px-3 py-2 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none cursor-pointer"
+                  title="Sort examinations by"
+                >
+                  <option value="submission_date">Sort: Submission Date</option>
+                  <option value="exam_date">Sort: Examination Date</option>
+                  <option value="department">Sort: Department</option>
+                  <option value="exam_name">Sort: Examination Name</option>
+                  <option value="status">Sort: Workflow Status</option>
+                </select>
+
+                {/* Sort Order Button */}
+                <button
+                  type="button"
+                  onClick={() => setApprovalSortOrder((prev) => (prev === "asc" ? "desc" : "asc"))}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-xs font-extrabold text-indigo-700 rounded-xl transition-all cursor-pointer shadow-2xs"
+                  title={`Order: ${getSortOrderLabel(approvalSortBy, approvalSortOrder)} (Click to switch)`}
+                >
+                  {approvalSortOrder === "asc" ? (
+                    <ArrowUp className="w-3.5 h-3.5 text-indigo-600" />
+                  ) : (
+                    <ArrowDown className="w-3.5 h-3.5 text-indigo-600" />
+                  )}
+                  <span>{getSortOrderLabel(approvalSortBy, approvalSortOrder)}</span>
+                </button>
+              </div>
+            </div>
 
             {pendingApprovals.length > 0 ? (
-              <div className="divide-y divide-slate-100">
-                {pendingApprovals.map((approval) => (
-                  <div key={approval.workflow_id} className="py-4 flex flex-col md:flex-row justify-between md:items-center gap-4 first:pt-0 last:pb-0">
-                    <div className="space-y-1.5">
-                      <h3 className="text-base font-bold text-slate-800">{approval.exam.title}</h3>
-                      <div className="text-xs text-slate-500 font-medium flex flex-wrap items-center gap-1.5">
-                        <span>Course: <strong className="text-slate-700">{approval.exam?.course?.course_code || "Course"}</strong></span>
-                        <span>&bull;</span>
-                        <span>Author: <strong className="text-slate-700">{approval.exam?.faculty?.first_name || ""} {approval.exam?.faculty?.last_name || ""}</strong></span>
-                        {(() => {
-                          const pCode = determineProgramCodeFromCourseOrExam(approval.exam);
-                          return pCode ? (
-                            <>
-                              <span>&bull;</span>
-                              <span>Program: <strong className="text-emerald-700 font-bold">{pCode}</strong></span>
-                            </>
-                          ) : null;
-                        })()}
+              filteredAndSortedApprovals.length > 0 ? (
+                groupedApprovalsByDept ? (
+                  <div className="space-y-6">
+                    {groupedApprovalsByDept.map((group) => (
+                      <div key={group.departmentName} className="border border-indigo-100 bg-slate-50/40 rounded-2xl p-4 sm:p-5 space-y-3 shadow-2xs">
+                        <div className="flex items-center justify-between border-b border-indigo-100 pb-2.5">
+                          <div className="flex items-center gap-2">
+                            <Building2 className="w-4 h-4 text-indigo-600" />
+                            <h4 className="text-xs font-black text-slate-800 tracking-wide uppercase">
+                              {group.departmentName}
+                            </h4>
+                          </div>
+                          <span className="text-[11px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200/80 px-2.5 py-0.5 rounded-full">
+                            {group.items.length} {group.items.length === 1 ? "examination" : "examinations"}
+                          </span>
+                        </div>
+                        <div className="divide-y divide-slate-100 bg-white rounded-xl px-4 border border-slate-100">
+                          {group.items.map((approval) => (
+                            <div key={approval.workflow_id} className="py-4 flex flex-col md:flex-row justify-between md:items-center gap-4 first:pt-0 last:pb-0">
+                              <div className="space-y-1.5">
+                                <h3 className="text-base font-bold text-slate-800">{approval.exam.title}</h3>
+                                <div className="text-xs text-slate-500 font-medium flex flex-wrap items-center gap-1.5">
+                                  <span>Course: <strong className="text-slate-700">{approval.exam?.course?.course_code || "Course"}</strong></span>
+                                  <span>&bull;</span>
+                                  <span>Author: <strong className="text-slate-700">{approval.exam?.faculty?.first_name || ""} {approval.exam?.faculty?.last_name || ""}</strong></span>
+                                  {(() => {
+                                    const pCode = determineProgramCodeFromCourseOrExam(approval.exam);
+                                    return pCode ? (
+                                      <>
+                                        <span>&bull;</span>
+                                        <span>Program: <strong className="text-emerald-700 font-bold">{pCode}</strong></span>
+                                      </>
+                                    ) : null;
+                                  })()}
+                                </div>
+                                <div className="text-xs text-slate-600 font-medium flex items-center gap-1.5 pt-0.5">
+                                  <Building2 className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                                  <span>Department: <strong className="text-slate-900 font-bold">{getExaminationDepartmentName(approval.exam)}</strong></span>
+                                </div>
+                                <div className="text-xs text-slate-500 font-medium flex flex-wrap items-center gap-x-3 gap-y-1 pt-0.5">
+                                  <span className="flex items-center gap-1">
+                                    <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                                    Exam Date: <strong className="text-slate-700 font-bold">{formatExamDate(approval.exam?.exam_date)}</strong>
+                                  </span>
+                                  <span>&bull;</span>
+                                  <span className="flex items-center gap-1">
+                                    <Clock className="w-3.5 h-3.5 text-slate-400" />
+                                    Submission Date: <strong className="text-slate-700 font-bold">{formatExamDate(approval.chair_action_timestamp || approval.exam?.tableOfSpecifications?.created_at)}</strong>
+                                  </span>
+                                </div>
+                                <p className="text-[11px] text-emerald-600 font-bold bg-emerald-50 inline-block px-2 py-0.5 rounded-full mt-1 border border-emerald-100">
+                                  Chair Review: {approval.chair_review_status}
+                                </p>
+                              </div>
+                              <div className="flex flex-wrap items-center gap-2 shrink-0">
+                                <button 
+                                  type="button"
+                                  onClick={() => {
+                                    setActivePreviewApproval(approval);
+                                    setPreviewSplitMode("split");
+                                  }}
+                                  className="bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 text-xs font-bold px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                                  title="Preview Official Examination Paper & TOS"
+                                >
+                                  <Eye className="w-3.5 h-3.5 text-indigo-600" />
+                                  Preview Exam
+                                </button>
+                                <button 
+                                  disabled={isSubmittingReview === approval.workflow_id || hasDirectorComments(approval.workflow_id)}
+                                  onClick={() => handleReview(approval.workflow_id, approval.exam_id, "Approve")}
+                                  title={
+                                    hasDirectorComments(approval.workflow_id)
+                                      ? "Approve is disabled because comments are entered. Clear comments or click Return."
+                                      : "Approve Examination"
+                                  }
+                                  className={`text-xs font-bold px-4 py-2 rounded-xl shadow-sm transition-all flex items-center gap-2 ${
+                                    hasDirectorComments(approval.workflow_id)
+                                      ? "bg-slate-200 text-slate-400 cursor-not-allowed opacity-60"
+                                      : "bg-indigo-600 hover:bg-indigo-700 text-white disabled:opacity-50 cursor-pointer"
+                                  }`}
+                                >
+                                  {isSubmittingReview === approval.workflow_id ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5" />}
+                                  Approve
+                                </button>
+                                <button 
+                                  disabled={isSubmittingReview === approval.workflow_id}
+                                  onClick={() => handleReview(approval.workflow_id, approval.exam_id, "Return")}
+                                  className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold px-4 py-2 rounded-xl transition-all disabled:opacity-50 flex items-center gap-2 cursor-pointer"
+                                >
+                                  {isSubmittingReview === approval.workflow_id ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <XCircle className="w-3.5 h-3.5" />}
+                                  Return
+                                </button>
+                                <button 
+                                  disabled={isSubmittingReview === approval.workflow_id}
+                                  onClick={() => handleReview(approval.workflow_id, approval.exam_id, "Hold")}
+                                  className="bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 text-xs font-bold px-4 py-2 rounded-xl transition-all disabled:opacity-50 flex items-center gap-2 cursor-pointer"
+                                >
+                                  {isSubmittingReview === approval.workflow_id ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Clock className="w-3.5 h-3.5" />}
+                                  Hold
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                      <div className="text-xs text-slate-600 font-medium flex items-center gap-1.5 pt-0.5">
-                        <Building2 className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                        <span>Department: <strong className="text-slate-900 font-bold">{getExaminationDepartmentName(approval.exam)}</strong></span>
-                      </div>
-                      <p className="text-[11px] text-emerald-600 font-bold bg-emerald-50 inline-block px-2 py-0.5 rounded-full mt-1 border border-emerald-100">
-                        Chair Review: {approval.chair_review_status}
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <button 
-                        type="button"
-                        onClick={() => {
-                          setActivePreviewApproval(approval);
-                          setPreviewSplitMode("split");
-                        }}
-                        className="bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 text-xs font-bold px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
-                        title="Preview Official Examination Paper & TOS"
-                      >
-                        <Eye className="w-3.5 h-3.5 text-indigo-600" />
-                        Preview Exam
-                      </button>
-                      <button 
-                        disabled={isSubmittingReview === approval.workflow_id || hasDirectorComments(approval.workflow_id)}
-                        onClick={() => handleReview(approval.workflow_id, approval.exam_id, "Approve")}
-                        title={
-                          hasDirectorComments(approval.workflow_id)
-                            ? "Approve is disabled because comments are entered. Clear comments or click Return."
-                            : "Approve Examination"
-                        }
-                        className={`text-xs font-bold px-4 py-2 rounded-xl shadow-sm transition-all flex items-center gap-2 ${
-                          hasDirectorComments(approval.workflow_id)
-                            ? "bg-slate-200 text-slate-400 cursor-not-allowed opacity-60"
-                            : "bg-indigo-600 hover:bg-indigo-700 text-white disabled:opacity-50 cursor-pointer"
-                        }`}
-                      >
-                        {isSubmittingReview === approval.workflow_id ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5" />}
-                        Approve
-                      </button>
-                      <button 
-                        disabled={isSubmittingReview === approval.workflow_id}
-                        onClick={() => handleReview(approval.workflow_id, approval.exam_id, "Return")}
-                        className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold px-4 py-2 rounded-xl transition-all disabled:opacity-50 flex items-center gap-2"
-                      >
-                        {isSubmittingReview === approval.workflow_id ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <XCircle className="w-3.5 h-3.5" />}
-                        Return
-                      </button>
-                      <button 
-                        disabled={isSubmittingReview === approval.workflow_id}
-                        onClick={() => handleReview(approval.workflow_id, approval.exam_id, "Hold")}
-                        className="bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 text-xs font-bold px-4 py-2 rounded-xl transition-all disabled:opacity-50 flex items-center gap-2"
-                      >
-                        {isSubmittingReview === approval.workflow_id ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Clock className="w-3.5 h-3.5" />}
-                        Hold
-                      </button>
-                    </div>
+                    ))}
                   </div>
-                ))}
-              </div>
+                ) : (
+                  <div className="divide-y divide-slate-100">
+                    {filteredAndSortedApprovals.map((approval) => (
+                      <div key={approval.workflow_id} className="py-4 flex flex-col md:flex-row justify-between md:items-center gap-4 first:pt-0 last:pb-0">
+                        <div className="space-y-1.5">
+                          <h3 className="text-base font-bold text-slate-800">{approval.exam.title}</h3>
+                          <div className="text-xs text-slate-500 font-medium flex flex-wrap items-center gap-1.5">
+                            <span>Course: <strong className="text-slate-700">{approval.exam?.course?.course_code || "Course"}</strong></span>
+                            <span>&bull;</span>
+                            <span>Author: <strong className="text-slate-700">{approval.exam?.faculty?.first_name || ""} {approval.exam?.faculty?.last_name || ""}</strong></span>
+                            {(() => {
+                              const pCode = determineProgramCodeFromCourseOrExam(approval.exam);
+                              return pCode ? (
+                                <>
+                                  <span>&bull;</span>
+                                  <span>Program: <strong className="text-emerald-700 font-bold">{pCode}</strong></span>
+                                </>
+                              ) : null;
+                            })()}
+                          </div>
+                          <div className="text-xs text-slate-600 font-medium flex items-center gap-1.5 pt-0.5">
+                            <Building2 className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                            <span>Department: <strong className="text-slate-900 font-bold">{getExaminationDepartmentName(approval.exam)}</strong></span>
+                          </div>
+                          <div className="text-xs text-slate-500 font-medium flex flex-wrap items-center gap-x-3 gap-y-1 pt-0.5">
+                            <span className="flex items-center gap-1">
+                              <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                              Exam Date: <strong className="text-slate-700 font-bold">{formatExamDate(approval.exam?.exam_date)}</strong>
+                            </span>
+                            <span>&bull;</span>
+                            <span className="flex items-center gap-1">
+                              <Clock className="w-3.5 h-3.5 text-slate-400" />
+                              Submission Date: <strong className="text-slate-700 font-bold">{formatExamDate(approval.chair_action_timestamp || approval.exam?.tableOfSpecifications?.created_at)}</strong>
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-emerald-600 font-bold bg-emerald-50 inline-block px-2 py-0.5 rounded-full mt-1 border border-emerald-100">
+                            Chair Review: {approval.chair_review_status}
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2 shrink-0">
+                          <button 
+                            type="button"
+                            onClick={() => {
+                              setActivePreviewApproval(approval);
+                              setPreviewSplitMode("split");
+                            }}
+                            className="bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 text-xs font-bold px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                            title="Preview Official Examination Paper & TOS"
+                          >
+                            <Eye className="w-3.5 h-3.5 text-indigo-600" />
+                            Preview Exam
+                          </button>
+                          <button 
+                            disabled={isSubmittingReview === approval.workflow_id || hasDirectorComments(approval.workflow_id)}
+                            onClick={() => handleReview(approval.workflow_id, approval.exam_id, "Approve")}
+                            title={
+                              hasDirectorComments(approval.workflow_id)
+                                ? "Approve is disabled because comments are entered. Clear comments or click Return."
+                                : "Approve Examination"
+                            }
+                            className={`text-xs font-bold px-4 py-2 rounded-xl shadow-sm transition-all flex items-center gap-2 ${
+                              hasDirectorComments(approval.workflow_id)
+                                ? "bg-slate-200 text-slate-400 cursor-not-allowed opacity-60"
+                                : "bg-indigo-600 hover:bg-indigo-700 text-white disabled:opacity-50 cursor-pointer"
+                            }`}
+                          >
+                            {isSubmittingReview === approval.workflow_id ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5" />}
+                            Approve
+                          </button>
+                          <button 
+                            disabled={isSubmittingReview === approval.workflow_id}
+                            onClick={() => handleReview(approval.workflow_id, approval.exam_id, "Return")}
+                            className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold px-4 py-2 rounded-xl transition-all disabled:opacity-50 flex items-center gap-2 cursor-pointer"
+                          >
+                            {isSubmittingReview === approval.workflow_id ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <XCircle className="w-3.5 h-3.5" />}
+                            Return
+                          </button>
+                          <button 
+                            disabled={isSubmittingReview === approval.workflow_id}
+                            onClick={() => handleReview(approval.workflow_id, approval.exam_id, "Hold")}
+                            className="bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 text-xs font-bold px-4 py-2 rounded-xl transition-all disabled:opacity-50 flex items-center gap-2 cursor-pointer"
+                          >
+                            {isSubmittingReview === approval.workflow_id ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Clock className="w-3.5 h-3.5" />}
+                            Hold
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )
+              ) : (
+                <div className="flex flex-col items-center justify-center py-12 text-center border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50/50 space-y-2">
+                  <Filter className="w-8 h-8 text-slate-400" />
+                  <h3 className="font-bold text-slate-800 text-sm">No examinations match your filter criteria</h3>
+                  <p className="text-slate-500 text-xs max-w-sm">
+                    Try resetting your department filter to view pending approvals.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setApprovalDeptFilter("ALL");
+                    }}
+                    className="text-xs font-bold text-indigo-600 hover:text-indigo-700 underline mt-1 cursor-pointer"
+                  >
+                    Reset Department Filter
+                  </button>
+                </div>
+              )
             ) : (
               <div className="flex flex-col items-center justify-center py-16 text-center border-2 border-dashed border-slate-100 rounded-2xl bg-slate-50/50">
                 <ShieldCheck className="w-10 h-10 text-indigo-400 mb-4" />
@@ -1237,33 +1602,49 @@ export function DirectorDashboardClient({
 
       {/* MANAGE EXAMINATIONS TAB */}
       {activeTab === "exams" && (
-        <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-6">
-          <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-slate-100 pb-5 gap-4">
+        <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-5">
+          <div className="flex flex-col xl:flex-row xl:items-center justify-between border-b border-slate-100 pb-5 gap-4">
             <div>
               <h2 className="text-xl font-bold text-slate-950 flex items-center gap-2">
                 <span className="w-1.5 h-6 bg-indigo-750 rounded-full" />
                 Manage All Examinations
+                <span className="text-xs font-bold text-slate-500 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full">
+                  {filteredAndSortedExams.length}
+                </span>
               </h2>
               <p className="text-slate-500 text-xs mt-1">
                 Oversee all system examinations and place or lift administrative holds on specific assessments.
               </p>
             </div>
             
-            <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
-              <div className="relative flex-1 md:w-64">
+            <div className="flex flex-wrap items-center gap-2.5">
+              {/* Search */}
+              <div className="relative min-w-[200px] flex-1 sm:flex-initial">
                 <input
                   type="text"
-                  placeholder="Search by title or course..."
+                  placeholder="Search by title, course, author..."
                   value={examSearchQuery}
                   onChange={(e) => setExamSearchQuery(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 text-sm font-medium text-slate-800 placeholder:text-slate-400 px-10 py-2.5 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all outline-none"
+                  className="w-full bg-slate-50 border border-slate-200 text-xs font-medium text-slate-800 placeholder:text-slate-400 pl-8 pr-3 py-2.5 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all outline-none"
                 />
-                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-3" />
+                {examSearchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setExamSearchQuery("")}
+                    className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
+
+              {/* Status Filter */}
               <select
                 value={examStatusFilter}
                 onChange={(e) => setExamStatusFilter(e.target.value)}
-                className="bg-slate-50 border border-slate-200 text-sm font-bold text-slate-700 px-4 py-2.5 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none"
+                className="bg-slate-50 border border-slate-200 text-xs font-bold text-slate-700 px-3 py-2.5 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none cursor-pointer"
+                title="Filter by Status"
               >
                 <option value="ALL">All Statuses</option>
                 <option value="Draft">Draft</option>
@@ -1273,8 +1654,51 @@ export function DirectorDashboardClient({
                 <option value="Approved">Approved (Live)</option>
                 <option value="Returned">Returned</option>
               </select>
+
+              {/* Department Filter */}
+              <select
+                value={examDeptFilter}
+                onChange={(e) => setExamDeptFilter(e.target.value)}
+                className="bg-slate-50 border border-slate-200 text-xs font-bold text-slate-700 px-3 py-2.5 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none cursor-pointer"
+                title="Filter by Department"
+              >
+                <option value="ALL">All Departments</option>
+                {DEPARTMENT_FILTER_OPTIONS.map((dept) => (
+                  <option key={dept} value={dept}>{dept}</option>
+                ))}
+              </select>
+
+              {/* Sort By Field */}
+              <select
+                value={examSortBy}
+                onChange={(e) => setExamSortBy(e.target.value as ApprovalSortField)}
+                className="bg-slate-50 border border-slate-200 text-xs font-bold text-slate-700 px-3 py-2.5 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none cursor-pointer"
+                title="Sort examinations by"
+              >
+                <option value="exam_date">Sort: Examination Date</option>
+                <option value="submission_date">Sort: Submission Date</option>
+                <option value="department">Sort: Department</option>
+                <option value="exam_name">Sort: Examination Name</option>
+                <option value="status">Sort: Current Workflow Status</option>
+              </select>
+
+              {/* Sort Order Button */}
+              <button
+                type="button"
+                onClick={() => setExamSortOrder((prev) => (prev === "asc" ? "desc" : "asc"))}
+                className="flex items-center gap-1.5 px-3 py-2.5 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-xs font-extrabold text-indigo-700 rounded-xl transition-all cursor-pointer shadow-2xs"
+                title={`Order: ${getSortOrderLabel(examSortBy, examSortOrder)} (Click to switch)`}
+              >
+                {examSortOrder === "asc" ? (
+                  <ArrowUp className="w-3.5 h-3.5 text-indigo-600" />
+                ) : (
+                  <ArrowDown className="w-3.5 h-3.5 text-indigo-600" />
+                )}
+                <span>{getSortOrderLabel(examSortBy, examSortOrder)}</span>
+              </button>
             </div>
           </div>
+
 
           <div className="overflow-x-auto rounded-xl border border-slate-200">
             <table className="w-full text-left text-sm text-slate-600">
@@ -1282,100 +1706,237 @@ export function DirectorDashboardClient({
                 <tr>
                   <th scope="col" className="px-6 py-4">Course & Title</th>
                   <th scope="col" className="px-6 py-4">Faculty Author</th>
+                  <th scope="col" className="px-6 py-4">Schedule & Dates</th>
                   <th scope="col" className="px-6 py-4">Status</th>
                   <th scope="col" className="px-6 py-4">Actions / Administrative Hold</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 bg-white">
-                {filteredExams.map(exam => {
-                  const isManualHold = exam.approvalWorkflow?.di_review_status === "Hold" && exam.approvalWorkflow?.reviewed_by_di_id !== null;
-                  const isLoading = isTogglingIndividualHold[exam.exam_id] || false;
-                  
-                  return (
-                    <tr key={exam.exam_id} className="hover:bg-slate-50/50 transition-colors">
-                      <td className="px-6 py-4">
-                        <div className="flex flex-col">
-                          <span className="font-bold text-slate-800 text-sm">{exam.title}</span>
-                          <span className="text-xs text-slate-400 mt-0.5">{exam.course?.course_code || "Course"} {exam.course?.course_title ? `- ${exam.course.course_title}` : ""}</span>
-                          <span className="text-[11px] text-slate-600 font-medium mt-1 flex items-center gap-1">
-                            <Building2 className="w-3 h-3 text-indigo-600 shrink-0" />
-                            Department: <strong className="text-slate-800 font-bold">{getExaminationDepartmentName(exam)}</strong>
-                          </span>
-                          {exam.current_status === "Approved" && (
-                            <div className="mt-1.5 flex items-center gap-1 text-[10px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded w-fit shadow-sm">
-                              <ShieldCheck className="w-3 h-3 text-emerald-600" />
-                              Digitally Signed by Chairperson & Director for Instruction
+                {groupedExamsByDept ? (
+                  groupedExamsByDept.map((group) => (
+                    <Fragment key={group.departmentName}>
+                      <tr className="bg-indigo-50/70 border-y border-indigo-100">
+                        <td colSpan={5} className="px-6 py-2.5">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <Building2 className="w-4 h-4 text-indigo-700" />
+                              <span className="text-xs font-black text-indigo-950 uppercase tracking-wide">
+                                {group.departmentName}
+                              </span>
                             </div>
-                          )}
-                          {isManualHold && exam.approvalWorkflow?.di_comments && (
-                            <div className="text-[10px] italic font-semibold text-rose-600 bg-rose-50 border border-rose-100 px-1.5 py-0.5 rounded w-fit mt-1.5 shadow-sm">
-                              Hold Reason: "{exam.approvalWorkflow.di_comments}"
-                            </div>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap font-medium text-slate-700">
-                        {exam.faculty.first_name} {exam.faculty.last_name}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`text-xs font-bold px-2.5 py-1 rounded-full border ${
-                          exam.current_status === "Approved" ? "bg-emerald-50 text-emerald-700 border-emerald-200" :
-                          exam.current_status === "Returned" ? "bg-rose-50 text-rose-700 border-rose-200" :
-                          exam.current_status === "Pending_DI" ? "bg-amber-50 text-amber-700 border-amber-200" :
-                          exam.current_status === "Pending_Chair" ? "bg-blue-50 text-blue-700 border-blue-200" :
-                          exam.current_status === "Pending_Program_Chair" ? "bg-purple-50 text-purple-700 border-purple-200" :
-                          "bg-slate-50 text-slate-600 border-slate-200"
-                        }`}>
-                          {exam.current_status === "Approved" ? "Approved (Live)" : exam.current_status === "Pending_Program_Chair" ? "Pending Program Chairperson" : exam.current_status === "Pending_Chair" ? "Pending Dept Chairperson" : exam.current_status}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setActivePreviewApproval({
-                                workflow_id: exam.approvalWorkflow?.workflow_id || 0,
-                                exam_id: exam.exam_id,
-                                chair_review_status: exam.approvalWorkflow?.chair_review_status || "Approved",
-                                exam: exam,
-                              });
-                              setPreviewSplitMode("split");
-                            }}
-                            className="text-xs font-bold px-2.5 py-1.5 rounded-lg border border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 transition-all flex items-center gap-1.5 cursor-pointer"
-                            title="Preview Exam Paper & TOS"
-                          >
-                            <Eye className="w-3.5 h-3.5 text-indigo-600" />
-                            Preview
-                          </button>
-                          <button
-                            disabled={isLoading}
-                            onClick={() => handleToggleIndividualHold(exam.exam_id, !isManualHold)}
-                            className={`text-xs font-bold px-3 py-1.5 rounded-lg border transition-all disabled:opacity-50 flex items-center gap-1.5 ${
-                              isManualHold
-                                ? "bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100"
-                                : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
-                            }`}
-                          >
-                            {isLoading ? (
-                              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                            ) : isManualHold ? (
-                              <>
-                                <Clock className="w-3.5 h-3.5 text-rose-500" />
-                                On Hold
-                              </>
-                            ) : (
-                              "No Hold"
+                            <span className="text-[10px] font-bold text-indigo-800 bg-white border border-indigo-200 px-2 py-0.5 rounded-full">
+                              {group.items.length} {group.items.length === 1 ? "exam" : "exams"}
+                            </span>
+                          </div>
+                        </td>
+                      </tr>
+                      {group.items.map((exam) => {
+                        const isManualHold = exam.approvalWorkflow?.di_review_status === "Hold" && exam.approvalWorkflow?.reviewed_by_di_id !== null;
+                        const isLoading = isTogglingIndividualHold[exam.exam_id] || false;
+                        const examDateStr = formatExamDate(exam.exam_date);
+                        const subDateStr = formatExamDate(exam.approvalWorkflow?.chair_action_timestamp || exam.tableOfSpecifications?.created_at);
+
+                        return (
+                          <tr key={exam.exam_id} className="hover:bg-slate-50/50 transition-colors">
+                            <td className="px-6 py-4">
+                              <div className="flex flex-col">
+                                <span className="font-bold text-slate-800 text-sm">{exam.title}</span>
+                                <span className="text-xs text-slate-400 mt-0.5">{exam.course?.course_code || "Course"} {exam.course?.course_title ? `- ${exam.course.course_title}` : ""}</span>
+                                <span className="text-[11px] text-slate-600 font-medium mt-1 flex items-center gap-1">
+                                  <Building2 className="w-3 h-3 text-indigo-600 shrink-0" />
+                                  Department: <strong className="text-slate-800 font-bold">{getExaminationDepartmentName(exam)}</strong>
+                                </span>
+                                {exam.current_status === "Approved" && (
+                                  <div className="mt-1.5 flex items-center gap-1 text-[10px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded w-fit shadow-sm">
+                                    <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                                    Digitally Signed by Chairperson & Director for Instruction
+                                  </div>
+                                )}
+                                {isManualHold && exam.approvalWorkflow?.di_comments && (
+                                  <div className="text-[10px] italic font-semibold text-rose-600 bg-rose-50 border border-rose-100 px-1.5 py-0.5 rounded w-fit mt-1.5 shadow-sm">
+                                    Hold Reason: "{exam.approvalWorkflow.di_comments}"
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap font-medium text-slate-700">
+                              {exam.faculty.first_name} {exam.faculty.last_name}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-xs text-slate-600">
+                              <div className="flex flex-col gap-1">
+                                <span className="flex items-center gap-1 font-semibold text-slate-700">
+                                  <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                  Exam: <strong>{examDateStr}</strong>
+                                </span>
+                                <span className="flex items-center gap-1 text-slate-500 text-[11px]">
+                                  <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                  Submitted: <strong>{subDateStr}</strong>
+                                </span>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span className={`text-xs font-bold px-2.5 py-1 rounded-full border ${
+                                exam.current_status === "Approved" ? "bg-emerald-50 text-emerald-700 border-emerald-200" :
+                                exam.current_status === "Returned" ? "bg-rose-50 text-rose-700 border-rose-200" :
+                                exam.current_status === "Pending_DI" ? "bg-amber-50 text-amber-700 border-amber-200" :
+                                exam.current_status === "Pending_Chair" ? "bg-blue-50 text-blue-700 border-blue-200" :
+                                exam.current_status === "Pending_Program_Chair" ? "bg-purple-50 text-purple-700 border-purple-200" :
+                                "bg-slate-50 text-slate-600 border-slate-200"
+                              }`}>
+                                {exam.current_status === "Approved" ? "Approved (Live)" : exam.current_status === "Pending_Program_Chair" ? "Pending Program Chairperson" : exam.current_status === "Pending_Chair" ? "Pending Dept Chairperson" : exam.current_status}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setActivePreviewApproval({
+                                      workflow_id: exam.approvalWorkflow?.workflow_id || 0,
+                                      exam_id: exam.exam_id,
+                                      chair_review_status: exam.approvalWorkflow?.chair_review_status || "Approved",
+                                      exam: exam,
+                                    });
+                                    setPreviewSplitMode("split");
+                                  }}
+                                  className="text-xs font-bold px-2.5 py-1.5 rounded-lg border border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 transition-all flex items-center gap-1.5 cursor-pointer"
+                                  title="Preview Exam Paper & TOS"
+                                >
+                                  <Eye className="w-3.5 h-3.5 text-indigo-600" />
+                                  Preview
+                                </button>
+                                <button
+                                  disabled={isLoading}
+                                  onClick={() => handleToggleIndividualHold(exam.exam_id, !isManualHold)}
+                                  className={`text-xs font-bold px-3 py-1.5 rounded-lg border transition-all disabled:opacity-50 flex items-center gap-1.5 ${
+                                    isManualHold
+                                      ? "bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100"
+                                      : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+                                  }`}
+                                >
+                                  {isLoading ? (
+                                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                                  ) : isManualHold ? (
+                                    <>
+                                      <Clock className="w-3.5 h-3.5 text-rose-500" />
+                                      On Hold
+                                    </>
+                                  ) : (
+                                    "No Hold"
+                                  )}
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </Fragment>
+                  ))
+                ) : (
+                  filteredAndSortedExams.map((exam) => {
+                    const isManualHold = exam.approvalWorkflow?.di_review_status === "Hold" && exam.approvalWorkflow?.reviewed_by_di_id !== null;
+                    const isLoading = isTogglingIndividualHold[exam.exam_id] || false;
+                    const examDateStr = formatExamDate(exam.exam_date);
+                    const subDateStr = formatExamDate(exam.approvalWorkflow?.chair_action_timestamp || exam.tableOfSpecifications?.created_at);
+
+                    return (
+                      <tr key={exam.exam_id} className="hover:bg-slate-50/50 transition-colors">
+                        <td className="px-6 py-4">
+                          <div className="flex flex-col">
+                            <span className="font-bold text-slate-800 text-sm">{exam.title}</span>
+                            <span className="text-xs text-slate-400 mt-0.5">{exam.course?.course_code || "Course"} {exam.course?.course_title ? `- ${exam.course.course_title}` : ""}</span>
+                            <span className="text-[11px] text-slate-600 font-medium mt-1 flex items-center gap-1">
+                              <Building2 className="w-3 h-3 text-indigo-600 shrink-0" />
+                              Department: <strong className="text-slate-800 font-bold">{getExaminationDepartmentName(exam)}</strong>
+                            </span>
+                            {exam.current_status === "Approved" && (
+                              <div className="mt-1.5 flex items-center gap-1 text-[10px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded w-fit shadow-sm">
+                                <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                                Digitally Signed by Chairperson & Director for Instruction
+                              </div>
                             )}
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-                {filteredExams.length === 0 && (
+                            {isManualHold && exam.approvalWorkflow?.di_comments && (
+                              <div className="text-[10px] italic font-semibold text-rose-600 bg-rose-50 border border-rose-100 px-1.5 py-0.5 rounded w-fit mt-1.5 shadow-sm">
+                                Hold Reason: "{exam.approvalWorkflow.di_comments}"
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap font-medium text-slate-700">
+                          {exam.faculty.first_name} {exam.faculty.last_name}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-xs text-slate-600">
+                          <div className="flex flex-col gap-1">
+                            <span className="flex items-center gap-1 font-semibold text-slate-700">
+                              <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                              Exam: <strong>{examDateStr}</strong>
+                            </span>
+                            <span className="flex items-center gap-1 text-slate-500 text-[11px]">
+                              <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                              Submitted: <strong>{subDateStr}</strong>
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`text-xs font-bold px-2.5 py-1 rounded-full border ${
+                            exam.current_status === "Approved" ? "bg-emerald-50 text-emerald-700 border-emerald-200" :
+                            exam.current_status === "Returned" ? "bg-rose-50 text-rose-700 border-rose-200" :
+                            exam.current_status === "Pending_DI" ? "bg-amber-50 text-amber-700 border-amber-200" :
+                            exam.current_status === "Pending_Chair" ? "bg-blue-50 text-blue-700 border-blue-200" :
+                            exam.current_status === "Pending_Program_Chair" ? "bg-purple-50 text-purple-700 border-purple-200" :
+                            "bg-slate-50 text-slate-600 border-slate-200"
+                          }`}>
+                            {exam.current_status === "Approved" ? "Approved (Live)" : exam.current_status === "Pending_Program_Chair" ? "Pending Program Chairperson" : exam.current_status === "Pending_Chair" ? "Pending Dept Chairperson" : exam.current_status}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setActivePreviewApproval({
+                                  workflow_id: exam.approvalWorkflow?.workflow_id || 0,
+                                  exam_id: exam.exam_id,
+                                  chair_review_status: exam.approvalWorkflow?.chair_review_status || "Approved",
+                                  exam: exam,
+                                });
+                                setPreviewSplitMode("split");
+                              }}
+                              className="text-xs font-bold px-2.5 py-1.5 rounded-lg border border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 transition-all flex items-center gap-1.5 cursor-pointer"
+                              title="Preview Exam Paper & TOS"
+                            >
+                              <Eye className="w-3.5 h-3.5 text-indigo-600" />
+                              Preview
+                            </button>
+                            <button
+                              disabled={isLoading}
+                              onClick={() => handleToggleIndividualHold(exam.exam_id, !isManualHold)}
+                              className={`text-xs font-bold px-3 py-1.5 rounded-lg border transition-all disabled:opacity-50 flex items-center gap-1.5 ${
+                                isManualHold
+                                  ? "bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100"
+                                  : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+                              }`}
+                            >
+                              {isLoading ? (
+                                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                              ) : isManualHold ? (
+                                <>
+                                  <Clock className="w-3.5 h-3.5 text-rose-500" />
+                                  On Hold
+                                </>
+                              ) : (
+                                "No Hold"
+                              )}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+                {filteredAndSortedExams.length === 0 && (
                   <tr>
-                    <td colSpan={4} className="px-6 py-12 text-center text-slate-500">
+                    <td colSpan={5} className="px-6 py-12 text-center text-slate-500">
                       <AlertCircle className="w-6 h-6 mx-auto mb-2 text-slate-400" />
                       <p>No examinations found matching the filters.</p>
                     </td>

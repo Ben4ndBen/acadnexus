@@ -95,6 +95,11 @@ export default async function DirectorDashboard() {
             },
             course: true,
             questionBank: true,
+            tableOfSpecifications: {
+              select: {
+                created_at: true,
+              },
+            },
             examTargets: {
               include: {
                 program: {
@@ -121,6 +126,11 @@ export default async function DirectorDashboard() {
         course: true,
         approvalWorkflow: true,
         questionBank: true,
+        tableOfSpecifications: {
+          select: {
+            created_at: true,
+          },
+        },
         examTargets: {
           include: {
             program: {
