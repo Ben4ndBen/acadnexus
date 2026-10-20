@@ -2231,6 +2231,32 @@ export function FacultyDashboardClient({
                       {exam.current_status === "Returned" && (
                         <div className="space-y-3">
                           {(() => {
+                            const computeExamTqNumberMap = (qBank: any[]) => {
+                              const map = new Map<string, number>();
+                              if (!qBank || !Array.isArray(qBank)) return map;
+                              const groupsMap: Record<string, any[]> = {};
+                              qBank.forEach((q: any) => {
+                                const type = q.question_type || "Multiple_Choice";
+                                if (!groupsMap[type]) groupsMap[type] = [];
+                                groupsMap[type].push(q);
+                              });
+                              const sortedTypes = Object.keys(groupsMap).sort((a, b) => {
+                                const orderA = QUESTION_TYPE_ORDER[a] || 99;
+                                const orderB = QUESTION_TYPE_ORDER[b] || 99;
+                                return orderA - orderB;
+                              });
+                              let itemCounter = 0;
+                              sortedTypes.forEach((qType) => {
+                                groupsMap[qType].forEach((q: any) => {
+                                  itemCounter += 1;
+                                  if (q.question_id !== undefined && q.question_id !== null) {
+                                    map.set(String(q.question_id), itemCounter);
+                                  }
+                                });
+                              });
+                              return map;
+                            };
+
                             const renderCommentCard = (commentsText: string, titleLabel: string) => {
                               let parsedComments: { general?: string; questions?: Record<string, any> } | null = null;
                               try {
@@ -2258,6 +2284,8 @@ export function FacultyDashboardClient({
                                   .filter((item) => item.comment.length > 0);
 
                                 if (!hasGeneral && qItems.length === 0) return null;
+
+                                const tqNumberMap = computeExamTqNumberMap(exam.questionBank || []);
 
                                 return (
                                   <div className="bg-rose-50/70 border border-rose-200 rounded-2xl p-4 sm:p-5 space-y-3.5 shadow-2xs">
@@ -2287,7 +2315,7 @@ export function FacultyDashboardClient({
 
                                     {/* Questions Flagged for Revision Breakdown */}
                                     {qItems.length > 0 && (
-                                      <div className="bg-white/90 border border-rose-200 rounded-xl p-3.5 space-y-2 mt-2">
+                                      <div className="bg-white/90 border border-rose-200 rounded-xl p-3.5 space-y-2.5 mt-2">
                                         <div className="flex items-center justify-between gap-2 flex-wrap">
                                           <span className="text-[11px] font-black uppercase tracking-wider text-rose-900 flex items-center gap-1.5">
                                             <AlertCircle className="w-3.5 h-3.5 text-rose-600" />
@@ -2300,11 +2328,29 @@ export function FacultyDashboardClient({
                                             Revise in Builder →
                                           </button>
                                         </div>
+
+                                        {/* Dedicated Needs Revision list format */}
+                                        <div className="bg-rose-50 border border-rose-200 rounded-lg p-2.5 space-y-1">
+                                          <span className="text-[10px] font-black uppercase tracking-wider text-rose-900 block">
+                                            Needs Revision:
+                                          </span>
+                                          <div className="flex flex-wrap items-center gap-1.5">
+                                            {qItems.map((qi, idx) => {
+                                              const tqNum = tqNumberMap.get(String(qi.qId)) || (String(qi.qId).match(/\d+/) ? parseInt(String(qi.qId).match(/\d+/)![0], 10) : undefined);
+                                              const label = tqNum !== undefined ? `Question #${tqNum}` : `Question #${idx + 1}`;
+                                              return (
+                                                <span key={idx} className="bg-rose-600 text-white font-black text-[11px] px-2.5 py-1 rounded-md shadow-2xs">
+                                                  {label}
+                                                </span>
+                                              );
+                                            })}
+                                          </div>
+                                        </div>
+
                                         <div className="space-y-1.5">
                                           {qItems.map((qi, idx) => {
-                                            const matchedQ = exam.questionBank?.find((q: any) => String(q.question_id) === String(qi.qId));
-                                            const qIndex = exam.questionBank?.findIndex((q: any) => String(q.question_id) === String(qi.qId));
-                                            const itemLabel = qIndex !== undefined && qIndex >= 0 ? `Item #${qIndex + 1}` : `Question ID #${qi.qId}`;
+                                            const tqNum = tqNumberMap.get(String(qi.qId)) || (String(qi.qId).match(/\d+/) ? parseInt(String(qi.qId).match(/\d+/)![0], 10) : undefined);
+                                            const itemLabel = tqNum !== undefined ? `Question #${tqNum}` : `Question ID #${qi.qId}`;
                                             return (
                                               <div key={idx} className="flex items-start gap-2 text-xs text-rose-950 bg-rose-50/60 border border-rose-100 rounded-lg p-2">
                                                 <span className="font-extrabold bg-rose-600 text-white px-2 py-0.5 rounded text-[10px] shrink-0">

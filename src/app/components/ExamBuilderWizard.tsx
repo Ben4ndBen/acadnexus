@@ -926,9 +926,99 @@ export function ExamBuilderWizard({
     exam.questionBank.length > 0 ? 0 : -1
   );
 
-  // Map of question_id / item index -> reviewer feedback
+  // Immutable mapping of the original examination's questionBank to its exact TQ item numbers as seen by the reviewer
+  const { originalTqQuestionIdMap, originalTqItemNumMap } = useMemo(() => {
+    const qIdMap = new Map<string, { itemNum: number; testNum: number; testItemNum: number; q: any }>();
+    const itemNumMap = new Map<number, { question_id: any; q: any; testNum: number; testItemNum: number }>();
+
+    const qBank = exam.questionBank || [];
+    if (!Array.isArray(qBank) || qBank.length === 0) {
+      return { originalTqQuestionIdMap: qIdMap, originalTqItemNumMap: itemNumMap };
+    }
+
+    const groupsMap: Record<string, any[]> = {};
+    qBank.forEach((q: any) => {
+      const type = q.question_type || "Multiple_Choice";
+      if (!groupsMap[type]) groupsMap[type] = [];
+      groupsMap[type].push(q);
+    });
+
+    const sortedTypes = Object.keys(groupsMap).sort((a, b) => {
+      const orderA = QUESTION_TYPE_ORDER[a] || 99;
+      const orderB = QUESTION_TYPE_ORDER[b] || 99;
+      return orderA - orderB;
+    });
+
+    let itemCounter = 0;
+    sortedTypes.forEach((qType, typeIdx) => {
+      const items = groupsMap[qType];
+      items.forEach((q: any, subIdx: number) => {
+        itemCounter += 1;
+        const info = {
+          itemNum: itemCounter,
+          testNum: typeIdx + 1,
+          testItemNum: subIdx + 1,
+          q,
+        };
+        if (q.question_id !== undefined && q.question_id !== null) {
+          qIdMap.set(String(q.question_id), info);
+          itemNumMap.set(itemCounter, {
+            question_id: q.question_id,
+            q,
+            testNum: typeIdx + 1,
+            testItemNum: subIdx + 1,
+          });
+        }
+      });
+    });
+
+    return { originalTqQuestionIdMap: qIdMap, originalTqItemNumMap: itemNumMap };
+  }, [exam.questionBank]);
+
+  // Current dynamic TQ item numbers based on current questions array ordered by QUESTION_TYPE_ORDER
+  const currentTqNumberMap = useMemo(() => {
+    const map = new Map<any, { currentItemNum: number; testNum: number; testItemNum: number }>();
+    const groupsMap: Record<string, QuestionState[]> = {};
+    questions.forEach((q) => {
+      const type = q.question_type || "Multiple_Choice";
+      if (!groupsMap[type]) groupsMap[type] = [];
+      groupsMap[type].push(q);
+    });
+
+    const sortedTypes = Object.keys(groupsMap).sort((a, b) => {
+      const orderA = QUESTION_TYPE_ORDER[a] || 99;
+      const orderB = QUESTION_TYPE_ORDER[b] || 99;
+      return orderA - orderB;
+    });
+
+    let itemCounter = 0;
+    sortedTypes.forEach((qType, typeIdx) => {
+      const items = groupsMap[qType];
+      items.forEach((q, subIdx) => {
+        itemCounter += 1;
+        const info = {
+          currentItemNum: itemCounter,
+          testNum: typeIdx + 1,
+          testItemNum: subIdx + 1,
+        };
+        if (q.question_id !== undefined && q.question_id !== null) {
+          map.set(String(q.question_id), info);
+        }
+        map.set(q, info);
+      });
+    });
+
+    return map;
+  }, [questions]);
+
+  // Map of question_id -> reviewer feedback with original TQ item number
   const questionFeedbackMap = useMemo(() => {
-    const map: Record<string, { comment: string; reviewer: string; allComments: Array<{ comment: string; reviewer: string }> }> = {};
+    const map: Record<string, {
+      comment: string;
+      reviewer: string;
+      allComments: Array<{ comment: string; reviewer: string }>;
+      originalTqItemNum?: number;
+    }> = {};
     if (!exam.approvalWorkflow) return map;
 
     const extractQComments = (commentsRaw: string | null | undefined, reviewerLabel: string) => {
@@ -937,26 +1027,50 @@ export function ExamBuilderWizard({
         if (commentsRaw.startsWith("{")) {
           const parsed = JSON.parse(commentsRaw);
           if (parsed.questions && typeof parsed.questions === "object") {
-            Object.entries(parsed.questions).forEach(([qId, val]) => {
+            Object.entries(parsed.questions).forEach(([rawKey, val]) => {
               let cText = "";
               if (val && typeof val === "object") {
                 cText = (val as any).comment || "";
               } else if (typeof val === "string") {
                 cText = val;
               }
-              if (cText.trim()) {
-                const existing = map[String(qId)];
-                const newCommentObj = { comment: cText.trim(), reviewer: reviewerLabel };
-                if (existing) {
-                  existing.allComments.push(newCommentObj);
-                  existing.comment = `${existing.comment} | [${reviewerLabel}]: ${cText.trim()}`;
-                } else {
-                  map[String(qId)] = {
-                    comment: cText.trim(),
-                    reviewer: reviewerLabel,
-                    allComments: [newCommentObj],
-                  };
+              if (!cText.trim()) return;
+
+              // Resolve rawKey to question_id and original TQ item number
+              let targetQId: string | null = null;
+              let originalItemNum: number | undefined = undefined;
+
+              if (originalTqQuestionIdMap.has(String(rawKey))) {
+                targetQId = String(rawKey);
+                originalItemNum = originalTqQuestionIdMap.get(String(rawKey))?.itemNum;
+              } else {
+                const matchNum = String(rawKey).match(/\d+/);
+                if (matchNum) {
+                  const num = parseInt(matchNum[0], 10);
+                  const matchedFromNum = originalTqItemNumMap.get(num);
+                  if (matchedFromNum) {
+                    targetQId = String(matchedFromNum.question_id);
+                    originalItemNum = num;
+                  }
                 }
+              }
+
+              const finalKey = targetQId || String(rawKey);
+              const existing = map[finalKey];
+              const newCommentObj = { comment: cText.trim(), reviewer: reviewerLabel };
+              if (existing) {
+                existing.allComments.push(newCommentObj);
+                existing.comment = `${existing.comment} | [${reviewerLabel}]: ${cText.trim()}`;
+                if (!existing.originalTqItemNum && originalItemNum) {
+                  existing.originalTqItemNum = originalItemNum;
+                }
+              } else {
+                map[finalKey] = {
+                  comment: cText.trim(),
+                  reviewer: reviewerLabel,
+                  allComments: [newCommentObj],
+                  originalTqItemNum: originalItemNum,
+                };
               }
             });
           }
@@ -969,7 +1083,7 @@ export function ExamBuilderWizard({
     extractQComments(exam.approvalWorkflow.di_comments, "Director of Instruction");
 
     return map;
-  }, [exam.approvalWorkflow]);
+  }, [exam.approvalWorkflow, originalTqQuestionIdMap, originalTqItemNumMap]);
 
   const isReturnedForRevision = Boolean(
     exam.current_status === "Returned" ||
@@ -977,13 +1091,12 @@ export function ExamBuilderWizard({
     exam.approvalWorkflow?.prog_chair_review_status === "Returned"
   );
 
-  const getQuestionFeedback = useCallback((q: any, itemIndex?: number) => {
+  // Safely resolve question feedback by question_id (independent of array order or reordering)
+  const getQuestionFeedback = useCallback((q: any) => {
     if (!isReturnedForRevision) return null;
-    if (q?.question_id && questionFeedbackMap[String(q.question_id)]) {
-      return questionFeedbackMap[String(q.question_id)];
-    }
-    if (typeof itemIndex === "number" && questionFeedbackMap[String(itemIndex)]) {
-      return questionFeedbackMap[String(itemIndex)];
+    if (q?.question_id !== undefined && q.question_id !== null) {
+      const fb = questionFeedbackMap[String(q.question_id)];
+      if (fb) return fb;
     }
     return null;
   }, [isReturnedForRevision, questionFeedbackMap]);
@@ -998,23 +1111,61 @@ export function ExamBuilderWizard({
     }));
   };
 
-  // List of all questions in this exam that need revision
+  // Helper to scroll directly to a specific question by question_id or original TQ item number
+  const scrollToQuestion = useCallback((q: QuestionState, originalTqItemNum?: number) => {
+    setStep(2);
+    const topicKey = q.topic?.trim() || "Unassigned Topic";
+    setOpenTopics((prev) => ({ ...prev, [topicKey]: true }));
+    setTimeout(() => {
+      const targetId = `q-builder-${q.question_id || originalTqItemNum}`;
+      const el = document.getElementById(targetId) || 
+                 (q.question_id ? document.getElementById(`q-builder-${q.question_id}`) : null) || 
+                 (originalTqItemNum ? document.getElementById(`q-builder-${originalTqItemNum}`) : null);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    }, 180);
+  }, []);
+
+  // List of all questions in this exam that need revision, strictly ordered by original TQ number (Question #3, Question #8, Question #12)
   const questionsNeedingRevision = useMemo(() => {
     if (!isReturnedForRevision) return [];
 
-    return questions
-      .map((q, idx) => {
-        const feedback = getQuestionFeedback(q, idx + 1);
-        return {
+    const list: Array<{
+      q: QuestionState;
+      globalIdx: number;
+      originalTqItemNum: number;
+      currentTqItemNum: number;
+      feedback: {
+        comment: string;
+        reviewer: string;
+        allComments: Array<{ comment: string; reviewer: string }>;
+      };
+      key: string;
+    }> = [];
+
+    questions.forEach((q, idx) => {
+      const feedback = getQuestionFeedback(q);
+      if (feedback) {
+        const origInfo = q.question_id !== undefined ? originalTqQuestionIdMap.get(String(q.question_id)) : null;
+        const currInfo = currentTqNumberMap.get(q) || (q.question_id !== undefined ? currentTqNumberMap.get(String(q.question_id)) : null);
+        const originalTqItemNum = origInfo?.itemNum || feedback.originalTqItemNum || (idx + 1);
+        const currentTqItemNum = currInfo?.currentItemNum || (idx + 1);
+
+        list.push({
           q,
           globalIdx: idx,
-          itemNum: idx + 1,
+          originalTqItemNum,
+          currentTqItemNum,
           feedback,
-          key: String(q.question_id || idx + 1),
-        };
-      })
-      .filter((item): item is typeof item & { feedback: NonNullable<typeof item.feedback> } => Boolean(item.feedback));
-  }, [isReturnedForRevision, questions, getQuestionFeedback]);
+          key: String(q.question_id || originalTqItemNum || idx + 1),
+        });
+      }
+    });
+
+    // Sort ascending by actual TQ item numbers so Question #3 comes before Question #8, Question #12
+    return list.sort((a, b) => a.originalTqItemNum - b.originalTqItemNum);
+  }, [isReturnedForRevision, questions, getQuestionFeedback, originalTqQuestionIdMap, currentTqNumberMap]);
 
   // Topic Accordion Dropdown Open/Closed State (Auto-expand topics containing revision questions)
   const [openTopics, setOpenTopics] = useState<Record<string, boolean>>({});
@@ -1039,21 +1190,9 @@ export function ExamBuilderWizard({
     if (isReturnedExam && questionsNeedingRevision.length > 0 && !hasAutoScrolledToRevisionRef.current) {
       hasAutoScrolledToRevisionRef.current = true;
       const firstFlagged = questionsNeedingRevision[0];
-      const targetId = `q-builder-${firstFlagged.q.question_id || firstFlagged.itemNum}`;
-      
-      const topicName = firstFlagged.q.topic?.trim() || "Unassigned Topic";
-      setOpenTopics((prev) => ({ ...prev, [topicName]: true }));
-
-      const timer = setTimeout(() => {
-        const el = document.getElementById(targetId);
-        if (el) {
-          el.scrollIntoView({ behavior: "smooth", block: "center" });
-        }
-      }, 400);
-
-      return () => clearTimeout(timer);
+      scrollToQuestion(firstFlagged.q, firstFlagged.originalTqItemNum);
     }
-  }, [isReturnedExam, questionsNeedingRevision]);
+  }, [isReturnedExam, questionsNeedingRevision, scrollToQuestion]);
 
   // Interactive Popup Modal State for Submission & Save Draft feedback
   interface ModalState {
@@ -2884,24 +3023,68 @@ export function ExamBuilderWizard({
                   </div>
                 </div>
 
+                {/* Dedicated Needs Revision quick numbers bar */}
+                <div className="bg-white/95 border border-rose-300 rounded-2xl p-4 space-y-2">
+                  <span className="text-xs font-black text-rose-950 uppercase tracking-wider block">
+                    Needs Revision:
+                  </span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {questionsNeedingRevision.map(({ q, originalTqItemNum, currentTqItemNum, key }) => {
+                      const isAddressed = Boolean(addressedQuestions[key]);
+                      return (
+                        <button
+                          key={key}
+                          type="button"
+                          onClick={() => scrollToQuestion(q, originalTqItemNum)}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-extrabold border shadow-2xs transition-all cursor-pointer ${
+                            isAddressed
+                              ? "bg-emerald-50 text-emerald-900 border-emerald-300 hover:bg-emerald-100"
+                              : "bg-rose-50 text-rose-900 border-rose-300 hover:bg-rose-100"
+                          }`}
+                        >
+                          <span className={`px-2 py-0.5 rounded text-[11px] font-black ${
+                            isAddressed ? "bg-emerald-600 text-white" : "bg-rose-600 text-white"
+                          }`}>
+                            Question #{originalTqItemNum}
+                          </span>
+                          {currentTqItemNum !== originalTqItemNum && (
+                            <span className="text-[10px] text-slate-500 font-bold">
+                              (now #{currentTqItemNum})
+                            </span>
+                          )}
+                          {isAddressed ? (
+                            <span className="text-[10px] text-emerald-700 font-bold">✓ Addressed</span>
+                          ) : (
+                            <span className="text-[10px] text-rose-700 font-black uppercase">Needs Revision</span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {questionsNeedingRevision.map(({ q, itemNum, feedback }) => {
-                    const qKey = String(q.question_id || itemNum);
-                    const isAddressed = Boolean(addressedQuestions[qKey]);
+                  {questionsNeedingRevision.map(({ q, originalTqItemNum, currentTqItemNum, feedback, key }) => {
+                    const isAddressed = Boolean(addressedQuestions[key]);
                     return (
                       <div
-                        key={itemNum}
+                        key={key}
                         className={`rounded-2xl p-4 border transition-all space-y-2 ${
                           isAddressed
                             ? "bg-white/90 border-emerald-300 shadow-2xs"
                             : "bg-white border-rose-300 shadow-2xs hover:border-rose-400"
                         }`}
                       >
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-2">
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <span className="bg-rose-600 text-white font-black text-xs px-2.5 py-0.5 rounded-md">
-                              Item #{itemNum}
+                              Question #{originalTqItemNum}
                             </span>
+                            {currentTqItemNum !== originalTqItemNum && (
+                              <span className="text-[10px] font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded">
+                                (Current: #{currentTqItemNum})
+                              </span>
+                            )}
                             <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded">
                               {q.question_type.replace(/_/g, " ")}
                             </span>
@@ -2923,7 +3106,7 @@ export function ExamBuilderWizard({
 
                         <div className="bg-rose-50 border border-rose-200 rounded-xl p-2.5 text-xs text-rose-950 space-y-0.5">
                           <span className="text-[10px] font-extrabold uppercase text-rose-800 block">
-                            Feedback by {feedback.reviewer}:
+                            Feedback for Question #{originalTqItemNum} by {feedback.reviewer}:
                           </span>
                           <p className="italic font-bold">"{feedback.comment}"</p>
                         </div>
@@ -2931,20 +3114,10 @@ export function ExamBuilderWizard({
                         <div className="flex items-center justify-end gap-2 pt-1 border-t border-slate-100">
                           <button
                             type="button"
-                            onClick={() => {
-                              setStep(2);
-                              const topicKey = q.topic || "Unassigned Topic";
-                              setOpenTopics((prev) => ({ ...prev, [topicKey]: true }));
-                              setTimeout(() => {
-                                const el = document.getElementById(`q-builder-${q.question_id || itemNum}`);
-                                if (el) {
-                                  el.scrollIntoView({ behavior: "smooth", block: "center" });
-                                }
-                              }, 150);
-                            }}
+                            onClick={() => scrollToQuestion(q, originalTqItemNum)}
                             className="text-[11px] font-bold text-rose-700 hover:text-rose-900 bg-rose-50 hover:bg-rose-100 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
                           >
-                            Edit Item #{itemNum} in Builder →
+                            Edit Question #{originalTqItemNum} in Builder →
                           </button>
                         </div>
                       </div>
@@ -3683,7 +3856,67 @@ export function ExamBuilderWizard({
       {/* STEP 2: QUESTION BANK BUILDER */}
       {step === 2 && (
         <div className="space-y-6">
-          
+          {/* Dedicated Needs Revision Top Access Card */}
+          {isReturnedForRevision && questionsNeedingRevision.length > 0 && (
+            <div className="bg-gradient-to-r from-rose-50 via-rose-50/80 to-amber-50/60 border-2 border-rose-400 rounded-3xl p-5 sm:p-6 shadow-sm space-y-3.5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-rose-600 text-white rounded-2xl shadow-xs">
+                    <AlertCircle className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm sm:text-base font-black text-rose-950 uppercase tracking-wide flex items-center gap-2">
+                      <span>Needs Revision:</span>
+                      <span className="text-xs bg-rose-600 text-white font-extrabold px-2.5 py-0.5 rounded-full">
+                        {questionsNeedingRevision.length} {questionsNeedingRevision.length === 1 ? "Question" : "Questions"}
+                      </span>
+                    </h3>
+                    <p className="text-xs text-rose-800 font-semibold mt-0.5">
+                      The reviewer flagged the following question numbers from the examination's TQ. Click any number to jump directly to it:
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2.5 pt-1">
+                {questionsNeedingRevision.map(({ q, originalTqItemNum, currentTqItemNum, key }) => {
+                  const isAddressed = Boolean(addressedQuestions[key]);
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => scrollToQuestion(q, originalTqItemNum)}
+                      className={`group flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-black transition-all shadow-2xs border cursor-pointer ${
+                        isAddressed
+                          ? "bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border-emerald-300"
+                          : "bg-white hover:bg-rose-100 text-rose-900 border-rose-300 hover:border-rose-400 ring-1 ring-rose-200"
+                      }`}
+                    >
+                      <span className={`px-2 py-0.5 rounded-md text-[11px] font-black ${
+                        isAddressed ? "bg-emerald-600 text-white" : "bg-rose-600 text-white"
+                      }`}>
+                        Question #{originalTqItemNum}
+                      </span>
+                      {currentTqItemNum !== originalTqItemNum && (
+                        <span className="text-[10px] text-slate-500 font-bold">
+                          (now #{currentTqItemNum})
+                        </span>
+                      )}
+                      {isAddressed ? (
+                        <span className="text-[10px] font-bold text-emerald-700 flex items-center gap-1">
+                          ✓ Addressed
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-black text-rose-600 uppercase">
+                          Needs Revision
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Topics Accordion Dropdown List (Click topic header to drop down items) */}
           <div className="space-y-4">
@@ -3701,6 +3934,20 @@ export function ExamBuilderWizard({
                 const topicQuestions = questions
                   .map((q, globalIdx) => ({ q, globalIdx }))
                   .filter(({ q }) => (q.topic?.trim() || "Unassigned Topic") === topicName);
+
+                // Revision questions inside this topic
+                const topicRevisionQuestions = topicQuestions
+                  .map(({ q }) => {
+                    const fb = getQuestionFeedback(q);
+                    if (!fb) return null;
+                    const orig = q.question_id !== undefined ? originalTqQuestionIdMap.get(String(q.question_id)) : null;
+                    return {
+                      q,
+                      originalTqItemNum: orig?.itemNum || fb.originalTqItemNum,
+                    };
+                  })
+                  .filter((item): item is { q: QuestionState; originalTqItemNum: number } => Boolean(item && item.originalTqItemNum))
+                  .sort((a, b) => a.originalTqItemNum - b.originalTqItemNum);
 
                 return (
                   <div 
@@ -3763,10 +4010,10 @@ export function ExamBuilderWizard({
                           <span>Placement:</span>
                           <strong className="text-indigo-900 font-black">{tItem.rangeString}</strong>
                         </span>
-                        {topicQuestions.some(({ q, globalIdx }) => Boolean(getQuestionFeedback(q, globalIdx + 1))) && (
+                        {topicRevisionQuestions.length > 0 && (
                           <span className="bg-rose-600 text-white border border-rose-700 px-2.5 py-1 rounded-xl shadow-2xs flex items-center gap-1.5 text-xs font-black animate-pulse">
                             <AlertCircle className="w-3.5 h-3.5 text-rose-100" />
-                            <span>Revision Required in this Topic</span>
+                            <span>Needs Revision: {topicRevisionQuestions.map(item => `Question #${item.originalTqItemNum}`).join(", ")}</span>
                           </span>
                         )}
                       </div>
@@ -3777,14 +4024,20 @@ export function ExamBuilderWizard({
                       <div className="p-4 sm:p-6 space-y-5">
                         {topicQuestions.length > 0 ? (
                           topicQuestions.map(({ q, globalIdx }, topicItemIdx) => {
-                            const itemFeedback = getQuestionFeedback(q, globalIdx + 1);
-                            const qKey = String(q.question_id || globalIdx + 1);
+                            const itemFeedback = getQuestionFeedback(q);
+                            const origInfo = q.question_id !== undefined ? originalTqQuestionIdMap.get(String(q.question_id)) : null;
+                            const currInfo = currentTqNumberMap.get(q) || (q.question_id !== undefined ? currentTqNumberMap.get(String(q.question_id)) : null);
+                            const origItemNum = origInfo?.itemNum || itemFeedback?.originalTqItemNum;
+                            const currItemNum = currInfo?.currentItemNum;
+                            const displayItemNum = origItemNum || currItemNum || (globalIdx + 1);
+                            const isReordered = Boolean(origItemNum && currItemNum && origItemNum !== currItemNum);
+                            const qKey = String(q.question_id || origItemNum || globalIdx + 1);
                             const isAddressed = Boolean(addressedQuestions[qKey]);
 
                             return (
                               <div
                                 key={globalIdx}
-                                id={`q-builder-${q.question_id || globalIdx + 1}`}
+                                id={`q-builder-${q.question_id || origItemNum || globalIdx + 1}`}
                                 className={`rounded-2xl p-4 sm:p-5 shadow-xs space-y-4 transition-all ${
                                   itemFeedback
                                     ? isAddressed
@@ -3804,7 +4057,7 @@ export function ExamBuilderWizard({
                                       <div className="flex items-center justify-between gap-2 flex-wrap">
                                         <div className="flex items-center gap-2">
                                           <span className={`text-[11px] font-black uppercase tracking-wider ${isAddressed ? "text-emerald-950" : "text-rose-950"}`}>
-                                            Revision Requested by {itemFeedback.reviewer}
+                                            Revision Requested for Question #{origItemNum || displayItemNum} by {itemFeedback.reviewer}
                                           </span>
                                           {isAddressed ? (
                                             <span className="bg-emerald-600 text-white text-[9px] font-black uppercase px-2 py-0.5 rounded-full flex items-center gap-1">
@@ -3813,7 +4066,7 @@ export function ExamBuilderWizard({
                                           ) : (
                                             <span className="bg-rose-600 text-white text-[9px] font-black uppercase px-2 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
                                               <AlertCircle className="w-2.5 h-2.5 text-rose-100" />
-                                              Revision Required
+                                              Needs Revision: Question #{origItemNum || displayItemNum}
                                             </span>
                                           )}
                                         </div>
@@ -3834,7 +4087,7 @@ export function ExamBuilderWizard({
                                             onClick={() => {
                                               setStep(3);
                                               setTimeout(() => {
-                                                const el = document.getElementById(`tq-question-${q.question_id || globalIdx + 1}`);
+                                                const el = document.getElementById(`tq-question-${q.question_id || origItemNum || globalIdx + 1}`);
                                                 if (el) {
                                                   el.scrollIntoView({ behavior: "smooth", block: "center" });
                                                 }
@@ -3858,9 +4111,28 @@ export function ExamBuilderWizard({
                                 
                                 {/* Left: Badges & Type/Taxonomy/Topic Selectors */}
                                 <div className="flex items-center gap-2.5 shrink-0">
-                                  <span className="text-sm font-black text-slate-900 shrink-0 px-1">
-                                    {topicItemIdx + 1}.
-                                  </span>
+                                  <div className="flex items-center gap-2 shrink-0">
+                                    <span className="text-xs sm:text-sm font-black text-slate-900 bg-slate-100 border border-slate-300 px-2.5 py-1 rounded-lg shrink-0">
+                                      Question #{displayItemNum}
+                                    </span>
+
+                                    {itemFeedback && (
+                                      <span className="bg-rose-600 text-white text-[10px] font-black uppercase px-2.5 py-1 rounded-md flex items-center gap-1 shadow-2xs shrink-0">
+                                        <AlertCircle className="w-3 h-3 text-rose-100" />
+                                        Needs Revision: Question #{origItemNum || displayItemNum}
+                                      </span>
+                                    )}
+
+                                    {isReordered && (
+                                      <span className="text-[10px] font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded shrink-0" title={`Original review position was Question #${origItemNum}`}>
+                                        (Original TQ: Question #{origItemNum})
+                                      </span>
+                                    )}
+
+                                    <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded shrink-0">
+                                      Topic Item #{topicItemIdx + 1}
+                                    </span>
+                                  </div>
 
 
                                   {/* Question Type Selector Dropdown per Item */}
@@ -4922,13 +5194,15 @@ export function ExamBuilderWizard({
                           if (block.type === "question-item" && block.q) {
                             const q = block.q;
                             const itemNumLabel = block.itemNumberLabel || (block.idx! + 1);
-                            const feedback = getQuestionFeedback(q, Number(itemNumLabel));
+                            const feedback = getQuestionFeedback(q);
+                            const origInfo = q.question_id !== undefined ? originalTqQuestionIdMap.get(String(q.question_id)) : null;
+                            const origItemNum = origInfo?.itemNum || feedback?.originalTqItemNum;
                             const isRevisionRequired = Boolean(feedback);
 
                             return (
                               <div
                                 key={block.id}
-                                id={`tq-question-${q.question_id || itemNumLabel}`}
+                                id={`tq-question-${q.question_id || origItemNum || itemNumLabel}`}
                                 className={`rounded-xl p-3.5 space-y-2.5 text-xs transition-all ${
                                   isRevisionRequired
                                     ? "bg-rose-50/80 border-2 border-rose-500 ring-2 ring-rose-200/70 shadow-sm print:bg-white print:border-rose-500"
@@ -4952,7 +5226,7 @@ export function ExamBuilderWizard({
                                     <div className="shrink-0 flex items-center gap-1.5 print:border print:border-rose-600">
                                       <span className="bg-rose-600 text-white text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
                                         <AlertCircle className="w-3 h-3 text-rose-100" />
-                                        Revision Required
+                                        Needs Revision: Question #{origItemNum || itemNumLabel}
                                       </span>
                                     </div>
                                   )}
@@ -4964,22 +5238,12 @@ export function ExamBuilderWizard({
                                     <div className="flex items-center justify-between gap-2 flex-wrap">
                                       <div className="flex items-center gap-1.5 text-[11px] font-black uppercase text-rose-950 tracking-wider">
                                         <AlertCircle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
-                                        <span>Reviewer Comment ({feedback.reviewer})</span>
+                                        <span>Reviewer Comment for Question #{origItemNum || itemNumLabel} ({feedback.reviewer})</span>
                                       </div>
                                       <button
                                         type="button"
-                                        onClick={() => {
-                                          setStep(2);
-                                          const topicKey = q.topic || "Unassigned Topic";
-                                          setOpenTopics((prev) => ({ ...prev, [topicKey]: true }));
-                                          setTimeout(() => {
-                                            const el = document.getElementById(`q-builder-${q.question_id || itemNumLabel}`);
-                                            if (el) {
-                                              el.scrollIntoView({ behavior: "smooth", block: "center" });
-                                            }
-                                          }, 150);
-                                        }}
-                                        className="text-[10px] font-bold text-rose-700 hover:text-rose-950 underline bg-rose-200/70 hover:bg-rose-200 px-2 py-0.5 rounded-md transition-colors cursor-pointer print:hidden"
+                                        onClick={() => scrollToQuestion(q, origItemNum)}
+                                        className="text-[10px] font-bold text-rose-800 hover:text-rose-950 underline bg-rose-200/70 hover:bg-rose-200 px-2 py-0.5 rounded-md transition-colors cursor-pointer print:hidden"
                                       >
                                         Edit this question in builder →
                                       </button>
