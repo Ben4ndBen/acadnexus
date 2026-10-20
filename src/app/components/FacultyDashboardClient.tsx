@@ -2232,7 +2232,7 @@ export function FacultyDashboardClient({
                         <div className="space-y-3">
                           {(() => {
                             const renderCommentCard = (commentsText: string, titleLabel: string) => {
-                              let parsedComments: { general?: string; questions?: Record<string, string> } | null = null;
+                              let parsedComments: { general?: string; questions?: Record<string, any> } | null = null;
                               try {
                                 const trimmed = commentsText.trim();
                                 if (trimmed.startsWith("{")) {
@@ -2244,18 +2244,81 @@ export function FacultyDashboardClient({
 
                               if (parsedComments) {
                                 const hasGeneral = !!(parsedComments.general && parsedComments.general.trim().length > 0);
-                                if (!hasGeneral) return null;
+                                const qFeedbackMap = (parsedComments.questions || {}) as Record<string, any>;
+                                const qItems = Object.entries(qFeedbackMap)
+                                  .map(([qId, val]) => {
+                                    let comment = "";
+                                    if (typeof val === "object" && val !== null) {
+                                      comment = (val as any).comment || "";
+                                    } else if (typeof val === "string") {
+                                      comment = val;
+                                    }
+                                    return { qId, comment: comment.trim() };
+                                  })
+                                  .filter((item) => item.comment.length > 0);
+
+                                if (!hasGeneral && qItems.length === 0) return null;
+
                                 return (
-                                  <div className="bg-rose-50/50 border border-rose-100 rounded-xl p-4 space-y-3">
+                                  <div className="bg-rose-50/70 border border-rose-200 rounded-2xl p-4 sm:p-5 space-y-3.5 shadow-2xs">
                                     <div className="flex gap-3 items-start">
-                                      <AlertCircle className="w-5 h-5 text-rose-500 shrink-0 mt-0.5" />
-                                      <div>
-                                        <p className="text-xs font-bold text-rose-800">{titleLabel}:</p>
-                                        <p className="text-xs text-rose-700 mt-1 italic leading-relaxed">
-                                          "{parsedComments.general!.trim()}"
-                                        </p>
+                                      <div className="p-1.5 bg-rose-600 text-white rounded-lg shrink-0 mt-0.5">
+                                        <AlertCircle className="w-4 h-4" />
+                                      </div>
+                                      <div className="space-y-1 w-full">
+                                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                                          <p className="text-xs font-black text-rose-950 uppercase tracking-wide">
+                                            {titleLabel}
+                                          </p>
+                                          {qItems.length > 0 && (
+                                            <span className="bg-rose-600 text-white text-[10px] font-black uppercase px-2 py-0.5 rounded-full">
+                                              {qItems.length} {qItems.length === 1 ? "Question Needs" : "Questions Need"} Revision
+                                            </span>
+                                          )}
+                                        </div>
+
+                                        {hasGeneral && (
+                                          <p className="text-xs text-rose-900 mt-1 italic font-semibold leading-relaxed">
+                                            "{parsedComments.general!.trim()}"
+                                          </p>
+                                        )}
                                       </div>
                                     </div>
+
+                                    {/* Questions Flagged for Revision Breakdown */}
+                                    {qItems.length > 0 && (
+                                      <div className="bg-white/90 border border-rose-200 rounded-xl p-3.5 space-y-2 mt-2">
+                                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                                          <span className="text-[11px] font-black uppercase tracking-wider text-rose-900 flex items-center gap-1.5">
+                                            <AlertCircle className="w-3.5 h-3.5 text-rose-600" />
+                                            Specific Questions Highlighted for Correction:
+                                          </span>
+                                          <button
+                                            onClick={() => router.push(`/dashboard/faculty/exams/${exam.exam_id}/builder`)}
+                                            className="text-[11px] font-bold text-rose-700 hover:text-rose-900 underline transition-colors cursor-pointer"
+                                          >
+                                            Revise in Builder →
+                                          </button>
+                                        </div>
+                                        <div className="space-y-1.5">
+                                          {qItems.map((qi, idx) => {
+                                            const matchedQ = exam.questionBank?.find((q: any) => String(q.question_id) === String(qi.qId));
+                                            const qIndex = exam.questionBank?.findIndex((q: any) => String(q.question_id) === String(qi.qId));
+                                            const itemLabel = qIndex !== undefined && qIndex >= 0 ? `Item #${qIndex + 1}` : `Question ID #${qi.qId}`;
+                                            return (
+                                              <div key={idx} className="flex items-start gap-2 text-xs text-rose-950 bg-rose-50/60 border border-rose-100 rounded-lg p-2">
+                                                <span className="font-extrabold bg-rose-600 text-white px-2 py-0.5 rounded text-[10px] shrink-0">
+                                                  {itemLabel}
+                                                </span>
+                                                <span className="italic font-bold leading-relaxed">
+                                                  "{qi.comment}"
+                                                </span>
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                      </div>
+                                    )}
                                   </div>
                                 );
                               }

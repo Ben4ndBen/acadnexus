@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useMemo } from "react";
+import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { 
   Settings, BookOpen, ClipboardCheck, ArrowLeft, ArrowRight, Save, 
@@ -913,9 +913,9 @@ export function ExamBuilderWizard({
     exam.questionBank.length > 0 ? 0 : -1
   );
 
-  // Map of question_id -> { comment: string, reviewer: string } for reviewer feedback
+  // Map of question_id / item index -> reviewer feedback
   const questionFeedbackMap = useMemo(() => {
-    const map: Record<string, { comment: string; reviewer: string }> = {};
+    const map: Record<string, { comment: string; reviewer: string; allComments: Array<{ comment: string; reviewer: string }> }> = {};
     if (!exam.approvalWorkflow) return map;
 
     const extractQComments = (commentsRaw: string | null | undefined, reviewerLabel: string) => {
@@ -932,7 +932,18 @@ export function ExamBuilderWizard({
                 cText = val;
               }
               if (cText.trim()) {
-                map[String(qId)] = { comment: cText.trim(), reviewer: reviewerLabel };
+                const existing = map[String(qId)];
+                const newCommentObj = { comment: cText.trim(), reviewer: reviewerLabel };
+                if (existing) {
+                  existing.allComments.push(newCommentObj);
+                  existing.comment = `${existing.comment} | [${reviewerLabel}]: ${cText.trim()}`;
+                } else {
+                  map[String(qId)] = {
+                    comment: cText.trim(),
+                    reviewer: reviewerLabel,
+                    allComments: [newCommentObj],
+                  };
+                }
               }
             });
           }
@@ -947,8 +958,66 @@ export function ExamBuilderWizard({
     return map;
   }, [exam.approvalWorkflow]);
 
-  // Topic Accordion Dropdown Open/Closed State (Minimized by default)
+  const isReturnedForRevision = Boolean(
+    exam.current_status === "Returned" ||
+    exam.approvalWorkflow?.chair_review_status === "Returned" ||
+    exam.approvalWorkflow?.prog_chair_review_status === "Returned"
+  );
+
+  const getQuestionFeedback = useCallback((q: any, itemIndex?: number) => {
+    if (!isReturnedForRevision) return null;
+    if (q?.question_id && questionFeedbackMap[String(q.question_id)]) {
+      return questionFeedbackMap[String(q.question_id)];
+    }
+    if (typeof itemIndex === "number" && questionFeedbackMap[String(itemIndex)]) {
+      return questionFeedbackMap[String(itemIndex)];
+    }
+    return null;
+  }, [isReturnedForRevision, questionFeedbackMap]);
+
+  // Track creator's working progress on addressed questions
+  const [addressedQuestions, setAddressedQuestions] = useState<Record<string, boolean>>({});
+
+  const toggleQuestionAddressed = (key: string) => {
+    setAddressedQuestions((prev) => ({
+      ...prev,
+      [key]: !prev[key],
+    }));
+  };
+
+  // List of all questions in this exam that need revision
+  const questionsNeedingRevision = useMemo(() => {
+    if (!isReturnedForRevision) return [];
+
+    return questions
+      .map((q, idx) => {
+        const feedback = getQuestionFeedback(q, idx + 1);
+        return {
+          q,
+          globalIdx: idx,
+          itemNum: idx + 1,
+          feedback,
+          key: String(q.question_id || idx + 1),
+        };
+      })
+      .filter((item): item is typeof item & { feedback: NonNullable<typeof item.feedback> } => Boolean(item.feedback));
+  }, [isReturnedForRevision, questions, getQuestionFeedback]);
+
+  // Topic Accordion Dropdown Open/Closed State (Auto-expand topics containing revision questions)
   const [openTopics, setOpenTopics] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    if (isReturnedForRevision && questionsNeedingRevision.length > 0) {
+      const topicsToOpen: Record<string, boolean> = {};
+      questionsNeedingRevision.forEach(({ q }) => {
+        const tName = q.topic?.trim() || "Unassigned Topic";
+        topicsToOpen[tName] = true;
+      });
+      if (Object.keys(topicsToOpen).length > 0) {
+        setOpenTopics((prev) => ({ ...prev, ...topicsToOpen }));
+      }
+    }
+  }, [isReturnedForRevision, questionsNeedingRevision]);
 
   // Interactive Popup Modal State for Submission & Save Draft feedback
   interface ModalState {
@@ -2717,7 +2786,7 @@ export function ExamBuilderWizard({
       </div>
 
       {/* RETURNED REVISION FEEDBACK BANNER */}
-      {exam.current_status === "Returned" && exam.approvalWorkflow && (() => {
+      {isReturnedForRevision && exam.approvalWorkflow && (() => {
         const getGeneralText = (commentStr?: string | null) => {
           if (!commentStr) return "";
           try {
@@ -2735,18 +2804,128 @@ export function ExamBuilderWizard({
         const progChairGeneral = getGeneralText(exam.approvalWorkflow.prog_chair_comments);
         const chairGeneral = getGeneralText(exam.approvalWorkflow.chair_comments);
         const diGeneral = exam.approvalWorkflow.di_comments?.trim() || "";
+        const hasAnyQuestions = questionsNeedingRevision.length > 0;
 
-        if (!progChairGeneral && !chairGeneral && !diGeneral) return null;
+        if (!progChairGeneral && !chairGeneral && !diGeneral && !hasAnyQuestions) return null;
 
         return (
           <div className="space-y-4 mb-6">
+            {/* 1. SPECIFIC QUESTIONS REQUIRING REVISION SUMMARY */}
+            {hasAnyQuestions && (
+              <div className="bg-rose-50 border-2 border-rose-400 rounded-3xl p-6 shadow-md space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-rose-200 pb-3.5">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 bg-rose-600 text-white rounded-xl shadow-xs">
+                      <AlertCircle className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-black text-rose-950 uppercase tracking-wide flex items-center gap-2">
+                        <span>Questions Requiring Revision</span>
+                        <span className="bg-rose-600 text-white text-[10px] font-black px-2.5 py-0.5 rounded-full">
+                          {questionsNeedingRevision.length} {questionsNeedingRevision.length === 1 ? "Item" : "Items"} Flagged
+                        </span>
+                      </h4>
+                      <p className="text-xs text-rose-800 font-medium mt-0.5">
+                        The reviewer highlighted the following specific questions. Click any item below to jump straight to correction.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setStep(2)}
+                      className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer"
+                    >
+                      Open Question Builder (Step 2)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setStep(3)}
+                      className="px-3.5 py-1.5 bg-white hover:bg-rose-100 text-rose-800 border border-rose-300 text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer"
+                    >
+                      View in Test Questions (Step 3)
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {questionsNeedingRevision.map(({ q, itemNum, feedback }) => {
+                    const qKey = String(q.question_id || itemNum);
+                    const isAddressed = Boolean(addressedQuestions[qKey]);
+                    return (
+                      <div
+                        key={itemNum}
+                        className={`rounded-2xl p-4 border transition-all space-y-2 ${
+                          isAddressed
+                            ? "bg-white/90 border-emerald-300 shadow-2xs"
+                            : "bg-white border-rose-300 shadow-2xs hover:border-rose-400"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <span className="bg-rose-600 text-white font-black text-xs px-2.5 py-0.5 rounded-md">
+                              Item #{itemNum}
+                            </span>
+                            <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded">
+                              {q.question_type.replace(/_/g, " ")}
+                            </span>
+                          </div>
+                          {isAddressed ? (
+                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                              ✓ Addressed
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-black uppercase text-rose-700 bg-rose-100 px-2 py-0.5 rounded-full">
+                              Needs Revision
+                            </span>
+                          )}
+                        </div>
+
+                        <p className="text-xs text-slate-700 line-clamp-2 font-medium">
+                          {q.text || "(Question prompt empty)"}
+                        </p>
+
+                        <div className="bg-rose-50 border border-rose-200 rounded-xl p-2.5 text-xs text-rose-950 space-y-0.5">
+                          <span className="text-[10px] font-extrabold uppercase text-rose-800 block">
+                            Feedback by {feedback.reviewer}:
+                          </span>
+                          <p className="italic font-bold">"{feedback.comment}"</p>
+                        </div>
+
+                        <div className="flex items-center justify-end gap-2 pt-1 border-t border-slate-100">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setStep(2);
+                              const topicKey = q.topic || "Unassigned Topic";
+                              setOpenTopics((prev) => ({ ...prev, [topicKey]: true }));
+                              setTimeout(() => {
+                                const el = document.getElementById(`q-builder-${q.question_id || itemNum}`);
+                                if (el) {
+                                  el.scrollIntoView({ behavior: "smooth", block: "center" });
+                                }
+                              }, 150);
+                            }}
+                            className="text-[11px] font-bold text-rose-700 hover:text-rose-900 bg-rose-50 hover:bg-rose-100 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                          >
+                            Edit Item #{itemNum} in Builder →
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* 2. GENERAL FEEDBACK CARDS */}
             {progChairGeneral && (
               <div className="bg-rose-50 border border-rose-200 rounded-3xl p-6 shadow-sm space-y-3">
                 <div className="flex gap-3 items-start">
                   <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
                   <div className="space-y-1 w-full">
                     <h4 className="text-xs font-extrabold text-rose-900 uppercase tracking-wider">
-                      Feedback from Program Chairperson (Returned)
+                      General Feedback from Program Chairperson (Returned)
                     </h4>
                     <p className="text-xs text-rose-800 italic leading-relaxed font-medium">
                       "{progChairGeneral}"
@@ -2762,7 +2941,7 @@ export function ExamBuilderWizard({
                   <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
                   <div className="space-y-1 w-full">
                     <h4 className="text-xs font-extrabold text-rose-900 uppercase tracking-wider">
-                      Feedback from Department Chairperson (Returned)
+                      General Feedback from Department Chairperson (Returned)
                     </h4>
                     <p className="text-xs text-rose-800 italic leading-relaxed font-medium">
                       "{chairGeneral}"
@@ -3548,6 +3727,12 @@ export function ExamBuilderWizard({
                           <span>Placement:</span>
                           <strong className="text-indigo-900 font-black">{tItem.rangeString}</strong>
                         </span>
+                        {topicQuestions.some(({ q, globalIdx }) => Boolean(getQuestionFeedback(q, globalIdx + 1))) && (
+                          <span className="bg-rose-600 text-white border border-rose-700 px-2.5 py-1 rounded-xl shadow-2xs flex items-center gap-1.5 text-xs font-black animate-pulse">
+                            <AlertCircle className="w-3.5 h-3.5 text-rose-100" />
+                            <span>Revision Required in this Topic</span>
+                          </span>
+                        )}
                       </div>
                     </div>
 
@@ -3556,29 +3741,76 @@ export function ExamBuilderWizard({
                       <div className="p-4 sm:p-6 space-y-5">
                         {topicQuestions.length > 0 ? (
                           topicQuestions.map(({ q, globalIdx }, topicItemIdx) => {
-                            const itemFeedback = questionFeedbackMap[String(q.question_id)];
+                            const itemFeedback = getQuestionFeedback(q, globalIdx + 1);
+                            const qKey = String(q.question_id || globalIdx + 1);
+                            const isAddressed = Boolean(addressedQuestions[qKey]);
+
                             return (
                               <div
                                 key={globalIdx}
+                                id={`q-builder-${q.question_id || globalIdx + 1}`}
                                 className={`rounded-2xl p-4 sm:p-5 shadow-xs space-y-4 transition-all ${
                                   itemFeedback
-                                    ? "bg-rose-50/70 border-2 border-rose-300 ring-2 ring-rose-200/50"
+                                    ? isAddressed
+                                      ? "bg-emerald-50/40 border-2 border-emerald-400 ring-2 ring-emerald-200/50 shadow-sm"
+                                      : "bg-rose-50/80 border-2 border-rose-500 ring-2 ring-rose-300/60 shadow-sm"
                                     : "bg-slate-50 border border-slate-200 hover:border-slate-300"
                                 }`}
                               >
                                 {itemFeedback && (
-                                  <div className="bg-rose-100/90 border border-rose-300 rounded-xl p-3.5 flex gap-2.5 items-start text-rose-950 shadow-2xs">
-                                    <AlertCircle className="w-4.5 h-4.5 text-rose-600 shrink-0 mt-0.5" />
-                                    <div className="space-y-0.5">
-                                      <div className="flex items-center gap-2">
-                                        <span className="text-[11px] font-black uppercase text-rose-950 tracking-wider">
-                                          Revision Requested by {itemFeedback.reviewer}
-                                        </span>
-                                        <span className="bg-rose-600 text-white text-[9px] font-black uppercase px-2 py-0.5 rounded-full">
-                                          Revision Required
-                                        </span>
+                                  <div className={`rounded-xl p-3.5 flex gap-2.5 items-start shadow-2xs border ${
+                                    isAddressed
+                                      ? "bg-emerald-100/90 border-emerald-300 text-emerald-950"
+                                      : "bg-rose-100/90 border-rose-300 text-rose-950"
+                                  }`}>
+                                    <AlertCircle className={`w-5 h-5 shrink-0 mt-0.5 ${isAddressed ? "text-emerald-600" : "text-rose-600"}`} />
+                                    <div className="space-y-1 w-full">
+                                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                                        <div className="flex items-center gap-2">
+                                          <span className={`text-[11px] font-black uppercase tracking-wider ${isAddressed ? "text-emerald-950" : "text-rose-950"}`}>
+                                            Revision Requested by {itemFeedback.reviewer}
+                                          </span>
+                                          {isAddressed ? (
+                                            <span className="bg-emerald-600 text-white text-[9px] font-black uppercase px-2 py-0.5 rounded-full flex items-center gap-1">
+                                              ✓ Addressed / Revised
+                                            </span>
+                                          ) : (
+                                            <span className="bg-rose-600 text-white text-[9px] font-black uppercase px-2 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
+                                              <AlertCircle className="w-2.5 h-2.5 text-rose-100" />
+                                              Revision Required
+                                            </span>
+                                          )}
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                          <button
+                                            type="button"
+                                            onClick={() => toggleQuestionAddressed(qKey)}
+                                            className={`text-[10px] font-bold px-2.5 py-0.5 rounded-md border transition-colors cursor-pointer ${
+                                              isAddressed
+                                                ? "bg-white text-emerald-700 border-emerald-300 hover:bg-emerald-50"
+                                                : "bg-white text-rose-700 border-rose-300 hover:bg-rose-50"
+                                            }`}
+                                          >
+                                            {isAddressed ? "Mark as Needs Revision" : "Mark as Addressed"}
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setStep(3);
+                                              setTimeout(() => {
+                                                const el = document.getElementById(`tq-question-${q.question_id || globalIdx + 1}`);
+                                                if (el) {
+                                                  el.scrollIntoView({ behavior: "smooth", block: "center" });
+                                                }
+                                              }, 150);
+                                            }}
+                                            className="text-[10px] font-bold text-slate-700 hover:text-slate-900 bg-white border border-slate-300 px-2 py-0.5 rounded-md transition-colors cursor-pointer"
+                                          >
+                                            View in Test Questions (TQ) →
+                                          </button>
+                                        </div>
                                       </div>
-                                      <p className="text-xs text-rose-900 italic font-bold leading-relaxed">
+                                      <p className={`text-xs font-bold italic leading-relaxed ${isAddressed ? "text-emerald-900" : "text-rose-900"}`}>
                                         "{itemFeedback.comment}"
                                       </p>
                                     </div>
@@ -4654,19 +4886,73 @@ export function ExamBuilderWizard({
                           if (block.type === "question-item" && block.q) {
                             const q = block.q;
                             const itemNumLabel = block.itemNumberLabel || (block.idx! + 1);
+                            const feedback = getQuestionFeedback(q, Number(itemNumLabel));
+                            const isRevisionRequired = Boolean(feedback);
 
                             return (
-                              <div key={block.id} className="bg-white border border-slate-200 rounded-xl p-3.5 space-y-2 text-xs shadow-2xs">
-                                <div className="flex items-start justify-between gap-2">
-                                  <div className="flex items-start gap-2">
-                                    <span className="font-extrabold text-slate-900 bg-slate-100 border border-slate-300 px-2 py-0.5 rounded text-[11px] shrink-0">
+                              <div
+                                key={block.id}
+                                id={`tq-question-${q.question_id || itemNumLabel}`}
+                                className={`rounded-xl p-3.5 space-y-2.5 text-xs transition-all ${
+                                  isRevisionRequired
+                                    ? "bg-rose-50/80 border-2 border-rose-500 ring-2 ring-rose-200/70 shadow-sm print:bg-white print:border-rose-500"
+                                    : "bg-white border border-slate-200 shadow-2xs"
+                                }`}
+                              >
+                                <div className="flex items-start justify-between gap-2 flex-wrap">
+                                  <div className="flex items-start gap-2 flex-1">
+                                    <span className={`font-extrabold px-2 py-0.5 rounded text-[11px] shrink-0 ${
+                                      isRevisionRequired
+                                        ? "bg-rose-600 text-white border border-rose-700"
+                                        : "text-slate-900 bg-slate-100 border border-slate-300"
+                                    }`}>
                                       {itemNumLabel}.
                                     </span>
                                     <p className="font-extrabold text-slate-900 leading-relaxed text-xs">
                                       {q.text || "(Question prompt empty)"}
                                     </p>
                                   </div>
+                                  {isRevisionRequired && (
+                                    <div className="shrink-0 flex items-center gap-1.5 print:border print:border-rose-600">
+                                      <span className="bg-rose-600 text-white text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
+                                        <AlertCircle className="w-3 h-3 text-rose-100" />
+                                        Revision Required
+                                      </span>
+                                    </div>
+                                  )}
                                 </div>
+
+                                {/* Reviewer comment box directly beside / below the question */}
+                                {isRevisionRequired && feedback && (
+                                  <div className="bg-rose-100/90 border border-rose-300 rounded-xl p-3 text-rose-950 space-y-1.5 shadow-2xs print:bg-rose-50 print:border-rose-400">
+                                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                                      <div className="flex items-center gap-1.5 text-[11px] font-black uppercase text-rose-950 tracking-wider">
+                                        <AlertCircle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                                        <span>Reviewer Comment ({feedback.reviewer})</span>
+                                      </div>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setStep(2);
+                                          const topicKey = q.topic || "Unassigned Topic";
+                                          setOpenTopics((prev) => ({ ...prev, [topicKey]: true }));
+                                          setTimeout(() => {
+                                            const el = document.getElementById(`q-builder-${q.question_id || itemNumLabel}`);
+                                            if (el) {
+                                              el.scrollIntoView({ behavior: "smooth", block: "center" });
+                                            }
+                                          }, 150);
+                                        }}
+                                        className="text-[10px] font-bold text-rose-700 hover:text-rose-950 underline bg-rose-200/70 hover:bg-rose-200 px-2 py-0.5 rounded-md transition-colors cursor-pointer print:hidden"
+                                      >
+                                        Edit this question in builder →
+                                      </button>
+                                    </div>
+                                    <p className="text-xs text-rose-900 font-bold italic leading-relaxed pl-5">
+                                      "{feedback.comment}"
+                                    </p>
+                                  </div>
+                                )}
 
                                 {/* Prompt Image if any */}
                                 {q.image_url && (
