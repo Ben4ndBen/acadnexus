@@ -1194,6 +1194,23 @@ export function ExamBuilderWizard({
     }
   }, [isReturnedExam, questionsNeedingRevision, scrollToQuestion]);
 
+  // Listen for focus revision events (e.g. when user clicks on Returned Exam in Notification Bell)
+  useEffect(() => {
+    const handleFocusRevision = (e: any) => {
+      if (!e.detail?.examId || e.detail.examId === exam.exam_id) {
+        setStep(2);
+        if (questionsNeedingRevision.length > 0) {
+          const firstFlagged = questionsNeedingRevision[0];
+          scrollToQuestion(firstFlagged.q, firstFlagged.originalTqItemNum);
+        }
+      }
+    };
+    window.addEventListener("acadnexus:focus-revision-questions", handleFocusRevision);
+    return () => {
+      window.removeEventListener("acadnexus:focus-revision-questions", handleFocusRevision);
+    };
+  }, [exam.exam_id, questionsNeedingRevision, scrollToQuestion]);
+
   // Interactive Popup Modal State for Submission & Save Draft feedback
   interface ModalState {
     isOpen: boolean;

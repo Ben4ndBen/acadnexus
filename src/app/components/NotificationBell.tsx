@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { 
   getNotificationsAction, 
@@ -19,7 +20,8 @@ import {
   AlertTriangle, 
   FileText,
   Award,
-  Eye
+  Eye,
+  Edit3
 } from "lucide-react";
 
 interface Notification {
@@ -36,6 +38,7 @@ interface NotificationBellProps {
 }
 
 export function NotificationBell({ userId }: NotificationBellProps) {
+  const router = useRouter();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -138,7 +141,34 @@ export function NotificationBell({ userId }: NotificationBellProps) {
       markNotificationReadAction(notif.notification_id).catch(console.error);
     }
 
-    // Check if notification contains an exam reference
+    // 1. Check if returned exam reference
+    const returnedExamMatch = notif.message ? notif.message.match(/\[ref:returned-exam:(\d+)\]/) : null;
+    let returnedExamId: number | null = returnedExamMatch && returnedExamMatch[1] ? parseInt(returnedExamMatch[1], 10) : null;
+    
+    // Fallback if not matching explicit tag but title indicates Returned and message contains an exam ID
+    if (!returnedExamId && notif.title.toLowerCase().includes("returned")) {
+      const fallbackMatch = notif.message ? notif.message.match(/exam(?:ination)?\s*(?:#|id:?|no\.?)?\s*(\d+)/i) : null;
+      if (fallbackMatch && fallbackMatch[1]) {
+        returnedExamId = parseInt(fallbackMatch[1], 10);
+      }
+    }
+
+    if (returnedExamId) {
+      setIsOpen(false);
+      const targetPath = `/dashboard/faculty/exams/${returnedExamId}/builder`;
+      if (typeof window !== "undefined" && window.location.pathname === targetPath) {
+        window.dispatchEvent(
+          new CustomEvent("acadnexus:focus-revision-questions", {
+            detail: { examId: returnedExamId },
+          })
+        );
+      } else {
+        router.push(targetPath);
+      }
+      return;
+    }
+
+    // 2. Check if student exam result reference
     const examMatch = notif.message ? notif.message.match(/\[ref:exam:(\d+)\]/) : null;
     if (examMatch && examMatch[1]) {
       const studentExamId = parseInt(examMatch[1], 10);
@@ -148,6 +178,7 @@ export function NotificationBell({ userId }: NotificationBellProps) {
         })
       );
       setIsOpen(false);
+      return;
     }
   };
 
@@ -271,29 +302,52 @@ export function NotificationBell({ userId }: NotificationBellProps) {
                 </div>
               </div>
             ) : (
-              notifications.map((notif) => {
+            notifications.map((notif) => {
                 const examMatch = notif.message ? notif.message.match(/\[ref:exam:(\d+)\]/) : null;
                 const isExamUpdate = !!examMatch;
-                const cleanMessage = notif.message
-                  ? notif.message
-                      .replace(/\s*\[ref:exam:\d+\]/g, "")
-                      .replace(/\.?\s*Comments:\s*No comments provided\.?/gi, ".")
-                      .replace(/\.?\s*Comments:\s*\{.*$/gi, ".")
-                      .replace(/\.\.+/g, ".")
-                      .trim()
-                  : "";
+
+                const returnedExamMatch = notif.message ? notif.message.match(/\[ref:returned-exam:(\d+)\]/) : null;
+                const isReturnedExam = !!returnedExamMatch || (notif.title.toLowerCase().includes("returned") && notif.title.toLowerCase().includes("exam"));
+
+                const isClickable = isExamUpdate || isReturnedExam;
+
+                let cleanMessage = notif.message || "";
+                cleanMessage = cleanMessage
+                  .replace(/\s*\[ref:returned-exam:\d+\]/g, "")
+                  .replace(/\s*\[ref:exam:\d+\]/g, "")
+                  .replace(/\.?\s*Comments:\s*No comments provided\.?/gi, ".")
+                  .replace(/\.?\s*Remarks:\s*""/gi, "")
+                  .replace(/\.?\s*Comments:\s*\{.*$/gi, "")
+                  .trim();
+
+                if (cleanMessage.includes("{") && cleanMessage.includes("}")) {
+                  try {
+                    cleanMessage = cleanMessage.replace(/\{[^{}]*\}/g, (jsonStr) => {
+                      try {
+                        const parsed = JSON.parse(jsonStr);
+                        if (parsed.general) return parsed.general;
+                        const values = Object.values(parsed).filter(Boolean);
+                        return values.join("; ");
+                      } catch {
+                        return "";
+                      }
+                    });
+                  } catch {}
+                }
+
+                cleanMessage = cleanMessage.replace(/\.\.+/g, ".").replace(/\s\s+/g, " ").trim();
 
                 return (
                   <div
                     key={notif.notification_id}
                     onClick={() => handleNotificationClick(notif)}
                     className={`flex gap-3.5 p-4 transition-colors relative hover:bg-slate-50/80 group ${
-                      isExamUpdate ? "cursor-pointer" : ""
-                    } ${!notif.is_read ? "bg-amber-50/15" : ""}`}
+                      isClickable ? "cursor-pointer" : ""
+                    } ${!notif.is_read ? (isReturnedExam ? "bg-rose-50/20" : "bg-amber-50/15") : ""}`}
                   >
                     {/* Status Indicator Bar */}
                     {!notif.is_read && (
-                      <span className="absolute left-0 top-0 bottom-0 w-1 bg-[#7A151A]" />
+                      <span className={`absolute left-0 top-0 bottom-0 w-1 ${isReturnedExam ? "bg-rose-600" : "bg-[#7A151A]"}`} />
                     )}
 
                     {/* Icon */}
@@ -304,9 +358,16 @@ export function NotificationBell({ userId }: NotificationBellProps) {
                     {/* Text Details */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between gap-2">
-                        <p className={`text-xs font-bold leading-snug ${!notif.is_read ? "text-slate-900" : "text-slate-600"}`}>
-                          {notif.title}
-                        </p>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <p className={`text-xs font-bold leading-snug ${!notif.is_read ? "text-slate-900" : "text-slate-600"}`}>
+                            {notif.title}
+                          </p>
+                          {isReturnedExam && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 uppercase tracking-wider">
+                              Action Required
+                            </span>
+                          )}
+                        </div>
                         <span className="text-[10px] text-slate-400 whitespace-nowrap">
                           {getRelativeTime(notif.created_at)}
                         </span>
@@ -314,6 +375,12 @@ export function NotificationBell({ userId }: NotificationBellProps) {
                       <p className={`text-xs mt-1 leading-relaxed ${!notif.is_read ? "text-slate-800" : "text-slate-500"}`}>
                         {cleanMessage}
                       </p>
+                      {isReturnedExam && (
+                        <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-rose-50 text-rose-700 text-[11px] font-bold border border-rose-200 group-hover:bg-rose-100 group-hover:border-rose-300 transition-all">
+                          <Edit3 className="w-3.5 h-3.5 text-rose-600" />
+                          <span>Open in Step 2 to Edit Questions →</span>
+                        </div>
+                      )}
                       {isExamUpdate && (
                         <div className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 group-hover:text-emerald-800 group-hover:underline">
                           <Eye className="w-3.5 h-3.5" />

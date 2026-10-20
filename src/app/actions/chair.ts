@@ -14,7 +14,7 @@ export async function reviewExamByChair(
   try {
     const user = await db.user.findUnique({
       where: { user_id: userId },
-      include: { chair: true },
+      include: { chair: true, faculty: true },
     });
 
     const isProgChair =
@@ -109,6 +109,51 @@ export async function reviewExamByChair(
           ip_address: "127.0.0.1",
         },
       });
+
+      // Send clear notification to exam creator when returned for revision
+      if (action === "Return") {
+        const reviewerFaculty = user?.faculty;
+        const reviewerFullName = reviewerFaculty
+          ? `${reviewerFaculty.first_name} ${reviewerFaculty.last_name}`.trim()
+          : user?.username || "";
+        const reviewerRole = "Program Chairperson";
+        const reviewerInfo = reviewerFullName && reviewerFullName !== reviewerRole
+          ? `${reviewerFullName} (${reviewerRole})`
+          : reviewerRole;
+
+        let examDisplayTitle = currentWorkflow.exam.title || "Examination Draft";
+        if ((!examDisplayTitle || examDisplayTitle === "New Examination Draft") && currentWorkflow.exam.course) {
+          examDisplayTitle = `${currentWorkflow.exam.term || "Prelim"} Examination in ${currentWorkflow.exam.course.course_code}${currentWorkflow.exam.course.course_title ? ` - ${currentWorkflow.exam.course.course_title}` : ""}`;
+        }
+
+        let generalCommentText = "";
+        try {
+          const trimmed = (comments || "").trim();
+          if (trimmed.startsWith("{")) {
+            const parsed = JSON.parse(trimmed);
+            generalCommentText = parsed.general?.trim() || "";
+          } else {
+            generalCommentText = trimmed;
+          }
+        } catch {
+          generalCommentText = (comments || "").trim();
+        }
+
+        let notifMessage = `Your examination "${examDisplayTitle}" has been returned by ${reviewerInfo}. Please revise the highlighted questions in Step 2: Question Bank to resubmit for approval.`;
+        if (generalCommentText) {
+          notifMessage += ` Remarks: "${generalCommentText}"`;
+        }
+        notifMessage += ` [ref:returned-exam:${examId}]`;
+
+        await db.notification.create({
+          data: {
+            user_id: currentWorkflow.exam.faculty_id,
+            title: "Exam Returned for Revision",
+            message: notifMessage,
+            is_read: false,
+          },
+        });
+      }
     } else {
       // Department Chair Review step ("Recommending Approval" for programs with Prog Chair, or "Reviewed by" for programs without)
       const globalHoldSetting = await db.systemSetting.findUnique({
@@ -149,10 +194,56 @@ export async function reviewExamByChair(
           ip_address: "127.0.0.1",
         },
       });
+
+      // Send clear notification to exam creator when returned for revision
+      if (action === "Return") {
+        const reviewerFaculty = user?.faculty;
+        const reviewerFullName = reviewerFaculty
+          ? `${reviewerFaculty.first_name} ${reviewerFaculty.last_name}`.trim()
+          : user?.username || "";
+        const reviewerRole = "Department Chairperson";
+        const reviewerInfo = reviewerFullName && reviewerFullName !== reviewerRole
+          ? `${reviewerFullName} (${reviewerRole})`
+          : reviewerRole;
+
+        let examDisplayTitle = currentWorkflow.exam.title || "Examination Draft";
+        if ((!examDisplayTitle || examDisplayTitle === "New Examination Draft") && currentWorkflow.exam.course) {
+          examDisplayTitle = `${currentWorkflow.exam.term || "Prelim"} Examination in ${currentWorkflow.exam.course.course_code}${currentWorkflow.exam.course.course_title ? ` - ${currentWorkflow.exam.course.course_title}` : ""}`;
+        }
+
+        let generalCommentText = "";
+        try {
+          const trimmed = (comments || "").trim();
+          if (trimmed.startsWith("{")) {
+            const parsed = JSON.parse(trimmed);
+            generalCommentText = parsed.general?.trim() || "";
+          } else {
+            generalCommentText = trimmed;
+          }
+        } catch {
+          generalCommentText = (comments || "").trim();
+        }
+
+        let notifMessage = `Your examination "${examDisplayTitle}" has been returned by ${reviewerInfo}. Please revise the highlighted questions in Step 2: Question Bank to resubmit for approval.`;
+        if (generalCommentText) {
+          notifMessage += ` Remarks: "${generalCommentText}"`;
+        }
+        notifMessage += ` [ref:returned-exam:${examId}]`;
+
+        await db.notification.create({
+          data: {
+            user_id: currentWorkflow.exam.faculty_id,
+            title: "Exam Returned for Revision",
+            message: notifMessage,
+            is_read: false,
+          },
+        });
+      }
     }
 
     revalidatePath("/dashboard/chair");
     revalidatePath("/dashboard/director");
+    revalidatePath("/dashboard/faculty");
     return { success: true };
   } catch (err: any) {
     console.error("Error updating chair review:", err);

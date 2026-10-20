@@ -37,6 +37,7 @@ export async function reviewExamByDirector(
     const exam = await db.examination.update({
       where: { exam_id: examId },
       data: { current_status: examStatus },
+      include: { course: true },
     });
 
     // 3. Log the audit event
@@ -47,6 +48,56 @@ export async function reviewExamByDirector(
         ip_address: "127.0.0.1",
       },
     });
+
+    // 4. Send clear notification to exam creator when returned for revision
+    if (action === "Return") {
+      const user = await db.user.findUnique({
+        where: { user_id: userId },
+        include: { director: true, faculty: true },
+      });
+
+      const dirRecord = user?.director;
+      const reviewerFullName = dirRecord
+        ? `${dirRecord.title ? `${dirRecord.title} ` : ""}${dirRecord.first_name || ""} ${dirRecord.last_name || ""}`.trim()
+        : (user?.faculty ? `${user.faculty.first_name} ${user.faculty.last_name}`.trim() : user?.username || "");
+      const reviewerRole = "Director of Instruction";
+      const reviewerInfo = reviewerFullName && reviewerFullName !== reviewerRole
+        ? `${reviewerFullName} (${reviewerRole})`
+        : reviewerRole;
+
+      let examDisplayTitle = exam.title || "Examination Draft";
+      if ((!examDisplayTitle || examDisplayTitle === "New Examination Draft") && exam.course) {
+        examDisplayTitle = `${exam.term || "Prelim"} Examination in ${exam.course.course_code}${exam.course.course_title ? ` - ${exam.course.course_title}` : ""}`;
+      }
+
+      let generalCommentText = "";
+      try {
+        const trimmed = (comments || "").trim();
+        if (trimmed.startsWith("{")) {
+          const parsed = JSON.parse(trimmed);
+          generalCommentText = parsed.general?.trim() || "";
+        } else {
+          generalCommentText = trimmed;
+        }
+      } catch {
+        generalCommentText = (comments || "").trim();
+      }
+
+      let notifMessage = `Your examination "${examDisplayTitle}" has been returned by ${reviewerInfo}. Please revise the highlighted questions in Step 2: Question Bank to resubmit for approval.`;
+      if (generalCommentText) {
+        notifMessage += ` Remarks: "${generalCommentText}"`;
+      }
+      notifMessage += ` [ref:returned-exam:${examId}]`;
+
+      await db.notification.create({
+        data: {
+          user_id: exam.faculty_id,
+          title: "Exam Returned for Revision",
+          message: notifMessage,
+          is_read: false,
+        },
+      });
+    }
 
     revalidatePath("/dashboard/director");
     revalidatePath("/dashboard/chair");
