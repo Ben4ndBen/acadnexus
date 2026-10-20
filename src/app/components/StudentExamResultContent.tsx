@@ -1,11 +1,12 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { 
   CheckCircle2, Clock, ShieldAlert, Award, AlertCircle, 
-  Printer, BookOpen, Sparkles, ArrowLeft
+  Printer, BookOpen, Sparkles, ArrowLeft, Download, RefreshCw
 } from "lucide-react";
 import Link from "next/link";
-import { StudentExamResultData } from "@/app/actions/student";
+import { StudentExamResultData, submitStudentExam } from "@/app/actions/student";
 
 interface StudentExamResultContentProps {
   data: StudentExamResultData;
@@ -18,8 +19,116 @@ export function StudentExamResultContent({
   onClose,
   isModal = false,
 }: StudentExamResultContentProps) {
+  const [unsyncedAnswers, setUnsyncedAnswers] = useState<{ question_id: number; submitted_response: string }[]>([]);
+  const [isSyncingBackup, setIsSyncingBackup] = useState(false);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    try {
+      const backupKey = `exam_backup_${data.studentExamId}`;
+      const raw = localStorage.getItem(backupKey);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === "object") {
+          const unsynced: { question_id: number; submitted_response: string }[] = [];
+          for (const [qIdStr, val] of Object.entries(parsed)) {
+            const qId = Number(qIdStr);
+            const serverAns = data.answers.find((a) => a.questionId === qId);
+            if (typeof val === "string" && val.trim() !== "" && (!serverAns || (serverAns.submittedResponse || "") !== val)) {
+              unsynced.push({ question_id: qId, submitted_response: val });
+            }
+          }
+          if (unsynced.length > 0) {
+            setUnsyncedAnswers(unsynced);
+          } else {
+            localStorage.removeItem(backupKey);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("Failed checking offline local backup in result content:", e);
+    }
+  }, [data.studentExamId, data.answers]);
+
+  const handleSyncOfflineAnswers = async () => {
+    setIsSyncingBackup(true);
+    setSyncMessage(null);
+    try {
+      const res = await submitStudentExam(data.studentExamId, "Timeout", unsyncedAnswers);
+      if (res.success) {
+        localStorage.removeItem(`exam_backup_${data.studentExamId}`);
+        setSyncMessage("Recoverable answers successfully synchronized! Refreshing scores...");
+        setTimeout(() => {
+          window.location.reload();
+        }, 1200);
+      } else {
+        setSyncMessage(res.error || "Failed to synchronize recoverable answers. You may download the backup JSON below.");
+      }
+    } catch (err: any) {
+      setSyncMessage("Network error during sync. Please ensure you are connected or download the backup JSON below.");
+    } finally {
+      setIsSyncingBackup(false);
+    }
+  };
+
+  const handleDownloadOfflineBackup = () => {
+    const raw = localStorage.getItem(`exam_backup_${data.studentExamId}`);
+    const backupObj = {
+      studentExamId: data.studentExamId,
+      examTitle: data.examTitle,
+      courseCode: data.courseCode,
+      courseTitle: data.courseTitle,
+      exportedAt: new Date().toISOString(),
+      offlineAnswers: raw ? JSON.parse(raw) : {},
+      unsyncedItems: unsyncedAnswers,
+    };
+    const blob = new Blob([JSON.stringify(backupObj, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `Recoverable_Exam_Backup_${data.courseCode || "Exam"}_${data.studentExamId}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="space-y-6">
+      {/* Recoverable offline answers banner */}
+      {unsyncedAnswers.length > 0 && (
+        <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 sm:p-5 text-amber-900 space-y-3">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <h4 className="text-xs sm:text-sm font-bold text-amber-900">
+                Recoverable Answers Preserved Locally ({unsyncedAnswers.length} item{unsyncedAnswers.length !== 1 ? "s" : ""})
+              </h4>
+              <p className="text-xs text-amber-800 leading-relaxed">
+                We detected unsynchronized examination answers safely preserved in your browser from an internet disconnection. You can synchronize them now with the server or export a backup file for academic verification.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap pt-1">
+            <button
+              onClick={handleSyncOfflineAnswers}
+              disabled={isSyncingBackup}
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer disabled:opacity-50"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isSyncingBackup ? "animate-spin" : ""}`} />
+              {isSyncingBackup ? "Synchronizing..." : "Synchronize Recoverable Answers"}
+            </button>
+            <button
+              onClick={handleDownloadOfflineBackup}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded-xl text-xs font-semibold transition-all shadow-xs cursor-pointer"
+            >
+              <Download className="w-3.5 h-3.5 text-slate-500" />
+              Download Backup (JSON)
+            </button>
+          </div>
+          {syncMessage && (
+            <p className="text-xs font-semibold text-slate-700 pt-1">{syncMessage}</p>
+          )}
+        </div>
+      )}
       {/* Exam Title & Course Information Card */}
       <div className="border border-slate-200/90 rounded-3xl p-5 sm:p-6 bg-gradient-to-r from-slate-50/80 via-white to-slate-50/40 space-y-4 shadow-xs">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   Clock, ShieldAlert, CheckCircle2, AlertTriangle, Bookmark,
   ChevronLeft, ChevronRight, Maximize2, Monitor, Loader2, ArrowRight,
-  Menu, X, ShieldCheck, Wifi, WifiOff
+  Menu, X, ShieldCheck, Wifi, WifiOff, Download
 } from "lucide-react";
 import { saveStudentAnswers, submitStudentExam, logStudentWarning, keepAliveStudentExam } from "@/app/actions/student";
 import { Latex } from "@/app/components/Latex";
@@ -827,6 +827,33 @@ export function TakeExamClient({
     }
   };
 
+  // Export emergency local recovery answers backup
+  const handleDownloadBackup = () => {
+    const backupData = {
+      examTitle: initialData.examTitle,
+      courseCode: initialData.courseCode,
+      courseTitle: initialData.courseTitle,
+      studentId,
+      studentName,
+      institutionalId,
+      studentExamId: initialData.studentExamId,
+      examId,
+      exportedAt: new Date().toISOString(),
+      totalQuestions,
+      answeredCount,
+      unsavedCount,
+      answers: answersRef.current,
+      note: "Offline recoverable examination answers backup for academic verification.",
+    };
+    const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `Exam_Backup_${initialData.courseCode}_Attempt_${initialData.studentExamId}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   // --- Helper parsing of questions ---
   const currentQuestion = initialData.questions[currentQuestionIdx];
 
@@ -1197,11 +1224,12 @@ export function TakeExamClient({
     );
   }
 
-  // E. TIMEOUT OFFLINE VIEW (Answers safely queued, awaiting connection)
+  // E. TIMEOUT OFFLINE VIEW (Answers safely preserved, awaiting connection)
   if (mode === "timeout_offline") {
+    const syncedCount = Math.max(0, totalQuestions - unsavedCount);
     return (
       <div className="min-h-screen bg-[#0F172A] text-slate-100 flex items-center justify-center p-6 font-sans select-none">
-        <div className="max-w-md w-full bg-[#1E293B] border border-slate-800 rounded-3xl p-8 shadow-2xl text-center space-y-6 relative">
+        <div className="max-w-lg w-full bg-[#1E293B] border border-slate-800 rounded-3xl p-8 shadow-2xl text-center space-y-6 relative">
           <div className="absolute top-0 left-0 w-full h-1.5 bg-amber-500" />
           
           <div className="mx-auto w-16 h-16 bg-amber-500/10 rounded-2xl flex items-center justify-center text-amber-500 border border-amber-500/20">
@@ -1209,19 +1237,39 @@ export function TakeExamClient({
           </div>
 
           <div className="space-y-2">
-            <h2 className="text-xl font-black text-amber-400 tracking-tight uppercase">Time Limit Reached</h2>
-            <p className="text-xs text-slate-300 font-semibold leading-relaxed mt-2">
-              Your examination time has expired. Further answer changes have been locked.
+            <h2 className="text-xl font-black text-amber-400 tracking-tight uppercase">Examination Deadline Reached</h2>
+            <p className="text-xs text-slate-300 font-semibold leading-relaxed">
+              Your examination deadline has expired and further answer modifications have been locked.
             </p>
-            <div className="bg-amber-950/20 border border-amber-900/30 text-amber-300 p-4 rounded-2xl text-xs font-semibold text-left space-y-1.5">
-              <p className="flex items-center gap-1.5 font-bold text-amber-400">
-                <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                Answers Preserved Safely
-              </p>
-              <p className="text-slate-400 text-[11px] leading-relaxed">
-                Your responses are preserved safely on your device. We are waiting for an active internet connection to finalize your submission and record your final score.
-              </p>
+          </div>
+
+          {/* Breakdown of Verified Deadline & Preserved Answers */}
+          <div className="bg-[#0F172A] border border-slate-800 p-4 rounded-2xl text-xs font-semibold text-left space-y-2.5">
+            <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
+              <span className="text-slate-400">Total Items Answered</span>
+              <span className="text-white font-bold">{answeredCount} of {totalQuestions}</span>
             </div>
+            <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
+              <span className="text-slate-400">Synchronized With Server</span>
+              <span className="text-emerald-400 font-bold">{syncedCount} items saved</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-slate-400">Preserved Locally on Device</span>
+              <span className={unsavedCount > 0 ? "text-amber-400 font-bold" : "text-emerald-400 font-bold"}>
+                {unsavedCount > 0 ? `${unsavedCount} recoverable item${unsavedCount === 1 ? "" : "s"} waiting to sync` : "All answers synchronized"}
+              </span>
+            </div>
+          </div>
+
+          {/* Recovery and Safety Notice */}
+          <div className="bg-amber-950/20 border border-amber-900/30 text-amber-300 p-4 rounded-2xl text-xs font-semibold text-left space-y-1.5">
+            <p className="flex items-center gap-1.5 font-bold text-amber-400">
+              <ShieldCheck className="w-4 h-4 text-emerald-400" />
+              Recoverable Answers Safely Preserved
+            </p>
+            <p className="text-slate-400 text-[11px] leading-relaxed">
+              All responses are preserved safely on your device in accordance with examination recovery rules. Once internet connectivity returns, this screen will automatically synchronize your unsaved answers and finalize your submission.
+            </p>
           </div>
 
           <div className="pt-2 border-t border-slate-800 space-y-3">
@@ -1230,6 +1278,12 @@ export function TakeExamClient({
               className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-sm px-5 py-3 rounded-xl transition-all shadow-md cursor-pointer"
             >
               <ArrowRight className="w-4 h-4" /> Finalize Submission Now
+            </button>
+            <button
+              onClick={handleDownloadBackup}
+              className="w-full flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs px-4 py-2.5 rounded-xl transition-all border border-slate-700 cursor-pointer"
+            >
+              <Download className="w-4 h-4 text-slate-400" /> Download Recoverable Answers Backup (JSON)
             </button>
             <p className="text-[11px] text-slate-500">
               This page will submit automatically as soon as your internet connection is restored.

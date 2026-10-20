@@ -344,7 +344,13 @@ export async function saveStudentAnswers(
     }
 
     if (studentExam.submitted_at) {
-      return { error: "Examination has already been submitted. Modifications are locked." };
+      // If attempt was timed out while student was disconnected, allow saving recoverable answers within a 15-minute recovery window
+      const isTimeoutAttempt = studentExam.submission_trigger === "Timeout";
+      const nowManila = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
+      const timeSinceSubmission = (nowManila.getTime() - studentExam.submitted_at.getTime()) / 1000;
+      if (!isTimeoutAttempt || timeSinceSubmission >= 900) {
+        return { error: "Examination has already been submitted. Modifications are locked." };
+      }
     }
 
     // 1. First persist unsynchronized answers to prevent data loss after temporary disconnection
@@ -483,42 +489,50 @@ export async function submitStudentExam(
     }
 
     // Prevent duplicate submissions and duplicate penalties:
-    // If the attempt is already submitted, return the saved result immediately without re-calculating or re-penalizing
+    // If the attempt is already submitted, return the saved result immediately without re-calculating or re-penalizing,
+    // UNLESS the attempt was automatically timed out while the student was disconnected and they have now reconnected with recoverable offline answers.
     if (studentExam.submitted_at) {
-      const resultVisibility = parseExamResultSettings({
-        tos_file_path: studentExam.exam.tos_file_path,
-        tableOfSpecifications: studentExam.exam.tableOfSpecifications,
-        examTargets: studentExam.exam.examTargets,
-        current_status: studentExam.exam.current_status,
-      });
+      const isTimeoutAttempt = studentExam.submission_trigger === "Timeout";
+      const nowManila = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
+      const timeSinceSubmission = (nowManila.getTime() - studentExam.submitted_at.getTime()) / 1000;
+      const canSyncRecoverableAnswers = isTimeoutAttempt && finalAnswers && finalAnswers.length > 0 && timeSinceSubmission < 900;
 
-      const maxPoints = studentExam.exam.questionBank.reduce((sum, q) => sum + (q.points || 0), 0);
-      const violationsCount = studentExam.violations_count ?? 0;
-      const scorePenaltyPoints = typeof studentExam.exam.score_penalty_points === "number" ? studentExam.exam.score_penalty_points : 2;
-      const penaltyPoints = violationsCount * scorePenaltyPoints;
-      const rawScore = studentExam.total_score + penaltyPoints;
-      const hasEssay = studentExam.exam.questionBank.some((q) => q.question_type === "Essay");
+      if (!canSyncRecoverableAnswers) {
+        const resultVisibility = parseExamResultSettings({
+          tos_file_path: studentExam.exam.tos_file_path,
+          tableOfSpecifications: studentExam.exam.tableOfSpecifications,
+          examTargets: studentExam.exam.examTargets,
+          current_status: studentExam.exam.current_status,
+        });
 
-      return {
-        success: true,
-        totalScore: studentExam.total_score,
-        rawScore,
-        penaltyPoints,
-        scorePenaltyPoints,
-        violationsCount,
-        maxPoints,
-        trigger: studentExam.submission_trigger,
-        submittedAt: studentExam.submitted_at.toISOString(),
-        canShowResults: resultVisibility.canShowResults,
-        resultReleaseMode: resultVisibility.releaseMode,
-        resultStatusLabel: resultVisibility.statusLabel,
-        resultExplanation: resultVisibility.explanation,
-        hasManualGrading: hasEssay,
-        isProvisional: hasEssay,
-        pendingNotice: hasEssay
-          ? "Your initial score is shown above. Total score will be available once your instructor completes scoring the essay questions."
-          : null,
-      };
+        const maxPoints = studentExam.exam.questionBank.reduce((sum, q) => sum + (q.points || 0), 0);
+        const violationsCount = studentExam.violations_count ?? 0;
+        const scorePenaltyPoints = typeof studentExam.exam.score_penalty_points === "number" ? studentExam.exam.score_penalty_points : 2;
+        const penaltyPoints = violationsCount * scorePenaltyPoints;
+        const rawScore = studentExam.total_score + penaltyPoints;
+        const hasEssay = studentExam.exam.questionBank.some((q) => q.question_type === "Essay");
+
+        return {
+          success: true,
+          totalScore: studentExam.total_score,
+          rawScore,
+          penaltyPoints,
+          scorePenaltyPoints,
+          violationsCount,
+          maxPoints,
+          trigger: studentExam.submission_trigger,
+          submittedAt: studentExam.submitted_at.toISOString(),
+          canShowResults: resultVisibility.canShowResults,
+          resultReleaseMode: resultVisibility.releaseMode,
+          resultStatusLabel: resultVisibility.statusLabel,
+          resultExplanation: resultVisibility.explanation,
+          hasManualGrading: hasEssay,
+          isProvisional: hasEssay,
+          pendingNotice: hasEssay
+            ? "Your initial score is shown above. Total score will be available once your instructor completes scoring the essay questions."
+            : null,
+        };
+      }
     }
 
     const exam = studentExam.exam;
