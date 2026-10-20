@@ -644,39 +644,6 @@ async function syncAndGetYearLevelEnrolledStudents(courseId: number, facultyId?:
   const targetSemester = expectedInfo?.semester ?? null;
   const targetPrograms = await getTargetProgramsForCourseAndFaculty(courseId, facultyId);
 
-  // Auto-sync students taking this subject (matching target department/programs across ALL year levels) into studentCourse
-  const studentWhere: any = {};
-  if (targetPrograms.length > 0) {
-    studentWhere.program = {
-      program_code: { in: targetPrograms },
-    };
-  }
-
-  const eligibleStudents = await db.student.findMany({
-    where: studentWhere,
-    select: { student_id: true },
-  });
-
-  if (eligibleStudents.length > 0) {
-    const existingEnrollments = await db.studentCourse.findMany({
-      where: { course_id: courseId },
-      select: { student_id: true },
-    });
-
-    const existingSet = new Set(existingEnrollments.map((e) => e.student_id));
-    const missingIds = eligibleStudents.map((s) => s.student_id).filter((id) => !existingSet.has(id));
-
-    if (missingIds.length > 0) {
-      await db.studentCourse.createMany({
-        data: missingIds.map((studentId) => ({
-          student_id: studentId,
-          course_id: courseId,
-        })),
-        skipDuplicates: true,
-      });
-    }
-  }
-
   return { course, targetYearLevel, targetSemester, targetPrograms };
 }
 
@@ -686,9 +653,29 @@ export async function getAssignedStudentsForCourse(courseId: number, facultyId?:
       return { success: true, students: [] };
     }
 
+    if (facultyId) {
+      const isCourseAssigned = await db.facultyCourse.findFirst({
+        where: { faculty_id: facultyId, course_id: courseId },
+      });
+      if (!isCourseAssigned) {
+        return { success: true, students: [] };
+      }
+    }
+
+    const targetPrograms = await getTargetProgramsForCourseAndFaculty(courseId, facultyId);
+
+    const whereCondition: any = { course_id: courseId };
+    if (targetPrograms && targetPrograms.length > 0) {
+      whereCondition.student = {
+        program: {
+          program_code: { in: targetPrograms },
+        },
+      };
+    }
+
     // Fetch strictly students who are enrolled in this class (StudentCourse)
     const enrollments = await db.studentCourse.findMany({
-      where: { course_id: courseId },
+      where: whereCondition,
       include: {
         student: {
           include: {
@@ -2751,21 +2738,48 @@ export async function getFacultyEnrolledStudentsAndGrades(facultyId: number) {
 
 export async function getCourseRoster(courseId: number, facultyId?: number) {
   try {
-    if (facultyId) {
-      const assignedCount = await db.facultyCourse.count({ where: { faculty_id: facultyId } });
-      if (assignedCount === 0) {
-        return { success: true, students: [] };
+    if (!courseId) {
+      return { success: true, students: [] };
+    }
+
+    // Verify session user and enforce course assignment restrictions
+    const { createClient } = await import("@/lib/supabase/server");
+    const supabase = await createClient();
+    const { data: { user: authUser } } = await supabase.auth.getUser();
+
+    let targetFacultyId = facultyId;
+    if (authUser?.user_metadata?.institutional_id) {
+      const dbUser = await db.user.findUnique({
+        where: { institutional_id: authUser.user_metadata.institutional_id },
+        select: { user_id: true, role: true },
+      });
+      if (dbUser && dbUser.role !== "Director") {
+        targetFacultyId = dbUser.user_id;
       }
+    }
+
+    if (targetFacultyId) {
       const isCourseAssigned = await db.facultyCourse.findFirst({
-        where: { faculty_id: facultyId, course_id: courseId },
+        where: { faculty_id: targetFacultyId, course_id: courseId },
       });
       if (!isCourseAssigned) {
         return { success: true, students: [] };
       }
     }
 
+    const targetPrograms = await getTargetProgramsForCourseAndFaculty(courseId, targetFacultyId);
+
+    const whereCondition: any = { course_id: courseId };
+    if (targetPrograms && targetPrograms.length > 0) {
+      whereCondition.student = {
+        program: {
+          program_code: { in: targetPrograms },
+        },
+      };
+    }
+
     const enrollments = await db.studentCourse.findMany({
-      where: { course_id: courseId },
+      where: whereCondition,
       include: {
         student: {
           include: {
@@ -2831,19 +2845,39 @@ export async function enrollStudentInCourse(
   const formattedId = rawId.toUpperCase();
 
   try {
-    if (facultyId) {
-      const assignedCount = await db.facultyCourse.count({
-        where: { faculty_id: facultyId },
+    if (!courseId) {
+      return { error: "Course is required." };
+    }
+
+    // Verify caller session and course assignment permissions
+    const { createClient } = await import("@/lib/supabase/server");
+    const supabase = await createClient();
+    const { data: { user: authUser } } = await supabase.auth.getUser();
+
+    let targetFacultyId = facultyId;
+    if (authUser?.user_metadata?.institutional_id) {
+      const dbUser = await db.user.findUnique({
+        where: { institutional_id: authUser.user_metadata.institutional_id },
+        select: { user_id: true, role: true },
       });
-      if (assignedCount === 0) {
-        return { error: "UNASSIGNED_TEACHING_LOAD: No teaching subjects/courses have been assigned to your faculty account yet by the Campus Director." };
+      if (dbUser && dbUser.role !== "Director") {
+        targetFacultyId = dbUser.user_id;
       }
+    }
+
+    if (targetFacultyId) {
       const isAssigned = await db.facultyCourse.findFirst({
-        where: { faculty_id: facultyId, course_id: courseId },
+        where: { faculty_id: targetFacultyId, course_id: courseId },
       });
       if (!isAssigned) {
-        return { error: "UNASSIGNED_TEACHING_LOAD: This specific course/subject is not assigned to your teaching load by the Campus Director." };
+        return {
+          error: "UNASSIGNED_TEACHING_LOAD: This specific course/subject is not assigned to your teaching load by the Director for Instruction.",
+        };
       }
+    } else {
+      return {
+        error: "UNAUTHORIZED: You must be assigned to this course by the Director for Instruction to enroll students.",
+      };
     }
 
     const bcrypt = await import("bcryptjs");
@@ -3084,6 +3118,41 @@ export async function unenrollStudentFromCourse(
   studentId: number
 ) {
   try {
+    if (!courseId) {
+      return { error: "Course is required." };
+    }
+
+    // Verify caller session and course assignment permissions
+    const { createClient } = await import("@/lib/supabase/server");
+    const supabase = await createClient();
+    const { data: { user: authUser } } = await supabase.auth.getUser();
+
+    let targetFacultyId = facultyId;
+    if (authUser?.user_metadata?.institutional_id) {
+      const dbUser = await db.user.findUnique({
+        where: { institutional_id: authUser.user_metadata.institutional_id },
+        select: { user_id: true, role: true },
+      });
+      if (dbUser && dbUser.role !== "Director") {
+        targetFacultyId = dbUser.user_id;
+      }
+    }
+
+    if (targetFacultyId) {
+      const isAssigned = await db.facultyCourse.findFirst({
+        where: { faculty_id: targetFacultyId, course_id: courseId },
+      });
+      if (!isAssigned) {
+        return {
+          error: "UNASSIGNED_TEACHING_LOAD: You cannot remove students from a course not assigned to your teaching load by the Director for Instruction.",
+        };
+      }
+    } else {
+      return {
+        error: "UNAUTHORIZED: You must be assigned to this course by the Director for Instruction to unenroll students.",
+      };
+    }
+
     const course = await db.course.findUnique({
       where: { course_id: courseId },
     });

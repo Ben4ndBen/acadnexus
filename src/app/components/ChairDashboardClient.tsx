@@ -789,10 +789,11 @@ export function ChairDashboardClient({
       {/* MY TEACHING & EXAMS TAB */}
       {activeTab === "my_teaching" && (
         <FacultyDashboardClient
+          key="chair_my_teaching_view"
           faculty={effectiveFaculty}
           institutionalId={institutionalId || ""}
           programs={programs}
-          courses={courses}
+          courses={assignedCourses}
           assignedCourses={assignedCourses}
           hasSeenCourseAssignment={hasSeenCourseAssignment}
           requirePasswordUpdate={requirePasswordUpdate}

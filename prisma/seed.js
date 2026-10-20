@@ -601,6 +601,60 @@ async function main() {
     });
   }
 
+  // 7. Seed Exact BSInfoTech Student Course Enrollments
+  console.log("Seeding exact BSInfoTech student course enrollments...");
+  const fs = require("fs");
+  const path = require("path");
+  const enrollmentsFile = path.join(__dirname, "bsit_student_enrollments.json");
+  if (fs.existsSync(enrollmentsFile)) {
+    const enrollmentBatches = JSON.parse(fs.readFileSync(enrollmentsFile, "utf8"));
+    const allCourses = await prisma.course.findMany();
+    const courseMap = new Map();
+    for (const c of allCourses) {
+      courseMap.set(c.course_code.trim().toUpperCase(), c.course_id);
+    }
+
+    const allStudents = await prisma.student.findMany({
+      include: { user: true },
+    });
+    const studentMap = new Map();
+    for (const s of allStudents) {
+      if (s.user?.institutional_id) {
+        studentMap.set(s.user.institutional_id.trim().toUpperCase(), s.student_id);
+      }
+    }
+
+    const enrollmentData = [];
+    const seenPairs = new Set();
+    for (const item of enrollmentBatches) {
+      const studentId = studentMap.get(item.id.trim().toUpperCase());
+      if (!studentId || !Array.isArray(item.subjects)) continue;
+
+      for (const rawCode of item.subjects) {
+        const cleanCode = rawCode.trim().toUpperCase();
+        const courseId = courseMap.get(cleanCode);
+        if (!courseId) continue;
+
+        const pairKey = `${studentId}_${courseId}`;
+        if (!seenPairs.has(pairKey)) {
+          seenPairs.add(pairKey);
+          enrollmentData.push({
+            student_id: studentId,
+            course_id: courseId,
+          });
+        }
+      }
+    }
+
+    if (enrollmentData.length > 0) {
+      await prisma.studentCourse.createMany({
+        data: enrollmentData,
+        skipDuplicates: true,
+      });
+      console.log(`Seeded ${enrollmentData.length} exact studentCourse enrollment records.`);
+    }
+  }
+
   console.log("Database seeding completed successfully!");
 }
 

@@ -90,6 +90,7 @@ interface FacultyDashboardClientProps {
     }>;
     facultyCourses?: Array<any>;
   };
+  initialTab?: "overview" | "tracker" | "submissions" | "profile" | "override" | "question_bank" | "archive" | "students";
   institutionalId: string;
   programs?: Array<{ program_id: number; program_code: string; program_name: string; department_id: number }>;
   courses?: Array<{ course_id: number; course_code: string; course_title: string }>;
@@ -222,6 +223,7 @@ function parseExamPaperQuestion(q: any) {
 }
 
 export function FacultyDashboardClient({ 
+  initialTab,
   faculty, 
   institutionalId, 
   programs = [], 
@@ -233,7 +235,7 @@ export function FacultyDashboardClient({
   studentExams = []
 }: FacultyDashboardClientProps) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<"overview" | "tracker" | "submissions" | "profile" | "override" | "question_bank" | "archive" | "students">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "tracker" | "submissions" | "profile" | "override" | "question_bank" | "archive" | "students">(initialTab || "overview");
 
   // Popup modal state for newly assigned courses upon first / new login
   const [showAssignedCoursesModal, setShowAssignedCoursesModal] = useState<boolean>(() => {
@@ -259,10 +261,42 @@ export function FacultyDashboardClient({
     }
   };
 
+  // Only show courses assigned to the logged-in user by the Director for Instruction
+  const effectiveAssignedCourses = useMemo(() => {
+    if (assignedCourses && assignedCourses.length > 0) {
+      return assignedCourses.filter((c: any) => Boolean(c && c.course_id && c.course_code));
+    }
+    if (faculty?.facultyCourses && faculty.facultyCourses.length > 0) {
+      return faculty.facultyCourses
+        .map((fc: any) => fc.course)
+        .filter((c: any) => Boolean(c && c.course_id && c.course_code));
+    }
+    return [];
+  }, [assignedCourses, faculty?.facultyCourses]);
+
   // --- Class Roster & Student Enrollment Tab State ---
   const [selectedRosterCourseId, setSelectedRosterCourseId] = useState<number>(() => {
+    if (assignedCourses && assignedCourses.length > 0 && assignedCourses[0]?.course_id) {
+      return assignedCourses[0].course_id;
+    }
+    if (faculty?.facultyCourses && faculty.facultyCourses.length > 0 && faculty.facultyCourses[0]?.course?.course_id) {
+      return faculty.facultyCourses[0].course.course_id;
+    }
     return courses[0]?.course_id || 0;
   });
+
+  // Keep selectedRosterCourseId strictly aligned with the user's actual Director assignments
+  useEffect(() => {
+    if (effectiveAssignedCourses.length > 0) {
+      const isStillAssigned = effectiveAssignedCourses.some((c) => c.course_id === selectedRosterCourseId);
+      if (!isStillAssigned || !selectedRosterCourseId) {
+        setSelectedRosterCourseId(effectiveAssignedCourses[0].course_id);
+      }
+    } else {
+      setSelectedRosterCourseId(0);
+    }
+  }, [effectiveAssignedCourses, selectedRosterCourseId]);
+
   const [classRosterStudents, setClassRosterStudents] = useState<any[]>([]);
   const [loadingClassRoster, setLoadingClassRoster] = useState(false);
   const [rosterSearch, setRosterSearch] = useState("");
@@ -324,8 +358,12 @@ export function FacultyDashboardClient({
   const [unenrollingId, setUnenrollingId] = useState<number | null>(null);
 
   const fetchRoster = async (cId: number) => {
-    if (!cId) return;
+    if (!cId) {
+      setClassRosterStudents([]);
+      return;
+    }
     setLoadingClassRoster(true);
+    setClassRosterStudents([]);
     const res = await getCourseRoster(cId, faculty.faculty_id);
     setLoadingClassRoster(false);
     if (res.success) {
@@ -1312,10 +1350,14 @@ export function FacultyDashboardClient({
 
   const handleSingleEnroll = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (courses.length === 0 || assignedCourses.length === 0) {
+    if (effectiveAssignedCourses.length === 0 || !selectedRosterCourseId) {
       setEnrollModalOpen(false);
       setUnassignedActionText("adding students to the class roster");
       setUnassignedWarningModalOpen(true);
+      return;
+    }
+    if (!effectiveAssignedCourses.some((c) => c.course_id === selectedRosterCourseId)) {
+      setEnrollError("You can only add students to courses assigned to you by the Director for Instruction.");
       return;
     }
     setEnrollError(null);
@@ -1362,10 +1404,14 @@ export function FacultyDashboardClient({
 
   const handleBulkEnroll = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (courses.length === 0 || assignedCourses.length === 0) {
+    if (effectiveAssignedCourses.length === 0 || !selectedRosterCourseId) {
       setBulkEnrollModalOpen(false);
       setUnassignedActionText("bulk enrolling students to the class roster");
       setUnassignedWarningModalOpen(true);
+      return;
+    }
+    if (!effectiveAssignedCourses.some((c) => c.course_id === selectedRosterCourseId)) {
+      setBulkResult({ message: "Error", errors: ["You can only bulk add students to courses assigned to you by the Director for Instruction."] });
       return;
     }
     setBulkResult(null);
@@ -1406,6 +1452,10 @@ export function FacultyDashboardClient({
   };
 
   const handleUnenroll = async (studentId: number, studentName: string) => {
+    if (!effectiveAssignedCourses.some((c) => c.course_id === selectedRosterCourseId)) {
+      alert("You can only remove students from courses assigned to you by the Director for Instruction.");
+      return;
+    }
     if (!confirm(`Are you sure you want to unenroll ${studentName} from this class?`)) {
       return;
     }
@@ -1792,7 +1842,7 @@ export function FacultyDashboardClient({
           }`}
         >
           <GraduationCap className="w-4 h-4" />
-          Class Students
+          Student Class
         </button>
         <button
           onClick={() => setActiveTab("archive")}
@@ -4681,7 +4731,7 @@ export function FacultyDashboardClient({
 
       {/* CLASS ROSTER & STUDENT ENROLLMENT TAB */}
       {activeTab === "students" && (() => {
-        const selectedCourse = courses.find((c) => c.course_id === selectedRosterCourseId) || courses[0];
+        const selectedCourse = effectiveAssignedCourses.find((c) => c.course_id === selectedRosterCourseId) || effectiveAssignedCourses[0];
         const filteredRosterStudents = classRosterStudents.filter((s) => {
           if (!rosterSearch.trim()) return true;
           const q = rosterSearch.toLowerCase();
@@ -4713,7 +4763,7 @@ export function FacultyDashboardClient({
                 <button
                   type="button"
                   onClick={() => {
-                    if (courses.length === 0 || assignedCourses.length === 0) {
+                    if (effectiveAssignedCourses.length === 0) {
                       setUnassignedActionText("adding students to the class roster");
                       setUnassignedWarningModalOpen(true);
                       return;
@@ -4730,7 +4780,7 @@ export function FacultyDashboardClient({
                 <button
                   type="button"
                   onClick={() => {
-                    if (courses.length === 0 || assignedCourses.length === 0) {
+                    if (effectiveAssignedCourses.length === 0) {
                       setUnassignedActionText("bulk adding students to the class roster");
                       setUnassignedWarningModalOpen(true);
                       return;
@@ -4746,7 +4796,7 @@ export function FacultyDashboardClient({
                 <button
                   type="button"
                   onClick={() => fetchRoster(selectedRosterCourseId)}
-                  disabled={loadingClassRoster || courses.length === 0}
+                  disabled={loadingClassRoster || effectiveAssignedCourses.length === 0}
                   title="Refresh Class List"
                   className="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl transition-all disabled:opacity-50 disabled:pointer-events-none"
                 >
@@ -4756,12 +4806,12 @@ export function FacultyDashboardClient({
             </div>
 
             {/* Course Selector & Search Filter Bar */}
-            {courses.length === 0 ? (
+            {effectiveAssignedCourses.length === 0 ? (
               <div className="bg-amber-50/80 border border-amber-200 p-6 rounded-2xl text-center space-y-2">
                 <AlertCircle className="w-8 h-8 text-amber-600 mx-auto" />
                 <h3 className="text-sm font-extrabold text-amber-900">No Teaching Subjects Assigned Yet</h3>
                 <p className="text-xs text-amber-800 max-w-md mx-auto leading-relaxed">
-                  The Campus Director has not assigned any teaching subjects or courses to your faculty account yet. The class student list remains empty until subjects are assigned to your load.
+                  The Director for Instruction has not assigned any teaching subjects or courses to your account yet. The class student list remains empty until subjects are assigned to your load.
                 </p>
               </div>
             ) : (
@@ -4776,7 +4826,7 @@ export function FacultyDashboardClient({
                     onChange={(e) => setSelectedRosterCourseId(Number(e.target.value))}
                     className="w-full sm:max-w-md bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 px-3.5 py-2.5 focus:outline-emerald-500 shadow-sm"
                   >
-                    {(courses || []).filter(c => Boolean(c && c.course_id)).map((c) => (
+                    {effectiveAssignedCourses.map((c) => (
                       <option key={c.course_id} value={c.course_id}>
                         {c.course_code} - {c.course_title}
                       </option>
