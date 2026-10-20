@@ -347,8 +347,41 @@ export async function saveStudentAnswers(
       return { error: "Examination has already been submitted. Modifications are locked." };
     }
 
-    // Server-side deadline enforcement:
-    // Do not allow students to extend their deadline through browser manipulation or clock tampering
+    // 1. First persist unsynchronized answers to prevent data loss after temporary disconnection
+    if (answers && answers.length > 0) {
+      await db.$transaction(async (tx) => {
+        const existingAnswers = await tx.studentAnswer.findMany({
+          where: { student_exam_id: studentExamId },
+        });
+
+        const existingMap = new Map(existingAnswers.map((ans) => [ans.question_id, ans.answer_id]));
+
+        for (const ans of answers) {
+          const answerId = existingMap.get(ans.question_id);
+          if (answerId !== undefined) {
+            await tx.studentAnswer.update({
+              where: { answer_id: answerId },
+              data: {
+                submitted_response: ans.submitted_response,
+                last_updated_at: new Date(),
+              },
+            });
+          } else {
+            await tx.studentAnswer.create({
+              data: {
+                student_exam_id: studentExamId,
+                question_id: ans.question_id,
+                submitted_response: ans.submitted_response,
+                last_updated_at: new Date(),
+              },
+            });
+          }
+        }
+      });
+    }
+
+    // 2. Server-side deadline enforcement:
+    // If examination deadline has expired after temporary disconnection, submit attempt with preserved answers
     const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
     const elapsedSeconds = Math.floor((now.getTime() - studentExam.started_at.getTime()) / 1000);
     const timePenalty = typeof studentExam.exam.time_penalty_seconds === "number" ? studentExam.exam.time_penalty_seconds : 0;
@@ -358,39 +391,8 @@ export async function saveStudentAnswers(
     // 15 seconds grace period for network transit
     if (elapsedSeconds > totalAllowedSeconds + 15) {
       await submitStudentExam(studentExamId, "Timeout");
-      return { error: "Examination deadline has expired. Answers are locked and submitted." };
+      return { success: true, savedCount: answers.length, isTimeout: true, error: "Examination deadline has expired. Final answers were saved and submitted." };
     }
-
-    await db.$transaction(async (tx) => {
-      // Retrieve existing answers for updates
-      const existingAnswers = await tx.studentAnswer.findMany({
-        where: { student_exam_id: studentExamId },
-      });
-
-      const existingMap = new Map(existingAnswers.map((ans) => [ans.question_id, ans.answer_id]));
-
-      for (const ans of answers) {
-        const answerId = existingMap.get(ans.question_id);
-        if (answerId !== undefined) {
-          await tx.studentAnswer.update({
-            where: { answer_id: answerId },
-            data: {
-              submitted_response: ans.submitted_response,
-              last_updated_at: new Date(),
-            },
-          });
-        } else {
-          await tx.studentAnswer.create({
-            data: {
-              student_exam_id: studentExamId,
-              question_id: ans.question_id,
-              submitted_response: ans.submitted_response,
-              last_updated_at: new Date(),
-            },
-          });
-        }
-      }
-    });
 
     return { success: true, savedCount: answers.length };
   } catch (err: any) {

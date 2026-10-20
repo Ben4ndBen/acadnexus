@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   Clock, ShieldAlert, CheckCircle2, AlertTriangle, Bookmark,
   ChevronLeft, ChevronRight, Maximize2, Monitor, Loader2, ArrowRight,
-  Menu, X, ShieldCheck
+  Menu, X, ShieldCheck, Wifi, WifiOff
 } from "lucide-react";
 import { saveStudentAnswers, submitStudentExam, logStudentWarning, keepAliveStudentExam } from "@/app/actions/student";
 import { Latex } from "@/app/components/Latex";
@@ -54,8 +54,9 @@ export function TakeExamClient({
   const [violations, setViolations] = useState<number>(0);
   const [warningReason, setWarningReason] = useState<string>("");
   const [lastViolationNotice, setLastViolationNotice] = useState<string>("");
-  const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "offline">("saved");
-  const [isOnline, setIsOnline] = useState<boolean>(true);
+  const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "offline" | "syncing">("saved");
+  const [isOnline, setIsOnline] = useState<boolean>(() => typeof navigator !== "undefined" ? navigator.onLine : true);
+  const [justSyncedNotice, setJustSyncedNotice] = useState<boolean>(false);
   const [showConfirmSubmit, setShowConfirmSubmit] = useState<boolean>(false);
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(true);
   const [finalScore, setFinalScore] = useState<number | null>(null);
@@ -91,6 +92,12 @@ export function TakeExamClient({
     return initial;
   });
 
+  // Number of unsynchronized answers between client and server
+  const unsavedCount = Object.entries(answers).reduce((count, [qId, val]) => {
+    const questionId = Number(qId);
+    return (lastSavedAnswers[questionId] || "") !== (val || "") ? count + 1 : count;
+  }, 0);
+
   // Flagged/Bookmarked Questions: Record<question_id, boolean>
   const [flagged, setFlagged] = useState<Record<number, boolean>>({});
 
@@ -102,6 +109,9 @@ export function TakeExamClient({
   const pendingSaveQueuedRef = useRef<boolean>(false);
   const isProcessingViolationRef = useRef<boolean>(false);
   const lastViolationTimestampRef = useRef<number>(0);
+  const isOnlineRef = useRef<boolean>(typeof navigator !== "undefined" ? navigator.onLine : true);
+  const reconnectedAtRef = useRef<number>(0);
+  const isSubmittingRef = useRef<boolean>(false);
 
   const violationsKey = `exam_violations_${initialData.studentExamId}`;
   const localBackupKey = `exam_answers_backup_${initialData.studentExamId}`;
@@ -118,7 +128,7 @@ export function TakeExamClient({
     lastSavedAnswersRef.current = lastSavedAnswers;
   }, [lastSavedAnswers]);
 
-  // 0. Crash Recovery & Answer Preservation from Local Storage on Mount
+  // 0. Crash Recovery & Answer Preservation from Local Storage on Mount / Resume
   useEffect(() => {
     try {
       const stored = localStorage.getItem(localBackupKey);
@@ -130,7 +140,7 @@ export function TakeExamClient({
           for (const [qIdStr, val] of Object.entries(parsed)) {
             const qId = Number(qIdStr);
             const dbVal = initialData.savedAnswers.find((a) => a.question_id === qId)?.submitted_response || "";
-            if (val && val !== dbVal) {
+            if (typeof val === "string" && val !== dbVal) {
               merged[qId] = String(val);
               hasDiff = true;
             }
@@ -138,8 +148,15 @@ export function TakeExamClient({
           if (hasDiff) {
             setAnswers(merged);
             answersRef.current = merged;
-            // Synchronize restored changes with database immediately
-            triggerBackgroundSave(merged);
+            // Synchronize restored answers with server immediately if online
+            if (isOnlineRef.current && (typeof navigator === "undefined" || navigator.onLine)) {
+              setSaveStatus("syncing");
+              triggerBackgroundSave(merged, true);
+            } else {
+              setSaveStatus("offline");
+              setIsOnline(false);
+              isOnlineRef.current = false;
+            }
           }
         }
       }
@@ -152,15 +169,20 @@ export function TakeExamClient({
   useEffect(() => {
     const handleOnline = () => {
       setIsOnline(true);
+      isOnlineRef.current = true;
+      reconnectedAtRef.current = Date.now();
+
       if (mode === "timeout_offline") {
         triggerTimeoutSubmission();
       } else {
-        triggerBackgroundSave(answersRef.current);
+        setSaveStatus("syncing");
+        triggerBackgroundSave(answersRef.current, true);
       }
     };
 
     const handleOffline = () => {
       setIsOnline(false);
+      isOnlineRef.current = false;
       setSaveStatus("offline");
     };
 
@@ -169,6 +191,7 @@ export function TakeExamClient({
 
     if (typeof navigator !== "undefined" && !navigator.onLine) {
       setIsOnline(false);
+      isOnlineRef.current = false;
       setSaveStatus("offline");
     }
 
@@ -236,15 +259,22 @@ export function TakeExamClient({
   }, [mode]);
 
   // 4. Focus Loss & Tab Switching Monitor (Alt+Tab & Window Switching)
+  // An internet disconnection by itself or reconnection transition must NOT be treated as cheating
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === "hidden" && mode === "exam") {
+        if (!isOnlineRef.current || (typeof navigator !== "undefined" && !navigator.onLine) || (reconnectedAtRef.current > 0 && Date.now() - reconnectedAtRef.current < 8000)) {
+          return;
+        }
         triggerViolation("Leaving the exam window or switching tabs.");
       }
     };
 
     const handleWindowBlur = () => {
       if (mode === "exam") {
+        if (!isOnlineRef.current || (typeof navigator !== "undefined" && !navigator.onLine) || (reconnectedAtRef.current > 0 && Date.now() - reconnectedAtRef.current < 8000)) {
+          return;
+        }
         triggerViolation("Switching away from the exam screen.");
       }
     };
@@ -259,9 +289,13 @@ export function TakeExamClient({
   }, [mode, violations, answers]);
 
   // 5. Fullscreen Exit Monitor
+  // An internet disconnection by itself or reconnection transition must NOT be treated as cheating
   useEffect(() => {
     const handleFullscreenChange = () => {
       if (document.fullscreenElement === null && mode === "exam") {
+        if (!isOnlineRef.current || (typeof navigator !== "undefined" && !navigator.onLine) || (reconnectedAtRef.current > 0 && Date.now() - reconnectedAtRef.current < 8000)) {
+          return;
+        }
         triggerViolation("Exiting full screen mode.");
       }
     };
@@ -310,6 +344,16 @@ export function TakeExamClient({
 
   // Log and increment violation attempts
   const triggerViolation = async (reason: string) => {
+    // Internet disconnection handling:
+    // An internet disconnection by itself must NOT be treated as cheating or an anti-cheating violation.
+    const isCurrentlyOffline = !isOnlineRef.current || (typeof navigator !== "undefined" && !navigator.onLine);
+    const isRecentlyReconnected = reconnectedAtRef.current > 0 && (Date.now() - reconnectedAtRef.current < 8000);
+
+    if (isCurrentlyOffline || isRecentlyReconnected) {
+      console.log("Anti-cheating violation suppressed due to internet disconnection / reconnection state:", reason);
+      return;
+    }
+
     // 1. Guard against duplicate events (blur + visibilitychange + fullscreenchange in rapid succession)
     if (mode !== "exam" || isProcessingViolationRef.current || (Date.now() - lastViolationTimestampRef.current < 2500)) {
       return;
@@ -384,13 +428,16 @@ export function TakeExamClient({
     }
   };
 
-  // Background save dirty responses
-  const triggerBackgroundSave = async (overrideAnswers?: Record<number, string>) => {
+  // Background save dirty responses without overwriting newer answers
+  const triggerBackgroundSave = async (overrideAnswers?: Record<number, string>, isReconnectingSync = false) => {
     const currentAnswers = overrideAnswers || answersRef.current;
 
-    // If offline, preserve locally and transition status
-    if (typeof navigator !== "undefined" && !navigator.onLine) {
+    // Check connectivity status
+    const currentlyOnline = typeof navigator !== "undefined" ? navigator.onLine && isOnlineRef.current : isOnlineRef.current;
+    if (!currentlyOnline) {
       setSaveStatus("offline");
+      setIsOnline(false);
+      isOnlineRef.current = false;
       return;
     }
 
@@ -404,22 +451,27 @@ export function TakeExamClient({
 
     Object.entries(currentAnswers).forEach(([qId, val]) => {
       const questionId = Number(qId);
-      if (lastSavedAnswersRef.current[questionId] !== val) {
+      if ((lastSavedAnswersRef.current[questionId] || "") !== (val || "")) {
         changedList.push({ question_id: questionId, submitted_response: val });
       }
     });
 
     if (changedList.length === 0) {
       setSaveStatus("saved");
+      if (isReconnectingSync) {
+        setJustSyncedNotice(true);
+        setTimeout(() => setJustSyncedNotice(false), 4000);
+      }
       return;
     }
 
     isSavingRef.current = true;
-    setSaveStatus("saving");
+    setSaveStatus(isReconnectingSync ? "syncing" : "saving");
 
     try {
       const res = await saveStudentAnswers(initialData.studentExamId, changedList);
       if (res.success) {
+        // Update server confirmation record for exactly the items that were saved
         setLastSavedAnswers((prev) => {
           const next = { ...prev };
           changedList.forEach((c) => {
@@ -428,17 +480,46 @@ export function TakeExamClient({
           lastSavedAnswersRef.current = next;
           return next;
         });
-        setSaveStatus("saved");
+
+        setIsOnline(true);
+        isOnlineRef.current = true;
+
+        // Check if student provided newer answers while save was in flight to prevent overwriting
+        let hasNewerChanges = false;
+        for (const [qId, val] of Object.entries(answersRef.current)) {
+          if ((lastSavedAnswersRef.current[Number(qId)] || "") !== (val || "")) {
+            hasNewerChanges = true;
+            break;
+          }
+        }
+
+        if (hasNewerChanges) {
+          // Immediately process newer answers
+          pendingSaveQueuedRef.current = false;
+          triggerBackgroundSave(answersRef.current);
+        } else {
+          setSaveStatus("saved");
+          if (isReconnectingSync) {
+            setJustSyncedNotice(true);
+            setTimeout(() => setJustSyncedNotice(false), 4000);
+          }
+        }
       } else {
         if (res.error?.includes("locked") || res.error?.includes("already been submitted")) {
           console.warn("Save rejected: Exam attempt is locked.");
         } else {
+          // Connection interrupted / server error: preserve answers locally and mark offline
           setSaveStatus("offline");
+          setIsOnline(false);
+          isOnlineRef.current = false;
         }
       }
     } catch (err) {
-      console.error("Background auto-save failed:", err);
+      console.error("Background auto-save network error:", err);
+      // Connection lost: safe local copy preserved, will sync when reconnected
       setSaveStatus("offline");
+      setIsOnline(false);
+      isOnlineRef.current = false;
     } finally {
       isSavingRef.current = false;
       // If student answered or typed while this network save was in flight, process queue immediately
@@ -449,7 +530,7 @@ export function TakeExamClient({
     }
   };
 
-  // Update answer locally, write to local crash backup, and trigger responsive auto-saving
+  // Update answer locally, write to safe local storage backup, and trigger responsive auto-saving
   const handleAnswerChange = (questionId: number, response: string) => {
     setAnswers((prev) => {
       const newAnswers = {
@@ -458,7 +539,7 @@ export function TakeExamClient({
       };
       answersRef.current = newAnswers;
 
-      // Synchronously write to local storage mirror so answers survive abrupt tab closing / refresh
+      // Keep safe local copy of unsynchronized answers synchronously in localStorage
       try {
         localStorage.setItem(localBackupKey, JSON.stringify(newAnswers));
       } catch (err) {
@@ -475,6 +556,12 @@ export function TakeExamClient({
 
       if (autoSaveDebounceRef.current) {
         clearTimeout(autoSaveDebounceRef.current);
+      }
+
+      // If connection lost, keep safe local copy and do NOT claim answers are saved to server
+      if (!isOnlineRef.current || (typeof navigator !== "undefined" && !navigator.onLine)) {
+        setSaveStatus("offline");
+        return newAnswers;
       }
 
       if (isTextType) {
@@ -497,6 +584,10 @@ export function TakeExamClient({
     if (autoSaveDebounceRef.current) {
       clearTimeout(autoSaveDebounceRef.current);
     }
+    if (!isOnlineRef.current || (typeof navigator !== "undefined" && !navigator.onLine)) {
+      setSaveStatus("offline");
+      return;
+    }
     triggerBackgroundSave(answersRef.current);
   };
 
@@ -505,7 +596,9 @@ export function TakeExamClient({
     if (autoSaveDebounceRef.current) {
       clearTimeout(autoSaveDebounceRef.current);
     }
-    triggerBackgroundSave(answersRef.current);
+    if (isOnlineRef.current && (typeof navigator === "undefined" || navigator.onLine)) {
+      triggerBackgroundSave(answersRef.current);
+    }
     setCurrentQuestionIdx(newIdx);
   };
 
@@ -578,9 +671,21 @@ export function TakeExamClient({
 
   // Manual explicit submit
   const handleManualSubmit = async () => {
+    if (isSubmittingRef.current) return;
+
     if (autoSaveDebounceRef.current) {
       clearTimeout(autoSaveDebounceRef.current);
     }
+
+    // Check connectivity before attempting submission
+    if (!isOnlineRef.current || (typeof navigator !== "undefined" && !navigator.onLine)) {
+      setShowConfirmSubmit(false);
+      alert("Internet connection is currently offline. Your answers are saved locally on this device and will be submitted as soon as your connection is restored.");
+      setSaveStatus("offline");
+      return;
+    }
+
+    isSubmittingRef.current = true;
     setMode("submitting");
     setShowConfirmSubmit(false);
     
@@ -622,8 +727,13 @@ export function TakeExamClient({
       }
     } catch (err) {
       console.error("Manual submit failed:", err);
-      alert("Submission error. Your answers have been preserved on this device. Please try submitting again.");
+      setIsOnline(false);
+      isOnlineRef.current = false;
+      setSaveStatus("offline");
+      alert("Submission error due to network disconnection. Your answers are preserved safely on this device. Please try submitting again once connected.");
       setMode("exam");
+    } finally {
+      isSubmittingRef.current = false;
     }
   };
 
@@ -1168,27 +1278,28 @@ export function TakeExamClient({
         <div className="flex items-center gap-2 sm:gap-4">
           {/* Status Indicator */}
           <div className={`flex items-center gap-1.5 text-[11px] font-semibold px-2.5 sm:px-3 py-1 rounded-full border transition-all ${
-            saveStatus === "saving"
+            saveStatus === "saving" || saveStatus === "syncing"
               ? "bg-sky-500/10 border-sky-500/30 text-sky-300"
-              : saveStatus === "offline"
+              : !isOnline || saveStatus === "offline"
               ? "bg-amber-500/10 border-amber-500/30 text-amber-300"
               : "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
           }`}>
-            {saveStatus === "saving" ? (
+            {saveStatus === "saving" || saveStatus === "syncing" ? (
               <>
                 <Loader2 className="w-3 h-3 text-sky-400 animate-spin" />
-                <span>Saving...</span>
+                <span>{saveStatus === "syncing" ? "Syncing..." : "Saving..."}</span>
               </>
-            ) : saveStatus === "offline" ? (
+            ) : !isOnline || saveStatus === "offline" ? (
               <>
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-                <span className="hidden sm:inline">Offline (Saved on device)</span>
-                <span className="sm:hidden">Offline</span>
+                <WifiOff className="w-3 h-3 text-amber-400" />
+                <span className="hidden sm:inline">Offline (Saved locally)</span>
+                <span className="sm:hidden">Saved locally</span>
               </>
             ) : (
               <>
                 <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                <span>Saved</span>
+                <span className="hidden sm:inline">All answers saved to server</span>
+                <span className="sm:hidden">Saved to server</span>
               </>
             )}
           </div>
@@ -1210,6 +1321,52 @@ export function TakeExamClient({
           </button>
         </div>
       </header>
+
+      {/* Connection Lost Notification Banner - displayed only when connection is lost and answers are safely preserved locally */}
+      {(!isOnline || saveStatus === "offline") && (
+        <div className="bg-amber-950/95 border-b border-amber-600/50 text-amber-200 px-4 py-2.5 text-xs font-semibold flex items-center justify-between gap-3 shadow-md z-30 transition-all animate-in slide-in-from-top-2">
+          <div className="flex items-center gap-2.5">
+            <WifiOff className="w-4 h-4 text-amber-400 shrink-0" />
+            <span>
+              Connection lost — your answers are saved locally and will sync when connection returns.
+              {unsavedCount > 0 && (
+                <span className="ml-2 text-amber-300 font-bold bg-amber-900/60 border border-amber-700/60 px-2 py-0.5 rounded-full text-[11px]">
+                  {unsavedCount} unsynced {unsavedCount === 1 ? "answer" : "answers"}
+                </span>
+              )}
+            </span>
+          </div>
+          <span className="text-[11px] text-amber-400/80 font-mono hidden sm:inline">
+            Preserved safely on device
+          </span>
+        </div>
+      )}
+
+      {/* Connection Restored Syncing Banner */}
+      {isOnline && saveStatus === "syncing" && (
+        <div className="bg-sky-950/95 border-b border-sky-600/50 text-sky-200 px-4 py-2 text-xs font-semibold flex items-center justify-between gap-3 shadow-md z-30 transition-all animate-in slide-in-from-top-2">
+          <div className="flex items-center gap-2.5">
+            <Loader2 className="w-4 h-4 text-sky-400 animate-spin shrink-0" />
+            <span>Connection restored — synchronizing answers with server...</span>
+          </div>
+        </div>
+      )}
+
+      {/* Connection Restored Synced Confirmation Notice */}
+      {justSyncedNotice && isOnline && saveStatus === "saved" && (
+        <div className="bg-emerald-950/95 border-b border-emerald-600/50 text-emerald-200 px-4 py-2 text-xs font-semibold flex items-center justify-between gap-3 shadow-md z-30 transition-all animate-in slide-in-from-top-2">
+          <div className="flex items-center gap-2.5">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span>All answers have been synchronized with the server successfully.</span>
+          </div>
+          <button
+            onClick={() => setJustSyncedNotice(false)}
+            className="text-emerald-400 hover:text-white p-1 rounded-lg hover:bg-emerald-900/50 transition-colors cursor-pointer"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* Anti-Cheating Violation Alert Banner */}
       {lastViolationNotice && (
@@ -1664,7 +1821,7 @@ export function TakeExamClient({
 
       {/* Mobile save status footer banner */}
       <div className="sm:hidden text-center text-[9px] text-slate-500 py-1 bg-slate-900 border-t border-slate-800">
-        ● {saveStatus === "saving" ? "Saving changes..." : saveStatus === "offline" ? "Offline (Saved on device)" : "All changes saved to database"}
+        ● {saveStatus === "saving" || saveStatus === "syncing" ? "Saving changes to server..." : !isOnline || saveStatus === "offline" ? "Offline (Answers saved locally)" : "All answers saved to server"}
       </div>
 
     </div>
