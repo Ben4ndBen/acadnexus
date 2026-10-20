@@ -160,7 +160,8 @@ export default async function StudentDashboard() {
   for (const se of completedExams) {
     if (!se.submitted_at) {
       const elapsedMs = now.getTime() - se.started_at.getTime();
-      const timePenaltyMs = (se.violations_count || 0) * (se.exam.time_penalty_seconds ?? 60) * 1000;
+      const timePenalty = typeof se.exam.time_penalty_seconds === "number" ? se.exam.time_penalty_seconds : 0;
+      const timePenaltyMs = (se.violations_count || 0) * timePenalty * 1000;
       const totalAllowedMs = Math.max(0, se.exam.time_limit_minutes * 60 * 1000 - timePenaltyMs);
       if (elapsedMs >= totalAllowedMs) {
         try {
@@ -256,7 +257,8 @@ export default async function StudentDashboard() {
     const inProgressAttempt = inProgressExamsMap.get(o.exam_id);
     if (inProgressAttempt) {
       const elapsedMs = now.getTime() - inProgressAttempt.started_at.getTime();
-      const timePenaltyMs = (inProgressAttempt.violations_count || 0) * (o.exam.time_penalty_seconds ?? 60) * 1000;
+      const timePenalty = typeof o.exam.time_penalty_seconds === "number" ? o.exam.time_penalty_seconds : 0;
+      const timePenaltyMs = (inProgressAttempt.violations_count || 0) * timePenalty * 1000;
       const totalAllowedMs = Math.max(0, o.exam.time_limit_minutes * 60 * 1000 - timePenaltyMs);
       if (elapsedMs < totalAllowedMs) {
         activeExams.push({
@@ -353,7 +355,8 @@ export default async function StudentDashboard() {
 
     if (inProgressAttempt) {
       const elapsedMs = now.getTime() - inProgressAttempt.started_at.getTime();
-      const timePenaltyMs = (inProgressAttempt.violations_count || 0) * (t.exam.time_penalty_seconds ?? 60) * 1000;
+      const timePenalty = typeof t.exam.time_penalty_seconds === "number" ? t.exam.time_penalty_seconds : 0;
+      const timePenaltyMs = (inProgressAttempt.violations_count || 0) * timePenalty * 1000;
       const totalAllowedMs = Math.max(0, t.exam.time_limit_minutes * 60 * 1000 - timePenaltyMs);
       if (elapsedMs < totalAllowedMs) {
         // Attempt is still active and student has remaining time to finish
