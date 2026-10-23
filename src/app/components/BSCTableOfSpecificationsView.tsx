@@ -254,7 +254,10 @@ export function BSCTableOfSpecificationsView({
   let runningItemStart = 1;
 
   return (
-    <div className="bg-white text-black border-none rounded-none shadow-md overflow-hidden font-sans w-full max-w-[1123px] mx-auto flex flex-col justify-between min-h-[794px] print:shadow-none print:border-none print:p-0 print:m-0 print:w-full print:max-w-none print:rounded-none">
+    <div
+      style={{ fontFamily: "Arial, Helvetica, sans-serif" }}
+      className="bg-white text-black border-none rounded-none shadow-md overflow-hidden font-sans w-full max-w-[1123px] mx-auto flex flex-col justify-between min-h-[794px] print:shadow-none print:border-none print:p-0 print:m-0 print:w-full print:max-w-none print:rounded-none"
+    >
       
       {/* BSC OFFICIAL HEADER BORDER */}
       <div className="w-full relative overflow-hidden leading-none block shrink-0">
@@ -311,53 +314,87 @@ export function BSCTableOfSpecificationsView({
       <div className="w-full max-w-full overflow-hidden rounded-none border border-black shadow-2xs print:overflow-visible">
         <table className="w-full text-left border-collapse text-[9px] print:text-[8.5px] table-fixed border-black font-sans">
           <thead>
-            <tr className="bg-white text-black font-black uppercase text-center border-b border-black">
-              <th rowSpan={3} className="py-2 px-1.5 border-r border-black w-[14%] text-left font-black align-middle text-[8.5px] leading-tight">
+            <tr
+              style={{ fontFamily: "Arial, Helvetica, sans-serif", fontSize: "6pt" }}
+              className="bg-white text-black font-black uppercase text-center border-b border-black text-[6pt]"
+            >
+              <th rowSpan={3} style={{ fontFamily: "Arial, Helvetica, sans-serif", fontSize: "8pt" }} className="py-2 px-1.5 border-r border-black w-[14%] text-left font-black align-middle text-[8pt] leading-tight">
                 LESSON / TOPIC
               </th>
-              <th rowSpan={3} className="py-2 px-2 border-r border-black w-[24%] text-left font-black align-middle text-[8.5px] leading-tight">
+              <th rowSpan={3} style={{ fontFamily: "Arial, Helvetica, sans-serif", fontSize: "8pt" }} className="py-2 px-2 border-r border-black w-[24%] text-left font-black align-middle text-[8pt] leading-tight">
                 LEARNING OUTCOMES
               </th>
-              <th rowSpan={2} className="py-2 px-0.5 border-r border-b border-black w-[5.5%] font-black text-center align-middle text-[7.5px] leading-tight">
+              <th rowSpan={2} style={{ fontFamily: "Arial, Helvetica, sans-serif", fontSize: "6pt" }} className="py-2 px-0.5 border-r border-b border-black w-[5.5%] font-black text-center align-middle text-[6pt] leading-tight">
                 NO. OF TEACHING HOURS
               </th>
-              <th rowSpan={3} className="py-2 px-0.5 border-r border-black w-[5.5%] font-black text-center align-middle text-[7.5px] leading-tight">
+              <th rowSpan={3} style={{ fontFamily: "Arial, Helvetica, sans-serif", fontSize: "6pt" }} className="py-2 px-0.5 border-r border-black w-[5.5%] font-black text-center align-middle text-[6pt] leading-tight">
                 % OF ALLOCATION
               </th>
-              <th rowSpan={2} className="py-2 px-0.5 border-r border-b border-black w-[5.5%] font-black text-center align-middle text-[7.5px] leading-tight">
+              <th rowSpan={2} style={{ fontFamily: "Arial, Helvetica, sans-serif", fontSize: "6pt" }} className="py-2 px-0.5 border-r border-b border-black w-[5.5%] font-black text-center align-middle text-[6pt] leading-tight">
                 NO. OF ITEMS
               </th>
-              <th colSpan={7} className="py-1.5 px-0.5 border-r border-b border-black bg-white text-black font-black text-center text-[8.5px] tracking-tight">
+              <th colSpan={7} style={{ fontFamily: "Arial, Helvetica, sans-serif", fontSize: "6pt" }} className="py-1.5 px-0.5 border-r border-b border-black bg-white text-black font-black text-center text-[6pt] tracking-tight">
                 ITEM SPECIFICATION PER TAXONOMY OF LEARNING
               </th>
-              <th rowSpan={3} className="py-2 px-1 border-black w-[11.7%] font-black text-center align-middle text-[7.5px] leading-tight">
+              <th
+                rowSpan={3}
+                style={{ fontFamily: "Arial, Helvetica, sans-serif", fontSize: "6pt" }}
+                className="py-2 px-1 border-black w-[11.7%] font-black text-center align-middle text-[6pt] leading-tight break-words whitespace-normal"
+              >
                 ITEM PLACEMENT
               </th>
             </tr>
-            <tr className="bg-white text-black font-black text-[7px] uppercase text-center border-b border-black">
-              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-normal text-center overflow-hidden w-[4.8%]">
-                KNOW LEDGE /<br />REMEMBERING
+            <tr
+              style={{ fontFamily: "Arial, Helvetica, sans-serif", fontSize: "4pt" }}
+              className="bg-white text-black font-black text-[4pt] uppercase text-center border-b border-black"
+            >
+              <th
+                style={{ fontFamily: "Arial, Helvetica, sans-serif", fontSize: "4pt" }}
+                className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-words text-center w-[4.8%] text-[4pt]"
+              >
+                KNOWLEDGE /<br />REMEMBERING
               </th>
-              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-normal text-center overflow-hidden w-[4.8%]">
-                COMPRE HENSION /<br />UNDERSTANDING
+              <th
+                style={{ fontFamily: "Arial, Helvetica, sans-serif", fontSize: "4pt" }}
+                className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-words text-center w-[4.8%] text-[4pt]"
+              >
+                COMPREHENSION /<br />UNDERSTANDING
               </th>
-              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-normal text-center overflow-hidden w-[4.8%]">
+              <th
+                style={{ fontFamily: "Arial, Helvetica, sans-serif", fontSize: "4pt" }}
+                className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-words text-center w-[4.8%] text-[4pt]"
+              >
                 APPLICATION /<br />APPLYING
               </th>
-              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-normal text-center overflow-hidden w-[4.8%]">
+              <th
+                style={{ fontFamily: "Arial, Helvetica, sans-serif", fontSize: "4pt" }}
+                className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-words text-center w-[4.8%] text-[4pt]"
+              >
                 ANALYSIS /<br />ANALYZING
               </th>
-              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-normal text-center overflow-hidden w-[4.8%]">
+              <th
+                style={{ fontFamily: "Arial, Helvetica, sans-serif", fontSize: "4pt" }}
+                className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-words text-center w-[4.8%] text-[4pt]"
+              >
                 SYNTHESIS /<br />EVALUATING
               </th>
-              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-normal text-center overflow-hidden w-[4.8%]">
-                EVALUATION /<br />CREA TING
+              <th
+                style={{ fontFamily: "Arial, Helvetica, sans-serif", fontSize: "4pt" }}
+                className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-words text-center w-[4.8%] text-[4pt]"
+              >
+                EVALUATION /<br />CREATING
               </th>
-              <th className="py-1 px-0.5 border-r border-b border-black bg-white font-black text-black text-[8.5px] text-center align-middle w-[5%]">
+              <th
+                style={{ fontFamily: "Arial, Helvetica, sans-serif", fontSize: "6pt" }}
+                className="py-1 px-0.5 border-r border-b border-black bg-white font-black text-black text-[6pt] text-center align-middle w-[5%]"
+              >
                 TOTAL
               </th>
             </tr>
-            <tr className="bg-white text-black font-black text-[8.5px] uppercase text-center border-b border-black">
+            <tr
+              style={{ fontFamily: "Arial, Helvetica, sans-serif", fontSize: "6pt" }}
+              className="bg-white text-black font-black text-[6pt] uppercase text-center border-b border-black"
+            >
               <th className="py-1 px-0.5 border-r border-black font-black text-center underline">
                 {Math.round(totalHours)}
               </th>
@@ -387,10 +424,13 @@ export function BSCTableOfSpecificationsView({
               </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-black font-medium text-black bg-white">
+          <tbody
+            style={{ fontFamily: "Arial, Helvetica, sans-serif", fontSize: "10pt" }}
+            className="divide-y divide-black font-medium text-black bg-white text-[10pt]"
+          >
             {topics.length === 0 ? (
               <tr>
-                <td colSpan={13} className="p-6 text-center text-black italic font-sans">
+                <td colSpan={13} className="p-6 text-center text-black italic font-sans text-[10pt]">
                   No TOS topics configured yet.
                 </td>
               </tr>
@@ -408,49 +448,62 @@ export function BSCTableOfSpecificationsView({
                 const outcomeLines = rawOutcome.split("\n").filter(l => l.trim().length > 0);
 
                 return (
-                  <tr key={t.id || idx} className="bg-white border-b border-black">
-                    <td className="py-2 px-2 font-bold text-black border-r border-black align-top text-[9px] leading-normal break-words">
+                  <tr
+                    key={t.id || idx}
+                    style={{ fontFamily: "Arial, Helvetica, sans-serif", fontSize: "10pt" }}
+                    className="bg-white border-b border-black text-[10pt]"
+                  >
+                    <td className="py-2 px-2 font-bold text-black border-r border-black align-top text-[10pt] leading-normal break-words">
                       {t.topic_name || `Topic ${idx + 1}`}
                     </td>
-                    <td className="py-1.5 px-2 text-black border-r border-black text-[9px] align-top whitespace-pre-wrap break-words leading-normal">
+                    <td className="py-1.5 px-2 text-black border-r border-black text-[10pt] align-top whitespace-pre-wrap break-words leading-normal">
                       {outcomeLines.map((line, lIdx) => (
-                        <div key={lIdx} className="flex items-start gap-1 mb-1 text-[9px] leading-normal font-sans">
+                        <div key={lIdx} className="flex items-start gap-1 mb-1 text-[10pt] leading-normal font-sans">
                           <span className="shrink-0 font-bold">•</span>
                           <span className="break-words whitespace-pre-wrap">{line.replace(/^[•\-\*]\s*/, "")}</span>
                         </div>
                       ))}
                     </td>
-                    <td className="py-2 px-1 text-center font-bold text-black border-r border-black align-top">
+                    <td className="py-2 px-1 text-center font-bold text-black border-r border-black align-top text-[10pt]">
                       {t.hours > 0 ? t.hours : "0"}
                     </td>
-                    <td className="py-2 px-1 text-center font-black text-black border-r border-black align-top">
+                    <td className="py-2 px-1 text-center font-black text-black border-r border-black align-top text-[10pt]">
                       {t.weightPercentage}%
                     </td>
-                    <td className="py-2 px-1 text-center font-black text-black border-r border-black align-top">
+                    <td className="py-2 px-1 text-center font-black text-black border-r border-black align-top text-[10pt]">
                       {t.assignedItems}
                     </td>
-                    <td className="py-2 px-0.5 text-center border-r border-black font-bold text-black align-top">
+                    <td className="py-2 px-0.5 text-center border-r border-black font-bold text-black align-top text-[10pt]">
                       {tax.rem}
                     </td>
-                    <td className="py-2 px-0.5 text-center border-r border-black font-bold text-black align-top">
+                    <td className="py-2 px-0.5 text-center border-r border-black font-bold text-black align-top text-[10pt]">
                       {tax.und}
                     </td>
-                    <td className="py-2 px-0.5 text-center border-r border-black font-bold text-black align-top">
+                    <td className="py-2 px-0.5 text-center border-r border-black font-bold text-black align-top text-[10pt]">
                       {tax.app}
                     </td>
-                    <td className="py-2 px-0.5 text-center border-r border-black font-bold text-black align-top">
+                    <td className="py-2 px-0.5 text-center border-r border-black font-bold text-black align-top text-[10pt]">
                       {tax.ana}
                     </td>
-                    <td className="py-2 px-0.5 text-center border-r border-black font-bold text-black align-top">
+                    <td className="py-2 px-0.5 text-center border-r border-black font-bold text-black align-top text-[10pt]">
                       {tax.eva}
                     </td>
-                    <td className="py-2 px-0.5 text-center border-r border-black font-bold text-black align-top">
+                    <td className="py-2 px-0.5 text-center border-r border-black font-bold text-black align-top text-[10pt]">
                       {tax.cre}
                     </td>
-                    <td className="py-2 px-0.5 text-center border-r border-black font-black text-black bg-white align-top">
+                    <td className="py-2 px-0.5 text-center border-r border-black font-black text-black bg-white align-top text-[10pt]">
                       {t.assignedItems}
                     </td>
-                    <td className="py-2 px-1.5 font-mono font-bold text-black text-[9px] align-top">
+                    <td
+                      style={{
+                        fontFamily: "Arial, Helvetica, sans-serif",
+                        fontSize: "10pt",
+                        wordBreak: "break-word",
+                        overflowWrap: "break-word",
+                        whiteSpace: "normal"
+                      }}
+                      className="py-2 px-1 font-sans font-bold text-black text-[10pt] align-top text-center whitespace-normal break-words leading-tight"
+                    >
                       {calculatedPlacement}
                     </td>
                   </tr>
@@ -460,7 +513,10 @@ export function BSCTableOfSpecificationsView({
           </tbody>
           <tfoot>
             {/* OFFICIAL TEMPLATE TOTAL ROW: ALL CELLS FILLED WITH GOLDEN YELLOW #F5B000 */}
-            <tr className="bg-[#F5B000] text-black font-black text-[9.5px] uppercase text-center border-t-2 border-black divide-x divide-black">
+            <tr
+              style={{ fontFamily: "Arial, Helvetica, sans-serif", fontSize: "10pt" }}
+              className="bg-[#F5B000] text-black font-black text-[10pt] uppercase text-center border-t-2 border-black divide-x divide-black"
+            >
               <td colSpan={2} className="py-2 px-3 text-left font-black text-xs tracking-wider bg-[#F5B000]">
                 TOTAL
               </td>
@@ -474,7 +530,7 @@ export function BSCTableOfSpecificationsView({
               <td className="py-2 px-0.5 font-black bg-[#F5B000]">{totalEvaluating}</td>
               <td className="py-2 px-0.5 font-black bg-[#F5B000]">{totalCreating}</td>
               <td className="py-2 px-0.5 font-black bg-[#F5B000]">{totalAssignedItems}</td>
-              <td className="py-2 px-1 font-mono font-bold text-black bg-[#F5B000]"></td>
+              <td className="py-2 px-1 font-sans font-bold text-black bg-[#F5B000] text-[10pt]"></td>
             </tr>
           </tfoot>
         </table>

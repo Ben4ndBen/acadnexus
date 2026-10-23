@@ -1410,8 +1410,8 @@ export function ExamBuilderWizard({
       ranges.push(start === end ? `${start}` : `${start}–${end}`);
 
       const rangeText = ranges.length === 1 && items.length === 1
-        ? `item ${ranges[0]}`
-        : `items ${ranges.join(", ")}`;
+        ? `Item ${ranges[0]}`
+        : `Items ${ranges.join(", ")}`;
 
       parts.push(`Test ${testNum} - ${rangeText}`);
     });
@@ -4674,39 +4674,77 @@ export function ExamBuilderWizard({
                       <div className="w-full max-w-full overflow-hidden rounded-none border border-black shadow-2xs print:overflow-visible">
                         <table className="w-full text-left border-collapse text-[9px] print:text-[8.5px] table-fixed border-black font-sans">
                           <thead>
-                            <tr className="bg-white text-black font-black uppercase text-center border-b border-black">
-                              <th rowSpan={3} className="py-2 px-1 border-r border-black w-[14%] text-left font-black align-middle text-[8.5px] leading-tight">LESSON / TOPIC</th>
-                              <th rowSpan={3} className="py-2 px-1.5 border-r border-black w-[24%] text-left font-black align-middle text-[8.5px] leading-tight">LEARNING OUTCOMES</th>
-                              <th rowSpan={2} className="py-2 px-0.5 border-r border-b border-black w-[5.5%] font-black text-center align-middle text-[7.5px] leading-tight">NO. OF TEACHING HOURS</th>
-                              <th rowSpan={3} className="py-2 px-0.5 border-r border-black w-[5.5%] font-black text-center align-middle text-[7.5px] leading-tight">% OF ALLOCATION</th>
-                              <th rowSpan={2} className="py-2 px-0.5 border-r border-b border-black w-[5.5%] font-black text-center align-middle text-[7.5px] leading-tight">NO. OF ITEMS</th>
-                              <th colSpan={7} className="py-1.5 px-0.5 border-r border-b border-black bg-white text-black font-black text-center text-[8.5px] tracking-tight">
+                            <tr
+                              style={{ fontFamily: "Arial, Helvetica, sans-serif", fontSize: "6pt" }}
+                              className="bg-white text-black font-black uppercase text-center border-b border-black text-[6pt]"
+                            >
+                              <th rowSpan={3} style={{ fontFamily: "Arial, Helvetica, sans-serif", fontSize: "8pt" }} className="py-2 px-1 border-r border-black w-[14%] text-left font-black align-middle text-[8pt] leading-tight">LESSON / TOPIC</th>
+                              <th rowSpan={3} style={{ fontFamily: "Arial, Helvetica, sans-serif", fontSize: "8pt" }} className="py-2 px-1.5 border-r border-black w-[24%] text-left font-black align-middle text-[8pt] leading-tight">LEARNING OUTCOMES</th>
+                              <th rowSpan={2} style={{ fontFamily: "Arial, Helvetica, sans-serif", fontSize: "6pt" }} className="py-2 px-0.5 border-r border-b border-black w-[5.5%] font-black text-center align-middle text-[6pt] leading-tight">NO. OF TEACHING HOURS</th>
+                              <th rowSpan={3} style={{ fontFamily: "Arial, Helvetica, sans-serif", fontSize: "6pt" }} className="py-2 px-0.5 border-r border-black w-[5.5%] font-black text-center align-middle text-[6pt] leading-tight">% OF ALLOCATION</th>
+                              <th rowSpan={2} style={{ fontFamily: "Arial, Helvetica, sans-serif", fontSize: "6pt" }} className="py-2 px-0.5 border-r border-b border-black w-[5.5%] font-black text-center align-middle text-[6pt] leading-tight">NO. OF ITEMS</th>
+                              <th colSpan={7} style={{ fontFamily: "Arial, Helvetica, sans-serif", fontSize: "6pt" }} className="py-1.5 px-0.5 border-r border-b border-black bg-white text-black font-black text-center text-[6pt] tracking-tight">
                                 ITEM SPECIFICATION PER TAXONOMY OF LEARNING
                               </th>
-                              <th rowSpan={3} className="py-2 px-1 border-black w-[11.7%] font-black text-center align-middle text-[7.5px] leading-tight">ITEM PLACEMENT</th>
+                              <th
+                                rowSpan={3}
+                                style={{ fontFamily: "Arial, Helvetica, sans-serif", fontSize: "6pt" }}
+                                className="py-2 px-1 border-black w-[11.7%] font-black text-center align-middle text-[6pt] leading-tight break-words whitespace-normal"
+                              >
+                                ITEM PLACEMENT
+                              </th>
                             </tr>
-                            <tr className="bg-white text-black font-black text-[7px] uppercase text-center border-b border-black">
-                              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-normal text-center overflow-hidden w-[4.8%]">
-                                KNOW LEDGE /<br />REMEMBERING
+                            <tr
+                              style={{ fontFamily: "Arial, Helvetica, sans-serif", fontSize: "4pt" }}
+                              className="bg-white text-black font-black text-[4pt] uppercase text-center border-b border-black"
+                            >
+                              <th
+                                style={{ fontFamily: "Arial, Helvetica, sans-serif", fontSize: "4pt" }}
+                                className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-words text-center w-[4.8%] text-[4pt]"
+                              >
+                                KNOWLEDGE /<br />REMEMBERING
                               </th>
-                              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-normal text-center overflow-hidden w-[4.8%]">
-                                COMPRE HENSION /<br />UNDERSTANDING
+                              <th
+                                style={{ fontFamily: "Arial, Helvetica, sans-serif", fontSize: "4pt" }}
+                                className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-words text-center w-[4.8%] text-[4pt]"
+                              >
+                                COMPREHENSION /<br />UNDERSTANDING
                               </th>
-                              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-normal text-center overflow-hidden w-[4.8%]">
+                              <th
+                                style={{ fontFamily: "Arial, Helvetica, sans-serif", fontSize: "4pt" }}
+                                className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-words text-center w-[4.8%] text-[4pt]"
+                              >
                                 APPLICATION /<br />APPLYING
                               </th>
-                              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-normal text-center overflow-hidden w-[4.8%]">
+                              <th
+                                style={{ fontFamily: "Arial, Helvetica, sans-serif", fontSize: "4pt" }}
+                                className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-words text-center w-[4.8%] text-[4pt]"
+                              >
                                 ANALYSIS /<br />ANALYZING
                               </th>
-                              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-normal text-center overflow-hidden w-[4.8%]">
+                              <th
+                                style={{ fontFamily: "Arial, Helvetica, sans-serif", fontSize: "4pt" }}
+                                className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-words text-center w-[4.8%] text-[4pt]"
+                              >
                                 SYNTHESIS /<br />EVALUATING
                               </th>
-                              <th className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-normal text-center overflow-hidden w-[4.8%]">
-                                EVALUATION /<br />CREA TING
+                              <th
+                                style={{ fontFamily: "Arial, Helvetica, sans-serif", fontSize: "4pt" }}
+                                className="py-1 px-0.5 border-r border-b border-black font-black leading-tight whitespace-normal break-words text-center w-[4.8%] text-[4pt]"
+                              >
+                                EVALUATION /<br />CREATING
                               </th>
-                              <th className="py-1 px-0.5 border-r border-b border-black bg-white font-black text-black text-[8.5px] text-center align-middle w-[5%]">TOTAL</th>
+                              <th
+                                style={{ fontFamily: "Arial, Helvetica, sans-serif", fontSize: "6pt" }}
+                                className="py-1 px-0.5 border-r border-b border-black bg-white font-black text-black text-[6pt] text-center align-middle w-[5%]"
+                              >
+                                TOTAL
+                              </th>
                             </tr>
-                            <tr className="bg-white text-black font-black text-[8.5px] uppercase text-center border-b border-black">
+                            <tr
+                              style={{ fontFamily: "Arial, Helvetica, sans-serif", fontSize: "6pt" }}
+                              className="bg-white text-black font-black text-[6pt] uppercase text-center border-b border-black"
+                            >
                               <th className="py-1 px-0.5 border-r border-black font-black text-center underline">
                                 {Math.round(tosTopicBreakdown.reduce((sum, r) => sum + r.hoursTaught, 0))}
                               </th>
@@ -4736,56 +4774,72 @@ export function ExamBuilderWizard({
                               </th>
                             </tr>
                           </thead>
-                          <tbody className="divide-y divide-black font-medium text-black bg-white">
+                          <tbody
+                            style={{ fontFamily: "Arial, Helvetica, sans-serif", fontSize: "10pt" }}
+                            className="divide-y divide-black font-medium text-black bg-white text-[10pt]"
+                          >
                             {pageRows.map((row, idx) => {
                               const t = row.taxonomy;
                               return (
-                                <tr key={idx} className="bg-white border-b border-black">
-                                  <td className="py-2 px-2 font-bold text-black border-r border-black align-top text-[9px] leading-normal break-words">
+                                <tr
+                                  key={idx}
+                                  style={{ fontFamily: "Arial, Helvetica, sans-serif", fontSize: "10pt" }}
+                                  className="bg-white border-b border-black text-[10pt]"
+                                >
+                                  <td className="py-2 px-2 font-bold text-black border-r border-black align-top text-[10pt] leading-normal break-words">
                                     {row.topic}
                                   </td>
-                                  <td className="py-1.5 px-2 text-black border-r border-black text-[9px] align-top whitespace-pre-wrap break-words leading-normal">
+                                  <td className="py-1.5 px-2 text-black border-r border-black text-[10pt] align-top whitespace-pre-wrap break-words leading-normal">
                                     <div
                                       contentEditable
                                       suppressContentEditableWarning
                                       onBlur={(e) => handleUpdateLearningOutcome(row.topic, e.currentTarget.innerText || "")}
-                                      className="w-full min-h-[36px] bg-transparent outline-none font-sans text-[9px] leading-normal text-black font-medium focus:bg-amber-50 focus:ring-1 focus:ring-amber-400 rounded p-1 transition-all cursor-text print:p-0 print:focus:bg-transparent print:focus:ring-0 whitespace-pre-wrap break-words"
+                                      className="w-full min-h-[36px] bg-transparent outline-none font-sans text-[10pt] leading-normal text-black font-medium focus:bg-amber-50 focus:ring-1 focus:ring-amber-400 rounded p-1 transition-all cursor-text print:p-0 print:focus:bg-transparent print:focus:ring-0 whitespace-pre-wrap break-words"
                                       title="Faculty: Click to edit learning outcomes for this topic"
                                     >
                                       {learningOutcomes[row.topic] ?? `Demonstrates competency and learning outcomes for ${row.topic.toLowerCase()}.`}
                                     </div>
                                   </td>
-                                  <td className="py-2 px-1 text-center font-bold text-black border-r border-black align-top">
+                                  <td className="py-2 px-1 text-center font-bold text-black border-r border-black align-top text-[10pt]">
                                     {row.hoursTaught > 0 ? row.hoursTaught : "0"}
                                   </td>
-                                  <td className="py-2 px-1 text-center font-extrabold text-black border-r border-black align-top">
+                                  <td className="py-2 px-1 text-center font-extrabold text-black border-r border-black align-top text-[10pt]">
                                     {row.weightPercentage}%
                                   </td>
-                                  <td className="py-2 px-1 text-center font-extrabold text-black border-r border-black align-top">
+                                  <td className="py-2 px-1 text-center font-extrabold text-black border-r border-black align-top text-[10pt]">
                                     {row.count}
                                   </td>
-                                  <td className="py-2 px-0.5 text-center border-r border-black font-bold text-black align-top">
+                                  <td className="py-2 px-0.5 text-center border-r border-black font-bold text-black align-top text-[10pt]">
                                     {t.remembering.count}
                                   </td>
-                                  <td className="py-2 px-0.5 text-center border-r border-black font-bold text-black align-top">
+                                  <td className="py-2 px-0.5 text-center border-r border-black font-bold text-black align-top text-[10pt]">
                                     {t.understanding.count}
                                   </td>
-                                  <td className="py-2 px-0.5 text-center border-r border-black font-bold text-black align-top">
+                                  <td className="py-2 px-0.5 text-center border-r border-black font-bold text-black align-top text-[10pt]">
                                     {t.applying.count}
                                   </td>
-                                  <td className="py-2 px-0.5 text-center border-r border-black font-bold text-black align-top">
+                                  <td className="py-2 px-0.5 text-center border-r border-black font-bold text-black align-top text-[10pt]">
                                     {t.analyzing.count}
                                   </td>
-                                  <td className="py-2 px-0.5 text-center border-r border-black font-bold text-black align-top">
+                                  <td className="py-2 px-0.5 text-center border-r border-black font-bold text-black align-top text-[10pt]">
                                     {t.evaluating.count}
                                   </td>
-                                  <td className="py-2 px-0.5 text-center border-r border-black font-bold text-black align-top">
+                                  <td className="py-2 px-0.5 text-center border-r border-black font-bold text-black align-top text-[10pt]">
                                     {t.creating.count}
                                   </td>
-                                  <td className="py-2 px-0.5 text-center border-r border-black font-black text-black bg-white align-top">
+                                  <td className="py-2 px-0.5 text-center border-r border-black font-black text-black bg-white align-top text-[10pt]">
                                     {row.count}
                                   </td>
-                                  <td className="py-2 px-1.5 font-sans font-bold text-black text-[9px] align-top text-center whitespace-nowrap">
+                                  <td
+                                    style={{
+                                      fontFamily: "Arial, Helvetica, sans-serif",
+                                      fontSize: "10pt",
+                                      wordBreak: "break-word",
+                                      overflowWrap: "break-word",
+                                      whiteSpace: "normal"
+                                    }}
+                                    className="py-2 px-1 font-sans font-bold text-black text-[10pt] align-top text-center whitespace-normal break-words leading-tight"
+                                  >
                                     {row.rangeString}
                                   </td>
                                 </tr>
@@ -4794,7 +4848,10 @@ export function ExamBuilderWizard({
                           </tbody>
                           {pageIdx === tosPages.length - 1 && (
                             <tfoot>
-                              <tr className="bg-[#F5B000] text-black font-black text-xs uppercase border-t-2 border-black divide-x divide-black">
+                              <tr
+                                style={{ fontFamily: "Arial, Helvetica, sans-serif", fontSize: "10pt" }}
+                                className="bg-[#F5B000] text-black font-black text-[10pt] uppercase border-t-2 border-black divide-x divide-black"
+                              >
                                 <td colSpan={2} className="py-2 px-3 border-r border-black text-left font-black bg-[#F5B000]">TOTAL</td>
                                 <td className="py-2 px-1 text-center border-r border-black font-black bg-[#F5B000]">
                                   {tosTopicBreakdown.reduce((sum, r) => sum + r.hoursTaught, 0)}
@@ -4826,7 +4883,7 @@ export function ExamBuilderWizard({
                                 <td className="py-2 px-0.5 text-center border-r border-black font-black bg-[#F5B000]">
                                   {questions.length}
                                 </td>
-                                <td className="py-2 px-1.5 text-[9px] font-black bg-[#F5B000]"></td>
+                                <td className="py-2 px-1 text-[10pt] font-black bg-[#F5B000]"></td>
                               </tr>
                             </tfoot>
                           )}
