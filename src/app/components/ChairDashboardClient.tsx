@@ -6,7 +6,8 @@ import {
   Activity, Users, ClipboardCheck, CheckCircle, 
   XCircle, Send, AlertCircle, RefreshCw, FileText, Check, X,
   Columns, ExternalLink, Download, Loader2, Eye, EyeOff,
-  Tag, Layers, BookOpen, Search, Plus, UserCog, Clock
+  Tag, Layers, BookOpen, Search, Plus, UserCog, Clock,
+  ArrowUp, ArrowDown, Calendar, Filter
 } from "lucide-react";
 import { reviewExamByChair, updateChairNameAction } from "@/app/actions/chair";
 import { createExamDraft } from "@/app/actions/faculty";
@@ -116,6 +117,113 @@ const parseQuestionData = (q: any) => {
 };
 
 
+export type ChairApprovalSortField = 
+  | "submission_date" 
+  | "exam_date" 
+  | "exam_name" 
+  | "instructor" 
+  | "course" 
+  | "status";
+
+export type SortDirection = "asc" | "desc";
+
+export const CHAIR_SORT_FIELD_LABELS: Record<ChairApprovalSortField, string> = {
+  submission_date: "Submission Date",
+  exam_date: "Examination Date",
+  exam_name: "Examination Name",
+  instructor: "Instructor",
+  course: "Course",
+  status: "Workflow Status",
+};
+
+function getSortOrderLabel(field: ChairApprovalSortField, order: SortDirection): string {
+  if (field === "exam_date" || field === "submission_date") {
+    return order === "desc" ? "Newest to Oldest" : "Oldest to Newest";
+  }
+  return order === "asc" ? "A → Z" : "Z → A";
+}
+
+function formatExamDate(dateVal?: Date | string | number | null): string {
+  if (!dateVal) return "Not set";
+  try {
+    const d = new Date(dateVal);
+    if (isNaN(d.getTime())) return "Not set";
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  } catch {
+    return "Not set";
+  }
+}
+
+function getSubmissionTimestamp(item: any): number {
+  if (item.prog_chair_action_timestamp) {
+    const t = new Date(item.prog_chair_action_timestamp).getTime();
+    if (!isNaN(t)) return t;
+  }
+  if (item.chair_action_timestamp) {
+    const t = new Date(item.chair_action_timestamp).getTime();
+    if (!isNaN(t)) return t;
+  }
+  if (item.approvalWorkflow?.chair_action_timestamp) {
+    const t = new Date(item.approvalWorkflow.chair_action_timestamp).getTime();
+    if (!isNaN(t)) return t;
+  }
+  const tosCreated = item.exam?.tableOfSpecifications?.created_at || item.tableOfSpecifications?.created_at;
+  if (tosCreated) {
+    const t = new Date(tosCreated).getTime();
+    if (!isNaN(t)) return t;
+  }
+  if (item.exam?.exam_date) {
+    const t = new Date(item.exam.exam_date).getTime();
+    if (!isNaN(t)) return t;
+  }
+  return item.workflow_id || item.exam?.exam_id || item.exam_id || 0;
+}
+
+function compareApprovals(
+  a: any,
+  b: any,
+  sortBy: ChairApprovalSortField,
+  sortOrder: SortDirection
+): number {
+  let result = 0;
+
+  if (sortBy === "exam_date") {
+    const examA = a.exam || a;
+    const examB = b.exam || b;
+    const timeA = examA.exam_date ? new Date(examA.exam_date).getTime() : 0;
+    const timeB = examB.exam_date ? new Date(examB.exam_date).getTime() : 0;
+    result = timeA - timeB;
+  } else if (sortBy === "submission_date") {
+    const timeA = getSubmissionTimestamp(a);
+    const timeB = getSubmissionTimestamp(b);
+    result = timeA - timeB;
+  } else if (sortBy === "exam_name") {
+    const titleA = (a.exam?.title || a.title || "").trim();
+    const titleB = (b.exam?.title || b.title || "").trim();
+    result = titleA.localeCompare(titleB, undefined, { sensitivity: "base" });
+  } else if (sortBy === "instructor") {
+    const instA = `${a.exam?.faculty?.first_name || ""} ${a.exam?.faculty?.last_name || ""}`.trim();
+    const instB = `${b.exam?.faculty?.first_name || ""} ${b.exam?.faculty?.last_name || ""}`.trim();
+    result = instA.localeCompare(instB, undefined, { sensitivity: "base" });
+  } else if (sortBy === "course") {
+    const courseA = `${a.exam?.course?.course_code || ""} ${a.exam?.course?.course_title || ""}`.trim();
+    const courseB = `${b.exam?.course?.course_code || ""} ${b.exam?.course?.course_title || ""}`.trim();
+    result = courseA.localeCompare(courseB, undefined, { sensitivity: "base" });
+  } else if (sortBy === "status") {
+    const statusA = (a.prog_chair_review_status || a.chair_review_status || a.exam?.current_status || "").trim();
+    const statusB = (b.prog_chair_review_status || b.chair_review_status || b.exam?.current_status || "").trim();
+    result = statusA.localeCompare(statusB, undefined, { sensitivity: "base" });
+  }
+
+  if (result === 0) {
+    const idA = a.workflow_id || a.exam_id || a.exam?.exam_id || 0;
+    const idB = b.workflow_id || b.exam_id || b.exam?.exam_id || 0;
+    result = idA - idB;
+  }
+
+  return sortOrder === "asc" ? result : -result;
+}
+
 interface ChairDashboardClientProps {
   chairUserId: number;
   departmentId?: number;
@@ -147,10 +255,15 @@ interface ChairDashboardClientProps {
     workflow_id: number;
     exam_id: number;
     chair_review_status: string;
+    prog_chair_review_status?: string | null;
+    prog_chair_action_timestamp?: Date | string | null;
+    chair_action_timestamp?: Date | string | null;
     exam: {
       faculty_id?: number;
       title: string;
       tos_file_path: string;
+      exam_date?: Date | string | null;
+      tableOfSpecifications?: { created_at?: Date | string | null; updated_at?: Date | string | null } | null;
       course: {
         course_id: number;
         course_code: string;
@@ -215,6 +328,30 @@ export function ChairDashboardClient({
   useEffect(() => {
     setApprovalsList(pendingApprovals);
   }, [pendingApprovals]);
+
+  // Sorting and Filtering for Pending Review Queue (matching Director pattern)
+  const [approvalSortBy, setApprovalSortBy] = useState<ChairApprovalSortField>("submission_date");
+  const [approvalSortOrder, setApprovalSortOrder] = useState<SortDirection>("desc");
+  const [approvalSearchQuery, setApprovalSearchQuery] = useState("");
+
+  const filteredAndSortedApprovals = useMemo(() => {
+    let result = approvalsList.filter((approval) => {
+      if (approvalSearchQuery.trim()) {
+        const q = approvalSearchQuery.toLowerCase().trim();
+        const titleMatch = (approval.exam?.title || "").toLowerCase().includes(q);
+        const courseCodeMatch = (approval.exam?.course?.course_code || "").toLowerCase().includes(q);
+        const courseTitleMatch = (approval.exam?.course?.course_title || "").toLowerCase().includes(q);
+        const facultyMatch = `${approval.exam?.faculty?.first_name || ""} ${approval.exam?.faculty?.last_name || ""}`.toLowerCase().includes(q);
+        if (!titleMatch && !courseCodeMatch && !courseTitleMatch && !facultyMatch) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+
+    return [...result].sort((a, b) => compareApprovals(a, b, approvalSortBy, approvalSortOrder));
+  }, [approvalsList, approvalSortBy, approvalSortOrder, approvalSearchQuery]);
 
   // State for Review Queue
   const [isSubmittingReview, setIsSubmittingReview] = useState<number | null>(null);
@@ -1052,18 +1189,76 @@ export function ChairDashboardClient({
       {/* PENDING REVIEW QUEUE TAB */}
       {activeTab === "queue" && (
         <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-6">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-5">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-5">
             <div>
               <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
                 <span className="w-1.5 h-6 bg-amber-600 rounded-full" />
                 Pending Review Queue
+                <span className="text-xs bg-amber-100 text-amber-900 font-extrabold px-2.5 py-0.5 rounded-full ml-1">
+                  {approvalsList.length}
+                </span>
               </h2>
               <p className="text-slate-500 text-xs mt-1">Review, approve, or return examinations drafted by faculty members.</p>
+            </div>
+
+            {/* Sorting and Filtering Controls - single line, matching Director */}
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              {/* Search input */}
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder="Search examinations..."
+                  value={approvalSearchQuery}
+                  onChange={(e) => setApprovalSearchQuery(e.target.value)}
+                  className="bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-700 pl-8 pr-7 py-2 rounded-xl focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 outline-none w-36 sm:w-44 placeholder:text-slate-400"
+                />
+                {approvalSearchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setApprovalSearchQuery("")}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs"
+                    title="Clear search"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+
+              {/* Sort Field Select */}
+              <select
+                value={approvalSortBy}
+                onChange={(e) => setApprovalSortBy(e.target.value as ChairApprovalSortField)}
+                className="bg-slate-50 border border-slate-200 text-xs font-bold text-slate-700 px-3 py-2 rounded-xl focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 outline-none cursor-pointer"
+                title="Sort examinations by"
+              >
+                <option value="submission_date">Sort: Submission Date</option>
+                <option value="exam_date">Sort: Examination Date</option>
+                <option value="exam_name">Sort: Examination Name</option>
+                <option value="instructor">Sort: Instructor</option>
+                <option value="course">Sort: Course</option>
+                <option value="status">Sort: Workflow Status</option>
+              </select>
+
+              {/* Sort Order Button */}
+              <button
+                type="button"
+                onClick={() => setApprovalSortOrder((prev) => (prev === "asc" ? "desc" : "asc"))}
+                className="flex items-center gap-1.5 px-3 py-2 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-xs font-extrabold text-amber-800 rounded-xl transition-all cursor-pointer shadow-2xs"
+                title={`Order: ${getSortOrderLabel(approvalSortBy, approvalSortOrder)} (Click to switch)`}
+              >
+                {approvalSortOrder === "asc" ? (
+                  <ArrowUp className="w-3.5 h-3.5 text-amber-700" />
+                ) : (
+                  <ArrowDown className="w-3.5 h-3.5 text-amber-700" />
+                )}
+                <span>{getSortOrderLabel(approvalSortBy, approvalSortOrder)}</span>
+              </button>
             </div>
           </div>
 
           <div className="max-h-[650px] overflow-y-auto pr-2 space-y-6 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
-            {approvalsList.map(approval => {
+            {filteredAndSortedApprovals.map(approval => {
               const hasTosFile = Boolean(approval.exam.tos_file_path && approval.exam.tos_file_path.trim() !== "");
 
               return (
@@ -1123,6 +1318,17 @@ export function ChairDashboardClient({
                               ) : null;
                             })()}
                           </div>
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 font-medium mt-1.5 pt-1.5 border-t border-slate-100/70">
+                            <span className="flex items-center gap-1">
+                              <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                              Exam Date: <strong className="text-slate-700">{formatExamDate(approval.exam?.exam_date)}</strong>
+                            </span>
+                            <span>•</span>
+                            <span className="flex items-center gap-1">
+                              <Clock className="w-3.5 h-3.5 text-slate-400" />
+                              Submission Date: <strong className="text-slate-700">{formatExamDate(getSubmissionTimestamp(approval))}</strong>
+                            </span>
+                          </div>
                         </div>
 
                         <button
@@ -1171,6 +1377,14 @@ export function ChairDashboardClient({
                 </div>
               );
             })}
+
+            {approvalsList.length > 0 && filteredAndSortedApprovals.length === 0 && (
+              <div className="flex flex-col items-center justify-center py-16 text-center border-2 border-dashed border-slate-200 rounded-3xl bg-slate-50/50">
+                <Search className="w-8 h-8 text-slate-400 mb-2" />
+                <h3 className="font-bold text-slate-800 text-sm">No matching examinations found</h3>
+                <p className="text-slate-500 text-xs mt-1">Try adjusting your search query.</p>
+              </div>
+            )}
 
             {approvalsList.length === 0 && (
               <div className="flex flex-col items-center justify-center py-20 text-center border-2 border-dashed border-slate-100 rounded-3xl bg-slate-50/50">

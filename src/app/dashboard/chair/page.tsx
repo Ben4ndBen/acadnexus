@@ -95,7 +95,8 @@ export default async function ChairDashboard() {
                 include: {
                   course: true,
                   faculty: true,
-                  questionBank: true
+                  questionBank: true,
+                  tableOfSpecifications: true,
                 }
               },
             },
@@ -219,6 +220,7 @@ export default async function ChairDashboard() {
             course: true,
             faculty: true,
             questionBank: true,
+            tableOfSpecifications: true,
           },
         },
       },
