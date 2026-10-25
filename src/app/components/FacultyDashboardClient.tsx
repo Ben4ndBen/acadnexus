@@ -7,7 +7,7 @@ import {
   User, Shield, Settings, Activity, Send, RotateCcw, AlertCircle, RefreshCw, Mail,
   Plus, Trash2, Calendar, Lock, Camera, Check, ShieldAlert, Loader2, ShieldCheck, Clock,
   X, AlertTriangle, Archive, Search, Edit, GraduationCap, Users, Download, Layers, ChevronRight,
-  Printer, CheckCircle2, XCircle, ArrowLeft
+  Printer, CheckCircle2, XCircle, ArrowLeft, ArrowUp, ArrowDown
 } from "lucide-react";
 import { 
   updateFacultyProfile, updateExamStatus, createExamDraft, deleteExam, 
@@ -30,6 +30,34 @@ import { DatePicker } from "@/app/components/DatePicker";
 import { getProgramHeaderImage } from "@/lib/programHeader";
 import { EditableExamTitle } from "@/app/components/EditableExamTitle";
 import { ExamSignatorySection } from "@/app/components/ExamSignatorySection";
+
+export type FacultyExamSortField = "recent" | "exam_date" | "title" | "course" | "status";
+
+function getExamScheduledTimestamp(exam: any): number {
+  if (exam.examTargets && Array.isArray(exam.examTargets) && exam.examTargets.length > 0) {
+    for (const target of exam.examTargets) {
+      if (target?.scheduled_date) {
+        const t = new Date(target.scheduled_date).getTime();
+        if (!isNaN(t) && t > 0) return t;
+      }
+    }
+  }
+  if (exam.exam_date) {
+    const t = new Date(exam.exam_date).getTime();
+    if (!isNaN(t) && t > 0) return t;
+  }
+  return 0;
+}
+
+function getExamSortOrderLabel(sortBy: FacultyExamSortField, sortOrder: "asc" | "desc"): string {
+  if (sortBy === "recent") {
+    return sortOrder === "desc" ? "Newest" : "Oldest";
+  }
+  if (sortBy === "exam_date") {
+    return sortOrder === "asc" ? "Earliest" : "Latest";
+  }
+  return sortOrder === "asc" ? "A → Z" : "Z → A";
+}
 
 interface FacultyDashboardClientProps {
   faculty: {
@@ -1000,8 +1028,10 @@ export function FacultyDashboardClient({
   const [isCreatingExam, setIsCreatingExam] = useState(false);
   const [deletingExamId, setDeletingExamId] = useState<number | null>(null);
   
-  // Tracker Filter State
+  // Tracker Filter & Sorting State
   const [trackerFilter, setTrackerFilter] = useState<string>("ALL");
+  const [examSortBy, setExamSortBy] = useState<FacultyExamSortField>("recent");
+  const [examSortOrder, setExamSortOrder] = useState<"asc" | "desc">("desc");
 
   // Schedule Exam Modal State
   const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
@@ -1685,12 +1715,53 @@ export function FacultyDashboardClient({
     }
   };
 
-  // Filtered Exams
-  const filteredExams = faculty.examinations.filter((exam) => {
-    if (exam.is_archived) return false;
-    if (trackerFilter === "ALL") return true;
-    return exam.current_status === trackerFilter;
-  });
+  // Filtered and Sorted Exams
+  const filteredExams = useMemo(() => {
+    const filtered = (faculty.examinations || []).filter((exam) => {
+      if (exam.is_archived) return false;
+      if (trackerFilter === "ALL") return true;
+      return exam.current_status === trackerFilter;
+    });
+
+    return [...filtered].sort((a, b) => {
+      let result = 0;
+      if (examSortBy === "exam_date") {
+        const timeA = getExamScheduledTimestamp(a);
+        const timeB = getExamScheduledTimestamp(b);
+        if (timeA === 0 && timeB === 0) {
+          result = 0;
+        } else if (timeA === 0) {
+          return 1;
+        } else if (timeB === 0) {
+          return -1;
+        } else {
+          result = timeA - timeB;
+        }
+      } else if (examSortBy === "title") {
+        const titleA = getExamDisplayTitle(a).trim();
+        const titleB = getExamDisplayTitle(b).trim();
+        result = titleA.localeCompare(titleB, undefined, { sensitivity: "base" });
+      } else if (examSortBy === "course") {
+        const courseA = `${a.course?.course_code || ""} ${a.course?.course_title || ""}`.trim();
+        const courseB = `${b.course?.course_code || ""} ${b.course?.course_title || ""}`.trim();
+        result = courseA.localeCompare(courseB, undefined, { sensitivity: "base" });
+      } else if (examSortBy === "status") {
+        const statusA = (a.current_status || "").trim();
+        const statusB = (b.current_status || "").trim();
+        result = statusA.localeCompare(statusB, undefined, { sensitivity: "base" });
+      } else {
+        // "recent"
+        result = (a.exam_id || 0) - (b.exam_id || 0);
+      }
+
+      if (result !== 0) {
+        return examSortOrder === "asc" ? result : -result;
+      }
+
+      // Tie-breaker: newest first
+      return (b.exam_id || 0) - (a.exam_id || 0);
+    });
+  }, [faculty.examinations, trackerFilter, examSortBy, examSortOrder, customExamTitles]);
 
   if (requirePasswordUpdate) {
     return (
@@ -2023,18 +2094,50 @@ export function FacultyDashboardClient({
                   )}
                 </h2>
               </div>
-              <button
-                disabled={isCreatingExam}
-                onClick={handleCreateExam}
-                className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold px-3 py-2 rounded-xl shadow-sm transition-all hover:scale-105 duration-300 flex items-center gap-1 cursor-pointer shrink-0"
-              >
-                {isCreatingExam ? (
-                  <RefreshCw className="w-3 h-3 animate-spin" />
-                ) : (
-                  <Plus className="w-3 h-3" />
-                )}
-                Create Exam
-              </button>
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* Tiny Sort Control */}
+                <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 text-slate-700 px-2.5 py-1.5 rounded-xl shadow-2xs">
+                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider hidden sm:inline">Sort:</span>
+                  <select
+                    value={examSortBy}
+                    onChange={(e) => setExamSortBy(e.target.value as FacultyExamSortField)}
+                    className="bg-transparent text-xs font-bold text-slate-700 outline-none cursor-pointer"
+                    title="Sort examinations by"
+                  >
+                    <option value="recent">Recent</option>
+                    <option value="exam_date">Scheduled Date</option>
+                    <option value="title">Exam Title</option>
+                    <option value="course">Course</option>
+                    <option value="status">Status</option>
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => setExamSortOrder((prev) => (prev === "asc" ? "desc" : "asc"))}
+                    className="flex items-center gap-1 px-1.5 py-0.5 hover:bg-white rounded-lg text-xs font-extrabold text-emerald-800 border border-transparent hover:border-slate-200 transition-all cursor-pointer"
+                    title={`Order: ${getExamSortOrderLabel(examSortBy, examSortOrder)} (Click to switch)`}
+                  >
+                    {examSortOrder === "asc" ? (
+                      <ArrowUp className="w-3.5 h-3.5 text-emerald-700" />
+                    ) : (
+                      <ArrowDown className="w-3.5 h-3.5 text-emerald-700" />
+                    )}
+                    <span className="text-[11px]">{getExamSortOrderLabel(examSortBy, examSortOrder)}</span>
+                  </button>
+                </div>
+
+                <button
+                  disabled={isCreatingExam}
+                  onClick={handleCreateExam}
+                  className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold px-3 py-2 rounded-xl shadow-sm transition-all hover:scale-105 duration-300 flex items-center gap-1 cursor-pointer shrink-0"
+                >
+                  {isCreatingExam ? (
+                    <RefreshCw className="w-3 h-3 animate-spin" />
+                  ) : (
+                    <Plus className="w-3 h-3" />
+                  )}
+                  Create Exam
+                </button>
+              </div>
             </div>
 
             {/* Filter Tabs */}
