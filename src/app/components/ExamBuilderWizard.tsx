@@ -39,6 +39,7 @@ interface Exam {
   exam_id: number;
   title: string;
   course_id: number;
+  faculty_id?: number;
   tos_file_path: string;
   time_limit_minutes: number;
   randomize_items: boolean;
@@ -2890,6 +2891,7 @@ export function ExamBuilderWizard({
                   examId={exam.exam_id}
                   initialTitle={title}
                   userId={facultyId}
+                  canEdit={!exam.faculty_id || exam.faculty_id === facultyId}
                   tag="span"
                   className="text-sm sm:text-base font-extrabold text-emerald-800"
                   onTitleUpdated={(newTitle) => {
@@ -3294,14 +3296,17 @@ export function ExamBuilderWizard({
                     <label className="text-xs font-extrabold text-slate-700 block">
                       Examination Name <span className="text-rose-500">*</span>
                     </label>
-                    <span className="text-[10px] font-bold text-slate-400">
-                      Click title or text to edit
-                    </span>
+                    {(!exam.faculty_id || exam.faculty_id === facultyId) && (
+                      <span className="text-[10px] font-bold text-slate-400">
+                        Click title or text to edit
+                      </span>
+                    )}
                   </div>
                   <EditableExamTitle
                     examId={exam.exam_id}
                     initialTitle={title}
                     userId={facultyId}
+                    canEdit={!exam.faculty_id || exam.faculty_id === facultyId}
                     tag="h3"
                     className="text-base font-extrabold text-slate-900"
                     onTitleUpdated={(newTitle) => {

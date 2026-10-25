@@ -3478,15 +3478,13 @@ export async function updateExamTitleAction(
     }
 
     // Check authorization:
-    // 1. Faculty owner can edit
-    // 2. Chair or ProgramChair can edit
-    // 3. Director can edit
+    // Only the faculty owner who created the exam can edit the examination name
+    // (e.g. instructors for their own exams, or chairs/PCs for their own exams created in their teaching portal).
+    // In pending reviews of PC, Chair, and DI, reviewers cannot edit the name of an exam submitted to them by an instructor.
     const isOwner = exam.faculty_id === userId;
-    const isChair = user.role === "Chair" || user.role === "ProgramChair" || !!user.chair;
-    const isDirector = user.role === "Director" || !!user.director;
 
-    if (!isOwner && !isChair && !isDirector) {
-      return { error: "Unauthorized to edit this examination name." };
+    if (!isOwner) {
+      return { error: "Unauthorized: You cannot edit the name of an exam submitted by another instructor. Only the exam author can edit their own examination name." };
     }
 
     const oldTitle = exam.title;

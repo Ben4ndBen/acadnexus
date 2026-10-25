@@ -148,6 +148,7 @@ interface ChairDashboardClientProps {
     exam_id: number;
     chair_review_status: string;
     exam: {
+      faculty_id?: number;
       title: string;
       tos_file_path: string;
       course: {
@@ -156,6 +157,7 @@ interface ChairDashboardClientProps {
         course_title: string;
       };
       faculty: {
+        faculty_id?: number;
         first_name: string;
         last_name: string;
       };
@@ -1076,6 +1078,7 @@ export function ChairDashboardClient({
                               examId={approval.exam_id}
                               initialTitle={approval.exam.title}
                               userId={chairUserId}
+                              canEdit={Boolean(approval.exam?.faculty_id && approval.exam.faculty_id === chairUserId)}
                               tag="h3"
                               className="text-lg font-bold text-slate-900"
                               onTitleUpdated={(newTitle) => {
@@ -1197,6 +1200,7 @@ export function ChairDashboardClient({
                     examId={activeSplitApproval.exam_id}
                     initialTitle={activeSplitApproval.exam.title}
                     userId={chairUserId}
+                    canEdit={Boolean(activeSplitApproval?.exam?.faculty_id && activeSplitApproval.exam.faculty_id === chairUserId)}
                     isDarkBg={true}
                     tag="h2"
                     className="text-base sm:text-lg font-bold text-white tracking-tight"

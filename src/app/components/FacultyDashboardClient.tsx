@@ -44,6 +44,7 @@ interface FacultyDashboardClientProps {
     } | null;
     examinations: Array<{
       exam_id: number;
+      faculty_id?: number;
       title: string;
       tos_file_path?: string | null;
       time_limit_minutes: number;
@@ -2078,6 +2079,7 @@ export function FacultyDashboardClient({
                               examId={exam.exam_id}
                               initialTitle={getExamDisplayTitle(exam)}
                               userId={faculty.faculty_id}
+                              canEdit={!exam.faculty_id || exam.faculty_id === faculty.faculty_id}
                               tag="h3"
                               className="text-base font-extrabold text-slate-900"
                               onTitleUpdated={(newTitle) => {
@@ -3395,6 +3397,7 @@ export function FacultyDashboardClient({
                               examId={exam.exam_id}
                               initialTitle={getExamDisplayTitle(exam)}
                               userId={faculty.faculty_id}
+                              canEdit={!exam.faculty_id || exam.faculty_id === faculty.faculty_id}
                               tag="h4"
                               className="text-sm font-extrabold text-slate-900 group-hover:text-amber-700 transition-colors line-clamp-2"
                               onTitleUpdated={(newTitle) => {
@@ -4816,6 +4819,7 @@ export function FacultyDashboardClient({
                       examId={exam.exam_id}
                       initialTitle={getExamDisplayTitle(exam)}
                       userId={faculty.faculty_id}
+                      canEdit={exam.faculty_id === faculty.faculty_id}
                       tag="h3"
                       className="font-extrabold text-slate-850 text-sm leading-snug"
                       onTitleUpdated={(newTitle) => {
