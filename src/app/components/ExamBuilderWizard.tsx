@@ -4101,15 +4101,10 @@ export function ExamBuilderWizard({
                                           <span className={`text-[11px] font-black uppercase tracking-wider ${isAddressed ? "text-emerald-950" : "text-rose-950"}`}>
                                             Revision Requested for Question #{origItemNum || displayItemNum} by {itemFeedback.reviewer}
                                           </span>
-                                          {isAddressed ? (
+                                          {isAddressed && (
                                             <span className="bg-amber-600 text-white text-[9px] font-black uppercase px-2 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
                                               <Check className="w-2.5 h-2.5" />
                                               Corrected — Awaiting Re-Review
-                                            </span>
-                                          ) : (
-                                            <span className="bg-rose-600 text-white text-[9px] font-black uppercase px-2 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
-                                              <AlertCircle className="w-2.5 h-2.5 text-rose-100" />
-                                              Needs Revision: Question #{origItemNum || displayItemNum}
                                             </span>
                                           )}
                                         </div>
@@ -4124,21 +4119,6 @@ export function ExamBuilderWizard({
                                             }`}
                                           >
                                             {isAddressed ? "Mark as Needs Revision" : "Mark as Corrected (Awaiting Re-Review)"}
-                                          </button>
-                                          <button
-                                            type="button"
-                                            onClick={() => {
-                                              setStep(3);
-                                              setTimeout(() => {
-                                                const el = document.getElementById(`tq-question-${q.question_id || origItemNum || globalIdx + 1}`);
-                                                if (el) {
-                                                  el.scrollIntoView({ behavior: "smooth", block: "center" });
-                                                }
-                                              }, 150);
-                                            }}
-                                            className="text-[10px] font-bold text-slate-700 hover:text-slate-900 bg-white border border-slate-300 px-2 py-0.5 rounded-md transition-colors cursor-pointer"
-                                          >
-                                            View in Test Questions (TQ) →
                                           </button>
                                         </div>
                                       </div>
@@ -4158,13 +4138,6 @@ export function ExamBuilderWizard({
                                     <span className="text-xs sm:text-sm font-black text-slate-900 bg-slate-100 border border-slate-300 px-2.5 py-1 rounded-lg shrink-0">
                                       Question #{displayItemNum}
                                     </span>
-
-                                    {itemFeedback && (
-                                      <span className="bg-rose-600 text-white text-[10px] font-black uppercase px-2.5 py-1 rounded-md flex items-center gap-1 shadow-2xs shrink-0">
-                                        <AlertCircle className="w-3 h-3 text-rose-100" />
-                                        Needs Revision: Question #{origItemNum || displayItemNum}
-                                      </span>
-                                    )}
 
                                     {isReordered && (
                                       <span className="text-[10px] font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded shrink-0" title={`Original review position was Question #${origItemNum}`}>
