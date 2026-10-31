@@ -4168,12 +4168,6 @@ export function ExamBuilderWizard({
                                           <span className={`text-[11px] font-black uppercase tracking-wider ${isAddressed ? "text-emerald-950" : "text-rose-950"}`}>
                                             Revision Requested for Question #{origItemNum || displayItemNum} by {itemFeedback.reviewer}
                                           </span>
-                                          {isAddressed && (
-                                            <span className="bg-amber-600 text-white text-[9px] font-black uppercase px-2 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
-                                              <Check className="w-2.5 h-2.5" />
-                                              Corrected — Awaiting Re-Review
-                                            </span>
-                                          )}
                                         </div>
                                         <div className="flex items-center gap-2">
                                           <button
