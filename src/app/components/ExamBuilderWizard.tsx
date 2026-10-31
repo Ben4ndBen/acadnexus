@@ -217,6 +217,40 @@ export function cleanQuestionText(rawText: string): string {
   return rawText;
 }
 
+export function getRevisionBadgeStyle(correctedCount: number, totalCount: number): {
+  background: string;
+  borderColor: string;
+} {
+  // If no items or none corrected yet -> solid red
+  if (totalCount <= 0 || correctedCount <= 0) {
+    return {
+      background: "linear-gradient(to right, #e11d48, #be123c)",
+      borderColor: "#be123c",
+    };
+  }
+
+  // If all items are corrected -> solid green
+  if (correctedCount >= totalCount) {
+    return {
+      background: "linear-gradient(to right, #059669, #047857)",
+      borderColor: "#047857",
+    };
+  }
+
+  // For multi-item revisions with partial progress:
+  // Reddish-to-greenish gradient from left to right, smoothly merging directly between red and green
+  const ratio = Math.min(1, Math.max(0, correctedCount / totalCount));
+  const redPct = Math.round((1 - ratio) * 100);
+  const blendRadius = 8;
+  const redStop = Math.max(0, redPct - blendRadius);
+  const greenStop = Math.min(100, redPct + blendRadius);
+
+  return {
+    background: `linear-gradient(to right, #e11d48 0%, #e11d48 ${redStop}%, #059669 ${greenStop}%, #059669 100%)`,
+    borderColor: "rgba(255, 255, 255, 0.25)",
+  };
+}
+
 // Deserialization helper
 function deserializeQuestions(dbQuestions: any[]): QuestionState[] {
   return dbQuestions.map(q => {
@@ -3053,13 +3087,6 @@ export function ExamBuilderWizard({
                     >
                       Open Question Builder (Step 2)
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => setStep(3)}
-                      className="px-3.5 py-1.5 bg-white hover:bg-rose-100 text-rose-800 border border-rose-300 text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer"
-                    >
-                      View in Test Questions (Step 3)
-                    </button>
                   </div>
                 </div>
 
@@ -3980,16 +4007,25 @@ export function ExamBuilderWizard({
 
                 // Revision questions inside this topic
                 const topicRevisionQuestions = topicQuestions
-                  .map(({ q }) => {
+                  .map(({ q, globalIdx }) => {
                     const fb = getQuestionFeedback(q);
                     if (!fb) return null;
                     const orig = q.question_id !== undefined ? originalTqQuestionIdMap.get(String(q.question_id)) : null;
+                    const origItemNum = orig?.itemNum || fb.originalTqItemNum;
+                    const key = String(q.question_id || origItemNum || globalIdx + 1);
+                    const isAddressed = Boolean(
+                      addressedQuestions[key] ||
+                      (q.question_id && addressedQuestions[String(q.question_id)]) ||
+                      (origItemNum && addressedQuestions[String(origItemNum)])
+                    );
                     return {
                       q,
-                      originalTqItemNum: orig?.itemNum || fb.originalTqItemNum,
+                      originalTqItemNum: origItemNum,
+                      key,
+                      isAddressed,
                     };
                   })
-                  .filter((item): item is { q: QuestionState; originalTqItemNum: number } => Boolean(item && item.originalTqItemNum))
+                  .filter((item): item is { q: QuestionState; originalTqItemNum: number; key: string; isAddressed: boolean } => Boolean(item && item.originalTqItemNum))
                   .sort((a, b) => a.originalTqItemNum - b.originalTqItemNum);
 
                 return (
@@ -4053,12 +4089,42 @@ export function ExamBuilderWizard({
                           <span>Placement:</span>
                           <strong className="text-indigo-900 font-black">{tItem.rangeString}</strong>
                         </span>
-                        {topicRevisionQuestions.length > 0 && (
-                          <span className="bg-rose-600 text-white border border-rose-700 px-2.5 py-1 rounded-xl shadow-2xs flex items-center gap-1.5 text-xs font-black animate-pulse">
-                            <AlertCircle className="w-3.5 h-3.5 text-rose-100" />
-                            <span>Needs Revision: {topicRevisionQuestions.map(item => `Question #${item.originalTqItemNum}`).join(", ")}</span>
-                          </span>
-                        )}
+                        {topicRevisionQuestions.length > 0 && (() => {
+                          const totalRevs = topicRevisionQuestions.length;
+                          const correctedRevs = topicRevisionQuestions.filter(item => item.isAddressed).length;
+                          const allCorrected = totalRevs > 0 && correctedRevs === totalRevs;
+                          const badgeStyle = getRevisionBadgeStyle(correctedRevs, totalRevs);
+
+                          return (
+                            <span
+                              style={badgeStyle}
+                              className={`text-white border px-2.5 py-1 rounded-xl shadow-2xs flex items-center gap-1.5 text-xs font-black transition-all duration-300 drop-shadow-[0_1px_1.5px_rgba(0,0,0,0.5)] ${
+                                !allCorrected ? "animate-pulse" : ""
+                              }`}
+                              title={
+                                allCorrected
+                                  ? `All ${totalRevs} revision items corrected in this topic`
+                                  : `${correctedRevs} of ${totalRevs} revision items marked as corrected`
+                              }
+                            >
+                              {allCorrected ? (
+                                <Check className="w-3.5 h-3.5 text-white" />
+                              ) : (
+                                <AlertCircle className="w-3.5 h-3.5 text-white/90" />
+                              )}
+                              <span>
+                                {allCorrected
+                                  ? `All Corrected: ${topicRevisionQuestions.map(item => `Question #${item.originalTqItemNum}`).join(", ")}`
+                                  : correctedRevs > 0
+                                    ? `Needs Revision (${correctedRevs}/${totalRevs} Corrected): ${topicRevisionQuestions
+                                        .map(item => item.isAddressed ? `Question #${item.originalTqItemNum} (✓)` : `Question #${item.originalTqItemNum}`)
+                                        .join(", ")}`
+                                    : `Needs Revision: ${topicRevisionQuestions.map(item => `Question #${item.originalTqItemNum}`).join(", ")}`
+                                }
+                              </span>
+                            </span>
+                          );
+                        })()}
                       </div>
                     </div>
 
@@ -5268,72 +5334,23 @@ export function ExamBuilderWizard({
                           if (block.type === "question-item" && block.q) {
                             const q = block.q;
                             const itemNumLabel = block.itemNumberLabel || (block.idx! + 1);
-                            const feedback = getQuestionFeedback(q);
-                            const origInfo = q.question_id !== undefined ? originalTqQuestionIdMap.get(String(q.question_id)) : null;
-                            const origItemNum = origInfo?.itemNum || feedback?.originalTqItemNum;
-                            const isRevisionRequired = Boolean(feedback);
 
                             return (
                               <div
                                 key={block.id}
-                                id={`tq-question-${q.question_id || origItemNum || itemNumLabel}`}
-                                className={`rounded-xl p-3.5 space-y-2.5 text-xs transition-all ${
-                                  isRevisionRequired
-                                    ? "bg-rose-50/80 border-2 border-rose-500 ring-2 ring-rose-200/70 shadow-sm print:bg-white print:border-rose-500"
-                                    : "bg-white border border-slate-200 shadow-2xs"
-                                }`}
+                                id={`tq-question-${q.question_id || itemNumLabel}`}
+                                className="rounded-xl p-3.5 space-y-2.5 text-xs transition-all bg-white border border-slate-200 shadow-2xs"
                               >
                                 <div className="flex items-start justify-between gap-2 flex-wrap">
                                   <div className="flex items-start gap-2 flex-1">
-                                    <span className={`font-extrabold px-2 py-0.5 rounded text-[11px] shrink-0 ${
-                                      isRevisionRequired
-                                        ? "bg-rose-600 text-white border border-rose-700"
-                                        : "text-slate-900 bg-slate-100 border border-slate-300"
-                                    }`}>
+                                    <span className="font-extrabold px-2 py-0.5 rounded text-[11px] shrink-0 text-slate-900 bg-slate-100 border border-slate-300">
                                       {itemNumLabel}.
                                     </span>
                                     <p className="font-extrabold text-slate-900 leading-relaxed text-xs">
                                       {q.text || "(Question prompt empty)"}
                                     </p>
                                   </div>
-                                  {isRevisionRequired && (
-                                    <div className="shrink-0 flex items-center gap-1.5 print:border print:border-amber-600">
-                                      {Boolean(addressedQuestions[String(q.question_id || origItemNum || itemNumLabel)]) ? (
-                                        <span className="bg-amber-600 text-white text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
-                                          <Check className="w-3 h-3 text-white" />
-                                          Corrected — Awaiting Re-Review: Question #{origItemNum || itemNumLabel}
-                                        </span>
-                                      ) : (
-                                        <span className="bg-rose-600 text-white text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
-                                          <AlertCircle className="w-3 h-3 text-rose-100" />
-                                          Needs Revision: Question #{origItemNum || itemNumLabel}
-                                        </span>
-                                      )}
-                                    </div>
-                                  )}
                                 </div>
-
-                                {/* Reviewer comment box directly beside / below the question */}
-                                {isRevisionRequired && feedback && (
-                                  <div className="bg-rose-100/90 border border-rose-300 rounded-xl p-3 text-rose-950 space-y-1.5 shadow-2xs print:bg-rose-50 print:border-rose-400">
-                                    <div className="flex items-center justify-between gap-2 flex-wrap">
-                                      <div className="flex items-center gap-1.5 text-[11px] font-black uppercase text-rose-950 tracking-wider">
-                                        <AlertCircle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
-                                        <span>Reviewer Comment for Question #{origItemNum || itemNumLabel} ({feedback.reviewer})</span>
-                                      </div>
-                                      <button
-                                        type="button"
-                                        onClick={() => scrollToQuestion(q, origItemNum)}
-                                        className="text-[10px] font-bold text-rose-800 hover:text-rose-950 underline bg-rose-200/70 hover:bg-rose-200 px-2 py-0.5 rounded-md transition-colors cursor-pointer print:hidden"
-                                      >
-                                        Edit this question in builder →
-                                      </button>
-                                    </div>
-                                    <p className="text-xs text-rose-900 font-bold italic leading-relaxed pl-5">
-                                      "{feedback.comment}"
-                                    </p>
-                                  </div>
-                                )}
 
                                 {/* Prompt Image if any */}
                                 {q.image_url && (
