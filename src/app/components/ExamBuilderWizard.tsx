@@ -16,6 +16,7 @@ import { DatePicker } from "@/app/components/DatePicker";
 import { getProgramHeaderImage } from "@/lib/programHeader";
 import { EditableExamTitle } from "@/app/components/EditableExamTitle";
 import { ExamSignatorySection } from "@/app/components/ExamSignatorySection";
+import { AutoResizeTextarea } from "@/app/components/AutoResizeTextarea";
 
 interface Course {
   course_id: number;
@@ -4235,9 +4236,9 @@ export function ExamBuilderWizard({
                               {/* Prompt Input Textarea */}
                                   <div className="space-y-1.5">
                                     <label className="text-xs font-extrabold text-slate-700 block">Question Prompt / Text</label>
-                                    <textarea
+                                    <AutoResizeTextarea
                                       id={`question-prompt-${globalIdx}`}
-                                      rows={2}
+                                      minHeight={62}
                                       placeholder={
                                         q.question_type === "Fill_In_The_Blanks"
                                           ? "e.g. The capital of Batanes is [blank] and it is located in [blank] region."
@@ -4245,7 +4246,7 @@ export function ExamBuilderWizard({
                                       }
                                       value={cleanQuestionText(q.text)}
                                       onChange={(e) => updateQuestionText(e.target.value, globalIdx)}
-                                      className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 text-xs font-medium text-slate-800 placeholder:text-slate-400 p-3 rounded-xl transition-all duration-300 outline-none"
+                                      className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 text-xs font-medium text-slate-800 placeholder:text-slate-400 p-3 rounded-xl outline-none"
                                     />
                                   </div>
                                   {/* Option to Upload PNG or Photo */}

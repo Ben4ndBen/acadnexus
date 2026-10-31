@@ -30,6 +30,7 @@ import { DatePicker } from "@/app/components/DatePicker";
 import { getProgramHeaderImage } from "@/lib/programHeader";
 import { EditableExamTitle } from "@/app/components/EditableExamTitle";
 import { ExamSignatorySection } from "@/app/components/ExamSignatorySection";
+import { AutoResizeTextarea } from "@/app/components/AutoResizeTextarea";
 
 export type FacultyExamSortField = "recent" | "exam_date" | "title" | "course" | "status";
 
@@ -5613,13 +5614,13 @@ export function FacultyDashboardClient({
 
               <div className="space-y-1.5">
                 <label className="text-xs font-extrabold text-slate-700 block">Question Prompt Text</label>
-                <textarea
-                  rows={3}
+                <AutoResizeTextarea
+                  minHeight={72}
                   required
                   placeholder="Enter the question details..."
                   value={qForm.question_text}
                   onChange={(e) => setQForm({ ...qForm, question_text: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 focus:bg-white text-sm font-semibold text-slate-900 px-4 py-2.5 rounded-xl transition-all"
+                  className="w-full bg-slate-50 border border-slate-200 focus:bg-white text-sm font-semibold text-slate-900 px-4 py-2.5 rounded-xl outline-none"
                 />
               </div>
 
