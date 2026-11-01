@@ -149,19 +149,23 @@ export function ExamSignatorySection({
   const displayDeptChair = departmentChairName || "NAME OF DEPARTMENT CHAIRPERSON";
   const displayDirector = directorName || "NAME OF DIRECTOR FOR INSTRUCTION";
 
-  const renderSignatureSlot = (sigUrl?: string | null, altText: string = "Official Signature") => {
+  const renderSignatureSlot = (
+    sigUrl?: string | null, 
+    altText: string = "Official Drawn Signature",
+    centered: boolean = false
+  ) => {
     if (sigUrl) {
       return (
-        <div className="h-12 -mb-2 flex items-end">
+        <div className={`h-14 pb-1 flex items-end ${centered ? "justify-center" : "justify-start"} select-none pointer-events-none`}>
           <img
             src={sigUrl}
             alt={altText}
-            className="max-h-14 max-w-[170px] object-contain block pointer-events-none select-none"
+            className="max-h-12 max-w-[160px] w-auto object-contain block pointer-events-none select-none print:max-h-12"
           />
         </div>
       );
     }
-    return <div className="h-8" />;
+    return <div className="h-14" />;
   };
 
   return (
@@ -397,7 +401,7 @@ export function ExamSignatorySection({
                 Approved by:
               </p>
               <div>
-                {renderSignatureSlot(directorSignature, "Director for Instruction Signature")}
+                {renderSignatureSlot(directorSignature, "Director for Instruction Signature", true)}
                 {isEditable ? (
                   <p
                     contentEditable
@@ -488,7 +492,7 @@ export function ExamSignatorySection({
                 Approved by:
               </p>
               <div>
-                {renderSignatureSlot(directorSignature, "Director for Instruction Signature")}
+                {renderSignatureSlot(directorSignature, "Director for Instruction Signature", true)}
                 {isEditable ? (
                   <p
                     contentEditable

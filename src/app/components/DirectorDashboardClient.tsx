@@ -1894,7 +1894,7 @@ export function DirectorDashboardClient({
                                 {exam.current_status === "Approved" && (
                                   <div className="mt-1.5 flex items-center gap-1 text-[10px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded w-fit shadow-sm">
                                     <ShieldCheck className="w-3 h-3 text-emerald-600" />
-                                    Digitally Signed by Chairperson & Director for Instruction
+                                    Officially Endorsed & Approved
                                   </div>
                                 )}
                                 {isManualHold && exam.approvalWorkflow?.di_comments && (
@@ -1997,7 +1997,7 @@ export function DirectorDashboardClient({
                             {exam.current_status === "Approved" && (
                               <div className="mt-1.5 flex items-center gap-1 text-[10px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded w-fit shadow-sm">
                                 <ShieldCheck className="w-3 h-3 text-emerald-600" />
-                                Digitally Signed by Chairperson & Director for Instruction
+                                Officially Endorsed & Approved
                               </div>
                             )}
                             {isManualHold && exam.approvalWorkflow?.di_comments && (

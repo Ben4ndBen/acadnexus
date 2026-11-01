@@ -162,19 +162,23 @@ export function BSCTableOfSpecificationsView({
   totalItems,
   topics,
 }: BSCTableOfSpecificationsViewProps) {
-  const renderSignatureSlot = (sigUrl?: string | null, altText: string = "Official Signature") => {
+  const renderSignatureSlot = (
+    sigUrl?: string | null,
+    altText: string = "Official Drawn Signature",
+    centered: boolean = false
+  ) => {
     if (sigUrl) {
       return (
-        <div className="h-12 -mb-2 flex items-end">
+        <div className={`h-14 pb-1 flex items-end ${centered ? "justify-center" : "justify-start"} select-none pointer-events-none`}>
           <img
             src={sigUrl}
             alt={altText}
-            className="max-h-14 max-w-[170px] object-contain block pointer-events-none select-none"
+            className="max-h-12 max-w-[160px] w-auto object-contain block pointer-events-none select-none print:max-h-12"
           />
         </div>
       );
     }
-    return <div className="h-8" />;
+    return <div className="h-14" />;
   };
 
   // Dynamically resolve department name from course code or faculty department
@@ -562,7 +566,7 @@ export function BSCTableOfSpecificationsView({
 
 
       {/* PAGE 2 SIGNATORIES / APPROVAL WORKFLOW MATCHING TEMPLATE SCREENSHOT EXACTLY */}
-      <div className="pt-6 border-t border-black space-y-10">
+      <div className="pt-6 border-t border-black space-y-10 break-inside-avoid print:break-inside-avoid">
         
         {/* OPTION 1: ***Signatories for programs with Program Chairperson */}
         {(signatoryLayoutMode === "WITH_PC" || signatoryLayoutMode === "ALL_TEMPLATES") && (
@@ -724,7 +728,7 @@ export function BSCTableOfSpecificationsView({
               <div className="sm:col-span-2 max-w-sm mx-auto w-full space-y-2 pt-2 text-center">
                 <p className="font-extrabold text-black uppercase tracking-wider text-[11px]">Approved by:</p>
                 <div>
-                  {renderSignatureSlot(directorSignature, "Director for Instruction Signature")}
+                  {renderSignatureSlot(directorSignature, "Director for Instruction Signature", true)}
                   <p
                     contentEditable
                     suppressContentEditableWarning
@@ -785,7 +789,7 @@ export function BSCTableOfSpecificationsView({
               <div className="sm:col-span-2 max-w-sm mx-auto w-full space-y-2 pt-2 text-center">
                 <p className="font-extrabold text-black uppercase tracking-wider text-[11px]">Approved by:</p>
                 <div>
-                  {renderSignatureSlot(directorSignature, "Director for Instruction Signature")}
+                  {renderSignatureSlot(directorSignature, "Director for Instruction Signature", true)}
                   <p
                     contentEditable
                     suppressContentEditableWarning

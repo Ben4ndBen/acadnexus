@@ -2304,7 +2304,7 @@ export function FacultyDashboardClient({
                             {exam.current_status === "Approved" && (
                               <div className="flex items-center gap-1.5 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-2.5 py-1 rounded-lg shadow-2xs">
                                 <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                                Digitally Signed
+                                Officially Approved
                               </div>
                             )}
                             {(() => {

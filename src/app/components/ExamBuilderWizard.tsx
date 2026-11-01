@@ -500,19 +500,23 @@ export function ExamBuilderWizard({
   const [showSignatureModal, setShowSignatureModal] = useState<boolean>(false);
 
   // Helper to render official signature image above signatory names
-  const renderSignatureSlot = (sigUrl?: string | null, altText: string = "Official Signature", centered: boolean = false) => {
+  const renderSignatureSlot = (
+    sigUrl?: string | null, 
+    altText: string = "Official Drawn Signature", 
+    centered: boolean = false
+  ) => {
     if (sigUrl) {
       return (
-        <div className={`h-12 -mb-2 flex items-end ${centered ? "justify-center" : ""}`}>
+        <div className={`h-14 pb-1 flex items-end ${centered ? "justify-center" : "justify-start"} select-none pointer-events-none`}>
           <img
             src={sigUrl}
             alt={altText}
-            className="max-h-14 max-w-[170px] object-contain block pointer-events-none select-none"
+            className="max-h-12 max-w-[160px] w-auto object-contain block pointer-events-none select-none print:max-h-12"
           />
         </div>
       );
     }
-    return <div className="h-4" />;
+    return <div className="h-14" />;
   };
 
   // Automatically open Step 2: Test Questions / Question Bank when exam is returned for revision
