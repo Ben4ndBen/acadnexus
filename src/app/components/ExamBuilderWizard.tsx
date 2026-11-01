@@ -2814,7 +2814,7 @@ export function ExamBuilderWizard({
   // Save and Submit for Review
   const handleSubmitForReview = async (confirmedSignature?: string, confirmedPassword?: string) => {
     // 0. Require password confirmation when signing the examination document
-    if (!confirmedSignature) {
+    if (!confirmedSignature || !confirmedPassword) {
       setShowSignatureModal(true);
       return;
     }

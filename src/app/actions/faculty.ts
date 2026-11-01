@@ -247,6 +247,21 @@ export async function updateExamStatus(examId: number, status: ExamStatus, userI
         reviewTargetRole = "Department Chairperson";
         isRevisionWorkflow = false;
 
+        const authorChairRecord = await tx.chair.findFirst({ where: { chair_id: userId } });
+        const authorUserRecord = await tx.user.findUnique({ where: { user_id: userId } });
+
+        const isAuthorProgChair = Boolean(
+          (progChair && progChair.chair_id === userId) ||
+          (authorChairRecord && authorChairRecord.is_program_chair) ||
+          (authorUserRecord && ((authorUserRecord.role as string) === "ProgramChair" || (authorUserRecord.role as string) === "Program Chair"))
+        );
+
+        const isAuthorDeptChair = Boolean(
+          (deptChair && deptChair.chair_id === userId) ||
+          (authorChairRecord && !authorChairRecord.is_program_chair) ||
+          (authorUserRecord && ((authorUserRecord.role as string) === "Chair" || (authorUserRecord.role as string) === "Department Chair"))
+        );
+
         if (isReturnedExam && existingWorkflow) {
           isRevisionWorkflow = true;
 
@@ -261,6 +276,8 @@ export async function updateExamStatus(examId: number, status: ExamStatus, userI
                 di_review_status: "Hold",
                 di_action_timestamp: null,
                 faculty_signature: authorUser?.signature || existingWorkflow.faculty_signature,
+                ...(isAuthorProgChair ? { prog_chair_signature: authorUser?.signature || existingWorkflow.prog_chair_signature } : {}),
+                ...(isAuthorDeptChair ? { chair_signature: authorUser?.signature || existingWorkflow.chair_signature } : {}),
                 // Preserve previous comments and revision history completely:
                 di_comments: existingWorkflow.di_comments,
                 chair_comments: existingWorkflow.chair_comments,
@@ -279,6 +296,7 @@ export async function updateExamStatus(examId: number, status: ExamStatus, userI
                 chair_review_status: "Pending",
                 chair_action_timestamp: null,
                 faculty_signature: authorUser?.signature || existingWorkflow.faculty_signature,
+                ...(isAuthorProgChair ? { prog_chair_signature: authorUser?.signature || existingWorkflow.prog_chair_signature } : {}),
                 // Retain prior Program Chair approval if it existed:
                 prog_chair_review_status: existingWorkflow.prog_chair_review_status,
                 prog_chair_action_timestamp: existingWorkflow.prog_chair_action_timestamp,
@@ -313,21 +331,6 @@ export async function updateExamStatus(examId: number, status: ExamStatus, userI
             where: { key: "global_administrative_hold" },
           });
           const isGlobalHoldActive = globalHoldSetting?.value === "true";
-
-          const authorChairRecord = await tx.chair.findFirst({ where: { chair_id: userId } });
-          const authorUserRecord = await tx.user.findUnique({ where: { user_id: userId } });
-
-          const isAuthorProgChair = Boolean(
-            (progChair && progChair.chair_id === userId) ||
-            (authorChairRecord && authorChairRecord.is_program_chair) ||
-            (authorUserRecord && ((authorUserRecord.role as string) === "ProgramChair" || (authorUserRecord.role as string) === "Program Chair"))
-          );
-
-          const isAuthorDeptChair = Boolean(
-            (deptChair && deptChair.chair_id === userId) ||
-            (authorChairRecord && !authorChairRecord.is_program_chair) ||
-            (authorUserRecord && ((authorUserRecord.role as string) === "Chair" || (authorUserRecord.role as string) === "Department Chair"))
-          );
 
           let progChairStatus = progChair ? "Pending" : null;
           let progChairComments: string | null = null;

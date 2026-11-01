@@ -1605,7 +1605,7 @@ export function FacultyDashboardClient({
     confirmedSignature?: string,
     confirmedPassword?: string
   ) => {
-    if (nextStatus === "Pending_Chair" && !confirmedSignature) {
+    if (nextStatus === "Pending_Chair" && (!confirmedSignature || !confirmedPassword)) {
       const targetExam = faculty.examinations?.find((e: any) => e.exam_id === examId);
       setPendingTransitionExam({
         examId,
