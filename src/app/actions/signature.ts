@@ -60,6 +60,19 @@ export async function saveUserSignatureAction(
       });
     }
 
+    if (!dbUser && sessionUser.id) {
+      dbUser = await db.user.findFirst({
+        where: { supabase_uid: sessionUser.id },
+      });
+    }
+
+    if (!dbUser && sessionUser.email) {
+      const emailPrefix = sessionUser.email.split("@")[0].toUpperCase();
+      dbUser = await db.user.findUnique({
+        where: { institutional_id: emailPrefix },
+      });
+    }
+
     if (!dbUser) {
       return { error: "User account could not be found." };
     }
@@ -151,6 +164,19 @@ export async function deleteUserSignatureAction(
     if (!dbUser && sessionInstitutionalId) {
       dbUser = await db.user.findUnique({
         where: { institutional_id: sessionInstitutionalId },
+      });
+    }
+
+    if (!dbUser && sessionUser.id) {
+      dbUser = await db.user.findFirst({
+        where: { supabase_uid: sessionUser.id },
+      });
+    }
+
+    if (!dbUser && sessionUser.email) {
+      const emailPrefix = sessionUser.email.split("@")[0].toUpperCase();
+      dbUser = await db.user.findUnique({
+        where: { institutional_id: emailPrefix },
       });
     }
 

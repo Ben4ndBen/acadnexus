@@ -462,9 +462,12 @@ export function MySignatureSection({
                 <p className="text-xs text-slate-600 leading-relaxed">
                   Please draw your signature in the space below and enter your current account password to save it. Use the same password you use to log in to your AcadNexus account.
                 </p>
-                <p className="text-[11px] text-slate-400 italic">
-                  This security measure guarantees that only you can authorize and attach your official electronic signature to institutional examinations and TOS documents.
-                </p>
+                <div className="pt-1 flex items-center gap-1.5 text-[11px] text-slate-500 font-medium">
+                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0" />
+                  <span>
+                    <strong>Synchronized Security:</strong> Your signature is always protected by your primary AcadNexus account password. Whenever you change your login password, your signature authorization will automatically use the new password.
+                  </span>
+                </div>
               </div>
             </div>
 

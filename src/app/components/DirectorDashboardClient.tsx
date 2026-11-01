@@ -7,7 +7,8 @@ import {
   XCircle, Clock, AlertCircle, RefreshCw, Search, Building2,
   UserPlus, X, Loader2, Eye, EyeOff, Award, Calendar, Sparkles,
   Users, BookOpen, UserCog, Columns, FileText,
-  ArrowUp, ArrowDown, ArrowUpDown, SlidersHorizontal, Filter, PenTool
+  ArrowUp, ArrowDown, ArrowUpDown, SlidersHorizontal, Filter, PenTool,
+  Lock, Check
 } from "lucide-react";
 import { BSCTableOfSpecificationsView } from "@/app/components/BSCTableOfSpecificationsView";
 import { getProgramHeaderImage } from "@/lib/programHeader";
@@ -16,7 +17,7 @@ import { ExamSignatorySection } from "@/app/components/ExamSignatorySection";
 import { MySignatureSection } from "@/app/components/MySignatureSection";
 import { reviewExamByDirector, toggleGlobalHold, toggleIndividualHold, saveActiveAcademicPeriod, updateDirectorNameAction } from "@/app/actions/director";
 import type { AcademicPeriodSettings } from "@/lib/academicUtils";
-import { registerInstructorByAdminAction } from "@/app/actions/auth";
+import { registerInstructorByAdminAction, updateUserPasswordAction } from "@/app/actions/auth";
 import { assignCoursesToFacultyAction } from "@/app/actions/faculty";
 import { getDepartmentTheme } from "@/lib/departmentThemes";
 import { DepartmentBadge } from "@/app/components/DepartmentBadge";
@@ -383,6 +384,46 @@ export function DirectorDashboardClient({
         setProfileModalOpen(false);
         router.refresh();
       }, 700);
+    }
+  };
+
+  // Director Account Password State
+  const [dirCurrentPass, setDirCurrentPass] = useState("");
+  const [dirNewPass, setDirNewPass] = useState("");
+  const [dirConfirmPass, setDirConfirmPass] = useState("");
+  const [showDirCurrentPass, setShowDirCurrentPass] = useState(false);
+  const [showDirNewPass, setShowDirNewPass] = useState(false);
+  const [isUpdatingDirPass, setIsUpdatingDirPass] = useState(false);
+  const [dirPassMsg, setDirPassMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  const handleUpdateDirectorPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!dirCurrentPass || !dirNewPass || !dirConfirmPass) {
+      setDirPassMsg({ type: "error", text: "Please fill in all password fields." });
+      return;
+    }
+    if (dirNewPass !== dirConfirmPass) {
+      setDirPassMsg({ type: "error", text: "New password and confirmation do not match." });
+      return;
+    }
+    if (dirNewPass.length < 8) {
+      setDirPassMsg({ type: "error", text: "New password must be at least 8 characters long." });
+      return;
+    }
+    setIsUpdatingDirPass(true);
+    setDirPassMsg(null);
+    const res = await updateUserPasswordAction(dirCurrentPass, dirNewPass, dirConfirmPass, directorUserId);
+    setIsUpdatingDirPass(false);
+    if (res.error) {
+      setDirPassMsg({ type: "error", text: res.error });
+    } else {
+      setDirPassMsg({
+        type: "success",
+        text: "Account password updated successfully! Your electronic signature confirmation now automatically uses this new password.",
+      });
+      setDirCurrentPass("");
+      setDirNewPass("");
+      setDirConfirmPass("");
     }
   };
 
@@ -3420,6 +3461,121 @@ export function DirectorDashboardClient({
                 </button>
               </div>
             </form>
+
+            {/* Account Password & Security Section */}
+            <div className="pt-6 border-t border-slate-200 space-y-4">
+              <div>
+                <h4 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
+                  <Lock className="w-4 h-4 text-indigo-600" />
+                  Account Password & Security
+                </h4>
+                <p className="text-xs text-slate-500 font-medium mt-0.5">
+                  Update your login password. Your electronic signature confirmation automatically synchronizes with this password.
+                </p>
+              </div>
+
+              {dirPassMsg && (
+                <div className={`p-3.5 rounded-2xl text-xs font-bold border flex items-center gap-2 ${
+                  dirPassMsg.type === "success"
+                    ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                    : "bg-rose-50 text-rose-800 border-rose-200"
+                }`}>
+                  {dirPassMsg.type === "success" ? (
+                    <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                  ) : (
+                    <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                  )}
+                  <span>{dirPassMsg.text}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleUpdateDirectorPassword} className="space-y-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">
+                    Current Password <span className="text-rose-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showDirCurrentPass ? "text" : "password"}
+                      required
+                      value={dirCurrentPass}
+                      onChange={(e) => setDirCurrentPass(e.target.value)}
+                      placeholder="Enter current login password"
+                      className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-xs font-medium text-slate-800 p-2.5 rounded-xl outline-none pr-9 transition-all"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowDirCurrentPass(!showDirCurrentPass)}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+                    >
+                      {showDirCurrentPass ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">
+                      New Password <span className="text-rose-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showDirNewPass ? "text" : "password"}
+                        required
+                        value={dirNewPass}
+                        onChange={(e) => setDirNewPass(e.target.value)}
+                        placeholder="Min 8 characters"
+                        className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-xs font-medium text-slate-800 p-2.5 rounded-xl outline-none pr-9 transition-all"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowDirNewPass(!showDirNewPass)}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+                      >
+                        {showDirNewPass ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">
+                      Confirm New Password <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="password"
+                      required
+                      value={dirConfirmPass}
+                      onChange={(e) => setDirConfirmPass(e.target.value)}
+                      placeholder="Repeat new password"
+                      className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-xs font-medium text-slate-800 p-2.5 rounded-xl outline-none transition-all"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-2">
+                  <span className="text-[10px] text-slate-400 font-medium">
+                    • Synchronizes with your signature authorization automatically.
+                  </span>
+                  <button
+                    type="submit"
+                    disabled={isUpdatingDirPass}
+                    className="px-4 py-2 text-xs font-extrabold text-white bg-indigo-700 hover:bg-indigo-800 rounded-xl shadow-xs transition-all flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                  >
+                    {isUpdatingDirPass ? (
+                      <>
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        <span>Updating...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-3 h-3 text-emerald-400" />
+                        <span>Update Password</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
 
             {/* Electronic Signature Section */}
             <div className="pt-6 border-t border-slate-200">

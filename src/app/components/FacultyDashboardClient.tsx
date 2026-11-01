@@ -7,7 +7,7 @@ import {
   User, Shield, Settings, Activity, Send, RotateCcw, AlertCircle, RefreshCw, Mail,
   Plus, Trash2, Calendar, Lock, Camera, Check, ShieldAlert, Loader2, ShieldCheck, Clock,
   X, AlertTriangle, Archive, Search, Edit, GraduationCap, Users, Download, Layers, ChevronRight,
-  Printer, CheckCircle2, XCircle, ArrowLeft, ArrowUp, ArrowDown
+  Printer, CheckCircle2, XCircle, ArrowLeft, ArrowUp, ArrowDown, Eye, EyeOff
 } from "lucide-react";
 import { 
   updateFacultyProfile, updateExamStatus, createExamDraft, deleteExam, 
@@ -18,6 +18,7 @@ import {
   getCourseRoster, enrollStudentInCourse, bulkEnrollStudentsInCourse, unenrollStudentFromCourse,
   acknowledgeAssignedCoursesAction, getStudentExamPaper, gradeEssayAnswer
 } from "@/app/actions/faculty";
+import { updateUserPasswordAction } from "@/app/actions/auth";
 import { 
   exportStudentGradesRosterToExcel, 
   exportExamSubmissionsToExcel, 
@@ -1025,6 +1026,46 @@ export function FacultyDashboardClient({
   const [lastName, setLastName] = useState(faculty.last_name);
   const [profileMessage, setProfileMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
+
+  // Account Password Update State
+  const [currentAccountPass, setCurrentAccountPass] = useState("");
+  const [newAccountPass, setNewAccountPass] = useState("");
+  const [confirmAccountPass, setConfirmAccountPass] = useState("");
+  const [showCurrentAccountPass, setShowCurrentAccountPass] = useState(false);
+  const [showNewAccountPass, setShowNewAccountPass] = useState(false);
+  const [isUpdatingAccountPass, setIsUpdatingAccountPass] = useState(false);
+  const [accountPassMsg, setAccountPassMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  const handleUpdateAccountPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentAccountPass || !newAccountPass || !confirmAccountPass) {
+      setAccountPassMsg({ type: "error", text: "Please fill in all password fields." });
+      return;
+    }
+    if (newAccountPass !== confirmAccountPass) {
+      setAccountPassMsg({ type: "error", text: "New password and confirmation do not match." });
+      return;
+    }
+    if (newAccountPass.length < 8) {
+      setAccountPassMsg({ type: "error", text: "New password must be at least 8 characters long." });
+      return;
+    }
+    setIsUpdatingAccountPass(true);
+    setAccountPassMsg(null);
+    const res = await updateUserPasswordAction(currentAccountPass, newAccountPass, confirmAccountPass, faculty.faculty_id);
+    setIsUpdatingAccountPass(false);
+    if (res.error) {
+      setAccountPassMsg({ type: "error", text: res.error });
+    } else {
+      setAccountPassMsg({
+        type: "success",
+        text: "Account password updated successfully! Your electronic signature confirmation now automatically uses this new password.",
+      });
+      setCurrentAccountPass("");
+      setNewAccountPass("");
+      setConfirmAccountPass("");
+    }
+  };
 
   // Status transition loading state
   const [transitioningExamId, setTransitioningExamId] = useState<number | null>(null);
@@ -4555,6 +4596,126 @@ export function FacultyDashboardClient({
                   className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-extrabold px-5 py-2.5 rounded-xl shadow-sm transition-all hover:scale-105 duration-300 cursor-pointer"
                 >
                   {isSavingProfile ? "Saving Changes..." : "Save Profile Details"}
+                </button>
+              </div>
+            </form>
+          </div>
+
+          {/* ACCOUNT PASSWORD & SECURITY */}
+          <div className="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-sm space-y-5">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+              <div>
+                <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                  <span className="w-1.5 h-5 bg-indigo-600 rounded-full" />
+                  Account Password & Security
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Update your login password. Your electronic signature confirmation automatically synchronizes with this password.
+                </p>
+              </div>
+              <div className="bg-indigo-50 text-indigo-700 p-2.5 rounded-2xl border border-indigo-100 hidden sm:block">
+                <Lock className="w-5 h-5" />
+              </div>
+            </div>
+
+            {accountPassMsg && (
+              <div className={`p-4 rounded-xl border text-xs font-bold flex items-center gap-2 ${
+                accountPassMsg.type === "success"
+                  ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                  : "bg-rose-50 text-rose-800 border-rose-200"
+              }`}>
+                {accountPassMsg.type === "success" ? (
+                  <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                ) : (
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                )}
+                <span>{accountPassMsg.text}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleUpdateAccountPassword} className="space-y-4">
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1.5">
+                  Current Password <span className="text-rose-500">*</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type={showCurrentAccountPass ? "text" : "password"}
+                    required
+                    value={currentAccountPass}
+                    onChange={(e) => setCurrentAccountPass(e.target.value)}
+                    placeholder="Enter current login password"
+                    className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 text-xs sm:text-sm font-medium text-slate-800 px-3.5 py-2.5 rounded-xl outline-none pr-10 transition-all"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowCurrentAccountPass(!showCurrentAccountPass)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+                  >
+                    {showCurrentAccountPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1.5">
+                    New Password <span className="text-rose-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showNewAccountPass ? "text" : "password"}
+                      required
+                      value={newAccountPass}
+                      onChange={(e) => setNewAccountPass(e.target.value)}
+                      placeholder="Minimum 8 characters"
+                      className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 text-xs sm:text-sm font-medium text-slate-800 px-3.5 py-2.5 rounded-xl outline-none pr-10 transition-all"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewAccountPass(!showNewAccountPass)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+                    >
+                      {showNewAccountPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1.5">
+                    Confirm New Password <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    value={confirmAccountPass}
+                    onChange={(e) => setConfirmAccountPass(e.target.value)}
+                    placeholder="Re-enter new password"
+                    className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 text-xs sm:text-sm font-medium text-slate-800 px-3.5 py-2.5 rounded-xl outline-none transition-all"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between pt-3 border-t border-slate-100 flex-wrap gap-3">
+                <span className="text-[11px] text-slate-500 font-medium">
+                  • Your electronic signature confirmation automatically synchronizes with this new password.
+                </span>
+                <button
+                  type="submit"
+                  disabled={isUpdatingAccountPass}
+                  className="bg-indigo-700 hover:bg-indigo-800 disabled:opacity-50 text-white text-xs font-extrabold px-5 py-2.5 rounded-xl shadow-xs transition-all flex items-center gap-2 cursor-pointer"
+                >
+                  {isUpdatingAccountPass ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Updating...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Update Account Password</span>
+                    </>
+                  )}
                 </button>
               </div>
             </form>

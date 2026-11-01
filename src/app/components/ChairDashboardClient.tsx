@@ -7,9 +7,10 @@ import {
   XCircle, Send, AlertCircle, RefreshCw, FileText, Check, X,
   Columns, ExternalLink, Download, Loader2, Eye, EyeOff,
   Tag, Layers, BookOpen, Search, Plus, UserCog, Clock,
-  ArrowUp, ArrowDown, Calendar, Filter, PenTool
+  ArrowUp, ArrowDown, Calendar, Filter, PenTool, Lock
 } from "lucide-react";
 import { reviewExamByChair, updateChairNameAction } from "@/app/actions/chair";
+import { updateUserPasswordAction } from "@/app/actions/auth";
 import { createExamDraft } from "@/app/actions/faculty";
 import { Latex } from "@/app/components/Latex";
 import { getDepartmentTheme } from "@/lib/departmentThemes";
@@ -408,6 +409,46 @@ export function ChairDashboardClient({
         setChairProfileModalOpen(false);
         router.refresh();
       }, 700);
+    }
+  };
+
+  // Chair Account Password State
+  const [chairCurrentPass, setChairCurrentPass] = useState("");
+  const [chairNewPass, setChairNewPass] = useState("");
+  const [chairConfirmPass, setChairConfirmPass] = useState("");
+  const [showChairCurrentPass, setShowChairCurrentPass] = useState(false);
+  const [showChairNewPass, setShowChairNewPass] = useState(false);
+  const [isUpdatingChairPass, setIsUpdatingChairPass] = useState(false);
+  const [chairPassMsg, setChairPassMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  const handleUpdateChairPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!chairCurrentPass || !chairNewPass || !chairConfirmPass) {
+      setChairPassMsg({ type: "error", text: "Please fill in all password fields." });
+      return;
+    }
+    if (chairNewPass !== chairConfirmPass) {
+      setChairPassMsg({ type: "error", text: "New password and confirmation do not match." });
+      return;
+    }
+    if (chairNewPass.length < 8) {
+      setChairPassMsg({ type: "error", text: "New password must be at least 8 characters long." });
+      return;
+    }
+    setIsUpdatingChairPass(true);
+    setChairPassMsg(null);
+    const res = await updateUserPasswordAction(chairCurrentPass, chairNewPass, chairConfirmPass, chairUserId);
+    setIsUpdatingChairPass(false);
+    if (res.error) {
+      setChairPassMsg({ type: "error", text: res.error });
+    } else {
+      setChairPassMsg({
+        type: "success",
+        text: "Account password updated successfully! Your electronic signature confirmation now automatically uses this new password.",
+      });
+      setChairCurrentPass("");
+      setChairNewPass("");
+      setChairConfirmPass("");
     }
   };
 
@@ -1915,6 +1956,121 @@ export function ChairDashboardClient({
                 </button>
               </div>
             </form>
+
+            {/* Account Password & Security Section */}
+            <div className="pt-6 border-t border-slate-200 space-y-4">
+              <div>
+                <h4 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
+                  <Lock className="w-4 h-4 text-indigo-600" />
+                  Account Password & Security
+                </h4>
+                <p className="text-xs text-slate-500 font-medium mt-0.5">
+                  Update your login password. Your electronic signature confirmation automatically synchronizes with this password.
+                </p>
+              </div>
+
+              {chairPassMsg && (
+                <div className={`p-3.5 rounded-2xl text-xs font-bold border flex items-center gap-2 ${
+                  chairPassMsg.type === "success"
+                    ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                    : "bg-rose-50 text-rose-800 border-rose-200"
+                }`}>
+                  {chairPassMsg.type === "success" ? (
+                    <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                  ) : (
+                    <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                  )}
+                  <span>{chairPassMsg.text}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleUpdateChairPassword} className="space-y-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">
+                    Current Password <span className="text-rose-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showChairCurrentPass ? "text" : "password"}
+                      required
+                      value={chairCurrentPass}
+                      onChange={(e) => setChairCurrentPass(e.target.value)}
+                      placeholder="Enter current login password"
+                      className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-xs font-medium text-slate-800 p-2.5 rounded-xl outline-none pr-9 transition-all"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowChairCurrentPass(!showChairCurrentPass)}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+                    >
+                      {showChairCurrentPass ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">
+                      New Password <span className="text-rose-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showChairNewPass ? "text" : "password"}
+                        required
+                        value={chairNewPass}
+                        onChange={(e) => setChairNewPass(e.target.value)}
+                        placeholder="Min 8 characters"
+                        className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-xs font-medium text-slate-800 p-2.5 rounded-xl outline-none pr-9 transition-all"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowChairNewPass(!showChairNewPass)}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+                      >
+                        {showChairNewPass ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">
+                      Confirm New Password <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="password"
+                      required
+                      value={chairConfirmPass}
+                      onChange={(e) => setChairConfirmPass(e.target.value)}
+                      placeholder="Repeat new password"
+                      className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-xs font-medium text-slate-800 p-2.5 rounded-xl outline-none transition-all"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-2">
+                  <span className="text-[10px] text-slate-400 font-medium">
+                    • Synchronizes with your signature authorization automatically.
+                  </span>
+                  <button
+                    type="submit"
+                    disabled={isUpdatingChairPass}
+                    className="px-4 py-2 text-xs font-extrabold text-white bg-slate-900 hover:bg-slate-800 rounded-xl shadow-xs transition-all flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                  >
+                    {isUpdatingChairPass ? (
+                      <>
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        <span>Updating...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-3 h-3 text-emerald-400" />
+                        <span>Update Password</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
 
             {/* Electronic Signature Section */}
             <div className="pt-6 border-t border-slate-200">

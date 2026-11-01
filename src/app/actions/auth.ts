@@ -367,3 +367,103 @@ export async function registerInstructorByAdminAction(prevState: any, formData: 
   }
 }
 
+/**
+ * Updates a user's account password.
+ * Securely verifies current password via bcrypt.compare before hashing the new password.
+ * The updated password automatically synchronizes with electronic signature saving and deletion.
+ */
+export async function updateUserPasswordAction(
+  currentPassword: string,
+  newPassword: string,
+  confirmPassword: string,
+  targetUserId?: number
+): Promise<{ success?: boolean; error?: string }> {
+  try {
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      return { error: "Please fill in all password fields." };
+    }
+
+    if (newPassword !== confirmPassword) {
+      return { error: "New password and confirm password do not match." };
+    }
+
+    if (newPassword.length < 8) {
+      return { error: "New password must be at least 8 characters long." };
+    }
+
+    const supabase = await createClient();
+    const {
+      data: { user: sessionUser },
+    } = await supabase.auth.getUser();
+
+    if (!sessionUser) {
+      return { error: "You must be logged in to update your password." };
+    }
+
+    const sessionInstitutionalId = sessionUser.user_metadata?.institutional_id;
+
+    let dbUser = null;
+    if (targetUserId) {
+      dbUser = await db.user.findUnique({
+        where: { user_id: targetUserId },
+      });
+      if (dbUser && sessionInstitutionalId && dbUser.institutional_id !== sessionInstitutionalId) {
+        return { error: "Unauthorized account access." };
+      }
+    }
+
+    if (!dbUser && sessionInstitutionalId) {
+      dbUser = await db.user.findUnique({
+        where: { institutional_id: sessionInstitutionalId },
+      });
+    }
+
+    if (!dbUser && sessionUser.id) {
+      dbUser = await db.user.findFirst({
+        where: { supabase_uid: sessionUser.id },
+      });
+    }
+
+    if (!dbUser) {
+      return { error: "Account could not be found." };
+    }
+
+    // Securely verify current password using bcrypt against live password_hash
+    const isCurrentValid = await bcrypt.compare(currentPassword, dbUser.password_hash);
+    if (!isCurrentValid) {
+      return { error: "Current password is incorrect. Please enter your existing AcadNexus login password." };
+    }
+
+    // Hash new password using bcrypt
+    const salt = await bcrypt.genSalt(10);
+    const newPasswordHash = await bcrypt.hash(newPassword, salt);
+
+    await db.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { user_id: dbUser.user_id },
+        data: {
+          password_hash: newPasswordHash,
+          require_password_update: false,
+        },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          user_id: dbUser.user_id,
+          action_performed: "User updated their account password. Signature authorization password automatically synchronized.",
+          ip_address: "127.0.0.1",
+        },
+      });
+    });
+
+    revalidatePath("/dashboard/faculty");
+    revalidatePath("/dashboard/chair");
+    revalidatePath("/dashboard/director");
+
+    return { success: true };
+  } catch (err: any) {
+    console.error("Error updating user password:", err);
+    return { error: err?.message || "Failed to update account password." };
+  }
+}
+
