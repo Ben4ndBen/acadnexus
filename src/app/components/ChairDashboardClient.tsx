@@ -26,6 +26,7 @@ import { getProgramHeaderImage } from "@/lib/programHeader";
 import { EditableExamTitle } from "@/app/components/EditableExamTitle";
 import { ExamSignatorySection } from "@/app/components/ExamSignatorySection";
 import { MySignatureSection } from "@/app/components/MySignatureSection";
+import { RequireSignatureModal } from "@/app/components/RequireSignatureModal";
 
 function toRomanNumeral(num: number): string {
   const romanMap: [number, string][] = [
@@ -326,6 +327,8 @@ export function ChairDashboardClient({
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<"overview" | "faculty" | "queue" | "my_teaching" | "signature">("overview");
   const [savedSignature, setSavedSignature] = useState<string | null>(userSignature || null);
+  const [showRequireSignatureModal, setShowRequireSignatureModal] = useState<boolean>(false);
+  const [pendingApproval, setPendingApproval] = useState<{ workflowId: number; examId: number; action: "Approve"; examTitle: string } | null>(null);
   const deptTheme = getDepartmentTheme(departmentName);
 
   // Approvals list with local optimistic updates for renamed examinations
@@ -461,7 +464,25 @@ export function ChairDashboardClient({
     return Object.values(qComms).some((c) => (c || "").trim().length > 0);
   };
 
-  const handleReview = async (workflowId: number, examId: number, action: "Approve" | "Return") => {
+  const handleReview = async (
+    workflowId: number, 
+    examId: number, 
+    action: "Approve" | "Return",
+    overrideSignature?: string
+  ) => {
+    const effectiveSig = overrideSignature !== undefined ? overrideSignature : savedSignature;
+    if (action === "Approve" && !effectiveSig) {
+      const approval = approvalsList.find(a => a.workflow_id === workflowId) || pendingApprovals.find(a => a.workflow_id === workflowId);
+      setPendingApproval({
+        workflowId,
+        examId,
+        action: "Approve",
+        examTitle: approval?.exam?.title || "Examination"
+      });
+      setShowRequireSignatureModal(true);
+      return;
+    }
+
     const generalComment = reviewComments[workflowId] || "";
     const qComments = questionComments[workflowId] || {};
     const qStatuses = questionStatuses[workflowId] || {};
@@ -504,6 +525,17 @@ export function ChairDashboardClient({
     setIsSubmittingReview(null);
 
     if (res.error) {
+      if ((res as any).requiresSignature) {
+        const approval = approvalsList.find(a => a.workflow_id === workflowId) || pendingApprovals.find(a => a.workflow_id === workflowId);
+        setPendingApproval({
+          workflowId,
+          examId,
+          action: "Approve",
+          examTitle: approval?.exam?.title || "Examination"
+        });
+        setShowRequireSignatureModal(true);
+        return;
+      }
       alert(res.error);
     } else {
       // Clear comments on success
@@ -2090,6 +2122,30 @@ export function ChairDashboardClient({
           </div>
         </div>
       )}
+
+      {/* REQUIRE SIGNATURE MODAL BEFORE APPROVAL */}
+      <RequireSignatureModal
+        isOpen={showRequireSignatureModal}
+        actionType="approve"
+        examTitle={pendingApproval?.examTitle || "Examination Review"}
+        userId={chairUserId}
+        userName={chairFullName}
+        userRole={isProgramChair ? "Program Chairperson" : "Department Chairperson"}
+        departmentName={departmentName || "Batanes State College"}
+        onClose={() => {
+          setShowRequireSignatureModal(false);
+          setPendingApproval(null);
+        }}
+        onSignatureSavedAndProceed={async (newSig) => {
+          setSavedSignature(newSig);
+          setShowRequireSignatureModal(false);
+          if (pendingApproval) {
+            const { workflowId, examId, action } = pendingApproval;
+            setPendingApproval(null);
+            await handleReview(workflowId, examId, action, newSig);
+          }
+        }}
+      />
 
     </div>
   );

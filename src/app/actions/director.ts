@@ -27,6 +27,13 @@ export async function reviewExamByDirector(
       include: { director: true, faculty: true },
     });
 
+    if (action === "Approve" && !user?.signature) {
+      return {
+        error: "A saved electronic signature is required before approving an examination. Please create and save your signature first.",
+        requiresSignature: true,
+      };
+    }
+
     // 1. Update the approval workflow
     await db.approvalWorkflow.update({
       where: { workflow_id: workflowId },

@@ -15,6 +15,7 @@ import { getProgramHeaderImage } from "@/lib/programHeader";
 import { Latex } from "@/app/components/Latex";
 import { ExamSignatorySection } from "@/app/components/ExamSignatorySection";
 import { MySignatureSection } from "@/app/components/MySignatureSection";
+import { RequireSignatureModal } from "@/app/components/RequireSignatureModal";
 import { reviewExamByDirector, toggleGlobalHold, toggleIndividualHold, saveActiveAcademicPeriod, updateDirectorNameAction } from "@/app/actions/director";
 import type { AcademicPeriodSettings } from "@/lib/academicUtils";
 import { registerInstructorByAdminAction, updateUserPasswordAction } from "@/app/actions/auth";
@@ -351,6 +352,8 @@ export function DirectorDashboardClient({
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<"overview" | "compliance" | "logs" | "exams" | "period" | "faculty" | "signature">("overview");
   const [savedSignature, setSavedSignature] = useState<string | null>(userSignature || null);
+  const [showRequireSignatureModal, setShowRequireSignatureModal] = useState<boolean>(false);
+  const [pendingApproval, setPendingApproval] = useState<{ workflowId: number; examId: number; action: "Approve"; examTitle: string } | null>(null);
 
   // State for Editing Director's Personal Profile Name
   const [profileModalOpen, setProfileModalOpen] = useState(false);
@@ -757,13 +760,31 @@ export function DirectorDashboardClient({
     }
   };
 
-  const handleReview = async (workflowId: number, examId: number, action: "Approve" | "Return" | "Hold") => {
+  const handleReview = async (
+    workflowId: number, 
+    examId: number, 
+    action: "Approve" | "Return" | "Hold",
+    overrideSignature?: string
+  ) => {
     if (action === "Hold") {
       setSelectedWorkflowId(workflowId);
       setSelectedExamId(examId);
       setHoldTriggerType("review");
       setHoldRemarks("");
       setHoldModalOpen(true);
+      return;
+    }
+
+    const effectiveSig = overrideSignature !== undefined ? overrideSignature : savedSignature;
+    if (action === "Approve" && !effectiveSig) {
+      const approval = pendingApprovals.find((a: any) => a.workflow_id === workflowId);
+      setPendingApproval({
+        workflowId,
+        examId,
+        action: "Approve",
+        examTitle: approval?.exam?.title || "Examination"
+      });
+      setShowRequireSignatureModal(true);
       return;
     }
 
@@ -804,6 +825,17 @@ export function DirectorDashboardClient({
     setIsSubmittingReview(null);
 
     if (res.error) {
+      if ((res as any).requiresSignature) {
+        const approval = pendingApprovals.find((a: any) => a.workflow_id === workflowId);
+        setPendingApproval({
+          workflowId,
+          examId,
+          action: "Approve",
+          examTitle: approval?.exam?.title || "Examination"
+        });
+        setShowRequireSignatureModal(true);
+        return;
+      }
       alert(res.error);
     } else {
       router.refresh();
@@ -3905,6 +3937,30 @@ export function DirectorDashboardClient({
           </div>
         </div>
       )}
+
+      {/* REQUIRE SIGNATURE MODAL BEFORE APPROVAL */}
+      <RequireSignatureModal
+        isOpen={showRequireSignatureModal}
+        actionType="approve"
+        examTitle={pendingApproval?.examTitle || "Examination Review"}
+        userId={directorUserId}
+        userName={[dirTitle, dirFirstName, dirMiddleName, dirLastName].filter(Boolean).join(" ").trim() || "Director for Instruction"}
+        userRole="Director for Instruction"
+        departmentName="Office of the Director for Instruction"
+        onClose={() => {
+          setShowRequireSignatureModal(false);
+          setPendingApproval(null);
+        }}
+        onSignatureSavedAndProceed={async (newSig) => {
+          setSavedSignature(newSig);
+          setShowRequireSignatureModal(false);
+          if (pendingApproval) {
+            const { workflowId, examId, action } = pendingApproval;
+            setPendingApproval(null);
+            await handleReview(workflowId, examId, action, newSig);
+          }
+        }}
+      />
     </div>
   );
 }

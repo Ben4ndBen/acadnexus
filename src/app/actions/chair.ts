@@ -31,6 +31,13 @@ export async function reviewExamByChair(
       return { error: "Approval workflow not found." };
     }
 
+    if (action === "Approve" && !user?.signature) {
+      return {
+        error: "A saved electronic signature is required before approving an examination. Please create and save your signature first.",
+        requiresSignature: true,
+      };
+    }
+
     if (isProgChair) {
       // Program Chair Review step ("Reviewed by")
       const status = action === "Approve" ? "Approved" : "Returned";

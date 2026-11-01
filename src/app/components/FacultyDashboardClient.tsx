@@ -33,6 +33,7 @@ import { EditableExamTitle } from "@/app/components/EditableExamTitle";
 import { ExamSignatorySection } from "@/app/components/ExamSignatorySection";
 import { AutoResizeTextarea } from "@/app/components/AutoResizeTextarea";
 import { MySignatureSection } from "@/app/components/MySignatureSection";
+import { RequireSignatureModal } from "@/app/components/RequireSignatureModal";
 
 export type FacultyExamSortField = "recent" | "exam_date" | "title" | "course" | "status";
 
@@ -272,6 +273,8 @@ export function FacultyDashboardClient({
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<"overview" | "tracker" | "submissions" | "profile" | "signature" | "override" | "question_bank" | "archive" | "students">(initialTab || "overview");
   const [savedSignature, setSavedSignature] = useState<string | null>(userSignature || null);
+  const [showRequireSignatureModal, setShowRequireSignatureModal] = useState<boolean>(false);
+  const [pendingTransitionExam, setPendingTransitionExam] = useState<{ examId: number; title: string } | null>(null);
 
   // Popup modal state for newly assigned courses upon first / new login
   const [showAssignedCoursesModal, setShowAssignedCoursesModal] = useState<boolean>(() => {
@@ -1596,12 +1599,36 @@ export function FacultyDashboardClient({
     }
   };
 
-  const handleStatusTransition = async (examId: number, nextStatus: "Draft" | "Pending_Chair" | "Pending_DI" | "Approved" | "Returned") => {
+  const handleStatusTransition = async (
+    examId: number, 
+    nextStatus: "Draft" | "Pending_Chair" | "Pending_DI" | "Approved" | "Returned",
+    overrideSignature?: string
+  ) => {
+    const effectiveSig = overrideSignature !== undefined ? overrideSignature : savedSignature;
+    if (nextStatus === "Pending_Chair" && !effectiveSig) {
+      const targetExam = faculty.examinations?.find((e: any) => e.exam_id === examId);
+      setPendingTransitionExam({
+        examId,
+        title: targetExam?.title || "Examination Draft"
+      });
+      setShowRequireSignatureModal(true);
+      return;
+    }
+
     setTransitioningExamId(examId);
     const res = await updateExamStatus(examId, nextStatus, faculty.faculty_id);
     setTransitioningExamId(null);
     
     if (res.error) {
+      if ((res as any).requiresSignature) {
+        const targetExam = faculty.examinations?.find((e: any) => e.exam_id === examId);
+        setPendingTransitionExam({
+          examId,
+          title: targetExam?.title || "Examination Draft"
+        });
+        setShowRequireSignatureModal(true);
+        return;
+      }
       alert(res.error);
     } else {
       router.refresh();
@@ -7329,6 +7356,30 @@ export function FacultyDashboardClient({
           </div>
         </div>
       )}
+
+      {/* REQUIRE SIGNATURE MODAL BEFORE SUBMISSION */}
+      <RequireSignatureModal
+        isOpen={showRequireSignatureModal}
+        actionType="submit"
+        examTitle={pendingTransitionExam?.title || "Examination Draft"}
+        userId={faculty.faculty_id}
+        userName={[faculty.first_name, faculty.last_name].filter(Boolean).join(" ") || "Faculty Member"}
+        userRole="Faculty"
+        departmentName={faculty.department?.department_name || "Batanes State College"}
+        onClose={() => {
+          setShowRequireSignatureModal(false);
+          setPendingTransitionExam(null);
+        }}
+        onSignatureSavedAndProceed={async (newSig) => {
+          setSavedSignature(newSig);
+          setShowRequireSignatureModal(false);
+          if (pendingTransitionExam) {
+            const idToSubmit = pendingTransitionExam.examId;
+            setPendingTransitionExam(null);
+            await handleStatusTransition(idToSubmit, "Pending_Chair", newSig);
+          }
+        }}
+      />
 
       {/* ASSIGNED COURSES INITIAL LOGIN POPUP MODAL */}
       {showAssignedCoursesModal && (

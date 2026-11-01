@@ -17,6 +17,7 @@ import { getProgramHeaderImage } from "@/lib/programHeader";
 import { EditableExamTitle } from "@/app/components/EditableExamTitle";
 import { ExamSignatorySection } from "@/app/components/ExamSignatorySection";
 import { AutoResizeTextarea } from "@/app/components/AutoResizeTextarea";
+import { RequireSignatureModal } from "@/app/components/RequireSignatureModal";
 
 interface Course {
   course_id: number;
@@ -493,6 +494,10 @@ export function ExamBuilderWizard({
   userSignature
 }: ExamBuilderWizardProps) {
   const router = useRouter();
+
+  // Signature state for submission validation
+  const [activeUserSignature, setActiveUserSignature] = useState<string | null>(userSignature || null);
+  const [showSignatureModal, setShowSignatureModal] = useState<boolean>(false);
 
   // Automatically open Step 2: Test Questions / Question Bank when exam is returned for revision
   const isReturnedExam = Boolean(
@@ -2791,7 +2796,14 @@ export function ExamBuilderWizard({
   };
 
   // Save and Submit for Review
-  const handleSubmitForReview = async () => {
+  const handleSubmitForReview = async (overrideSignature?: string) => {
+    // 0. Verify electronic signature existence before submission
+    const effectiveSig = overrideSignature !== undefined ? overrideSignature : activeUserSignature;
+    if (!effectiveSig) {
+      setShowSignatureModal(true);
+      return;
+    }
+
     // 1. Comprehensive question completeness validation
     const validation = validateExamQuestions();
     if (!validation.valid) {
@@ -2874,6 +2886,12 @@ export function ExamBuilderWizard({
       // Transition status to Pending_Chair
       const statusRes = await updateExamStatus(exam.exam_id, "Pending_Chair", facultyId);
       if (statusRes.error) {
+        if ((statusRes as any).requiresSignature) {
+          isSubmittedRef.current = false;
+          setIsSubmitting(false);
+          setShowSignatureModal(true);
+          return;
+        }
         isSubmittedRef.current = false;
         setSaveStatus({ type: "error", message: `Submission Error: ${statusRes.error}` });
         setPopupModal({
@@ -5598,7 +5616,7 @@ export function ExamBuilderWizard({
                                 onProgramChairNameChange={setSignatoryProgChairName}
                                 onDepartmentChairNameChange={setSignatoryDeptChairName}
                                 onDirectorNameChange={setSignatoryDirectorName}
-                                facultyAuthorSignature={userSignature || null}
+                                facultyAuthorSignature={activeUserSignature || null}
                               />
                             );
                           }
@@ -5683,7 +5701,7 @@ export function ExamBuilderWizard({
             <button
               type="button"
               disabled={isSubmitting || questions.length === 0}
-              onClick={handleSubmitForReview}
+              onClick={() => handleSubmitForReview()}
               className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold px-5 py-2.5 rounded-xl transition-all shadow-md hover:shadow-emerald-600/20 disabled:opacity-50 disabled:pointer-events-none cursor-pointer"
               title={isProgChairAuthor ? "Submit directly to Department Chairperson" : (hasProgramChair ? "Final Submit to Program Chairperson" : "Final Submit to Department Chairperson")}
             >
@@ -5695,6 +5713,23 @@ export function ExamBuilderWizard({
       </div>
 
 
+
+      {/* Signature Required Modal */}
+      <RequireSignatureModal
+        isOpen={showSignatureModal}
+        actionType="submit"
+        examTitle={title || "Examination Draft"}
+        userId={facultyId}
+        userName={signatoryFacultyName || "Faculty Member"}
+        userRole={userRole || "Faculty"}
+        departmentName={facultyDepartment || "Batanes State College"}
+        onClose={() => setShowSignatureModal(false)}
+        onSignatureSavedAndProceed={async (savedSig) => {
+          setActiveUserSignature(savedSig);
+          setShowSignatureModal(false);
+          await handleSubmitForReview(savedSig);
+        }}
+      />
 
       {/* Interactive Notification Popup Modal */}
       {popupModal && popupModal.isOpen && (

@@ -62,6 +62,14 @@ export async function updateExamStatus(examId: number, status: ExamStatus, userI
       // Allow submission for Chair review with integrated TOS matrix
       // Add or update ApprovalWorkflow record if needed
       if (status === "Pending_Chair") {
+        const authorUser = await tx.user.findUnique({ where: { user_id: userId } });
+        if (!authorUser?.signature) {
+          return {
+            error: "A saved electronic signature is required before submitting an examination. Please create and save your signature first.",
+            requiresSignature: true,
+          };
+        }
+
         // Find a Chair to assign (e.g. for the faculty's department)
         const faculty = await tx.faculty.findUnique({
           where: { faculty_id: userId },
