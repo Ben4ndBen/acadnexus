@@ -499,6 +499,22 @@ export function ExamBuilderWizard({
   const [activeUserSignature, setActiveUserSignature] = useState<string | null>(userSignature || null);
   const [showSignatureModal, setShowSignatureModal] = useState<boolean>(false);
 
+  // Helper to render official signature image above signatory names
+  const renderSignatureSlot = (sigUrl?: string | null, altText: string = "Official Signature", centered: boolean = false) => {
+    if (sigUrl) {
+      return (
+        <div className={`h-12 -mb-2 flex items-end ${centered ? "justify-center" : ""}`}>
+          <img
+            src={sigUrl}
+            alt={altText}
+            className="max-h-14 max-w-[170px] object-contain block pointer-events-none select-none"
+          />
+        </div>
+      );
+    }
+    return <div className="h-4" />;
+  };
+
   // Automatically open Step 2: Test Questions / Question Bank when exam is returned for revision
   const isReturnedExam = Boolean(
     exam.current_status === "Returned" ||
@@ -5088,6 +5104,7 @@ export function ExamBuilderWizard({
                                 <div className="space-y-6">
                                   <p className="font-extrabold text-black uppercase tracking-wider text-[11px]">Prepared by:</p>
                                   <div>
+                                    {renderSignatureSlot(activeUserSignature || (exam as any)?.approvalWorkflow?.faculty_signature, "Faculty Member Signature")}
                                     <p
                                       contentEditable
                                       suppressContentEditableWarning
@@ -5115,6 +5132,10 @@ export function ExamBuilderWizard({
                                 <div className="space-y-6">
                                   <p className="font-extrabold text-black uppercase tracking-wider text-[11px]">Reviewed by:</p>
                                   <div>
+                                    {renderSignatureSlot(
+                                      isPcOrChairAuthor ? (exam as any)?.approvalWorkflow?.chair_signature : (exam as any)?.approvalWorkflow?.prog_chair_signature,
+                                      isPcOrChairAuthor ? "Department Chairperson Signature" : "Program Chairperson Signature"
+                                    )}
                                     <p
                                       contentEditable
                                       suppressContentEditableWarning
@@ -5140,6 +5161,7 @@ export function ExamBuilderWizard({
                                 <div className="space-y-6">
                                   <p className="font-extrabold text-black uppercase tracking-wider text-[11px]">Recommending Approval:</p>
                                   <div>
+                                    {renderSignatureSlot((exam as any)?.approvalWorkflow?.chair_signature, "Department Chairperson Signature")}
                                     <p
                                       contentEditable
                                       suppressContentEditableWarning
@@ -5155,6 +5177,7 @@ export function ExamBuilderWizard({
                                 <div className="space-y-6">
                                   <p className="font-extrabold text-black uppercase tracking-wider text-[11px]">Approved by:</p>
                                   <div>
+                                    {renderSignatureSlot((exam as any)?.approvalWorkflow?.di_signature, "Director for Instruction Signature")}
                                     <p
                                       contentEditable
                                       suppressContentEditableWarning
@@ -5177,6 +5200,7 @@ export function ExamBuilderWizard({
                                 <div className="space-y-6">
                                   <p className="font-extrabold text-black uppercase tracking-wider text-[11px]">Prepared by:</p>
                                   <div>
+                                    {renderSignatureSlot(activeUserSignature || (exam as any)?.approvalWorkflow?.faculty_signature, "Faculty Member Signature")}
                                     <p
                                       contentEditable
                                       suppressContentEditableWarning
@@ -5204,6 +5228,7 @@ export function ExamBuilderWizard({
                                 <div className="space-y-6">
                                   <p className="font-extrabold text-black uppercase tracking-wider text-[11px]">Reviewed by:</p>
                                   <div>
+                                    {renderSignatureSlot((exam as any)?.approvalWorkflow?.chair_signature, "Department Chairperson Signature")}
                                     <p
                                       contentEditable
                                       suppressContentEditableWarning
@@ -5219,6 +5244,7 @@ export function ExamBuilderWizard({
                                 <div className="sm:col-span-2 max-w-sm mx-auto w-full space-y-6 pt-2">
                                   <p className="font-extrabold text-black uppercase tracking-wider text-[11px] text-center">Approved by:</p>
                                   <div className="text-center">
+                                    {renderSignatureSlot((exam as any)?.approvalWorkflow?.di_signature, "Director for Instruction Signature", true)}
                                     <p
                                       contentEditable
                                       suppressContentEditableWarning
@@ -5241,6 +5267,7 @@ export function ExamBuilderWizard({
                                 <div className="space-y-6">
                                   <p className="font-extrabold text-black uppercase tracking-wider text-[11px]">Prepared by:</p>
                                   <div>
+                                    {renderSignatureSlot(activeUserSignature || (exam as any)?.approvalWorkflow?.prog_chair_signature || (exam as any)?.approvalWorkflow?.faculty_signature, "Program Chairperson Signature")}
                                     <p
                                       contentEditable
                                       suppressContentEditableWarning
@@ -5256,6 +5283,7 @@ export function ExamBuilderWizard({
                                 <div className="space-y-6">
                                   <p className="font-extrabold text-black uppercase tracking-wider text-[11px]">Recommending Approval:</p>
                                   <div>
+                                    {renderSignatureSlot((exam as any)?.approvalWorkflow?.chair_signature, "Department Chairperson Signature")}
                                     <p
                                       contentEditable
                                       suppressContentEditableWarning
@@ -5271,6 +5299,7 @@ export function ExamBuilderWizard({
                                 <div className="sm:col-span-2 max-w-sm mx-auto w-full space-y-6 pt-2">
                                   <p className="font-extrabold text-black uppercase tracking-wider text-[11px] text-center">Approved by:</p>
                                   <div className="text-center">
+                                    {renderSignatureSlot((exam as any)?.approvalWorkflow?.di_signature, "Director for Instruction Signature", true)}
                                     <p
                                       contentEditable
                                       suppressContentEditableWarning
@@ -5615,7 +5644,10 @@ export function ExamBuilderWizard({
                                 onProgramChairNameChange={setSignatoryProgChairName}
                                 onDepartmentChairNameChange={setSignatoryDeptChairName}
                                 onDirectorNameChange={setSignatoryDirectorName}
-                                facultyAuthorSignature={activeUserSignature || null}
+                                facultyAuthorSignature={activeUserSignature || (exam as any)?.approvalWorkflow?.faculty_signature || null}
+                                programChairSignature={isPcOrChairAuthor ? (activeUserSignature || (exam as any)?.approvalWorkflow?.prog_chair_signature || null) : ((exam as any)?.approvalWorkflow?.prog_chair_signature || null)}
+                                departmentChairSignature={(exam as any)?.approvalWorkflow?.chair_signature || null}
+                                directorSignature={(exam as any)?.approvalWorkflow?.di_signature || null}
                               />
                             );
                           }

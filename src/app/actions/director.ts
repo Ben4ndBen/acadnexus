@@ -36,15 +36,20 @@ export async function reviewExamByDirector(
         };
       }
 
-      if (password && password.trim()) {
-        const bcrypt = await import("bcryptjs");
-        const isPasswordValid = await bcrypt.compare(password, user.password_hash);
-        if (!isPasswordValid) {
-          return {
-            error: "Incorrect password. Please enter your current AcadNexus account password to authorize your signature.",
-            invalidPassword: true,
-          };
-        }
+      if (!password || !password.trim()) {
+        return {
+          error: "Password confirmation is required to authorize your signature.",
+          requiresSignature: true,
+        };
+      }
+
+      const bcrypt = await import("bcryptjs");
+      const isPasswordValid = await bcrypt.compare(password, user.password_hash);
+      if (!isPasswordValid) {
+        return {
+          error: "Incorrect password. Please enter your current AcadNexus account password to authorize your signature.",
+          invalidPassword: true,
+        };
       }
     }
 

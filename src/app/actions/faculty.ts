@@ -70,15 +70,20 @@ export async function updateExamStatus(examId: number, status: ExamStatus, userI
           };
         }
 
-        if (password && password.trim()) {
-          const bcrypt = await import("bcryptjs");
-          const isPasswordValid = await bcrypt.compare(password, authorUser.password_hash);
-          if (!isPasswordValid) {
-            return {
-              error: "Incorrect password. Please enter your current AcadNexus account password to authorize your signature.",
-              invalidPassword: true,
-            };
-          }
+        if (!password || !password.trim()) {
+          return {
+            error: "Password confirmation is required to authorize your signature.",
+            requiresSignature: true,
+          };
+        }
+
+        const bcrypt = await import("bcryptjs");
+        const isPasswordValid = await bcrypt.compare(password, authorUser.password_hash);
+        if (!isPasswordValid) {
+          return {
+            error: "Incorrect password. Please enter your current AcadNexus account password to authorize your signature.",
+            invalidPassword: true,
+          };
         }
 
         // Find a Chair to assign (e.g. for the faculty's department)
@@ -255,6 +260,7 @@ export async function updateExamStatus(examId: number, status: ExamStatus, userI
               data: {
                 di_review_status: "Hold",
                 di_action_timestamp: null,
+                faculty_signature: authorUser?.signature || existingWorkflow.faculty_signature,
                 // Preserve previous comments and revision history completely:
                 di_comments: existingWorkflow.di_comments,
                 chair_comments: existingWorkflow.chair_comments,
@@ -272,6 +278,7 @@ export async function updateExamStatus(examId: number, status: ExamStatus, userI
               data: {
                 chair_review_status: "Pending",
                 chair_action_timestamp: null,
+                faculty_signature: authorUser?.signature || existingWorkflow.faculty_signature,
                 // Retain prior Program Chair approval if it existed:
                 prog_chair_review_status: existingWorkflow.prog_chair_review_status,
                 prog_chair_action_timestamp: existingWorkflow.prog_chair_action_timestamp,
@@ -292,6 +299,7 @@ export async function updateExamStatus(examId: number, status: ExamStatus, userI
               data: {
                 prog_chair_review_status: "Pending",
                 prog_chair_action_timestamp: null,
+                faculty_signature: authorUser?.signature || existingWorkflow.faculty_signature,
                 // Preserve previous comments and revision history completely:
                 prog_chair_comments: existingWorkflow.prog_chair_comments,
                 chair_comments: existingWorkflow.chair_comments,
