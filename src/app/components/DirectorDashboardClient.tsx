@@ -7,12 +7,13 @@ import {
   XCircle, Clock, AlertCircle, RefreshCw, Search, Building2,
   UserPlus, X, Loader2, Eye, EyeOff, Award, Calendar, Sparkles,
   Users, BookOpen, UserCog, Columns, FileText,
-  ArrowUp, ArrowDown, ArrowUpDown, SlidersHorizontal, Filter
+  ArrowUp, ArrowDown, ArrowUpDown, SlidersHorizontal, Filter, PenTool
 } from "lucide-react";
 import { BSCTableOfSpecificationsView } from "@/app/components/BSCTableOfSpecificationsView";
 import { getProgramHeaderImage } from "@/lib/programHeader";
 import { Latex } from "@/app/components/Latex";
 import { ExamSignatorySection } from "@/app/components/ExamSignatorySection";
+import { MySignatureSection } from "@/app/components/MySignatureSection";
 import { reviewExamByDirector, toggleGlobalHold, toggleIndividualHold, saveActiveAcademicPeriod, updateDirectorNameAction } from "@/app/actions/director";
 import type { AcademicPeriodSettings } from "@/lib/academicUtils";
 import { registerInstructorByAdminAction } from "@/app/actions/auth";
@@ -328,6 +329,7 @@ interface DirectorDashboardClientProps {
     user?: { institutional_id: string; username?: string | null; is_active: boolean; role?: string };
     facultyCourses?: Array<{ course: { course_id: number; course_code: string; course_title: string } }>;
   }>;
+  userSignature?: string | null;
 }
 
 export function DirectorDashboardClient({ 
@@ -342,10 +344,12 @@ export function DirectorDashboardClient({
   departmentsList = [],
   academicPeriodSettings,
   courses = [],
-  facultyMembers = []
+  facultyMembers = [],
+  userSignature
 }: DirectorDashboardClientProps) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<"overview" | "compliance" | "logs" | "exams" | "period" | "faculty">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "compliance" | "logs" | "exams" | "period" | "faculty" | "signature">("overview");
+  const [savedSignature, setSavedSignature] = useState<string | null>(userSignature || null);
 
   // State for Editing Director's Personal Profile Name
   const [profileModalOpen, setProfileModalOpen] = useState(false);
@@ -1174,6 +1178,12 @@ export function DirectorDashboardClient({
           const resolvedDept = getExaminationDepartmentName(approval.exam);
           const directorName = [dirTitle, dirFirstName, dirMiddleName, dirLastName].filter(Boolean).join(" ").trim() || "NAME OF DIRECTOR FOR INSTRUCTION";
 
+          const aw = (approval as any).approvalWorkflow || (approval.exam as any)?.approvalWorkflow || approval;
+          const facultyAuthorSig = (approval.exam?.faculty as any)?.user?.signature || (aw as any)?.faculty_signature || null;
+          const progChairSig = (aw as any)?.prog_chair_signature || null;
+          const deptChairSig = (aw as any)?.chair_signature || null;
+          const directorSig = (aw as any)?.di_signature || (approval.di_review_status === "Approved" || approval.exam?.current_status === "Approved" ? savedSignature : null);
+
           return (
             <ExamSignatorySection
               departmentName={resolvedDept}
@@ -1185,6 +1195,10 @@ export function DirectorDashboardClient({
               directorName={directorName}
               isProgramChairAuthor={isAuthorPC}
               isEditable={false}
+              facultyAuthorSignature={facultyAuthorSig}
+              programChairSignature={progChairSig}
+              departmentChairSignature={deptChairSig}
+              directorSignature={directorSig}
             />
           );
         })()}
@@ -1270,6 +1284,22 @@ export function DirectorDashboardClient({
         >
           <Users className="w-4 h-4" />
           Faculty & Assigned Courses
+        </button>
+        <button
+          onClick={() => setActiveTab("signature")}
+          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-bold rounded-xl transition-all duration-300 ${
+            activeTab === "signature"
+              ? "bg-indigo-700 text-white shadow-md shadow-indigo-700/20"
+              : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+          }`}
+        >
+          <PenTool className="w-4 h-4" />
+          <span>My Signature</span>
+          {savedSignature ? (
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" title="Signature on file" />
+          ) : (
+            <span className="w-2 h-2 rounded-full bg-amber-400" title="Signature pending" />
+          )}
         </button>
 
         <div className="flex items-center gap-2 ml-auto">
@@ -2540,6 +2570,30 @@ export function DirectorDashboardClient({
         </div>
       )}
 
+      {/* MY SIGNATURE SECTION TAB */}
+      {activeTab === "signature" && (
+        <div className="bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6">
+          <div className="border-b border-slate-100 pb-5">
+            <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+              <span className="w-1.5 h-6 bg-indigo-600 rounded-full" />
+              Director for Instruction Signature Settings
+            </h2>
+            <p className="text-slate-500 text-xs mt-1">
+              Draw and save your official signature for automated endorsement on all approved BSC institution examinations.
+            </p>
+          </div>
+
+          <MySignatureSection
+            currentSignature={savedSignature}
+            userRole="Director for Instruction"
+            userName={[dirTitle, dirFirstName, dirMiddleName, dirLastName].filter(Boolean).join(" ").trim() || "Director for Instruction"}
+            departmentName="Office of the Director for Instruction"
+            onSignatureSaved={(sig) => setSavedSignature(sig)}
+            onSignatureDeleted={() => setSavedSignature(null)}
+          />
+        </div>
+      )}
+
       {/* HOLD REMARKS MODAL */}
       {holdModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
@@ -3247,15 +3301,15 @@ export function DirectorDashboardClient({
       {/* EDIT DIRECTOR PROFILE / NAME MODAL */}
       {profileModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl border border-slate-100 space-y-6 animate-in zoom-in-95 duration-200">
+          <div className="bg-white rounded-3xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6 sm:p-8 shadow-2xl border border-slate-100 space-y-6 animate-in zoom-in-95 duration-200">
             <div className="flex items-center justify-between border-b border-slate-100 pb-4">
               <div className="flex items-center gap-3">
                 <div className="bg-indigo-50 text-indigo-700 p-2.5 rounded-2xl border border-indigo-100">
                   <UserCog className="w-6 h-6" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-extrabold text-slate-900">Director Profile Name</h3>
-                  <p className="text-xs text-slate-500 font-medium">Update your official name and academic prefix/title</p>
+                  <h3 className="text-lg font-extrabold text-slate-900">Director Profile & Signature</h3>
+                  <p className="text-xs text-slate-500 font-medium">Update your official name and drawn signature displayed across portals</p>
                 </div>
               </div>
               <button
@@ -3339,7 +3393,7 @@ export function DirectorDashboardClient({
                 />
               </div>
 
-              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2.5">
+              <div className="pt-2 flex items-center justify-end gap-2.5">
                 <button
                   type="button"
                   onClick={() => setProfileModalOpen(false)}
@@ -3366,6 +3420,22 @@ export function DirectorDashboardClient({
                 </button>
               </div>
             </form>
+
+            {/* Electronic Signature Section */}
+            <div className="pt-6 border-t border-slate-200">
+              <div className="mb-4">
+                <h4 className="text-sm font-extrabold text-slate-900">Official Electronic Signature</h4>
+                <p className="text-xs text-slate-500 font-medium">Draw and save your institutional signature for automated endorsement on approved exams.</p>
+              </div>
+              <MySignatureSection
+                currentSignature={savedSignature}
+                userRole="Director for Instruction"
+                userName={[dirTitle, dirFirstName, dirMiddleName, dirLastName].filter(Boolean).join(" ").trim() || "Director for Instruction"}
+                departmentName="Office of the Director for Instruction"
+                onSignatureSaved={(sig) => setSavedSignature(sig)}
+                onSignatureDeleted={() => setSavedSignature(null)}
+              />
+            </div>
           </div>
         </div>
       )}
@@ -3490,6 +3560,12 @@ export function DirectorDashboardClient({
                       activePreviewApproval.exam.faculty?.first_name?.toLowerCase().includes("progchair")
                     );
 
+                    const aw = (activePreviewApproval as any).approvalWorkflow || (activePreviewApproval.exam as any)?.approvalWorkflow || activePreviewApproval;
+                    const facultyAuthorSig = (activePreviewApproval.exam?.faculty as any)?.user?.signature || (aw as any)?.faculty_signature || null;
+                    const progChairSig = (aw as any)?.prog_chair_signature || null;
+                    const deptChairSig = (aw as any)?.chair_signature || null;
+                    const directorSig = (aw as any)?.di_signature || (activePreviewApproval.di_review_status === "Approved" || activePreviewApproval.exam?.current_status === "Approved" ? savedSignature : null);
+
                     if (parsedTos && parsedTos.topics) {
                       return (
                         <div className="w-full h-full overflow-y-auto bg-white p-4 rounded-xl border border-slate-800">
@@ -3508,6 +3584,10 @@ export function DirectorDashboardClient({
                             isProgramChairAuthor={isAuthorPC}
                             totalItems={parsedTos.targetTotalItems || activePreviewApproval.exam.questionBank?.length || 50}
                             topics={parsedTos.topics || []}
+                            facultyAuthorSignature={facultyAuthorSig}
+                            programChairSignature={progChairSig}
+                            departmentChairSignature={deptChairSig}
+                            directorSignature={directorSig}
                           />
                         </div>
                       );
@@ -3563,6 +3643,10 @@ export function DirectorDashboardClient({
                           isProgramChairAuthor={isAuthorPC}
                           totalItems={qBank.length || 50}
                           topics={fallbackTopics}
+                          facultyAuthorSignature={facultyAuthorSig}
+                          programChairSignature={progChairSig}
+                          departmentChairSignature={deptChairSig}
+                          directorSignature={directorSig}
                         />
                       </div>
                     );

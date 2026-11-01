@@ -271,6 +271,7 @@ export default async function ExamBuilderPage({ params }: PageProps) {
           initialDeptChairName={initialDeptChairName}
           initialProgChairName={initialProgChairName}
           initialDirectorName={initialDirectorName}
+          userSignature={dbUser?.signature || null}
         />
       </main>
 

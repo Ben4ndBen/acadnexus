@@ -14,6 +14,11 @@ export interface ExamSignatorySectionProps {
   departmentChairName?: string;
   directorName?: string;
 
+  facultyAuthorSignature?: string | null;
+  programChairSignature?: string | null;
+  departmentChairSignature?: string | null;
+  directorSignature?: string | null;
+
   isProgramChairAuthor?: boolean;
   authorRole?: string;
   reviewerRoleTitle?: string;
@@ -101,6 +106,10 @@ export function ExamSignatorySection({
   programChairName = "NAME OF PROGRAM CHAIRPERSON",
   departmentChairName = "NAME OF DEPARTMENT CHAIRPERSON",
   directorName = "NAME OF DIRECTOR FOR INSTRUCTION",
+  facultyAuthorSignature,
+  programChairSignature,
+  departmentChairSignature,
+  directorSignature,
   isProgramChairAuthor = false,
   authorRole,
   reviewerRoleTitle,
@@ -140,6 +149,21 @@ export function ExamSignatorySection({
   const displayDeptChair = departmentChairName || "NAME OF DEPARTMENT CHAIRPERSON";
   const displayDirector = directorName || "NAME OF DIRECTOR FOR INSTRUCTION";
 
+  const renderSignatureSlot = (sigUrl?: string | null, altText: string = "Official Signature") => {
+    if (sigUrl) {
+      return (
+        <div className="h-12 -mb-2 flex items-end">
+          <img
+            src={sigUrl}
+            alt={altText}
+            className="max-h-14 max-w-[170px] object-contain block pointer-events-none select-none"
+          />
+        </div>
+      );
+    }
+    return <div className="h-8" />;
+  };
+
   return (
     <div
       style={{ fontFamily: "Arial, Helvetica, sans-serif" }}
@@ -150,11 +174,12 @@ export function ExamSignatorySection({
         <div className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-7 gap-x-12 text-xs text-black font-sans pt-1">
             {/* Row 1 Left: Prepared by */}
-            <div className="space-y-5">
+            <div className="space-y-2">
               <p className="font-extrabold text-black uppercase tracking-wider text-[11px]">
                 Prepared by:
               </p>
               <div>
+                {renderSignatureSlot(facultyAuthorSignature, "Faculty Member Signature")}
                 {isEditable ? (
                   <p
                     contentEditable
@@ -194,11 +219,15 @@ export function ExamSignatorySection({
             </div>
 
             {/* Row 1 Right: Reviewed by */}
-            <div className="space-y-5">
+            <div className="space-y-2">
               <p className="font-extrabold text-black uppercase tracking-wider text-[11px]">
                 Reviewed by:
               </p>
               <div>
+                {renderSignatureSlot(
+                  isPcOrChairAuthor ? departmentChairSignature : programChairSignature,
+                  isPcOrChairAuthor ? "Department Chairperson Signature" : "Program Chairperson Signature"
+                )}
                 {isEditable ? (
                   <p
                     contentEditable
@@ -227,11 +256,12 @@ export function ExamSignatorySection({
             </div>
 
             {/* Row 2 Left: Recommending Approval */}
-            <div className="space-y-5">
+            <div className="space-y-2">
               <p className="font-extrabold text-black uppercase tracking-wider text-[11px]">
                 Recommending Approval:
               </p>
               <div>
+                {renderSignatureSlot(departmentChairSignature, "Department Chairperson Signature")}
                 {isEditable ? (
                   <p
                     contentEditable
@@ -254,11 +284,12 @@ export function ExamSignatorySection({
             </div>
 
             {/* Row 2 Right: Approved by */}
-            <div className="space-y-5">
+            <div className="space-y-2">
               <p className="font-extrabold text-black uppercase tracking-wider text-[11px]">
                 Approved by:
               </p>
               <div>
+                {renderSignatureSlot(directorSignature, "Director for Instruction Signature")}
                 {isEditable ? (
                   <p
                     contentEditable
@@ -288,11 +319,12 @@ export function ExamSignatorySection({
         <div className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-7 gap-x-12 text-xs text-black font-sans pt-1">
             {/* Row 1 Left: Prepared by */}
-            <div className="space-y-5">
+            <div className="space-y-2">
               <p className="font-extrabold text-black uppercase tracking-wider text-[11px]">
                 Prepared by:
               </p>
               <div>
+                {renderSignatureSlot(facultyAuthorSignature, "Faculty Member Signature")}
                 {isEditable ? (
                   <p
                     contentEditable
@@ -332,11 +364,12 @@ export function ExamSignatorySection({
             </div>
 
             {/* Row 1 Right: Reviewed by */}
-            <div className="space-y-5">
+            <div className="space-y-2">
               <p className="font-extrabold text-black uppercase tracking-wider text-[11px]">
                 Reviewed by:
               </p>
               <div>
+                {renderSignatureSlot(departmentChairSignature, "Department Chairperson Signature")}
                 {isEditable ? (
                   <p
                     contentEditable
@@ -359,11 +392,12 @@ export function ExamSignatorySection({
             </div>
 
             {/* Row 2 Center: Approved by */}
-            <div className="sm:col-span-2 max-w-sm mx-auto w-full space-y-5 pt-2 text-center">
+            <div className="sm:col-span-2 max-w-sm mx-auto w-full space-y-2 pt-2 text-center">
               <p className="font-extrabold text-black uppercase tracking-wider text-[11px]">
                 Approved by:
               </p>
               <div>
+                {renderSignatureSlot(directorSignature, "Director for Instruction Signature")}
                 {isEditable ? (
                   <p
                     contentEditable
@@ -393,11 +427,12 @@ export function ExamSignatorySection({
         <div className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-7 gap-x-12 text-xs text-black font-sans pt-1">
             {/* Row 1 Left: Prepared by Program Chair */}
-            <div className="space-y-5">
+            <div className="space-y-2">
               <p className="font-extrabold text-black uppercase tracking-wider text-[11px]">
                 Prepared by:
               </p>
               <div>
+                {renderSignatureSlot(programChairSignature || facultyAuthorSignature, "Program Chairperson Signature")}
                 {isEditable ? (
                   <p
                     contentEditable
@@ -420,11 +455,12 @@ export function ExamSignatorySection({
             </div>
 
             {/* Row 1 Right: Recommending Approval */}
-            <div className="space-y-5">
+            <div className="space-y-2">
               <p className="font-extrabold text-black uppercase tracking-wider text-[11px]">
                 Recommending Approval:
               </p>
               <div>
+                {renderSignatureSlot(departmentChairSignature, "Department Chairperson Signature")}
                 {isEditable ? (
                   <p
                     contentEditable
@@ -447,11 +483,12 @@ export function ExamSignatorySection({
             </div>
 
             {/* Row 2 Center: Approved by */}
-            <div className="sm:col-span-2 max-w-sm mx-auto w-full space-y-5 pt-2 text-center">
+            <div className="sm:col-span-2 max-w-sm mx-auto w-full space-y-2 pt-2 text-center">
               <p className="font-extrabold text-black uppercase tracking-wider text-[11px]">
                 Approved by:
               </p>
               <div>
+                {renderSignatureSlot(directorSignature, "Director for Instruction Signature")}
                 {isEditable ? (
                   <p
                     contentEditable

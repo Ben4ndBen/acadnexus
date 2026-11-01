@@ -96,6 +96,7 @@ interface ExamBuilderWizardProps {
   initialDeptChairName?: string;
   initialProgChairName?: string;
   initialDirectorName?: string;
+  userSignature?: string | null;
 }
 
 function toRomanNumeral(num: number): string {
@@ -488,7 +489,8 @@ export function ExamBuilderWizard({
   userRole,
   initialDeptChairName,
   initialProgChairName,
-  initialDirectorName
+  initialDirectorName,
+  userSignature
 }: ExamBuilderWizardProps) {
   const router = useRouter();
 
@@ -5596,6 +5598,7 @@ export function ExamBuilderWizard({
                                 onProgramChairNameChange={setSignatoryProgChairName}
                                 onDepartmentChairNameChange={setSignatoryDeptChairName}
                                 onDirectorNameChange={setSignatoryDirectorName}
+                                facultyAuthorSignature={userSignature || null}
                               />
                             );
                           }

@@ -7,7 +7,7 @@ import {
   XCircle, Send, AlertCircle, RefreshCw, FileText, Check, X,
   Columns, ExternalLink, Download, Loader2, Eye, EyeOff,
   Tag, Layers, BookOpen, Search, Plus, UserCog, Clock,
-  ArrowUp, ArrowDown, Calendar, Filter
+  ArrowUp, ArrowDown, Calendar, Filter, PenTool
 } from "lucide-react";
 import { reviewExamByChair, updateChairNameAction } from "@/app/actions/chair";
 import { createExamDraft } from "@/app/actions/faculty";
@@ -24,6 +24,7 @@ import { BSCTableOfSpecificationsView, formatFullExamDate } from "@/app/componen
 import { getProgramHeaderImage } from "@/lib/programHeader";
 import { EditableExamTitle } from "@/app/components/EditableExamTitle";
 import { ExamSignatorySection } from "@/app/components/ExamSignatorySection";
+import { MySignatureSection } from "@/app/components/MySignatureSection";
 
 function toRomanNumeral(num: number): string {
   const romanMap: [number, string][] = [
@@ -295,6 +296,7 @@ interface ChairDashboardClientProps {
   username?: string;
   studentExams?: any[];
   directorName?: string;
+  userSignature?: string | null;
 }
 
 export function ChairDashboardClient({ 
@@ -318,9 +320,11 @@ export function ChairDashboardClient({
   username,
   studentExams = [],
   directorName = "",
+  userSignature = null,
 }: ChairDashboardClientProps) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<"overview" | "faculty" | "queue" | "my_teaching">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "faculty" | "queue" | "my_teaching" | "signature">("overview");
+  const [savedSignature, setSavedSignature] = useState<string | null>(userSignature || null);
   const deptTheme = getDepartmentTheme(departmentName);
 
   // Approvals list with local optimistic updates for renamed examinations
@@ -379,6 +383,8 @@ export function ChairDashboardClient({
   const [chairLastName, setChairLastName] = useState(faculty?.last_name || "");
   const [isSavingChairName, setIsSavingChairName] = useState(false);
   const [chairNameMsg, setChairNameMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  const chairFullName = [chairFirstName, chairMiddleName, chairLastName].filter(Boolean).join(" ").trim() || `${faculty?.first_name || ""} ${faculty?.last_name || ""}`.trim() || "Chairperson";
 
   const handleSaveChairProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -899,6 +905,10 @@ export function ChairDashboardClient({
               programChairName={isProgramChair ? chairFullName : undefined}
               departmentChairName={!isProgramChair ? chairFullName : undefined}
               directorName={directorName}
+              facultyAuthorSignature={(approval.exam?.faculty as any)?.user?.signature || (approval as any).faculty_signature || null}
+              programChairSignature={(approval as any).prog_chair_signature || (isProgramChair && approval.prog_chair_review_status === "Approved" ? savedSignature : null)}
+              departmentChairSignature={(approval as any).chair_signature || (!isProgramChair && approval.chair_review_status === "Approved" ? savedSignature : null)}
+              directorSignature={(approval as any).di_signature || null}
               isProgramChairAuthor={isAuthorPC}
               isEditable={false}
             />
@@ -983,6 +993,20 @@ export function ChairDashboardClient({
           <BookOpen className="w-4 h-4" />
           My Teaching Portal & Exams
         </button>
+        <button
+          onClick={() => setActiveTab("signature")}
+          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-bold rounded-xl transition-all duration-300 ${
+            activeTab === "signature"
+              ? "bg-amber-600 text-white shadow-md shadow-amber-600/20"
+              : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+          }`}
+        >
+          <PenTool className="w-4 h-4" />
+          My Signature
+          {savedSignature && (
+            <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" title="Signature on file" />
+          )}
+        </button>
 
         {/* Action Buttons */}
         <div className="flex items-center gap-2 ml-auto">
@@ -997,7 +1021,7 @@ export function ChairDashboardClient({
             className="flex items-center gap-2 px-3.5 py-2.5 text-xs font-bold rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 shadow-sm transition-all duration-300 cursor-pointer"
           >
             <UserCog className="w-4 h-4 text-amber-600" />
-            Edit Profile / Name
+            Account & Signature
           </button>
           <button
             disabled={isCreatingExam}
@@ -1027,7 +1051,22 @@ export function ChairDashboardClient({
           requirePasswordUpdate={requirePasswordUpdate}
           username={username}
           studentExams={studentExams}
+          userSignature={savedSignature}
         />
+      )}
+
+      {/* MY SIGNATURE TAB */}
+      {activeTab === "signature" && (
+        <div className="max-w-4xl mx-auto space-y-6">
+          <MySignatureSection
+            initialSignature={savedSignature}
+            userId={chairUserId}
+            userFullName={chairFullName}
+            userRoleTitle={chairTitle || (isProgramChair ? "Program Chairperson" : "Department Chairperson")}
+            onSignatureSaved={(sig) => setSavedSignature(sig)}
+            onSignatureDeleted={() => setSavedSignature(null)}
+          />
+        </div>
       )}
 
       {/* OVERVIEW TAB */}
@@ -1577,6 +1616,10 @@ export function ChairDashboardClient({
                             isProgramChairAuthor={isAuthorPC}
                             totalItems={parsedTos.targetTotalItems || activeSplitApproval.exam.questionBank?.length || 50}
                             topics={parsedTos.topics || []}
+                            facultyAuthorSignature={(activeSplitApproval.exam.faculty as any)?.user?.signature || (activeSplitApproval as any).faculty_signature || null}
+                            programChairSignature={(activeSplitApproval as any).prog_chair_signature || (isProgramChair && activeSplitApproval.prog_chair_review_status === "Approved" ? savedSignature : null)}
+                            departmentChairSignature={(activeSplitApproval as any).chair_signature || (!isProgramChair && activeSplitApproval.chair_review_status === "Approved" ? savedSignature : null)}
+                            directorSignature={(activeSplitApproval as any).di_signature || null}
                           />
                         </div>
                       );
@@ -1643,6 +1686,10 @@ export function ChairDashboardClient({
                               itemPlacement: `Items 1–${qBank.length || 50}`,
                             }
                           ]}
+                          facultyAuthorSignature={(activeSplitApproval.exam.faculty as any)?.user?.signature || (activeSplitApproval as any).faculty_signature || null}
+                          programChairSignature={(activeSplitApproval as any).prog_chair_signature || (isProgramChair && activeSplitApproval.prog_chair_review_status === "Approved" ? savedSignature : null)}
+                          departmentChairSignature={(activeSplitApproval as any).chair_signature || (!isProgramChair && activeSplitApproval.chair_review_status === "Approved" ? savedSignature : null)}
+                          directorSignature={(activeSplitApproval as any).di_signature || null}
                         />
                       </div>
                     );
@@ -1762,15 +1809,15 @@ export function ChairDashboardClient({
       {/* EDIT CHAIRPERSON PROFILE / NAME MODAL */}
       {chairProfileModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl border border-slate-100 space-y-6 animate-in zoom-in-95 duration-200">
+          <div className="bg-white rounded-3xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6 sm:p-8 shadow-2xl border border-slate-100 space-y-6 animate-in zoom-in-95 duration-200">
             <div className="flex items-center justify-between border-b border-slate-100 pb-4">
               <div className="flex items-center gap-3">
                 <div className="bg-amber-50 text-amber-700 p-2.5 rounded-2xl border border-amber-100">
                   <UserCog className="w-6 h-6" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-extrabold text-slate-900">Chairperson Profile Name</h3>
-                  <p className="text-xs text-slate-500 font-medium">Update your official name displayed across portals and signatures</p>
+                  <h3 className="text-lg font-extrabold text-slate-900">Chairperson Profile & Signature</h3>
+                  <p className="text-xs text-slate-500 font-medium">Update your official name and drawn signature displayed across portals</p>
                 </div>
               </div>
               <button
@@ -1841,7 +1888,7 @@ export function ChairDashboardClient({
                 />
               </div>
 
-              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2.5">
+              <div className="pt-2 flex items-center justify-end gap-2.5">
                 <button
                   type="button"
                   onClick={() => setChairProfileModalOpen(false)}
@@ -1868,6 +1915,22 @@ export function ChairDashboardClient({
                 </button>
               </div>
             </form>
+
+            {/* Electronic Signature Section */}
+            <div className="pt-6 border-t border-slate-200">
+              <div className="mb-4">
+                <h4 className="text-sm font-extrabold text-slate-900">Official Electronic Signature</h4>
+                <p className="text-xs text-slate-500 font-medium">Draw and save your institutional signature for automated endorsement on approved exams.</p>
+              </div>
+              <MySignatureSection
+                currentSignature={savedSignature}
+                userRole={isProgramChair ? "Program Chairperson" : "Department Chairperson"}
+                userName={chairFullName}
+                departmentName={departmentName}
+                onSignatureSaved={(sig) => setSavedSignature(sig)}
+                onSignatureDeleted={() => setSavedSignature(null)}
+              />
+            </div>
           </div>
         </div>
       )}

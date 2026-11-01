@@ -23,6 +23,7 @@ is_active        Boolean     @default(true)
 supabase_uid     String?     @unique
 username         String?     @unique @db.VarChar(50)
 require_password_update Boolean @default(false)
+signature        String?     @db.Text
 
 // Inheritance relationships
 student          Student?
@@ -280,18 +281,23 @@ model ApprovalWorkflow {
   prog_chair_review_status  ReviewStatus? @default(Pending)
   prog_chair_comments       String?      @db.Text
   prog_chair_action_timestamp DateTime?  @db.Timestamp
+  prog_chair_signature   String?       @db.Text
 
   reviewed_by_chair_id   Int?
   chair                  Chair?        @relation("ChairApprovals", fields: [reviewed_by_chair_id], references: [chair_id])
   chair_review_status    ReviewStatus  @default(Pending)
   chair_comments         String?       @db.Text
   chair_action_timestamp DateTime?     @db.Timestamp
+  chair_signature        String?       @db.Text
 
   reviewed_by_di_id      Int?
   director               Director?     @relation(fields: [reviewed_by_di_id], references: [director_id])
   di_review_status       DIStatus      @default(Hold)
   di_action_timestamp    DateTime?     @db.Timestamp
   di_comments            String?       @db.Text
+  di_signature           String?       @db.Text
+
+  faculty_signature      String?       @db.Text
 
   @@map("APPROVAL_WORKFLOWS")
 }

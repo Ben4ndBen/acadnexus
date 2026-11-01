@@ -355,6 +355,9 @@ export async function updateExamStatus(examId: number, status: ExamStatus, userI
               di_review_status: diReviewStatus as any,
               di_action_timestamp: isAuthorDeptChair && !isGlobalHoldActive ? new Date() : null,
               reviewed_by_di_id: null,
+              faculty_signature: authorUserRecord?.signature || null,
+              ...(isAuthorProgChair ? { prog_chair_signature: authorUserRecord?.signature || null } : {}),
+              ...(isAuthorDeptChair ? { chair_signature: authorUserRecord?.signature || null } : {}),
             },
             create: {
               exam_id: examId,
@@ -368,6 +371,9 @@ export async function updateExamStatus(examId: number, status: ExamStatus, userI
               chair_action_timestamp: chairTimestamp,
               di_review_status: diReviewStatus as any,
               di_action_timestamp: isAuthorDeptChair && !isGlobalHoldActive ? new Date() : null,
+              faculty_signature: authorUserRecord?.signature || null,
+              ...(isAuthorProgChair ? { prog_chair_signature: authorUserRecord?.signature || null } : {}),
+              ...(isAuthorDeptChair ? { chair_signature: authorUserRecord?.signature || null } : {}),
             },
           });
         }

@@ -22,6 +22,11 @@ export async function reviewExamByDirector(
       }
     }
 
+    const user = await db.user.findUnique({
+      where: { user_id: userId },
+      include: { director: true, faculty: true },
+    });
+
     // 1. Update the approval workflow
     await db.approvalWorkflow.update({
       where: { workflow_id: workflowId },
@@ -30,6 +35,7 @@ export async function reviewExamByDirector(
         reviewed_by_di_id: userId,
         di_action_timestamp: new Date(),
         di_comments: comments || null,
+        di_signature: action === "Approve" ? (user?.signature || null) : undefined,
       },
     });
 

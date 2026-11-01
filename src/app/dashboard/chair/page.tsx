@@ -486,6 +486,7 @@ export default async function ChairDashboard() {
           hasSeenCourseAssignment={chairFacultyRecord?.has_seen_course_assignment || false}
           requirePasswordUpdate={dbUser.require_password_update || false}
           username={dbUser.username || undefined}
+          userSignature={dbUser.signature || null}
           studentExams={sanitizedStudentExams as any}
           directorName={directorName}
         />

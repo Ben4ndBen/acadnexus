@@ -92,6 +92,7 @@ export async function reviewExamByChair(
           prog_chair_review_status: status as any,
           prog_chair_comments: comments || null,
           prog_chair_action_timestamp: new Date(),
+          prog_chair_signature: action === "Approve" ? (user?.signature || null) : currentWorkflow.prog_chair_signature,
           reviewed_by_chair_id: targetDeptChairId,
           chair_review_status: action === "Approve" ? "Pending" : currentWorkflow.chair_review_status,
         },
@@ -176,6 +177,7 @@ export async function reviewExamByChair(
           chair_review_status: chairReviewStatus as any,
           chair_comments: comments || null,
           chair_action_timestamp: new Date(),
+          chair_signature: action === "Approve" ? (user?.signature || null) : currentWorkflow.chair_signature,
           di_review_status: diReviewStatus as any,
         },
       });

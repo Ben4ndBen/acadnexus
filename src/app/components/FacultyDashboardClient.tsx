@@ -31,6 +31,7 @@ import { getProgramHeaderImage } from "@/lib/programHeader";
 import { EditableExamTitle } from "@/app/components/EditableExamTitle";
 import { ExamSignatorySection } from "@/app/components/ExamSignatorySection";
 import { AutoResizeTextarea } from "@/app/components/AutoResizeTextarea";
+import { MySignatureSection } from "@/app/components/MySignatureSection";
 
 export type FacultyExamSortField = "recent" | "exam_date" | "title" | "course" | "status";
 
@@ -121,7 +122,7 @@ interface FacultyDashboardClientProps {
     }>;
     facultyCourses?: Array<any>;
   };
-  initialTab?: "overview" | "tracker" | "submissions" | "profile" | "override" | "question_bank" | "archive" | "students";
+  initialTab?: "overview" | "tracker" | "submissions" | "profile" | "signature" | "override" | "question_bank" | "archive" | "students";
   institutionalId: string;
   programs?: Array<{ program_id: number; program_code: string; program_name: string; department_id: number }>;
   courses?: Array<{ course_id: number; course_code: string; course_title: string }>;
@@ -130,6 +131,7 @@ interface FacultyDashboardClientProps {
   requirePasswordUpdate?: boolean;
   username?: string;
   studentExams?: any[];
+  userSignature?: string | null;
 }
 
 function toRomanNumeral(num: number): string {
@@ -263,10 +265,12 @@ export function FacultyDashboardClient({
   hasSeenCourseAssignment = false,
   requirePasswordUpdate = false, 
   username,
-  studentExams = []
+  studentExams = [],
+  userSignature = null,
 }: FacultyDashboardClientProps) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<"overview" | "tracker" | "submissions" | "profile" | "override" | "question_bank" | "archive" | "students">(initialTab || "overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "tracker" | "submissions" | "profile" | "signature" | "override" | "question_bank" | "archive" | "students">(initialTab || "overview");
+  const [savedSignature, setSavedSignature] = useState<string | null>(userSignature || null);
 
   // Popup modal state for newly assigned courses upon first / new login
   const [showAssignedCoursesModal, setShowAssignedCoursesModal] = useState<boolean>(() => {
@@ -1950,6 +1954,20 @@ export function FacultyDashboardClient({
         >
           <User className="w-4 h-4" />
           Profile Settings
+        </button>
+        <button
+          onClick={() => setActiveTab("signature")}
+          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-bold rounded-xl transition-all duration-300 ${
+            activeTab === "signature"
+              ? "bg-emerald-600 text-white shadow-md shadow-emerald-600/20"
+              : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+          }`}
+        >
+          <PenTool className="w-4 h-4" />
+          My Signature
+          {savedSignature && (
+            <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" title="Signature on file" />
+          )}
         </button>
       </div>
 
@@ -4534,13 +4552,37 @@ export function FacultyDashboardClient({
                 <button
                   type="submit"
                   disabled={isSavingProfile}
-                  className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-extrabold px-5 py-2.5 rounded-xl shadow-sm transition-all hover:scale-105 duration-300"
+                  className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-extrabold px-5 py-2.5 rounded-xl shadow-sm transition-all hover:scale-105 duration-300 cursor-pointer"
                 >
                   {isSavingProfile ? "Saving Changes..." : "Save Profile Details"}
                 </button>
               </div>
             </form>
           </div>
+
+          {/* MY SIGNATURE SECTION INSIDE PROFILE SETTINGS */}
+          <MySignatureSection
+            initialSignature={savedSignature}
+            userId={faculty.faculty_id}
+            userFullName={`Instructor ${faculty.first_name} ${faculty.last_name}`}
+            userRoleTitle={`${faculty.department?.department_name || "Faculty Member"} / Instructor`}
+            onSignatureSaved={(sig) => setSavedSignature(sig)}
+            onSignatureDeleted={() => setSavedSignature(null)}
+          />
+        </div>
+      )}
+
+      {/* DEDICATED MY SIGNATURE TAB */}
+      {activeTab === "signature" && (
+        <div className="max-w-4xl mx-auto space-y-6">
+          <MySignatureSection
+            initialSignature={savedSignature}
+            userId={faculty.faculty_id}
+            userFullName={`Instructor ${faculty.first_name} ${faculty.last_name}`}
+            userRoleTitle={`${faculty.department?.department_name || "Faculty Member"} / Instructor`}
+            onSignatureSaved={(sig) => setSavedSignature(sig)}
+            onSignatureDeleted={() => setSavedSignature(null)}
+          />
         </div>
       )}
 
@@ -6477,6 +6519,7 @@ export function FacultyDashboardClient({
                         courseTitle={exam.course?.course_title}
                         facultyAuthorName={`${faculty.first_name || ""} ${faculty.last_name || ""}`.trim()}
                         facultyAuthorRank={(faculty as any).academic_rank || ""}
+                        facultyAuthorSignature={savedSignature}
                         isEditable={false}
                       />
 

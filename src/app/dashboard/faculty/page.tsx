@@ -283,6 +283,7 @@ export default async function FacultyDashboard() {
                 requirePasswordUpdate={!!dbUser?.require_password_update}
                 username={dbUser?.username || undefined}
                 studentExams={sanitizedStudentExams as any}
+                userSignature={dbUser?.signature || null}
               />
             );
           });

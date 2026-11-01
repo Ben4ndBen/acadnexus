@@ -39,6 +39,10 @@ export interface BSCTableOfSpecificationsViewProps {
   programChairName?: string;
   deptChairName?: string;
   directorInstructionName?: string;
+  facultyAuthorSignature?: string | null;
+  programChairSignature?: string | null;
+  departmentChairSignature?: string | null;
+  directorSignature?: string | null;
   isProgramChairAuthor?: boolean;
   authorRole?: string;
   reviewerRoleTitle?: string;
@@ -147,6 +151,10 @@ export function BSCTableOfSpecificationsView({
   programChairName,
   deptChairName,
   directorInstructionName,
+  facultyAuthorSignature,
+  programChairSignature,
+  departmentChairSignature,
+  directorSignature,
   isProgramChairAuthor,
   authorRole,
   reviewerRoleTitle,
@@ -154,6 +162,21 @@ export function BSCTableOfSpecificationsView({
   totalItems,
   topics,
 }: BSCTableOfSpecificationsViewProps) {
+  const renderSignatureSlot = (sigUrl?: string | null, altText: string = "Official Signature") => {
+    if (sigUrl) {
+      return (
+        <div className="h-12 -mb-2 flex items-end">
+          <img
+            src={sigUrl}
+            alt={altText}
+            className="max-h-14 max-w-[170px] object-contain block pointer-events-none select-none"
+          />
+        </div>
+      );
+    }
+    return <div className="h-8" />;
+  };
+
   // Dynamically resolve department name from course code or faculty department
   const resolvedDeptName = resolveDepartmentName(courseCode, departmentName);
 
@@ -546,9 +569,10 @@ export function BSCTableOfSpecificationsView({
           <div className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-8 gap-x-12 text-xs text-black font-sans pt-1">
               {/* Row 1 Left: Prepared by */}
-              <div className="space-y-6">
+              <div className="space-y-2">
                 <p className="font-extrabold text-black uppercase tracking-wider text-[11px]">Prepared by:</p>
                 <div>
+                  {renderSignatureSlot(facultyAuthorSignature, "Faculty Member Signature")}
                   <p
                     contentEditable
                     suppressContentEditableWarning
@@ -575,9 +599,13 @@ export function BSCTableOfSpecificationsView({
               </div>
 
               {/* Row 1 Right: Reviewed by */}
-              <div className="space-y-6">
+              <div className="space-y-2">
                 <p className="font-extrabold text-black uppercase tracking-wider text-[11px]">Reviewed by:</p>
                 <div>
+                  {renderSignatureSlot(
+                    isPcOrChairAuthor ? departmentChairSignature : programChairSignature,
+                    isPcOrChairAuthor ? "Department Chairperson Signature" : "Program Chairperson Signature"
+                  )}
                   <p
                     contentEditable
                     suppressContentEditableWarning
@@ -602,9 +630,10 @@ export function BSCTableOfSpecificationsView({
               </div>
 
               {/* Row 2 Left: Recommending Approval */}
-              <div className="space-y-6">
+              <div className="space-y-2">
                 <p className="font-extrabold text-black uppercase tracking-wider text-[11px]">Recommending Approval:</p>
                 <div>
+                  {renderSignatureSlot(departmentChairSignature, "Department Chairperson Signature")}
                   <p
                     contentEditable
                     suppressContentEditableWarning
@@ -619,9 +648,10 @@ export function BSCTableOfSpecificationsView({
               </div>
 
               {/* Row 2 Right: Approved by */}
-              <div className="space-y-6">
+              <div className="space-y-2">
                 <p className="font-extrabold text-black uppercase tracking-wider text-[11px]">Approved by:</p>
                 <div>
+                  {renderSignatureSlot(directorSignature, "Director for Instruction Signature")}
                   <p
                     contentEditable
                     suppressContentEditableWarning
@@ -643,9 +673,10 @@ export function BSCTableOfSpecificationsView({
           <div className={`space-y-4 ${signatoryLayoutMode === "ALL_TEMPLATES" ? "pt-4 border-t border-slate-200 print:border-black" : ""}`}>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-8 gap-x-12 text-xs text-black font-sans pt-1">
               {/* Row 1 Left: Prepared by */}
-              <div className="space-y-6">
+              <div className="space-y-2">
                 <p className="font-extrabold text-black uppercase tracking-wider text-[11px]">Prepared by:</p>
                 <div>
+                  {renderSignatureSlot(facultyAuthorSignature, "Faculty Member Signature")}
                   <p
                     contentEditable
                     suppressContentEditableWarning
@@ -672,9 +703,10 @@ export function BSCTableOfSpecificationsView({
               </div>
 
               {/* Row 1 Right: Reviewed by */}
-              <div className="space-y-6">
+              <div className="space-y-2">
                 <p className="font-extrabold text-black uppercase tracking-wider text-[11px]">Reviewed by:</p>
                 <div>
+                  {renderSignatureSlot(departmentChairSignature, "Department Chairperson Signature")}
                   <p
                     contentEditable
                     suppressContentEditableWarning
@@ -689,9 +721,10 @@ export function BSCTableOfSpecificationsView({
               </div>
 
               {/* Row 2 Center: Approved by */}
-              <div className="sm:col-span-2 max-w-sm mx-auto w-full space-y-6 pt-2">
-                <p className="font-extrabold text-black uppercase tracking-wider text-[11px] text-center">Approved by:</p>
-                <div className="text-center">
+              <div className="sm:col-span-2 max-w-sm mx-auto w-full space-y-2 pt-2 text-center">
+                <p className="font-extrabold text-black uppercase tracking-wider text-[11px]">Approved by:</p>
+                <div>
+                  {renderSignatureSlot(directorSignature, "Director for Instruction Signature")}
                   <p
                     contentEditable
                     suppressContentEditableWarning
@@ -713,9 +746,10 @@ export function BSCTableOfSpecificationsView({
           <div className="space-y-4 pt-4 border-t border-slate-200 print:border-black">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-8 gap-x-12 text-xs text-black font-sans pt-1">
               {/* Row 1 Left: Prepared by Program Chair */}
-              <div className="space-y-6">
+              <div className="space-y-2">
                 <p className="font-extrabold text-black uppercase tracking-wider text-[11px]">Prepared by:</p>
                 <div>
+                  {renderSignatureSlot(programChairSignature || facultyAuthorSignature, "Program Chairperson Signature")}
                   <p
                     contentEditable
                     suppressContentEditableWarning
@@ -730,9 +764,10 @@ export function BSCTableOfSpecificationsView({
               </div>
 
               {/* Row 1 Right: Recommending Approval */}
-              <div className="space-y-6">
+              <div className="space-y-2">
                 <p className="font-extrabold text-black uppercase tracking-wider text-[11px]">Recommending Approval:</p>
                 <div>
+                  {renderSignatureSlot(departmentChairSignature, "Department Chairperson Signature")}
                   <p
                     contentEditable
                     suppressContentEditableWarning
@@ -747,9 +782,10 @@ export function BSCTableOfSpecificationsView({
               </div>
 
               {/* Row 2 Center: Approved by */}
-              <div className="sm:col-span-2 max-w-sm mx-auto w-full space-y-6 pt-2">
-                <p className="font-extrabold text-black uppercase tracking-wider text-[11px] text-center">Approved by:</p>
-                <div className="text-center">
+              <div className="sm:col-span-2 max-w-sm mx-auto w-full space-y-2 pt-2 text-center">
+                <p className="font-extrabold text-black uppercase tracking-wider text-[11px]">Approved by:</p>
+                <div>
+                  {renderSignatureSlot(directorSignature, "Director for Instruction Signature")}
                   <p
                     contentEditable
                     suppressContentEditableWarning

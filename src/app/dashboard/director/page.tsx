@@ -331,6 +331,7 @@ export default async function DirectorDashboard() {
           academicPeriodSettings={academicPeriod}
           courses={courses}
           facultyMembers={sanitizedFacultyMembers as any}
+          userSignature={dbUser.signature || null}
         />
       </main>
 
