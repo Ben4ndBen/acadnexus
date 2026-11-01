@@ -363,6 +363,7 @@ export function DirectorDashboardClient({
   const [dirLastName, setDirLastName] = useState(initialDirectorProfile?.lastName || "");
   const [isSavingDirectorName, setIsSavingDirectorName] = useState(false);
   const [directorNameMsg, setDirectorNameMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const directorDisplayName = [dirTitle, dirFirstName, dirMiddleName, dirLastName].filter(Boolean).join(" ").trim() || "NAME OF DIRECTOR FOR INSTRUCTION";
 
   const handleSaveDirectorProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -776,7 +777,7 @@ export function DirectorDashboardClient({
       return;
     }
 
-    if (action === "Approve" && !confirmedSignature) {
+    if (action === "Approve" && (!confirmedSignature || !confirmedPassword)) {
       const approval = pendingApprovals.find((a: any) => a.workflow_id === workflowId);
       setPendingApproval({
         workflowId,
@@ -1249,7 +1250,7 @@ export function DirectorDashboardClient({
             ? `${approval.exam.faculty.first_name || ""} ${approval.exam.faculty.last_name || ""}`.trim()
             : "";
           const resolvedDept = getExaminationDepartmentName(approval.exam);
-          const directorName = [dirTitle, dirFirstName, dirMiddleName, dirLastName].filter(Boolean).join(" ").trim() || "NAME OF DIRECTOR FOR INSTRUCTION";
+          const directorName = directorDisplayName;
 
           const aw = (approval as any).approvalWorkflow || (approval.exam as any)?.approvalWorkflow || approval;
           const facultyAuthorSig = (approval.exam?.faculty as any)?.user?.signature || (aw as any)?.faculty_signature || null;
@@ -1265,6 +1266,8 @@ export function DirectorDashboardClient({
               courseTitle={courseTitle}
               facultyAuthorName={authorFullName}
               facultyAuthorRank={approval.exam?.faculty?.academic_rank || ""}
+              programChairName={(approval as any).progChair?.user?.faculty ? `${(approval as any).progChair.user.faculty.first_name || ""} ${(approval as any).progChair.user.faculty.last_name || ""}`.trim() : undefined}
+              departmentChairName={(approval as any).chair?.user?.faculty ? `${(approval as any).chair.user.faculty.first_name || ""} ${(approval as any).chair.user.faculty.last_name || ""}`.trim() : undefined}
               directorName={directorName}
               isProgramChairAuthor={isAuthorPC}
               isEditable={false}
@@ -3769,6 +3772,10 @@ export function DirectorDashboardClient({
                             examDate={activePreviewApproval.exam.exam_date ? String(activePreviewApproval.exam.exam_date).split("T")[0] : ""}
                             documentReference={activePreviewApproval.exam.document_reference || "BSC-ODI-F-121"}
                             facultyName={`${activePreviewApproval.exam.faculty?.first_name || ""} ${activePreviewApproval.exam.faculty?.last_name || ""}`}
+                            facultyRank={activePreviewApproval.exam.faculty?.academic_rank || ""}
+                            programChairName={(activePreviewApproval as any).progChair?.user?.faculty ? `${(activePreviewApproval as any).progChair.user.faculty.first_name || ""} ${(activePreviewApproval as any).progChair.user.faculty.last_name || ""}`.trim() : undefined}
+                            deptChairName={(activePreviewApproval as any).chair?.user?.faculty ? `${(activePreviewApproval as any).chair.user.faculty.first_name || ""} ${(activePreviewApproval as any).chair.user.faculty.last_name || ""}`.trim() : undefined}
+                            directorInstructionName={directorDisplayName}
                             isProgramChairAuthor={isAuthorPC}
                             totalItems={parsedTos.targetTotalItems || activePreviewApproval.exam.questionBank?.length || 50}
                             topics={parsedTos.topics || []}
@@ -3828,6 +3835,10 @@ export function DirectorDashboardClient({
                           examDate={activePreviewApproval.exam.exam_date ? String(activePreviewApproval.exam.exam_date).split("T")[0] : ""}
                           documentReference={activePreviewApproval.exam.document_reference || "BSC-ODI-F-121"}
                           facultyName={`${activePreviewApproval.exam.faculty?.first_name || ""} ${activePreviewApproval.exam.faculty?.last_name || ""}`}
+                          facultyRank={activePreviewApproval.exam.faculty?.academic_rank || ""}
+                          programChairName={(activePreviewApproval as any).progChair?.user?.faculty ? `${(activePreviewApproval as any).progChair.user.faculty.first_name || ""} ${(activePreviewApproval as any).progChair.user.faculty.last_name || ""}`.trim() : undefined}
+                          deptChairName={(activePreviewApproval as any).chair?.user?.faculty ? `${(activePreviewApproval as any).chair.user.faculty.first_name || ""} ${(activePreviewApproval as any).chair.user.faculty.last_name || ""}`.trim() : undefined}
+                          directorInstructionName={directorDisplayName}
                           isProgramChairAuthor={isAuthorPC}
                           totalItems={qBank.length || 50}
                           topics={fallbackTopics}

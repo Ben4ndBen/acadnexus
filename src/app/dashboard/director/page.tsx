@@ -86,6 +86,16 @@ export default async function DirectorDashboard() {
         di_review_status: "Hold",
       },
       include: {
+        progChair: {
+          include: {
+            user: { include: { faculty: true } },
+          },
+        },
+        chair: {
+          include: {
+            user: { include: { faculty: true } },
+          },
+        },
         exam: {
           include: {
             faculty: {

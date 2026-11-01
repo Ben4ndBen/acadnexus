@@ -471,7 +471,7 @@ export function ChairDashboardClient({
     confirmedSignature?: string,
     confirmedPassword?: string
   ) => {
-    if (action === "Approve" && !confirmedSignature) {
+    if (action === "Approve" && (!confirmedSignature || !confirmedPassword)) {
       const approval = approvalsList.find(a => a.workflow_id === workflowId) || pendingApprovals.find(a => a.workflow_id === workflowId);
       setPendingApproval({
         workflowId,
@@ -975,8 +975,8 @@ export function ChairDashboardClient({
               courseTitle={courseTitle}
               facultyAuthorName={authorFullName}
               facultyAuthorRank={approval.exam?.faculty?.academic_rank || ""}
-              programChairName={isProgramChair ? chairFullName : undefined}
-              departmentChairName={!isProgramChair ? chairFullName : undefined}
+              programChairName={isProgramChair ? chairFullName : ((approval as any).progChair?.user?.faculty ? `${(approval as any).progChair.user.faculty.first_name || ""} ${(approval as any).progChair.user.faculty.last_name || ""}`.trim() : undefined)}
+              departmentChairName={!isProgramChair ? chairFullName : ((approval as any).chair?.user?.faculty ? `${(approval as any).chair.user.faculty.first_name || ""} ${(approval as any).chair.user.faculty.last_name || ""}`.trim() : undefined)}
               directorName={directorName}
               facultyAuthorSignature={(approval.exam?.faculty as any)?.user?.signature || (approval as any).faculty_signature || null}
               programChairSignature={(approval as any).prog_chair_signature || (isProgramChair && approval.prog_chair_review_status === "Approved" ? savedSignature : null)}
@@ -1686,6 +1686,10 @@ export function ChairDashboardClient({
                             examDate={activeSplitApproval.exam.exam_date ? String(activeSplitApproval.exam.exam_date).split("T")[0] : ""}
                             documentReference={activeSplitApproval.exam.document_reference || "BSC-ODI-F-121"}
                             facultyName={`${activeSplitApproval.exam.faculty?.first_name || ""} ${activeSplitApproval.exam.faculty?.last_name || ""}`}
+                            facultyRank={activeSplitApproval.exam.faculty?.academic_rank || ""}
+                            programChairName={isProgramChair ? chairFullName : ((activeSplitApproval as any).progChair?.user?.faculty ? `${(activeSplitApproval as any).progChair.user.faculty.first_name || ""} ${(activeSplitApproval as any).progChair.user.faculty.last_name || ""}`.trim() : undefined)}
+                            deptChairName={!isProgramChair ? chairFullName : ((activeSplitApproval as any).chair?.user?.faculty ? `${(activeSplitApproval as any).chair.user.faculty.first_name || ""} ${(activeSplitApproval as any).chair.user.faculty.last_name || ""}`.trim() : undefined)}
+                            directorInstructionName={directorName}
                             isProgramChairAuthor={isAuthorPC}
                             totalItems={parsedTos.targetTotalItems || activeSplitApproval.exam.questionBank?.length || 50}
                             topics={parsedTos.topics || []}
@@ -1745,6 +1749,10 @@ export function ChairDashboardClient({
                           examDate={activeSplitApproval.exam.exam_date ? String(activeSplitApproval.exam.exam_date).split("T")[0] : ""}
                           documentReference={activeSplitApproval.exam.document_reference || "BSC-ODI-F-121"}
                           facultyName={`${activeSplitApproval.exam.faculty?.first_name || ""} ${activeSplitApproval.exam.faculty?.last_name || ""}`}
+                          facultyRank={activeSplitApproval.exam.faculty?.academic_rank || ""}
+                          programChairName={isProgramChair ? chairFullName : ((activeSplitApproval as any).progChair?.user?.faculty ? `${(activeSplitApproval as any).progChair.user.faculty.first_name || ""} ${(activeSplitApproval as any).progChair.user.faculty.last_name || ""}`.trim() : undefined)}
+                          deptChairName={!isProgramChair ? chairFullName : ((activeSplitApproval as any).chair?.user?.faculty ? `${(activeSplitApproval as any).chair.user.faculty.first_name || ""} ${(activeSplitApproval as any).chair.user.faculty.last_name || ""}`.trim() : undefined)}
+                          directorInstructionName={directorName}
                           isProgramChairAuthor={isAuthorPC}
                           totalItems={qBank.length || 50}
                           topics={fallbackTopics.length > 0 ? fallbackTopics : [

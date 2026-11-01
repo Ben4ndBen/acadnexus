@@ -91,6 +91,16 @@ export default async function ChairDashboard() {
               },
             },
             include: {
+              progChair: {
+                include: {
+                  user: { include: { faculty: true } },
+                },
+              },
+              chair: {
+                include: {
+                  user: { include: { faculty: true } },
+                },
+              },
               exam: {
                 include: {
                   course: true,
@@ -215,6 +225,16 @@ export default async function ChairDashboard() {
         ],
       },
       include: {
+        progChair: {
+          include: {
+            user: { include: { faculty: true } },
+          },
+        },
+        chair: {
+          include: {
+            user: { include: { faculty: true } },
+          },
+        },
         exam: {
           include: {
             course: true,
