@@ -978,7 +978,7 @@ export function ChairDashboardClient({
               programChairName={isProgramChair ? chairFullName : ((approval as any).progChair?.user?.faculty ? `${(approval as any).progChair.user.faculty.first_name || ""} ${(approval as any).progChair.user.faculty.last_name || ""}`.trim() : undefined)}
               departmentChairName={!isProgramChair ? chairFullName : ((approval as any).chair?.user?.faculty ? `${(approval as any).chair.user.faculty.first_name || ""} ${(approval as any).chair.user.faculty.last_name || ""}`.trim() : undefined)}
               directorName={directorName}
-              facultyAuthorSignature={(approval.exam?.faculty as any)?.user?.signature || (approval as any).faculty_signature || null}
+              facultyAuthorSignature={(approval as any).faculty_signature || (approval.exam?.faculty as any)?.user?.signature || null}
               programChairSignature={(approval as any).prog_chair_signature || (isProgramChair && approval.prog_chair_review_status === "Approved" ? savedSignature : null)}
               departmentChairSignature={(approval as any).chair_signature || (!isProgramChair && approval.chair_review_status === "Approved" ? savedSignature : null)}
               directorSignature={(approval as any).di_signature || null}
@@ -1693,7 +1693,7 @@ export function ChairDashboardClient({
                             isProgramChairAuthor={isAuthorPC}
                             totalItems={parsedTos.targetTotalItems || activeSplitApproval.exam.questionBank?.length || 50}
                             topics={parsedTos.topics || []}
-                            facultyAuthorSignature={(activeSplitApproval.exam.faculty as any)?.user?.signature || (activeSplitApproval as any).faculty_signature || null}
+                            facultyAuthorSignature={(activeSplitApproval as any).faculty_signature || (activeSplitApproval.exam.faculty as any)?.user?.signature || null}
                             programChairSignature={(activeSplitApproval as any).prog_chair_signature || (isProgramChair && activeSplitApproval.prog_chair_review_status === "Approved" ? savedSignature : null)}
                             departmentChairSignature={(activeSplitApproval as any).chair_signature || (!isProgramChair && activeSplitApproval.chair_review_status === "Approved" ? savedSignature : null)}
                             directorSignature={(activeSplitApproval as any).di_signature || null}
@@ -1767,7 +1767,7 @@ export function ChairDashboardClient({
                               itemPlacement: `Items 1–${qBank.length || 50}`,
                             }
                           ]}
-                          facultyAuthorSignature={(activeSplitApproval.exam.faculty as any)?.user?.signature || (activeSplitApproval as any).faculty_signature || null}
+                          facultyAuthorSignature={(activeSplitApproval as any).faculty_signature || (activeSplitApproval.exam.faculty as any)?.user?.signature || null}
                           programChairSignature={(activeSplitApproval as any).prog_chair_signature || (isProgramChair && activeSplitApproval.prog_chair_review_status === "Approved" ? savedSignature : null)}
                           departmentChairSignature={(activeSplitApproval as any).chair_signature || (!isProgramChair && activeSplitApproval.chair_review_status === "Approved" ? savedSignature : null)}
                           directorSignature={(activeSplitApproval as any).di_signature || null}
@@ -2119,6 +2119,7 @@ export function ChairDashboardClient({
                 <p className="text-xs text-slate-500 font-medium">Draw and save your institutional signature for automated endorsement on approved exams.</p>
               </div>
               <MySignatureSection
+                userId={chairUserId}
                 currentSignature={savedSignature}
                 userRole={isProgramChair ? "Program Chairperson" : "Department Chairperson"}
                 userName={chairFullName}

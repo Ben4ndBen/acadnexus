@@ -1253,7 +1253,7 @@ export function DirectorDashboardClient({
           const directorName = directorDisplayName;
 
           const aw = (approval as any).approvalWorkflow || (approval.exam as any)?.approvalWorkflow || approval;
-          const facultyAuthorSig = (approval.exam?.faculty as any)?.user?.signature || (aw as any)?.faculty_signature || null;
+          const facultyAuthorSig = (aw as any)?.faculty_signature || (approval.exam?.faculty as any)?.user?.signature || null;
           const progChairSig = (aw as any)?.prog_chair_signature || null;
           const deptChairSig = (aw as any)?.chair_signature || null;
           const directorSig = (aw as any)?.di_signature || (approval.di_review_status === "Approved" || approval.exam?.current_status === "Approved" ? savedSignature : null);
@@ -3752,7 +3752,7 @@ export function DirectorDashboardClient({
                     );
 
                     const aw = (activePreviewApproval as any).approvalWorkflow || (activePreviewApproval.exam as any)?.approvalWorkflow || activePreviewApproval;
-                    const facultyAuthorSig = (activePreviewApproval.exam?.faculty as any)?.user?.signature || (aw as any)?.faculty_signature || null;
+                    const facultyAuthorSig = (aw as any)?.faculty_signature || (activePreviewApproval.exam?.faculty as any)?.user?.signature || null;
                     const progChairSig = (aw as any)?.prog_chair_signature || null;
                     const deptChairSig = (aw as any)?.chair_signature || null;
                     const directorSig = (aw as any)?.di_signature || (activePreviewApproval.di_review_status === "Approved" || activePreviewApproval.exam?.current_status === "Approved" ? savedSignature : null);

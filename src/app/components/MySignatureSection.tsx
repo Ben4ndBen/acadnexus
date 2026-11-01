@@ -80,6 +80,7 @@ export function MySignatureSection({
     if (!canvas) return;
 
     const rect = canvas.getBoundingClientRect();
+    if (rect.width === 0) return;
     const dpr = window.devicePixelRatio || 1;
 
     // Use actual CSS dimensions
@@ -100,13 +101,18 @@ export function MySignatureSection({
   }, []);
 
   useEffect(() => {
-    if (isDrawingMode && !isPreviewActive) {
+    if (isDrawingMode) {
       setupCanvas();
-      const handleResize = () => setupCanvas();
+      const handleResize = () => {
+        // Only re-initialize canvas dimensions on window resize if user hasn't drawn yet
+        if (!hasDrawn) {
+          setupCanvas();
+        }
+      };
       window.addEventListener("resize", handleResize);
       return () => window.removeEventListener("resize", handleResize);
     }
-  }, [isDrawingMode, isPreviewActive, setupCanvas]);
+  }, [isDrawingMode, hasDrawn, setupCanvas]);
 
   // Coordinate calculation relative to canvas rect
   const getCoordinates = (e: React.MouseEvent | React.TouchEvent | React.PointerEvent) => {
@@ -220,23 +226,22 @@ export function MySignatureSection({
     }
   };
 
-  // Back to Edit / Redraw
+  // Start Edit / Redraw
+  const handleStartEditSignature = () => {
+    setIsDrawingMode(true);
+    setIsPreviewActive(false);
+    setHasDrawn(false);
+    setPreviewDataUrl(null);
+    setStatusMessage(null);
+    setPassword("");
+    setTimeout(() => {
+      handleClear();
+    }, 10);
+  };
+
+  // Back to Edit / Redraw Signature from Preview
   const handleEditRedraw = () => {
     setIsPreviewActive(false);
-    // Keep existing drawing or let them continue drawing on the canvas
-    setTimeout(() => {
-      // Re-setup canvas context if needed
-      const canvas = canvasRef.current;
-      if (canvas) {
-        const ctx = canvas.getContext("2d");
-        if (ctx) {
-          ctx.lineCap = "round";
-          ctx.lineJoin = "round";
-          ctx.lineWidth = 2.4;
-          ctx.strokeStyle = "#0f172a";
-        }
-      }
-    }, 50);
   };
 
   // Save Signature
@@ -270,7 +275,7 @@ export function MySignatureSection({
         setPassword("");
         setStatusMessage({
           type: "success",
-          text: "Your official electronic signature has been successfully saved and attached to your account!",
+          text: "Your official electronic signature has been successfully updated and will be used for future submissions and approvals.",
         });
         if (onSignatureSaved) {
           onSignatureSaved(result.signature);
@@ -364,17 +369,11 @@ export function MySignatureSection({
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => {
-                  setIsDrawingMode(true);
-                  setIsPreviewActive(false);
-                  setHasDrawn(false);
-                  setPreviewDataUrl(null);
-                  setStatusMessage(null);
-                }}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition-all cursor-pointer"
+                onClick={handleStartEditSignature}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl bg-slate-900 hover:bg-slate-800 text-white shadow-xs transition-all cursor-pointer"
               >
-                <Edit3 className="w-3.5 h-3.5" />
-                Change / Redraw
+                <Edit3 className="w-3.5 h-3.5 text-amber-300" />
+                Edit Signature
               </button>
               <button
                 type="button"
@@ -439,9 +438,19 @@ export function MySignatureSection({
                 </div>
               </div>
 
-              <div className="mt-4 flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-100">
-                <FileCheck2 className="w-3.5 h-3.5 text-emerald-600" />
-                This drawn signature will automatically appear on exams and TOS approved by you.
+              <div className="mt-5 flex flex-col sm:flex-row items-center justify-between gap-3 w-full max-w-md pt-4 border-t border-slate-100">
+                <div className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-100">
+                  <FileCheck2 className="w-3.5 h-3.5 text-emerald-600" />
+                  Active Signature on File
+                </div>
+                <button
+                  type="button"
+                  onClick={handleStartEditSignature}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl bg-slate-900 hover:bg-slate-800 text-white shadow-xs transition-all cursor-pointer"
+                >
+                  <Edit3 className="w-3.5 h-3.5 text-amber-300" />
+                  Edit Signature
+                </button>
               </div>
             </div>
           </div>
@@ -460,45 +469,44 @@ export function MySignatureSection({
                   Draw and Authorize Your Signature
                 </h4>
                 <p className="text-xs text-slate-600 leading-relaxed">
-                  Please draw your signature in the space below and enter your current account password to save it. Use the same password you use to log in to your AcadNexus account.
+                  Please draw your signature in the space below. You can preview it, redraw it anytime, and save it by confirming your current account login password.
                 </p>
                 <div className="pt-1 flex items-center gap-1.5 text-[11px] text-slate-500 font-medium">
                   <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0" />
                   <span>
-                    <strong>Synchronized Security:</strong> Your signature is always protected by your primary AcadNexus account password. Whenever you change your login password, your signature authorization will automatically use the new password.
+                    <strong>Synchronized Security & Historical Integrity:</strong> Your signature is protected by your AcadNexus login password. Replacing your signature will apply to future submissions and approvals without altering past examination records.
                   </span>
                 </div>
               </div>
             </div>
 
-            {/* PREVIEW MODE or DRAWING PAD */}
-            {isPreviewActive && previewDataUrl ? (
-              /* Preview Mode */
-              <div className="space-y-4">
+            {/* PREVIEW MODE: SHOW NEW SIGNATURE PREVIEW */}
+            {isPreviewActive && previewDataUrl && (
+              <div className="space-y-4 animate-in fade-in duration-200">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
                     <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
-                    Signature Preview (As Seen on Documents)
+                    New Signature Preview (As Seen on Official Documents)
                   </span>
                   <button
                     type="button"
                     onClick={handleEditRedraw}
-                    className="inline-flex items-center gap-1 text-xs font-bold text-indigo-600 hover:text-indigo-800 transition-colors cursor-pointer"
+                    className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-600 hover:text-indigo-800 transition-colors cursor-pointer bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-xl border border-indigo-200"
                   >
                     <Edit3 className="w-3.5 h-3.5" />
-                    Edit / Redraw
+                    Edit Signature
                   </button>
                 </div>
 
                 <div className="bg-white border-2 border-indigo-100 rounded-2xl p-6 sm:p-8 flex flex-col items-center justify-center text-center shadow-xs">
                   <div className="max-w-md w-full space-y-3">
                     <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-                      Prepared / Reviewed / Approved by:
+                      Official Document Signatory Placement
                     </p>
                     <div className="h-24 flex items-end justify-center px-4 py-1">
                       <img
                         src={previewDataUrl}
-                        alt="Signature Preview"
+                        alt="New Signature Preview"
                         className="max-h-20 max-w-full object-contain"
                       />
                     </div>
@@ -513,69 +521,69 @@ export function MySignatureSection({
                   </div>
                 </div>
               </div>
-            ) : (
-              /* Interactive Drawing Canvas */
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-xs">
-                  <label className="font-bold text-slate-700 flex items-center gap-1.5">
-                    <PenTool className="w-3.5 h-3.5 text-slate-500" />
-                    Signature Drawing Pad
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[11px] text-slate-400 hidden sm:inline">
-                      Use mouse, stylus, or touch screen
-                    </span>
-                    <button
-                      type="button"
-                      onClick={handleClear}
-                      disabled={!hasDrawn}
-                      className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-500 hover:text-rose-600 disabled:opacity-30 disabled:hover:text-slate-500 transition-colors cursor-pointer"
-                    >
-                      <RotateCcw className="w-3 h-3" />
-                      Clear Pad
-                    </button>
-                  </div>
-                </div>
+            )}
 
-                {/* Canvas Container */}
-                <div className="relative w-full bg-white border-2 border-dashed border-slate-300 hover:border-slate-400 focus-within:border-indigo-500 rounded-2xl overflow-hidden transition-all shadow-inner touch-none cursor-crosshair">
-                  {/* Subtle Sign-Here Indicator */}
-                  <div className="absolute left-6 bottom-7 pointer-events-none select-none text-slate-300 text-sm font-serif">
-                    ✕
-                  </div>
-                  {/* Guideline */}
-                  <div className="absolute left-10 right-6 bottom-7 border-b border-slate-200 pointer-events-none select-none" />
-                  <div className="absolute right-6 bottom-2.5 pointer-events-none select-none text-[10px] text-slate-300 font-mono tracking-wider">
-                    SIGN ABOVE THIS LINE
-                  </div>
-
-                  {!hasDrawn && (
-                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none">
-                      <div className="text-center space-y-1 text-slate-400">
-                        <PenTool className="w-6 h-6 mx-auto opacity-40 text-slate-400" />
-                        <p className="text-xs font-medium">Draw your signature here</p>
-                      </div>
-                    </div>
-                  )}
-
-                  <canvas
-                    ref={canvasRef}
-                    onMouseDown={startDrawing}
-                    onMouseMove={draw}
-                    onMouseUp={stopDrawing}
-                    onMouseLeave={stopDrawing}
-                    onPointerDown={startDrawing}
-                    onPointerMove={draw}
-                    onPointerUp={stopDrawing}
-                    onTouchStart={startDrawing}
-                    onTouchMove={draw}
-                    onTouchEnd={stopDrawing}
-                    className="w-full h-[180px] block relative z-10"
-                    style={{ touchAction: "none" }}
-                  />
+            {/* INTERACTIVE DRAWING CANVAS (Preserves strokes when toggled) */}
+            <div className={`space-y-2 ${isPreviewActive && previewDataUrl ? "hidden" : "block"}`}>
+              <div className="flex items-center justify-between text-xs">
+                <label className="font-bold text-slate-700 flex items-center gap-1.5">
+                  <PenTool className="w-3.5 h-3.5 text-slate-500" />
+                  Signature Drawing Pad
+                </label>
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] text-slate-400 hidden sm:inline">
+                    Use mouse, stylus, or touch screen
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleClear}
+                    disabled={!hasDrawn}
+                    className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-500 hover:text-rose-600 disabled:opacity-30 disabled:hover:text-slate-500 transition-colors cursor-pointer"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    Clear Pad
+                  </button>
                 </div>
               </div>
-            )}
+
+              {/* Canvas Container */}
+              <div className="relative w-full bg-white border-2 border-dashed border-slate-300 hover:border-slate-400 focus-within:border-indigo-500 rounded-2xl overflow-hidden transition-all shadow-inner touch-none cursor-crosshair">
+                {/* Subtle Sign-Here Indicator */}
+                <div className="absolute left-6 bottom-7 pointer-events-none select-none text-slate-300 text-sm font-serif">
+                  ✕
+                </div>
+                {/* Guideline */}
+                <div className="absolute left-10 right-6 bottom-7 border-b border-slate-200 pointer-events-none select-none" />
+                <div className="absolute right-6 bottom-2.5 pointer-events-none select-none text-[10px] text-slate-300 font-mono tracking-wider">
+                  SIGN ABOVE THIS LINE
+                </div>
+
+                {!hasDrawn && (
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none">
+                    <div className="text-center space-y-1 text-slate-400">
+                      <PenTool className="w-6 h-6 mx-auto opacity-40 text-slate-400" />
+                      <p className="text-xs font-medium">Draw your signature here</p>
+                    </div>
+                  </div>
+                )}
+
+                <canvas
+                  ref={canvasRef}
+                  onMouseDown={startDrawing}
+                  onMouseMove={draw}
+                  onMouseUp={stopDrawing}
+                  onMouseLeave={stopDrawing}
+                  onPointerDown={startDrawing}
+                  onPointerMove={draw}
+                  onPointerUp={stopDrawing}
+                  onTouchStart={startDrawing}
+                  onTouchMove={draw}
+                  onTouchEnd={stopDrawing}
+                  className="w-full h-[180px] block relative z-10"
+                  style={{ touchAction: "none" }}
+                />
+              </div>
+            </div>
 
             {/* PASSWORD INPUT & CONFIRMATION SECTION */}
             <form onSubmit={handleSaveSignature} className="pt-2 space-y-4">
@@ -607,20 +615,20 @@ export function MySignatureSection({
 
                 {/* Action Buttons */}
                 <div className="flex items-center gap-2.5 sm:justify-end">
-                  {/* Preview Toggle Button */}
+                  {/* Preview Toggle / Edit Signature Button */}
                   <button
                     type="button"
                     onClick={handleTogglePreview}
                     disabled={!hasDrawn && !previewDataUrl}
                     className={`inline-flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold rounded-xl border transition-all cursor-pointer ${
                       isPreviewActive
-                        ? "bg-slate-100 text-slate-700 border-slate-300"
+                        ? "bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100"
                         : "bg-white text-slate-700 border-slate-300 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
                     }`}
                   >
                     {isPreviewActive ? (
                       <>
-                        <Edit3 className="w-3.5 h-3.5" />
+                        <Edit3 className="w-3.5 h-3.5 text-indigo-600" />
                         Edit Signature
                       </>
                     ) : (
