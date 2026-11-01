@@ -468,10 +468,10 @@ export function ChairDashboardClient({
     workflowId: number, 
     examId: number, 
     action: "Approve" | "Return",
-    overrideSignature?: string
+    confirmedSignature?: string,
+    confirmedPassword?: string
   ) => {
-    const effectiveSig = overrideSignature !== undefined ? overrideSignature : savedSignature;
-    if (action === "Approve" && !effectiveSig) {
+    if (action === "Approve" && !confirmedSignature) {
       const approval = approvalsList.find(a => a.workflow_id === workflowId) || pendingApprovals.find(a => a.workflow_id === workflowId);
       setPendingApproval({
         workflowId,
@@ -521,11 +521,11 @@ export function ChairDashboardClient({
     });
 
     setIsSubmittingReview(workflowId);
-    const res = await reviewExamByChair(workflowId, examId, action, compiledComments, chairUserId, isProgramChair);
+    const res = await reviewExamByChair(workflowId, examId, action, compiledComments, chairUserId, isProgramChair, confirmedPassword);
     setIsSubmittingReview(null);
 
     if (res.error) {
-      if ((res as any).requiresSignature) {
+      if ((res as any).requiresSignature || (res as any).invalidPassword) {
         const approval = approvalsList.find(a => a.workflow_id === workflowId) || pendingApprovals.find(a => a.workflow_id === workflowId);
         setPendingApproval({
           workflowId,
@@ -2132,17 +2132,18 @@ export function ChairDashboardClient({
         userName={chairFullName}
         userRole={isProgramChair ? "Program Chairperson" : "Department Chairperson"}
         departmentName={departmentName || "Batanes State College"}
+        userSignature={savedSignature}
         onClose={() => {
           setShowRequireSignatureModal(false);
           setPendingApproval(null);
         }}
-        onSignatureSavedAndProceed={async (newSig) => {
+        onSignatureSavedAndProceed={async (newSig, confirmedPassword) => {
           setSavedSignature(newSig);
           setShowRequireSignatureModal(false);
           if (pendingApproval) {
             const { workflowId, examId, action } = pendingApproval;
             setPendingApproval(null);
-            await handleReview(workflowId, examId, action, newSig);
+            await handleReview(workflowId, examId, action, newSig, confirmedPassword);
           }
         }}
       />

@@ -764,7 +764,8 @@ export function DirectorDashboardClient({
     workflowId: number, 
     examId: number, 
     action: "Approve" | "Return" | "Hold",
-    overrideSignature?: string
+    confirmedSignature?: string,
+    confirmedPassword?: string
   ) => {
     if (action === "Hold") {
       setSelectedWorkflowId(workflowId);
@@ -775,8 +776,7 @@ export function DirectorDashboardClient({
       return;
     }
 
-    const effectiveSig = overrideSignature !== undefined ? overrideSignature : savedSignature;
-    if (action === "Approve" && !effectiveSig) {
+    if (action === "Approve" && !confirmedSignature) {
       const approval = pendingApprovals.find((a: any) => a.workflow_id === workflowId);
       setPendingApproval({
         workflowId,
@@ -821,11 +821,11 @@ export function DirectorDashboardClient({
     }
 
     setIsSubmittingReview(workflowId);
-    const res = await reviewExamByDirector(workflowId, examId, action, directorUserId, compiledComments);
+    const res = await reviewExamByDirector(workflowId, examId, action, directorUserId, compiledComments, confirmedPassword);
     setIsSubmittingReview(null);
 
     if (res.error) {
-      if ((res as any).requiresSignature) {
+      if ((res as any).requiresSignature || (res as any).invalidPassword) {
         const approval = pendingApprovals.find((a: any) => a.workflow_id === workflowId);
         setPendingApproval({
           workflowId,
@@ -3947,17 +3947,18 @@ export function DirectorDashboardClient({
         userName={[dirTitle, dirFirstName, dirMiddleName, dirLastName].filter(Boolean).join(" ").trim() || "Director for Instruction"}
         userRole="Director for Instruction"
         departmentName="Office of the Director for Instruction"
+        userSignature={savedSignature}
         onClose={() => {
           setShowRequireSignatureModal(false);
           setPendingApproval(null);
         }}
-        onSignatureSavedAndProceed={async (newSig) => {
+        onSignatureSavedAndProceed={async (newSig, confirmedPassword) => {
           setSavedSignature(newSig);
           setShowRequireSignatureModal(false);
           if (pendingApproval) {
             const { workflowId, examId, action } = pendingApproval;
             setPendingApproval(null);
-            await handleReview(workflowId, examId, action, newSig);
+            await handleReview(workflowId, examId, action, newSig, confirmedPassword);
           }
         }}
       />

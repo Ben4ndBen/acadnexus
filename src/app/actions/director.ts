@@ -9,7 +9,8 @@ export async function reviewExamByDirector(
   examId: number,
   action: "Approve" | "Return" | "Hold",
   userId: number,
-  comments?: string
+  comments?: string,
+  password?: string
 ) {
   try {
     // Determine target statuses
@@ -27,11 +28,24 @@ export async function reviewExamByDirector(
       include: { director: true, faculty: true },
     });
 
-    if (action === "Approve" && !user?.signature) {
-      return {
-        error: "A saved electronic signature is required before approving an examination. Please create and save your signature first.",
-        requiresSignature: true,
-      };
+    if (action === "Approve") {
+      if (!user?.signature) {
+        return {
+          error: "A saved electronic signature is required before approving an examination. Please create and save your signature first.",
+          requiresSignature: true,
+        };
+      }
+
+      if (password && password.trim()) {
+        const bcrypt = await import("bcryptjs");
+        const isPasswordValid = await bcrypt.compare(password, user.password_hash);
+        if (!isPasswordValid) {
+          return {
+            error: "Incorrect password. Please enter your current AcadNexus account password to authorize your signature.",
+            invalidPassword: true,
+          };
+        }
+      }
     }
 
     // 1. Update the approval workflow

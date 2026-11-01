@@ -2796,10 +2796,9 @@ export function ExamBuilderWizard({
   };
 
   // Save and Submit for Review
-  const handleSubmitForReview = async (overrideSignature?: string) => {
-    // 0. Verify electronic signature existence before submission
-    const effectiveSig = overrideSignature !== undefined ? overrideSignature : activeUserSignature;
-    if (!effectiveSig) {
+  const handleSubmitForReview = async (confirmedSignature?: string, confirmedPassword?: string) => {
+    // 0. Require password confirmation when signing the examination document
+    if (!confirmedSignature) {
       setShowSignatureModal(true);
       return;
     }
@@ -2884,9 +2883,9 @@ export function ExamBuilderWizard({
       }
 
       // Transition status to Pending_Chair
-      const statusRes = await updateExamStatus(exam.exam_id, "Pending_Chair", facultyId);
+      const statusRes = await updateExamStatus(exam.exam_id, "Pending_Chair", facultyId, confirmedPassword);
       if (statusRes.error) {
-        if ((statusRes as any).requiresSignature) {
+        if ((statusRes as any).requiresSignature || (statusRes as any).invalidPassword) {
           isSubmittedRef.current = false;
           setIsSubmitting(false);
           setShowSignatureModal(true);
@@ -5723,11 +5722,12 @@ export function ExamBuilderWizard({
         userName={signatoryFacultyName || "Faculty Member"}
         userRole={userRole || "Faculty"}
         departmentName={facultyDepartment || "Batanes State College"}
+        userSignature={activeUserSignature}
         onClose={() => setShowSignatureModal(false)}
-        onSignatureSavedAndProceed={async (savedSig) => {
+        onSignatureSavedAndProceed={async (savedSig, confirmedPassword) => {
           setActiveUserSignature(savedSig);
           setShowSignatureModal(false);
-          await handleSubmitForReview(savedSig);
+          await handleSubmitForReview(savedSig, confirmedPassword);
         }}
       />
 

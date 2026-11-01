@@ -222,3 +222,76 @@ export async function deleteUserSignatureAction(
     return { error: error?.message || "Failed to remove signature." };
   }
 }
+
+/**
+ * Verifies a user's current account login password before applying their saved signature.
+ * Does not alter the signature. Returns the user's saved signature if password matches.
+ */
+export async function verifyUserSignaturePasswordAction(
+  password: string,
+  targetUserId?: number
+): Promise<{ success: boolean; error?: string; signature?: string | null }> {
+  try {
+    if (!password || !password.trim()) {
+      return { success: false, error: "Please enter your current account login password to authorize your signature." };
+    }
+
+    let dbUser = null;
+    if (targetUserId) {
+      dbUser = await db.user.findUnique({
+        where: { user_id: targetUserId },
+      });
+    }
+
+    if (!dbUser) {
+      const supabase = await createClient();
+      const {
+        data: { user: sessionUser },
+      } = await supabase.auth.getUser();
+
+      if (!sessionUser) {
+        return { success: false, error: "Session expired. Please log in again to sign this document." };
+      }
+
+      const sessionInstitutionalId = sessionUser.user_metadata?.institutional_id;
+      if (sessionInstitutionalId) {
+        dbUser = await db.user.findUnique({
+          where: { institutional_id: sessionInstitutionalId },
+        });
+      }
+      if (!dbUser && sessionUser.id) {
+        dbUser = await db.user.findFirst({
+          where: { supabase_uid: sessionUser.id },
+        });
+      }
+      if (!dbUser && sessionUser.email) {
+        const emailPrefix = sessionUser.email.split("@")[0].toUpperCase();
+        dbUser = await db.user.findUnique({
+          where: { institutional_id: emailPrefix },
+        });
+      }
+    }
+
+    if (!dbUser) {
+      return { success: false, error: "User account could not be found." };
+    }
+
+    if (dbUser.role === "Student") {
+      return { success: false, error: "Student accounts are not authorized to sign examination documents." };
+    }
+
+    const isMatch = await bcrypt.compare(password, dbUser.password_hash);
+    if (!isMatch) {
+      return {
+        success: false,
+        error: "Incorrect password. Please enter the same password you use to log in to your AcadNexus account.",
+      };
+    }
+
+    return { success: true, signature: dbUser.signature };
+  } catch (err: any) {
+    console.error("Error verifying signature password:", err);
+    return { success: false, error: err.message || "Failed to verify password." };
+  }
+}
+

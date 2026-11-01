@@ -1602,10 +1602,10 @@ export function FacultyDashboardClient({
   const handleStatusTransition = async (
     examId: number, 
     nextStatus: "Draft" | "Pending_Chair" | "Pending_DI" | "Approved" | "Returned",
-    overrideSignature?: string
+    confirmedSignature?: string,
+    confirmedPassword?: string
   ) => {
-    const effectiveSig = overrideSignature !== undefined ? overrideSignature : savedSignature;
-    if (nextStatus === "Pending_Chair" && !effectiveSig) {
+    if (nextStatus === "Pending_Chair" && !confirmedSignature) {
       const targetExam = faculty.examinations?.find((e: any) => e.exam_id === examId);
       setPendingTransitionExam({
         examId,
@@ -1616,11 +1616,11 @@ export function FacultyDashboardClient({
     }
 
     setTransitioningExamId(examId);
-    const res = await updateExamStatus(examId, nextStatus, faculty.faculty_id);
+    const res = await updateExamStatus(examId, nextStatus, faculty.faculty_id, confirmedPassword);
     setTransitioningExamId(null);
     
     if (res.error) {
-      if ((res as any).requiresSignature) {
+      if ((res as any).requiresSignature || (res as any).invalidPassword) {
         const targetExam = faculty.examinations?.find((e: any) => e.exam_id === examId);
         setPendingTransitionExam({
           examId,
@@ -7366,17 +7366,18 @@ export function FacultyDashboardClient({
         userName={[faculty.first_name, faculty.last_name].filter(Boolean).join(" ") || "Faculty Member"}
         userRole="Faculty"
         departmentName={faculty.department?.department_name || "Batanes State College"}
+        userSignature={savedSignature}
         onClose={() => {
           setShowRequireSignatureModal(false);
           setPendingTransitionExam(null);
         }}
-        onSignatureSavedAndProceed={async (newSig) => {
+        onSignatureSavedAndProceed={async (newSig, confirmedPassword) => {
           setSavedSignature(newSig);
           setShowRequireSignatureModal(false);
           if (pendingTransitionExam) {
             const idToSubmit = pendingTransitionExam.examId;
             setPendingTransitionExam(null);
-            await handleStatusTransition(idToSubmit, "Pending_Chair", newSig);
+            await handleStatusTransition(idToSubmit, "Pending_Chair", newSig, confirmedPassword);
           }
         }}
       />

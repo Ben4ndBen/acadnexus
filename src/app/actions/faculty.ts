@@ -41,7 +41,7 @@ export async function updateFacultyProfile(facultyId: number, firstName: string,
   }
 }
 
-export async function updateExamStatus(examId: number, status: ExamStatus, userId: number) {
+export async function updateExamStatus(examId: number, status: ExamStatus, userId: number, password?: string) {
   try {
     return await db.$transaction(async (tx) => {
       const exam = await tx.examination.findUnique({
@@ -68,6 +68,17 @@ export async function updateExamStatus(examId: number, status: ExamStatus, userI
             error: "A saved electronic signature is required before submitting an examination. Please create and save your signature first.",
             requiresSignature: true,
           };
+        }
+
+        if (password && password.trim()) {
+          const bcrypt = await import("bcryptjs");
+          const isPasswordValid = await bcrypt.compare(password, authorUser.password_hash);
+          if (!isPasswordValid) {
+            return {
+              error: "Incorrect password. Please enter your current AcadNexus account password to authorize your signature.",
+              invalidPassword: true,
+            };
+          }
         }
 
         // Find a Chair to assign (e.g. for the faculty's department)
