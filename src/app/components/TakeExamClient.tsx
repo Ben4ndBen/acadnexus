@@ -26,6 +26,8 @@ interface TakeExamClientProps {
     studentExamId: number;
     remainingSeconds: number;
     questions: Question[];
+    testTypeInstructions?: Record<string, string>;
+    testTypeTitles?: Record<string, string>;
     savedAnswers: { question_id: number; submitted_response: string }[];
     examTitle: string;
     courseTitle: string;
@@ -941,6 +943,109 @@ export function TakeExamClient({
 
   const currentParsed = currentQuestion ? parseQuestionText(currentQuestion) : null;
 
+  // Helper to convert 1-based section index to Roman numerals (I, II, III, IV, V...)
+  const toRomanNumeral = (num: number): string => {
+    const romanMap: Array<[number, string]> = [
+      [10, "X"],
+      [9, "IX"],
+      [5, "V"],
+      [4, "IV"],
+      [1, "I"],
+    ];
+    let result = "";
+    let n = num;
+    for (const [val, sym] of romanMap) {
+      while (n >= val) {
+        result += sym;
+        n -= val;
+      }
+    }
+    return result || String(num);
+  };
+
+  const formatTestTypeLabel = (qType: string): string => {
+    const labels: Record<string, string> = {
+      Multiple_Choice: "Multiple Choice",
+      True_False: "True or False",
+      Identification: "Identification",
+      Matching_Type: "Matching Type",
+      Fill_In_The_Blanks: "Fill in the Blanks",
+      Essay: "Essay",
+    };
+    return labels[qType] || qType.replace(/_/g, " ");
+  };
+
+  // Build ordered test-type sections with creator-provided instructions (never inventing fallback instructions)
+  const testTypeSections = (() => {
+    const sections: Array<{
+      questionType: string;
+      sectionNum: number;
+      romanNum: string;
+      label: string;
+      customTitle: string;
+      instruction: string;
+      questionIndices: number[];
+      startItemNum: number;
+      endItemNum: number;
+      totalPoints: number;
+    }> = [];
+    const sectionMap = new Map<string, (typeof sections)[number]>();
+
+    examQuestions.forEach((q, idx) => {
+      const qType = q.question_type;
+      let sec = sectionMap.get(qType);
+      if (!sec) {
+        const sectionNum = sections.length + 1;
+        // Resolve instruction strictly for this question_type from creator-provided metadata
+        let creatorInstruction = (initialData.testTypeInstructions?.[qType] || "").trim();
+        let creatorTitle = (initialData.testTypeTitles?.[qType] || "").trim();
+        if (!creatorInstruction || !creatorTitle) {
+          for (const item of examQuestions) {
+            if (item.question_type !== qType) continue;
+            if (item.question_text && item.question_text.trim().startsWith("{")) {
+              try {
+                const parsed = JSON.parse(item.question_text);
+                if (!creatorInstruction) {
+                  const inst = parsed.type_instruction ?? parsed.instruction ?? parsed.instructions;
+                  if (typeof inst === "string" && inst.trim() !== "") {
+                    creatorInstruction = inst.trim();
+                  }
+                }
+                if (!creatorTitle && typeof parsed.type_title === "string" && parsed.type_title.trim() !== "") {
+                  creatorTitle = parsed.type_title.trim();
+                }
+              } catch {}
+            }
+          }
+        }
+
+        sec = {
+          questionType: qType,
+          sectionNum,
+          romanNum: toRomanNumeral(sectionNum),
+          label: formatTestTypeLabel(qType),
+          customTitle: creatorTitle,
+          instruction: creatorInstruction,
+          questionIndices: [],
+          startItemNum: idx + 1,
+          endItemNum: idx + 1,
+          totalPoints: 0,
+        };
+        sectionMap.set(qType, sec);
+        sections.push(sec);
+      }
+      sec.questionIndices.push(idx);
+      sec.endItemNum = idx + 1;
+      sec.totalPoints += q.points || 1;
+    });
+
+    return sections;
+  })();
+
+  const currentSection = currentQuestion
+    ? testTypeSections.find((sec) => sec.questionType === currentQuestion.question_type) || null
+    : null;
+
   // Matching type specific helpers
   const getMatchingChoice = (questionId: number, premise: string): string => {
     const response = answers[questionId];
@@ -1605,8 +1710,45 @@ export function TakeExamClient({
         
         {/* Left Side: Question Pane */}
         <main className="flex-1 flex flex-col justify-between overflow-y-auto p-4 sm:p-8 space-y-6">
-          <div className="max-w-2xl w-full mx-auto space-y-6">
+          <div className="max-w-2xl w-full mx-auto space-y-5">
             
+            {/* Test-Type Section Header & Creator Instructions (Placed clearly before the questions of this category) */}
+            {currentSection && (
+              <div className="bg-[#1E293B] border border-slate-800/90 rounded-2xl p-4 sm:p-5 shadow-md space-y-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <span className="bg-[#7A151A] text-white border border-rose-500/30 text-[11px] font-black uppercase tracking-wider px-2.5 py-1 rounded-lg">
+                      Test {currentSection.romanNum}
+                    </span>
+                    <h2 className="text-sm sm:text-base font-extrabold text-white tracking-tight uppercase">
+                      {currentSection.customTitle || currentSection.label}
+                    </h2>
+                  </div>
+                  <div className="flex items-center gap-2 text-[11px] font-bold text-slate-400">
+                    <span className="bg-slate-900/80 border border-slate-800 px-2.5 py-0.5 rounded-full text-slate-300">
+                      {currentSection.startItemNum === currentSection.endItemNum
+                        ? `Question ${currentSection.startItemNum}`
+                        : `Questions ${currentSection.startItemNum}–${currentSection.endItemNum}`}
+                    </span>
+                    <span className="bg-slate-900/80 border border-slate-800 px-2.5 py-0.5 rounded-full text-emerald-400">
+                      {currentSection.totalPoints} {currentSection.totalPoints === 1 ? "Pt" : "Pts"}
+                    </span>
+                  </div>
+                </div>
+
+                {currentSection.instruction && (
+                  <div className="bg-slate-900/70 border border-slate-800/90 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-slate-200 leading-relaxed">
+                    <span className="font-black text-amber-400 uppercase tracking-wider text-[11px] mr-2">
+                      Instructions:
+                    </span>
+                    <span className="font-medium text-slate-100 whitespace-pre-wrap">
+                      <Latex text={currentSection.instruction} />
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Question title card */}
             <div className="bg-[#1E293B] border border-slate-800/80 rounded-2xl p-6 sm:p-8 shadow-lg space-y-4">
               <div className="flex justify-between items-center border-b border-slate-800/60 pb-3">
@@ -1910,45 +2052,73 @@ export function TakeExamClient({
               </span>
             </div>
 
-            {/* Grid list */}
-            <div className="grid grid-cols-4 gap-2.5">
-              {examQuestions.map((q, idx) => {
-                const isCurrent = currentQuestionIdx === idx;
-                const isFlagged = flagged[q.question_id];
-                const ans = answers[q.question_id];
-                
-                let isAnswered = false;
-                if (ans && ans.trim() !== "") {
-                  if (q.question_type === "Matching_Type") {
-                    try {
-                      const parsed = JSON.parse(ans);
-                      isAnswered = (parsed.matches?.length || 0) > 0;
-                    } catch {}
-                  } else {
-                    isAnswered = true;
-                  }
-                }
+            {/* Grid list grouped by Test Type Section */}
+            <div className="space-y-4">
+              {testTypeSections.map((sec) => (
+                <div key={sec.questionType} className="space-y-2">
+                  <div className="flex items-center justify-between text-[10px] font-extrabold uppercase tracking-wider text-slate-400 px-0.5">
+                    <span className="truncate">
+                      Test {sec.romanNum} • {sec.label}
+                    </span>
+                    <span className="text-slate-500 shrink-0">
+                      {sec.startItemNum === sec.endItemNum
+                        ? `#${sec.startItemNum}`
+                        : `#${sec.startItemNum}–${sec.endItemNum}`}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-4 gap-2">
+                    {sec.questionIndices.map((idx) => {
+                      const q = examQuestions[idx];
+                      const isCurrent = currentQuestionIdx === idx;
+                      const isFlagged = flagged[q.question_id];
+                      const ans = answers[q.question_id];
 
-                // Determine styling
-                let btnColor = "bg-slate-900 border-slate-800 text-slate-400 hover:bg-slate-800/60";
-                if (isCurrent) {
-                  btnColor = "bg-rose-600 text-white border-rose-500 shadow-md";
-                } else if (isFlagged) {
-                  btnColor = "bg-amber-500/20 text-amber-400 border-amber-500/40 hover:bg-amber-500/30";
-                } else if (isAnswered) {
-                  btnColor = "bg-emerald-500/20 text-emerald-400 border-emerald-500/40 hover:bg-emerald-500/30";
-                }
+                      let isAnswered = false;
+                      if (ans && ans.trim() !== "") {
+                        if (q.question_type === "Matching_Type") {
+                          try {
+                            const parsed = JSON.parse(ans);
+                            isAnswered = (parsed.matches?.length || 0) > 0;
+                          } catch {}
+                        } else if (q.question_type === "Fill_In_The_Blanks") {
+                          try {
+                            if (ans.trim().startsWith("{")) {
+                              const parsed = JSON.parse(ans);
+                              const bValues = Object.values(parsed.blanks || {}) as string[];
+                              isAnswered = bValues.some((v) => v.trim() !== "");
+                            } else {
+                              isAnswered = ans.trim() !== "";
+                            }
+                          } catch {
+                            isAnswered = ans.trim() !== "";
+                          }
+                        } else {
+                          isAnswered = true;
+                        }
+                      }
 
-                return (
-                  <button
-                    key={q.question_id}
-                    onClick={() => handleNavigateQuestion(idx)}
-                    className={`h-10 rounded-xl font-black text-xs border transition-all flex items-center justify-center ${btnColor}`}
-                  >
-                    {idx + 1}
-                  </button>
-                );
-              })}
+                      let btnColor = "bg-slate-900 border-slate-800 text-slate-400 hover:bg-slate-800/60";
+                      if (isCurrent) {
+                        btnColor = "bg-rose-600 text-white border-rose-500 shadow-md";
+                      } else if (isFlagged) {
+                        btnColor = "bg-amber-500/20 text-amber-400 border-amber-500/40 hover:bg-amber-500/30";
+                      } else if (isAnswered) {
+                        btnColor = "bg-emerald-500/20 text-emerald-400 border-emerald-500/40 hover:bg-emerald-500/30";
+                      }
+
+                      return (
+                        <button
+                          key={q.question_id}
+                          onClick={() => handleNavigateQuestion(idx)}
+                          className={`h-10 rounded-xl font-black text-xs border transition-all flex items-center justify-center ${btnColor}`}
+                        >
+                          {idx + 1}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
             </div>
             
             {/* Color keys */}

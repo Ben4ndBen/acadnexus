@@ -655,6 +655,8 @@ export async function saveExamConfig(formData: FormData) {
         const outcomesToSave = {
           ...(parsedTos.learningOutcomes || {}),
           __resultSettings: parsedTos.resultSettings,
+          __testTypeInstructions: parsedTos.testTypeInstructions || {},
+          __testTypeTitles: parsedTos.testTypeTitles || {},
         };
         await db.tableOfSpecifications.upsert({
           where: { exam_id: examId },

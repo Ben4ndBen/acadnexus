@@ -441,12 +441,16 @@ function deserializeQuestions(dbQuestions: any[]): QuestionState[] {
 }
 
 // Serialization helper
-function serializeQuestions(questions: QuestionState[]) {
+function serializeQuestions(
+  questions: QuestionState[],
+  typeInstructions?: Record<string, string>,
+  typeTitles?: Record<string, string>
+) {
   return questions.map((q, idx) => {
     let question_text = q.text;
     let correct_answer = q.correctAnswer;
 
-    // Build standard JSON wrapper to hold metadata like images, taxonomy level, and creator arrangement order
+    // Build standard JSON wrapper to hold metadata like images, taxonomy level, creator arrangement order, and test-type instructions
     const serializedData: Record<string, any> = {
       text: q.text,
       taxonomy_level: q.taxonomy_level || "KNOWLEDGE / REMEMBERING",
@@ -454,6 +458,14 @@ function serializeQuestions(questions: QuestionState[]) {
     };
     if (q.image_url) {
       serializedData.image_url = q.image_url;
+    }
+    const typeInstruction = typeInstructions?.[q.question_type]?.trim();
+    if (typeInstruction) {
+      serializedData.type_instruction = typeInstruction;
+    }
+    const typeTitle = typeTitles?.[q.question_type]?.trim();
+    if (typeTitle) {
+      serializedData.type_title = typeTitle;
     }
 
     let calculatedPoints = Number(q.points) || 1;
@@ -704,9 +716,78 @@ export function ExamBuilderWizard({
     setSignatoryLayoutMode(hasProgramChair ? "WITH_PC" : "WITHOUT_PC");
   }, [hasProgramChair]);
 
-  // Editable Test Type Headers & Directions State
-  const [customTypeTitles, setCustomTypeTitles] = useState<Record<string, string>>({});
-  const [customDirections, setCustomDirections] = useState<Record<string, string>>({});
+  // Editable Test Type Headers & Directions State (initialized strictly from creator-saved instructions)
+  const [customTypeTitles, setCustomTypeTitles] = useState<Record<string, string>>(() => {
+    const map: Record<string, string> = {};
+    if (exam.tos_file_path && exam.tos_file_path.trim().startsWith("{")) {
+      try {
+        const parsed = JSON.parse(exam.tos_file_path);
+        if (parsed.testTypeTitles && typeof parsed.testTypeTitles === "object") {
+          for (const [k, v] of Object.entries(parsed.testTypeTitles)) {
+            if (typeof v === "string" && v.trim() !== "") map[k] = v.trim();
+          }
+        }
+      } catch {}
+    }
+    const tosOutcomesJson = (exam as any).tableOfSpecifications?.learning_outcomes_json;
+    if (tosOutcomesJson && typeof tosOutcomesJson === "string" && tosOutcomesJson.trim().startsWith("{")) {
+      try {
+        const parsed = JSON.parse(tosOutcomesJson);
+        if (parsed.__testTypeTitles && typeof parsed.__testTypeTitles === "object") {
+          for (const [k, v] of Object.entries(parsed.__testTypeTitles)) {
+            if (typeof v === "string" && v.trim() !== "" && !map[k]) map[k] = v.trim();
+          }
+        }
+      } catch {}
+    }
+    for (const q of exam.questionBank || []) {
+      const qType = q.question_type;
+      if (qType && !map[qType] && typeof q.question_text === "string" && q.question_text.trim().startsWith("{")) {
+        try {
+          const parsed = JSON.parse(q.question_text);
+          const t = parsed.type_title;
+          if (typeof t === "string" && t.trim() !== "") map[qType] = t.trim();
+        } catch {}
+      }
+    }
+    return map;
+  });
+
+  const [customDirections, setCustomDirections] = useState<Record<string, string>>(() => {
+    const map: Record<string, string> = {};
+    if (exam.tos_file_path && exam.tos_file_path.trim().startsWith("{")) {
+      try {
+        const parsed = JSON.parse(exam.tos_file_path);
+        if (parsed.testTypeInstructions && typeof parsed.testTypeInstructions === "object") {
+          for (const [k, v] of Object.entries(parsed.testTypeInstructions)) {
+            if (typeof v === "string" && v.trim() !== "") map[k] = v.trim();
+          }
+        }
+      } catch {}
+    }
+    const tosOutcomesJson = (exam as any).tableOfSpecifications?.learning_outcomes_json;
+    if (tosOutcomesJson && typeof tosOutcomesJson === "string" && tosOutcomesJson.trim().startsWith("{")) {
+      try {
+        const parsed = JSON.parse(tosOutcomesJson);
+        if (parsed.__testTypeInstructions && typeof parsed.__testTypeInstructions === "object") {
+          for (const [k, v] of Object.entries(parsed.__testTypeInstructions)) {
+            if (typeof v === "string" && v.trim() !== "" && !map[k]) map[k] = v.trim();
+          }
+        }
+      } catch {}
+    }
+    for (const q of exam.questionBank || []) {
+      const qType = q.question_type;
+      if (qType && !map[qType] && typeof q.question_text === "string" && q.question_text.trim().startsWith("{")) {
+        try {
+          const parsed = JSON.parse(q.question_text);
+          const inst = parsed.type_instruction ?? parsed.instruction ?? parsed.instructions;
+          if (typeof inst === "string" && inst.trim() !== "") map[qType] = inst.trim();
+        } catch {}
+      }
+    }
+    return map;
+  });
 
   // 3. Assigned Students Selection with Sort & Filter
   const [assignedStudents, setAssignedStudents] = useState<StudentItem[]>(initialAssignedStudents);
@@ -984,6 +1065,8 @@ export function ExamBuilderWizard({
         targetTotalItems: tosTargetTotalItems,
         topicPlans: tosTopicPlans,
         learningOutcomes: learningOutcomes,
+        testTypeInstructions: customDirections,
+        testTypeTitles: customTypeTitles,
         resultSettings: {
           releaseMode: resultReleaseMode,
           showResultsImmediately: resultReleaseMode === "immediate",
@@ -993,7 +1076,7 @@ export function ExamBuilderWizard({
 
       const configRes = await saveExamConfig(configData);
       const sortedQs = sortQuestionsByType(questions);
-      const serializedQs = serializeQuestions(sortedQs);
+      const serializedQs = serializeQuestions(sortedQs, customDirections, customTypeTitles);
       const questionsRes = await saveExamQuestions(exam.exam_id, serializedQs, facultyId);
 
       if (configRes.error || questionsRes.error) {
@@ -2025,6 +2108,8 @@ export function ExamBuilderWizard({
         targetTotalItems: targetItemsToSave,
         topicPlans: plansToSave,
         learningOutcomes: outcomesToSave,
+        testTypeInstructions: customDirections,
+        testTypeTitles: customTypeTitles,
         resultSettings: {
           releaseMode: resultReleaseMode,
           showResultsImmediately: resultReleaseMode === "immediate",
@@ -2035,7 +2120,7 @@ export function ExamBuilderWizard({
       const configRes = await saveExamConfig(configData);
 
       const sortedQs = sortQuestionsByType(qsToSave);
-      const serializedQs = serializeQuestions(sortedQs);
+      const serializedQs = serializeQuestions(sortedQs, customDirections, customTypeTitles);
       const questionsRes = await saveExamQuestions(exam.exam_id, serializedQs, facultyId);
 
       if (!configRes.error && !questionsRes.error) {
@@ -2082,7 +2167,9 @@ export function ExamBuilderWizard({
     examDate,
     term,
     documentReference,
-    selectedStudentIds
+    selectedStudentIds,
+    customDirections,
+    customTypeTitles
   ]);
 
   // Initial check: if already submitted upon opening, show modal without immediate redirect
@@ -2777,6 +2864,8 @@ export function ExamBuilderWizard({
         targetTotalItems: tosTargetTotalItems,
         topicPlans: tosTopicPlans,
         learningOutcomes: learningOutcomes,
+        testTypeInstructions: customDirections,
+        testTypeTitles: customTypeTitles,
         resultSettings: {
           releaseMode: resultReleaseMode,
           showResultsImmediately: resultReleaseMode === "immediate",
@@ -2798,7 +2887,7 @@ export function ExamBuilderWizard({
 
       // Step 2: Save Questions (Auto-arranged by Question Type)
       const sortedQs = sortQuestionsByType(questions);
-      const serializedQs = serializeQuestions(sortedQs);
+      const serializedQs = serializeQuestions(sortedQs, customDirections, customTypeTitles);
       const questionsRes = await saveExamQuestions(exam.exam_id, serializedQs, facultyId);
 
       if (questionsRes.error) {
@@ -2889,6 +2978,8 @@ export function ExamBuilderWizard({
         targetTotalItems: tosTargetTotalItems,
         topicPlans: tosTopicPlans,
         learningOutcomes: learningOutcomes,
+        testTypeInstructions: customDirections,
+        testTypeTitles: customTypeTitles,
         resultSettings: {
           releaseMode: resultReleaseMode,
           showResultsImmediately: resultReleaseMode === "immediate",
@@ -2912,7 +3003,7 @@ export function ExamBuilderWizard({
 
       // Save questions (Auto-arranged by Question Type)
       const sortedQs = sortQuestionsByType(questions);
-      const serializedQs = serializeQuestions(sortedQs);
+      const serializedQs = serializeQuestions(sortedQs, customDirections, customTypeTitles);
       const questionsRes = await saveExamQuestions(exam.exam_id, serializedQs, facultyId);
 
       if (questionsRes.error) {
@@ -4185,6 +4276,71 @@ export function ExamBuilderWizard({
               </div>
             );
           })()}
+
+          {/* Test-Type Instructions (Directions for Students per Test Category) */}
+          {questionTypeTestMap.activeTypes.length > 0 && (
+            <div className="bg-white border border-slate-200/90 rounded-3xl p-5 sm:p-6 shadow-xs space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                <div>
+                  <h3 className="text-sm sm:text-base font-extrabold text-slate-900 flex items-center gap-2">
+                    <BookOpen className="w-4.5 h-4.5 text-emerald-600" />
+                    Test-Type Instructions (Directions for Students)
+                  </h3>
+                  <p className="text-xs text-slate-500 font-medium mt-0.5">
+                    Provide specific instructions for each test type in your examination. Each instruction will be displayed clearly before the questions in that section during the student examination. Leave blank if no specific instruction is needed for a test type.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {questionTypeTestMap.activeTypes.map((qType) => {
+                  const testNum = questionTypeTestMap.typeToTestNum[qType];
+                  const typeLabels: Record<string, string> = {
+                    Multiple_Choice: "Multiple Choice",
+                    Identification: "Identification",
+                    True_False: "True or False",
+                    Fill_In_The_Blanks: "Fill in the Blanks",
+                    Matching_Type: "Matching Type",
+                    Essay: "Essay",
+                  };
+                  const itemCount = questions.filter((q) => q.question_type === qType).length;
+                  const currentInstruction = customDirections[qType] || "";
+
+                  return (
+                    <div
+                      key={qType}
+                      className="bg-slate-50/80 border border-slate-200 rounded-2xl p-3.5 space-y-2 transition-all focus-within:border-emerald-400 focus-within:bg-white"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <label className="text-xs font-black text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
+                          <span className="bg-emerald-600 text-white text-[10px] font-black px-2 py-0.5 rounded-md">
+                            Test {toRomanNumeral(testNum)}
+                          </span>
+                          <span>{typeLabels[qType] || qType.replace(/_/g, " ")}</span>
+                        </label>
+                        <span className="text-[10px] font-bold text-slate-500 bg-white border border-slate-200 px-2 py-0.5 rounded-full">
+                          {itemCount} {itemCount === 1 ? "Item" : "Items"}
+                        </span>
+                      </div>
+                      <textarea
+                        rows={2}
+                        value={currentInstruction}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setCustomDirections((prev) => ({
+                            ...prev,
+                            [qType]: val,
+                          }));
+                        }}
+                        placeholder={`Enter instructions for ${typeLabels[qType] || qType.replace(/_/g, " ")} (optional)...`}
+                        className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 focus:outline-none resize-y"
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Topics Accordion Dropdown List (Click topic header to drop down items) */}
           <div className="space-y-4">
@@ -5485,15 +5641,8 @@ export function ExamBuilderWizard({
                               Matching_Type: "MATCHING TYPE",
                               Essay: "ESSAY / COMPREHENSION",
                             };
-                            const typeDirections: Record<string, string> = {
-                              Multiple_Choice: "Read each question carefully and select the letter corresponding to the correct answer.",
-                              Identification: "Identify the concept, term, or statement described in each item. Write your answer clearly.",
-                              True_False: "Read each statement carefully. Write True if the statement is correct; otherwise write False.",
-                              Fill_In_The_Blanks: "Fill in the blank space(s) with the correct word or phrase to complete the statement.",
-                              Matching_Type: "Match the premises in Column A with the corresponding correct options in Column B.",
-                              Essay: "Answer each question concisely and thoroughly in the space provided.",
-                            };
                             const qType = block.qType || "";
+                            const creatorDirection = (customDirections[qType] || "").trim();
                             return (
                               <div key={block.id} className="pt-3 pb-1.5 border-b-2 border-slate-900 mt-4 mb-2">
                                 <div className="flex items-baseline justify-between">
@@ -5507,7 +5656,7 @@ export function ExamBuilderWizard({
                                     className="font-extrabold text-xs sm:text-sm text-slate-900 tracking-wide uppercase font-sans outline-none focus:bg-amber-100/90 focus:ring-1 focus:ring-amber-500 rounded px-1 transition-all cursor-text print:p-0 print:bg-transparent print:ring-0"
                                     title="Click to edit test section header title"
                                   >
-                                    {customTypeTitles[qType] !== undefined
+                                    {customTypeTitles[qType] !== undefined && customTypeTitles[qType].trim() !== ""
                                       ? customTypeTitles[qType]
                                       : `TEST ${toRomanNumeral(block.testNum!)}. ${typeTitles[qType] || qType.toUpperCase()}`}
                                   </h4>
@@ -5515,23 +5664,36 @@ export function ExamBuilderWizard({
                                     ({block.points} {block.points === 1 ? "Point" : "Points"})
                                   </span>
                                 </div>
-                                <p className="text-xs text-slate-700 italic font-sans mt-0.5 leading-tight">
-                                  <span className="font-bold not-italic">Directions: </span>
-                                  <span
-                                    contentEditable
-                                    suppressContentEditableWarning
-                                    onBlur={(e) => {
-                                      const val = e.currentTarget.innerText || "";
-                                      setCustomDirections((prev) => ({ ...prev, [qType]: val }));
-                                    }}
-                                    className="outline-none focus:bg-amber-100/90 focus:ring-1 focus:ring-amber-500 rounded px-1 transition-all cursor-text print:p-0 print:bg-transparent print:ring-0"
-                                    title="Click to edit directions for this test type"
-                                  >
-                                    {customDirections[qType] !== undefined
-                                      ? customDirections[qType]
-                                      : (typeDirections[qType] || "Read each question carefully and answer accordingly.")}
-                                  </span>
-                                </p>
+                                {creatorDirection ? (
+                                  <p className="text-xs text-slate-700 italic font-sans mt-0.5 leading-tight">
+                                    <span className="font-bold not-italic">Directions: </span>
+                                    <span
+                                      contentEditable
+                                      suppressContentEditableWarning
+                                      onBlur={(e) => {
+                                        const val = (e.currentTarget.innerText || "").trim();
+                                        setCustomDirections((prev) => ({ ...prev, [qType]: val }));
+                                      }}
+                                      className="outline-none focus:bg-amber-100/90 focus:ring-1 focus:ring-amber-500 rounded px-1 transition-all cursor-text print:p-0 print:bg-transparent print:ring-0"
+                                      title="Click to edit directions for this test type"
+                                    >
+                                      {creatorDirection}
+                                    </span>
+                                  </p>
+                                ) : (
+                                  <div className="mt-1 print:hidden">
+                                    <input
+                                      type="text"
+                                      value={customDirections[qType] || ""}
+                                      onChange={(e) => {
+                                        const val = e.target.value;
+                                        setCustomDirections((prev) => ({ ...prev, [qType]: val }));
+                                      }}
+                                      placeholder="+ Add instructions for this test type (optional)..."
+                                      className="w-full bg-slate-50/70 hover:bg-amber-50/60 focus:bg-amber-50 border border-dashed border-slate-300 focus:border-amber-500 rounded px-2 py-1 text-[11px] italic text-slate-700 placeholder:text-slate-400 focus:outline-none transition-all"
+                                    />
+                                  </div>
+                                )}
                               </div>
                             );
                           }

@@ -96,6 +96,81 @@ function orderQuestionsForStudentExam<
   return randomizedByGroup;
 }
 
+/**
+ * Extracts creator-provided instructions and custom titles for each test type without inventing fallback text.
+ */
+function extractTestTypeMetadata(
+  exam: any,
+  dbQuestions: Array<{ question_type: string; question_text: string }>
+): { testTypeInstructions: Record<string, string>; testTypeTitles: Record<string, string> } {
+  const testTypeInstructions: Record<string, string> = {};
+  const testTypeTitles: Record<string, string> = {};
+
+  if (exam?.tos_file_path && typeof exam.tos_file_path === "string" && exam.tos_file_path.trim().startsWith("{")) {
+    try {
+      const parsedTos = JSON.parse(exam.tos_file_path);
+      if (parsedTos.testTypeInstructions && typeof parsedTos.testTypeInstructions === "object") {
+        for (const [k, v] of Object.entries(parsedTos.testTypeInstructions)) {
+          if (typeof v === "string" && v.trim() !== "") {
+            testTypeInstructions[k] = v.trim();
+          }
+        }
+      }
+      if (parsedTos.testTypeTitles && typeof parsedTos.testTypeTitles === "object") {
+        for (const [k, v] of Object.entries(parsedTos.testTypeTitles)) {
+          if (typeof v === "string" && v.trim() !== "") {
+            testTypeTitles[k] = v.trim();
+          }
+        }
+      }
+    } catch {}
+  }
+
+  const tosOutcomesJson = exam?.tableOfSpecifications?.learning_outcomes_json;
+  if (tosOutcomesJson && typeof tosOutcomesJson === "string" && tosOutcomesJson.trim().startsWith("{")) {
+    try {
+      const parsedOutcomes = JSON.parse(tosOutcomesJson);
+      if (parsedOutcomes.__testTypeInstructions && typeof parsedOutcomes.__testTypeInstructions === "object") {
+        for (const [k, v] of Object.entries(parsedOutcomes.__testTypeInstructions)) {
+          if (typeof v === "string" && v.trim() !== "" && !testTypeInstructions[k]) {
+            testTypeInstructions[k] = v.trim();
+          }
+        }
+      }
+      if (parsedOutcomes.__testTypeTitles && typeof parsedOutcomes.__testTypeTitles === "object") {
+        for (const [k, v] of Object.entries(parsedOutcomes.__testTypeTitles)) {
+          if (typeof v === "string" && v.trim() !== "" && !testTypeTitles[k]) {
+            testTypeTitles[k] = v.trim();
+          }
+        }
+      }
+    } catch {}
+  }
+
+  for (const q of dbQuestions || []) {
+    const qType = q.question_type;
+    if (qType && typeof q.question_text === "string" && q.question_text.trim().startsWith("{")) {
+      try {
+        const parsed = JSON.parse(q.question_text);
+        if (!testTypeInstructions[qType]) {
+          const inst = parsed.type_instruction ?? parsed.instruction ?? parsed.instructions;
+          if (typeof inst === "string" && inst.trim() !== "") {
+            testTypeInstructions[qType] = inst.trim();
+          }
+        }
+        if (!testTypeTitles[qType]) {
+          const title = parsed.type_title;
+          if (typeof title === "string" && title.trim() !== "") {
+            testTypeTitles[qType] = title.trim();
+          }
+        }
+      } catch {}
+    }
+  }
+
+  return { testTypeInstructions, testTypeTitles };
+}
+
 export async function startStudentExam(examId: number, studentId: number) {
   try {
     // 0. Authenticate caller and verify ownership
@@ -358,6 +433,8 @@ export async function startStudentExam(examId: number, studentId: number) {
       studentExam.student_exam_id
     );
 
+    const { testTypeInstructions, testTypeTitles } = extractTestTypeMetadata(exam, dbQuestions);
+
     const savedAnswers = studentExam.studentAnswers.map((ans) => ({
       question_id: ans.question_id,
       submitted_response: ans.submitted_response,
@@ -368,6 +445,8 @@ export async function startStudentExam(examId: number, studentId: number) {
       studentExamId: studentExam.student_exam_id,
       remainingSeconds,
       questions,
+      testTypeInstructions,
+      testTypeTitles,
       savedAnswers,
       examTitle: exam.title,
       courseTitle: exam.course.course_title,
