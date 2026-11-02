@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AcadNexus — Role-Based Operational Flowcharts</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      margin: 0;
+      padding: 24px;
+      background: #0f172a;
+      color: #f8fafc;
+    }
+    header {
+      background: #1e293b;
+      padding: 24px 32px;
+      border-radius: 12px;
+      margin-bottom: 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-left: 6px solid #38bdf8;
+      box-shadow: 0 4px 6px -1px rgba(0,0,0,0.3);
+    }
+    h1 { margin: 0 0 6px 0; font-size: 24px; color: #38bdf8; }
+    p { margin: 0; color: #94a3b8; font-size: 14px; }
+    .tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+    .tab-btn {
+      background: #1e293b;
+      color: #94a3b8;
+      border: 1px solid #334155;
+      padding: 10px 18px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .tab-btn.active, .tab-btn:hover {
+      background: #0284c7;
+      color: #ffffff;
+      border-color: #0284c7;
+    }
+    .card {
+      background: #ffffff;
+      color: #0f172a;
+      border-radius: 12px;
+      padding: 32px;
+      box-shadow: 0 4px 6px -1px rgba(0,0,0,0.3);
+      overflow-x: auto;
+      margin-bottom: 24px;
+    }
+    .card h2 {
+      margin: 0 0 16px 0;
+      color: #0369a1;
+      font-size: 20px;
+      border-bottom: 2px solid #e2e8f0;
+      padding-bottom: 8px;
+    }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+    .btn-print {
+      background: #0284c7;
+      color: #ffffff;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 14px;
+      cursor: pointer;
+    }
+    .btn-print:hover { background: #0369a1; }
+    @media print {
+      body { background: #ffffff; color: #000000; padding: 0; }
+      header, .tabs, .btn-print { display: none; }
+      .tab-content { display: block !important; page-break-after: always; }
+      .card { box-shadow: none; padding: 0; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>AcadNexus — Role-Based Operational Flowcharts</h1>
+      <p>Batanes State College &bull; Dedicated Procedural Workflows for Every Stakeholder</p>
+    </div>
+    <button class="btn-print" onclick="window.print()">Print / Export All to PDF</button>
+  </header>
+
+  <div class="tabs">
+    <button class="tab-btn active" onclick="showTab('tab-all')">All Roles Overview</button>
+    <button class="tab-btn" onclick="showTab('tab-student')">1. Student Workflow</button>
+    <button class="tab-btn" onclick="showTab('tab-faculty')">2. Faculty Workflow</button>
+    <button class="tab-btn" onclick="showTab('tab-progchair')">3. Program Chair Workflow</button>
+    <button class="tab-btn" onclick="showTab('tab-deptchair')">4. Department Chair Workflow</button>
+    <button class="tab-btn" onclick="showTab('tab-director')">5. Director for Instruction</button>
+  </div>
+
+  <!-- TAB: ALL ROLES -->
+  <div id="tab-all" class="tab-content active">
+    <div class="card">
+      <h2>Complete Multi-Role System Flowchart</h2>
+      <pre class="mermaid">
+flowchart TD
+    START([START: User Accesses Portal]) --> LOGIN[Input Institutional ID & Password]
+    LOGIN --> AUTH_CHECK{Valid Credentials?}
+    AUTH_CHECK -- No --> ERR[Display Error Alert] --> LOGIN
+    AUTH_CHECK -- Yes --> ROLE_CHECK{Check USERS.role}
+
+    ROLE_CHECK -- Student --> ST_PATH["Student Workflow: Take Exam & Auto-Grading"]
+    ROLE_CHECK -- Faculty --> FC_PATH["Faculty Workflow: Course Load & Exam Wizard"]
+    ROLE_CHECK -- ProgramChair --> PC_PATH["Program Chair Workflow: Tier-1 Item Audit"]
+    ROLE_CHECK -- Chair --> DC_PATH["Dept Chair Workflow: Tier-2 Compliance Check"]
+    ROLE_CHECK -- Director --> DI_PATH["Director Workflow: Tier-3 Clearance & Allocations"]
+
+    ST_PATH --> ST_END([Student Complete])
+    FC_PATH --> FC_END([Faculty Complete])
+    PC_PATH --> PC_END([Prog Chair Complete])
+    DC_PATH --> DC_END([Dept Chair Complete])
+    DI_PATH --> DI_END([Director Complete])
+      </pre>
+    </div>
+  </div>
+
+  <!-- TAB: STUDENT -->
+  <div id="tab-student" class="tab-content">
+    <div class="card">
+      <h2>1. Student User Flowchart (Role: Student)</h2>
+      <pre class="mermaid">
+flowchart TD
+    ST_START([START: Student Accesses AcadNexus]) --> ST_LOGIN[Enter Institutional ID & Password]
+    ST_LOGIN --> ST_AUTH{Valid Credentials?}
+    ST_AUTH -- No --> ST_ERR[Display Error Alert] --> ST_LOGIN
+    ST_AUTH -- Yes --> ST_DASH[Redirect to /dashboard/student]
+    
+    ST_DASH --> ST_FEED[Fetch Dynamic Exam Feed: Program, Year, Section, Courses]
+    ST_FEED --> ST_ACTIVE{Is an Exam Active Right Now?}
+    
+    ST_ACTIVE -- No --> ST_WAIT[View Upcoming Exam Schedules or Past Results] --> ST_END([END: Log Out])
+    ST_ACTIVE -- Yes --> ST_SUBMITTED{Already Submitted in STUDENT_EXAMS?}
+    ST_SUBMITTED -- Yes --> ST_VIEW_DONE[View Previous Score Summary] --> ST_END
+    
+    ST_SUBMITTED -- No --> ST_ENTER[Click 'Take Examination']
+    ST_ENTER --> ST_LOCKDOWN[Enforce HTML5 Fullscreen API & Hide Navigation]
+    ST_LOCKDOWN --> ST_INIT[Create STUDENT_EXAMS Attempt & Start Countdown Clock]
+    
+    ST_INIT --> ST_LOOP[Render Question: Pagination & Status Grid]
+    ST_LOOP --> ST_ANSWER[Student Types Response / Selects Choice]
+    
+    ST_ANSWER --> ST_AUTOSAVE[10s Server Heartbeat: Commit to STUDENT_ANSWERS & Sync Time]
+    ST_AUTOSAVE --> ST_VIOLATION{Focus Violation? Tab Switch, Blur, Exit Fullscreen}
+    
+    ST_VIOLATION -- Yes --> ST_STRIKE[Increment violations_count in STUDENT_EXAMS]
+    ST_STRIKE --> ST_STRIKE_MAX{violations_count >= 3?}
+    ST_STRIKE_MAX -- Strike 1 or 2 --> ST_WARN[Display Warning Banner: Penalty Applied] --> ST_LOOP
+    ST_STRIKE_MAX -- Strike 3 Reached --> ST_LOCKOUT[Forced Submission: Cheating_Lockout]
+    
+    ST_VIOLATION -- No --> ST_TIME_CHECK{Timer Hits 0:00?}
+    ST_TIME_CHECK -- Yes --> ST_TIMEOUT[Forced Submission: Timeout]
+    ST_TIME_CHECK -- No --> ST_MANUAL_SUBMIT{Student Clicks 'Final Submit'?}
+    ST_MANUAL_SUBMIT -- No --> ST_LOOP
+    ST_MANUAL_SUBMIT -- Yes --> ST_NORMAL[Manual Submission: Normal]
+    
+    ST_LOCKOUT --> ST_GRADE[Execute Auto-Grading Worker against QUESTION_BANK]
+    ST_TIMEOUT --> ST_GRADE
+    ST_NORMAL --> ST_GRADE
+    
+    ST_GRADE --> ST_SCORE[Compute total_score & Commit to STUDENT_EXAMS]
+    ST_SCORE --> ST_MODAL[Display Score Breakdown & Correct Answers] --> ST_END
+      </pre>
+    </div>
+  </div>
+
+  <!-- TAB: FACULTY -->
+  <div id="tab-faculty" class="tab-content">
+    <div class="card">
+      <h2>2. Faculty Member Flowchart (Role: Faculty)</h2>
+      <pre class="mermaid">
+flowchart TD
+    FC_START([START: Faculty Accesses Portal]) --> FC_LOGIN[Enter Institutional ID & Password]
+    FC_LOGIN --> FC_AUTH{Valid Credentials?}
+    FC_AUTH -- No --> FC_ERR[Display Error Alert] --> FC_LOGIN
+    FC_AUTH -- Yes --> FC_DASH[Redirect to /dashboard/faculty]
+    
+    FC_DASH --> FC_LOAD[Load Assigned Courses from FACULTY_COURSES]
+    FC_LOAD --> FC_ACTION{Select Action}
+    
+    FC_ACTION -- Class Roster --> FC_ROSTER[Manage 'Student Class' Enrolled Roster] --> FC_END([END: Log Out])
+    FC_ACTION -- Grade Essays --> FC_ESSAY[Grade Pending Subjective Essay Items] --> FC_END
+    FC_ACTION -- Create Exam --> FC_WIZARD[Launch Interactive Exam Builder Wizard]
+    
+    FC_WIZARD --> STEP1[Step 1: Configuration - Title, Term, Duration, Penalty Rules]
+    STEP1 --> FC_TARGET[Set EXAM_TARGETS: Program, Year Level, Section, Date & Window]
+    
+    FC_TARGET --> STEP2[Step 2: Table of Specifications TOS Builder]
+    STEP2 --> FC_TOS[Input Topic Plans, Teaching Hours, & Target Item Count]
+    FC_TOS --> FC_BLOOM[Allocate items across Bloom's 6 Cognitive Taxonomy Levels]
+    FC_BLOOM --> FC_TOS_VAL{Distributed Items == Target Total Items?}
+    FC_TOS_VAL -- No --> FC_TOS_ERR[Display Mismatch Warning] --> FC_TOS
+    FC_TOS_VAL -- Yes --> FC_SAVE_TOS[Commit to TABLE_OF_SPECIFICATIONS]
+    
+    FC_SAVE_TOS --> STEP3[Step 3: Question Bank Assembly]
+    STEP3 --> FC_ADD_Q[Add Questions: MCQ, True/False, Identification, Matching, Essay]
+    FC_ADD_Q --> FC_SAVE_QB[Commit Records to QUESTION_BANK]
+    
+    FC_SAVE_QB --> STEP4[Step 4: Formal Document Previews]
+    STEP4 --> FC_PREVIEW[Render Printable Exam Questionnaire & Official TOS Sheet]
+    
+    FC_PREVIEW --> FC_CHOICE{Submit for Approval or Save Draft?}
+    FC_CHOICE -- Save Draft --> FC_DRAFT[Set current_status = 'Draft'] --> FC_TRACKER
+    FC_CHOICE -- Submit --> FC_SUBMIT[Set current_status = 'Pending_Program_Chair'] --> FC_TRACKER
+    
+    FC_TRACKER[View Examination Workflow Tracker]
+    FC_TRACKER --> FC_STATUS{Review Decision from Chair / DI?}
+    FC_STATUS -- Returned --> FC_REVISE[Read Line-Item Remarks & Revise Questions/TOS] --> STEP3
+    FC_STATUS -- Approved --> FC_APPROVED[Exam Scheduled for Live Activation] --> FC_END
+      </pre>
+    </div>
+  </div>
+
+  <!-- TAB: PROGRAM CHAIR -->
+  <div id="tab-progchair" class="tab-content">
+    <div class="card">
+      <h2>3. Program Chairperson Flowchart (Role: ProgramChair)</h2>
+      <pre class="mermaid">
+flowchart TD
+    PC_START([START: Program Chair Accesses Portal]) --> PC_LOGIN[Enter Institutional ID & Password]
+    PC_LOGIN --> PC_AUTH{Valid Credentials?}
+    PC_AUTH -- No --> PC_ERR[Display Error Alert] --> PC_LOGIN
+    PC_AUTH -- Yes --> PC_DASH[Redirect to /dashboard/chair in Program Chair Mode]
+    
+    PC_DASH --> PC_DUAL{Handles Teaching Load?}
+    PC_DUAL -- Yes --> PC_SWITCH[Toggle 'My Teaching Portal & Exams' Workspace] --> PC_TEACH[Manage Courses, Rosters & Own Exams]
+    
+    PC_DUAL -- No / Chair Mode --> PC_QUEUE[Open Program 'Pending Review Queue']
+    PC_QUEUE --> PC_FILTER[Filter Submissions by program_id e.g. BSIT or BSCS]
+    
+    PC_FILTER --> PC_AUDIT[Inspect Table of Specifications & Conduct Itemized Question Audit]
+    PC_AUDIT --> PC_DECISION{Stage 1 Decision: Approve or Return?}
+    
+    PC_DECISION -- Return for Revision --> PC_REMARKS[Input Per-Question Line-Item Comments]
+    PC_REMARKS --> PC_SAVE_RET[Set prog_chair_review_status = 'Returned', current_status = 'Returned']
+    PC_SAVE_RET --> PC_NOTIF_FACULTY[System Dispatches Alert to NOTIFICATIONS for Faculty] --> PC_END([END: Log Out])
+    
+    PC_DECISION -- Approve --> PC_SAVE_APP[Set prog_chair_review_status = 'Approved']
+    PC_SAVE_APP --> PC_ADVANCE[Set current_status = 'Pending_Chair' -> Advance to Tier 2]
+    PC_ADVANCE --> PC_NOTIF_DEPT[System Forwards Exam to Department Chair Queue] --> PC_END
+      </pre>
+    </div>
+  </div>
+
+  <!-- TAB: DEPARTMENT CHAIR -->
+  <div id="tab-deptchair" class="tab-content">
+    <div class="card">
+      <h2>4. Department Chairperson Flowchart (Role: Chair)</h2>
+      <pre class="mermaid">
+flowchart TD
+    DC_START([START: Department Chair Accesses Portal]) --> DC_LOGIN[Enter Institutional ID & Password]
+    DC_LOGIN --> DC_AUTH{Valid Credentials?}
+    DC_AUTH -- No --> DC_ERR[Display Error Alert] --> DC_LOGIN
+    DC_AUTH -- Yes --> DC_DASH[Redirect to /dashboard/chair in Dept Chair Mode]
+    
+    DC_DASH --> DC_CHOOSE{Select Department Action}
+    DC_CHOOSE -- Teaching Load --> DC_TEACH[Toggle 'My Teaching Portal & Exams'] --> DC_END([END: Log Out])
+    DC_CHOOSE -- Compliance --> DC_COMPLY[View Faculty Progress Tracker & Submission Compliance] --> DC_END
+    DC_CHOOSE -- Review Queue --> DC_QUEUE[Open Department-Wide Pending Review Queue]
+    
+    DC_QUEUE --> DC_FILTER[Filter Submissions: prog_chair_review_status == 'Approved']
+    DC_FILTER --> DC_INSPECT[Inspect Syllabus Alignment & TOS Verification Checklist]
+    
+    DC_INSPECT --> DC_DECISION{Stage 2 Decision: Approve or Return?}
+    
+    DC_DECISION -- Return for Revision --> DC_REMARKS[Input Departmental Revision Remarks]
+    DC_REMARKS --> DC_SAVE_RET[Set chair_review_status = 'Returned', current_status = 'Returned']
+    DC_SAVE_RET --> DC_NOTIF[System Dispatches Return Notice to Faculty] --> DC_END
+    
+    DC_DECISION -- Approve --> DC_SAVE_APP[Set chair_review_status = 'Approved']
+    DC_SAVE_APP --> DC_ADVANCE[Set current_status = 'Pending_DI' -> Advance to Tier 3 Clearance]
+    DC_ADVANCE --> DC_SIGN[Apply Department Chairperson Digital Signature Stamp]
+    DC_SIGN --> DC_NOTIF_DI[System Forwards Exam to Director for Instruction] --> DC_END
+      </pre>
+    </div>
+  </div>
+
+  <!-- TAB: DIRECTOR -->
+  <div id="tab-director" class="tab-content">
+    <div class="card">
+      <h2>5. Director for Instruction Flowchart (Role: Director)</h2>
+      <pre class="mermaid">
+flowchart TD
+    DI_START([START: Director Accesses Portal]) --> DI_LOGIN[Enter Institutional ID & Password]
+    DI_LOGIN --> DI_AUTH{Valid Credentials?}
+    DI_AUTH -- No --> DI_ERR[Display Error Alert] --> DI_LOGIN
+    DI_AUTH -- Yes --> DI_DASH[Redirect to /dashboard/director]
+    
+    DI_DASH --> DI_CHOOSE{Select Institutional Operation}
+    
+    DI_CHOOSE -- Course Allocation --> DI_ALLOC[Open Faculty Course Assignment Module]
+    DI_ALLOC --> DI_ASSIGN[Allocate Courses to Instructors -> Commit to FACULTY_COURSES] --> DI_END([END: Log Out])
+    
+    DI_CHOOSE -- School Compliance Map --> DI_MAP[View Departmental Turnaround Times & Submission Compliance] --> DI_END
+    DI_CHOOSE -- System Action Logs --> DI_LOGS[Inspect Global AUDIT_LOGS: Security Incidents & Lockouts] --> DI_END
+    
+    DI_CHOOSE -- Final Clearance Queue --> DI_QUEUE[Open Institution-Wide Examination Approvals Queue]
+    DI_QUEUE --> DI_SORT[Filter & Sort by Department, Submission Date, or Title]
+    DI_QUEUE --> DI_INSPECT[Inspect Verified Exam Questionnaire, TOS Sheet, & Chair Signatories]
+    
+    DI_INSPECT --> DI_DECISION{Stage 3 Final Decision?}
+    
+    DI_DECISION -- Administrative Hold --> DI_HOLD[Set di_review_status = 'Hold', Input Written Remarks]
+    DI_HOLD --> DI_NOTIF_HOLD[Notify Department Chair & Faculty of Hold Order] --> DI_END
+    
+    DI_DECISION -- Grant Final Clearance --> DI_CLEAR[Set di_review_status = 'Approved', current_status = 'Approved']
+    DI_CLEAR --> DI_SIGN[Affix Official Director for Instruction Digital Seal Stamp]
+    DI_SIGN --> DI_ACTIVATE[System Activates Exam for Targeted Cohorts in EXAM_TARGETS on Scheduled Date] --> DI_END
+      </pre>
+    </div>
+  </div>
+
+  <script>
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: 'neutral',
+      flowchart: { useMaxWidth: false }
+    });
+
+    function showTab(tabId) {
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+      document.getElementById(tabId).classList.add('active');
+      event.target.classList.add('active');
+    }
+  </script>
+</body>
+</html>
