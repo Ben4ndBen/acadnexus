@@ -179,6 +179,7 @@ export default async function ExamPage({ params }: PageProps) {
         questions: result.questions!,
         testTypeInstructions: (result as any).testTypeInstructions || {},
         testTypeTitles: (result as any).testTypeTitles || {},
+        testTypeCaseRules: (result as any).testTypeCaseRules || {},
         savedAnswers: result.savedAnswers!,
         examTitle: result.examTitle!,
         courseTitle: result.courseTitle!,

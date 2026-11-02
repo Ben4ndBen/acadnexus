@@ -4,6 +4,12 @@ import db from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { SubmissionType } from "@prisma/client";
 import { parseExamResultSettings } from "@/lib/examResultSettings";
+import {
+  CaseSensitivityRule,
+  resolveQuestionCaseRule,
+  evaluateAnswerCaseCompliance,
+  gradeIdentificationQuestion,
+} from "@/lib/caseSensitivity";
 
 // Helper for deterministic shuffling using student_exam_id as seed
 function shuffleWithSeed<T>(array: T[], seed: number): T[] {
@@ -102,9 +108,14 @@ function orderQuestionsForStudentExam<
 function extractTestTypeMetadata(
   exam: any,
   dbQuestions: Array<{ question_type: string; question_text: string }>
-): { testTypeInstructions: Record<string, string>; testTypeTitles: Record<string, string> } {
+): {
+  testTypeInstructions: Record<string, string>;
+  testTypeTitles: Record<string, string>;
+  testTypeCaseRules: Record<string, string>;
+} {
   const testTypeInstructions: Record<string, string> = {};
   const testTypeTitles: Record<string, string> = {};
+  const testTypeCaseRules: Record<string, string> = {};
 
   if (exam?.tos_file_path && typeof exam.tos_file_path === "string" && exam.tos_file_path.trim().startsWith("{")) {
     try {
@@ -120,6 +131,13 @@ function extractTestTypeMetadata(
         for (const [k, v] of Object.entries(parsedTos.testTypeTitles)) {
           if (typeof v === "string" && v.trim() !== "") {
             testTypeTitles[k] = v.trim();
+          }
+        }
+      }
+      if (parsedTos.testTypeCaseRules && typeof parsedTos.testTypeCaseRules === "object") {
+        for (const [k, v] of Object.entries(parsedTos.testTypeCaseRules)) {
+          if (typeof v === "string" && v.trim() !== "") {
+            testTypeCaseRules[k] = v.trim();
           }
         }
       }
@@ -144,6 +162,13 @@ function extractTestTypeMetadata(
           }
         }
       }
+      if (parsedOutcomes.__testTypeCaseRules && typeof parsedOutcomes.__testTypeCaseRules === "object") {
+        for (const [k, v] of Object.entries(parsedOutcomes.__testTypeCaseRules)) {
+          if (typeof v === "string" && v.trim() !== "" && !testTypeCaseRules[k]) {
+            testTypeCaseRules[k] = v.trim();
+          }
+        }
+      }
     } catch {}
   }
 
@@ -164,11 +189,17 @@ function extractTestTypeMetadata(
             testTypeTitles[qType] = title.trim();
           }
         }
+        if (!testTypeCaseRules[qType]) {
+          const cRule = parsed.type_case_rule;
+          if (typeof cRule === "string" && cRule.trim() !== "") {
+            testTypeCaseRules[qType] = cRule.trim();
+          }
+        }
       } catch {}
     }
   }
 
-  return { testTypeInstructions, testTypeTitles };
+  return { testTypeInstructions, testTypeTitles, testTypeCaseRules };
 }
 
 /**
@@ -485,7 +516,7 @@ export async function startStudentExam(examId: number, studentId: number) {
     );
     const questions = await resolveQuestionImageUrls(orderedQuestions);
 
-    const { testTypeInstructions, testTypeTitles } = extractTestTypeMetadata(exam, dbQuestions);
+    const { testTypeInstructions, testTypeTitles, testTypeCaseRules } = extractTestTypeMetadata(exam, dbQuestions);
 
     const savedAnswers = studentExam.studentAnswers.map((ans) => ({
       question_id: ans.question_id,
@@ -499,6 +530,7 @@ export async function startStudentExam(examId: number, studentId: number) {
       questions,
       testTypeInstructions,
       testTypeTitles,
+      testTypeCaseRules,
       savedAnswers,
       examTitle: exam.title,
       courseTitle: exam.course.course_title,
@@ -761,18 +793,72 @@ export async function submitStudentExam(
     const totalPenalty = violationsCount * scorePenaltyPoints;
     let penalizedScore = 0;
 
+    const { testTypeInstructions, testTypeCaseRules } = extractTestTypeMetadata(exam, exam.questionBank || []);
+
+    const unwrapAnswerKey = (rawCorrect: string): string => {
+      if (!rawCorrect || typeof rawCorrect !== "string") return "";
+      const trimmed = rawCorrect.trim();
+      if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+        try {
+          const parsed = JSON.parse(trimmed);
+          if (typeof parsed === "string") return parsed;
+          if (parsed && typeof parsed.answer === "string") return parsed.answer;
+          if (parsed && typeof parsed.text === "string") return parsed.text;
+        } catch {}
+      }
+      return rawCorrect;
+    };
+
     await db.$transaction(async (tx) => {
       for (const q of exam.questionBank) {
         const ans = answersMap.get(q.question_id);
         const response = ans?.submitted_response || "";
         const correct = q.correct_answer || "";
 
+        let parsedQText: any = {};
+        if (q.question_text && q.question_text.trim().startsWith("{")) {
+          try {
+            parsedQText = JSON.parse(q.question_text);
+          } catch {}
+        }
+
+        const caseRule = resolveQuestionCaseRule({
+          questionType: q.question_type,
+          explicitQuestionRule: parsedQText.case_rule,
+          explicitTestTypeRule: testTypeCaseRules[q.question_type] || parsedQText.type_case_rule,
+          questionInstructionText: parsedQText.type_instruction ?? parsedQText.instruction ?? parsedQText.instructions,
+          questionPromptText: typeof parsedQText.text === "string" ? parsedQText.text : q.question_text,
+          testTypeInstructionText: testTypeInstructions[q.question_type],
+        });
+
         let isCorrect: boolean | null = false;
         let pointsAwarded: number | null = 0;
 
         if (q.question_type === "Essay") {
-          isCorrect = null;
-          pointsAwarded = null;
+          if (caseRule !== "NONE" && response.trim() !== "") {
+            const compliance = evaluateAnswerCaseCompliance(response, caseRule);
+            if (!compliance.compliant) {
+              // Essay violates instructor's specified letter-case requirement -> award 0 points
+              isCorrect = false;
+              pointsAwarded = 0;
+            } else {
+              isCorrect = null;
+              pointsAwarded = null;
+            }
+          } else {
+            isCorrect = null;
+            pointsAwarded = null;
+          }
+        } else if (q.question_type === "Identification") {
+          const cleanedExpected = unwrapAnswerKey(correct);
+          const idEval = gradeIdentificationQuestion({
+            submittedResponse: response,
+            correctAnswer: cleanedExpected,
+            points: q.points,
+            caseRule,
+          });
+          isCorrect = idEval.isCorrect;
+          pointsAwarded = idEval.pointsAwarded;
         } else if (q.question_type === "Fill_In_The_Blanks") {
           try {
             const parsedCorrect = JSON.parse(correct);
@@ -1268,6 +1354,9 @@ export interface StudentExamResultQuestionDetail {
   isCorrect: boolean | null;
   isPending: boolean;
   isInstructorGraded: boolean;
+  caseRule?: CaseSensitivityRule;
+  caseViolation?: boolean;
+  caseExplanation?: string | null;
 }
 
 export interface StudentExamResultData {
@@ -1449,6 +1538,21 @@ export async function getStudentExamResultDetails({
     }
 
     const answerMap = new Map(studentExam.studentAnswers.map((a) => [a.question_id, a]));
+    const { testTypeInstructions, testTypeCaseRules } = extractTestTypeMetadata(exam, questions);
+
+    const unwrapAnswerKey = (rawCorrect: string): string => {
+      if (!rawCorrect || typeof rawCorrect !== "string") return "";
+      const trimmed = rawCorrect.trim();
+      if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+        try {
+          const parsed = JSON.parse(trimmed);
+          if (typeof parsed === "string") return parsed;
+          if (parsed && typeof parsed.answer === "string") return parsed.answer;
+          if (parsed && typeof parsed.text === "string") return parsed.text;
+        } catch {}
+      }
+      return rawCorrect;
+    };
 
     let initialRawScore = 0;
     let instructorGradedPoints = 0;
@@ -1457,9 +1561,48 @@ export async function getStudentExamResultDetails({
 
     const answersDetail: StudentExamResultQuestionDetail[] = questions.map((q, idx) => {
       const ans = answerMap.get(q.question_id);
+      const submittedResp = ans?.submitted_response || "";
+
+      let parsedQText: any = {};
+      if (q.question_text && q.question_text.trim().startsWith("{")) {
+        try {
+          parsedQText = JSON.parse(q.question_text);
+        } catch {}
+      }
+
+      const caseRule = resolveQuestionCaseRule({
+        questionType: q.question_type,
+        explicitQuestionRule: parsedQText.case_rule,
+        explicitTestTypeRule: testTypeCaseRules[q.question_type] || parsedQText.type_case_rule,
+        questionInstructionText: parsedQText.type_instruction ?? parsedQText.instruction ?? parsedQText.instructions,
+        questionPromptText: typeof parsedQText.text === "string" ? parsedQText.text : q.question_text,
+        testTypeInstructionText: testTypeInstructions[q.question_type],
+      });
+
+      let caseViolation = false;
+      let caseExplanation: string | null = null;
+
+      if (q.question_type === "Identification" && caseRule !== "NONE" && submittedResp.trim() !== "") {
+        const cleanedExpected = unwrapAnswerKey(q.correct_answer || "");
+        const idEval = gradeIdentificationQuestion({
+          submittedResponse: submittedResp,
+          correctAnswer: cleanedExpected,
+          points: q.points,
+          caseRule,
+        });
+        caseViolation = idEval.caseViolation;
+        caseExplanation = idEval.caseExplanation;
+      } else if (q.question_type === "Essay" && caseRule !== "NONE" && submittedResp.trim() !== "") {
+        const compliance = evaluateAnswerCaseCompliance(submittedResp, caseRule);
+        if (!compliance.compliant) {
+          caseViolation = true;
+          caseExplanation = compliance.explanation;
+        }
+      }
+
       const isEssay = q.question_type === "Essay";
-      const isPending = isEssay && (ans?.points_awarded === null || ans?.points_awarded === undefined);
-      const isInstructorGraded = isEssay && ans?.points_awarded !== null && ans?.points_awarded !== undefined;
+      const isPending = isEssay && !caseViolation && (ans?.points_awarded === null || ans?.points_awarded === undefined);
+      const isInstructorGraded = isEssay && !caseViolation && ans?.points_awarded !== null && ans?.points_awarded !== undefined;
 
       if (isPending) {
         pendingQuestionsCount += 1;
@@ -1481,11 +1624,14 @@ export async function getStudentExamResultDetails({
         questionText: q.question_text,
         questionType: q.question_type,
         pointsPossible: q.points,
-        submittedResponse: ans?.submitted_response || "",
-        pointsAwarded: ans?.points_awarded ?? null,
-        isCorrect: ans?.is_correct ?? null,
+        submittedResponse: submittedResp,
+        pointsAwarded: ans?.points_awarded ?? (caseViolation ? 0 : null),
+        isCorrect: ans?.is_correct ?? (caseViolation ? false : null),
         isPending,
         isInstructorGraded,
+        caseRule,
+        caseViolation,
+        caseExplanation,
       };
     });
 

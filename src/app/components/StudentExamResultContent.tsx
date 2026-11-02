@@ -475,6 +475,11 @@ export function StudentExamResultContent({
                       <span className="text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
                         Partial Credit
                       </span>
+                    ) : ans.caseViolation ? (
+                      <span className="text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-200 flex items-center gap-1">
+                        <AlertCircle className="w-3 h-3 text-rose-600" />
+                        Letter-Case Requirement Not Met • 0 pts
+                      </span>
                     ) : (
                       <span className="text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-200">
                         Incorrect / 0 pts
@@ -545,6 +550,19 @@ export function StudentExamResultContent({
                     )}
                   </div>
                 </div>
+
+                {/* Clear Explanation when an answer violates the instructor's required letter case */}
+                {ans.caseViolation && ans.caseExplanation && (
+                  <div className="bg-rose-50 border border-rose-200 rounded-xl p-3.5 flex items-start gap-2.5 text-xs text-rose-900">
+                    <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                    <div className="space-y-0.5">
+                      <span className="font-extrabold uppercase tracking-wider text-[10px] text-rose-700 block">
+                        Letter-Case Requirement Explanation
+                      </span>
+                      <p className="font-semibold leading-relaxed">{ans.caseExplanation}</p>
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}

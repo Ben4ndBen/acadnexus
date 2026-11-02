@@ -140,6 +140,7 @@ interface QuestionState {
   topic?: string;
   year_level?: number;
   taxonomy_level?: TaxonomyLevel;
+  case_rule?: "NONE" | "UPPERCASE" | "LOWERCASE" | "FIRST_LETTER_UPPERCASE";
 }
 
 // Question Type priority mapping for automatic test arrangement
@@ -330,6 +331,7 @@ function deserializeQuestions(dbQuestions: any[]): QuestionState[] {
     let correctAnswer = cleanCorrectAnswer(q.correct_answer);
     let image_url = "";
     let taxonomy_level: TaxonomyLevel = "KNOWLEDGE / REMEMBERING";
+    let case_rule: "NONE" | "UPPERCASE" | "LOWERCASE" | "FIRST_LETTER_UPPERCASE" | undefined = undefined;
 
     // Check if the question text is a serialized JSON object
     if (q.question_text.trim().startsWith("{")) {
@@ -342,6 +344,7 @@ function deserializeQuestions(dbQuestions: any[]): QuestionState[] {
         min_words = parsed.min_words;
         image_url = parsed.image_url || "";
         if (parsed.taxonomy_level) taxonomy_level = parsed.taxonomy_level;
+        if (parsed.case_rule) case_rule = parsed.case_rule;
       } catch {
         text = q.question_text;
       }
@@ -436,6 +439,7 @@ function deserializeQuestions(dbQuestions: any[]): QuestionState[] {
       topic: q.topic || "",
       year_level: q.year_level || undefined,
       taxonomy_level,
+      case_rule,
     };
   });
 }
@@ -444,7 +448,8 @@ function deserializeQuestions(dbQuestions: any[]): QuestionState[] {
 function serializeQuestions(
   questions: QuestionState[],
   typeInstructions?: Record<string, string>,
-  typeTitles?: Record<string, string>
+  typeTitles?: Record<string, string>,
+  typeCaseRules?: Record<string, string>
 ) {
   return questions.map((q, idx) => {
     let question_text = q.text;
@@ -459,6 +464,9 @@ function serializeQuestions(
     if (q.image_url) {
       serializedData.image_url = q.image_url;
     }
+    if (q.case_rule && q.case_rule !== "NONE") {
+      serializedData.case_rule = q.case_rule;
+    }
     const typeInstruction = typeInstructions?.[q.question_type]?.trim();
     if (typeInstruction) {
       serializedData.type_instruction = typeInstruction;
@@ -466,6 +474,10 @@ function serializeQuestions(
     const typeTitle = typeTitles?.[q.question_type]?.trim();
     if (typeTitle) {
       serializedData.type_title = typeTitle;
+    }
+    const typeCaseRule = typeCaseRules?.[q.question_type]?.trim();
+    if (typeCaseRule && typeCaseRule !== "NONE") {
+      serializedData.type_case_rule = typeCaseRule;
     }
 
     let calculatedPoints = Number(q.points) || 1;
@@ -789,6 +801,42 @@ export function ExamBuilderWizard({
     return map;
   });
 
+  const [customCaseRules, setCustomCaseRules] = useState<Record<string, string>>(() => {
+    const map: Record<string, string> = {};
+    if (exam.tos_file_path && exam.tos_file_path.trim().startsWith("{")) {
+      try {
+        const parsed = JSON.parse(exam.tos_file_path);
+        if (parsed.testTypeCaseRules && typeof parsed.testTypeCaseRules === "object") {
+          for (const [k, v] of Object.entries(parsed.testTypeCaseRules)) {
+            if (typeof v === "string" && v.trim() !== "") map[k] = v.trim();
+          }
+        }
+      } catch {}
+    }
+    const tosOutcomesJson = (exam as any).tableOfSpecifications?.learning_outcomes_json;
+    if (tosOutcomesJson && typeof tosOutcomesJson === "string" && tosOutcomesJson.trim().startsWith("{")) {
+      try {
+        const parsed = JSON.parse(tosOutcomesJson);
+        if (parsed.__testTypeCaseRules && typeof parsed.__testTypeCaseRules === "object") {
+          for (const [k, v] of Object.entries(parsed.__testTypeCaseRules)) {
+            if (typeof v === "string" && v.trim() !== "" && !map[k]) map[k] = v.trim();
+          }
+        }
+      } catch {}
+    }
+    for (const q of exam.questionBank || []) {
+      const qType = q.question_type;
+      if (qType && !map[qType] && typeof q.question_text === "string" && q.question_text.trim().startsWith("{")) {
+        try {
+          const parsed = JSON.parse(q.question_text);
+          const cRule = parsed.type_case_rule;
+          if (typeof cRule === "string" && cRule.trim() !== "") map[qType] = cRule.trim();
+        } catch {}
+      }
+    }
+    return map;
+  });
+
   // 3. Assigned Students Selection with Sort & Filter
   const [assignedStudents, setAssignedStudents] = useState<StudentItem[]>(initialAssignedStudents);
   const [selectedStudentIds, setSelectedStudentIds] = useState<number[]>(() => {
@@ -1067,6 +1115,7 @@ export function ExamBuilderWizard({
         learningOutcomes: learningOutcomes,
         testTypeInstructions: customDirections,
         testTypeTitles: customTypeTitles,
+        testTypeCaseRules: customCaseRules,
         resultSettings: {
           releaseMode: resultReleaseMode,
           showResultsImmediately: resultReleaseMode === "immediate",
@@ -1076,7 +1125,7 @@ export function ExamBuilderWizard({
 
       const configRes = await saveExamConfig(configData);
       const sortedQs = sortQuestionsByType(questions);
-      const serializedQs = serializeQuestions(sortedQs, customDirections, customTypeTitles);
+      const serializedQs = serializeQuestions(sortedQs, customDirections, customTypeTitles, customCaseRules);
       const questionsRes = await saveExamQuestions(exam.exam_id, serializedQs, facultyId);
 
       if (configRes.error || questionsRes.error) {
@@ -2110,6 +2159,7 @@ export function ExamBuilderWizard({
         learningOutcomes: outcomesToSave,
         testTypeInstructions: customDirections,
         testTypeTitles: customTypeTitles,
+        testTypeCaseRules: customCaseRules,
         resultSettings: {
           releaseMode: resultReleaseMode,
           showResultsImmediately: resultReleaseMode === "immediate",
@@ -2120,7 +2170,7 @@ export function ExamBuilderWizard({
       const configRes = await saveExamConfig(configData);
 
       const sortedQs = sortQuestionsByType(qsToSave);
-      const serializedQs = serializeQuestions(sortedQs, customDirections, customTypeTitles);
+      const serializedQs = serializeQuestions(sortedQs, customDirections, customTypeTitles, customCaseRules);
       const questionsRes = await saveExamQuestions(exam.exam_id, serializedQs, facultyId);
 
       if (!configRes.error && !questionsRes.error) {
@@ -2169,7 +2219,8 @@ export function ExamBuilderWizard({
     documentReference,
     selectedStudentIds,
     customDirections,
-    customTypeTitles
+    customTypeTitles,
+    customCaseRules
   ]);
 
   // Initial check: if already submitted upon opening, show modal without immediate redirect
@@ -2866,6 +2917,7 @@ export function ExamBuilderWizard({
         learningOutcomes: learningOutcomes,
         testTypeInstructions: customDirections,
         testTypeTitles: customTypeTitles,
+        testTypeCaseRules: customCaseRules,
         resultSettings: {
           releaseMode: resultReleaseMode,
           showResultsImmediately: resultReleaseMode === "immediate",
@@ -2887,7 +2939,7 @@ export function ExamBuilderWizard({
 
       // Step 2: Save Questions (Auto-arranged by Question Type)
       const sortedQs = sortQuestionsByType(questions);
-      const serializedQs = serializeQuestions(sortedQs, customDirections, customTypeTitles);
+      const serializedQs = serializeQuestions(sortedQs, customDirections, customTypeTitles, customCaseRules);
       const questionsRes = await saveExamQuestions(exam.exam_id, serializedQs, facultyId);
 
       if (questionsRes.error) {
@@ -2980,6 +3032,7 @@ export function ExamBuilderWizard({
         learningOutcomes: learningOutcomes,
         testTypeInstructions: customDirections,
         testTypeTitles: customTypeTitles,
+        testTypeCaseRules: customCaseRules,
         resultSettings: {
           releaseMode: resultReleaseMode,
           showResultsImmediately: resultReleaseMode === "immediate",
@@ -3003,7 +3056,7 @@ export function ExamBuilderWizard({
 
       // Save questions (Auto-arranged by Question Type)
       const sortedQs = sortQuestionsByType(questions);
-      const serializedQs = serializeQuestions(sortedQs, customDirections, customTypeTitles);
+      const serializedQs = serializeQuestions(sortedQs, customDirections, customTypeTitles, customCaseRules);
       const questionsRes = await saveExamQuestions(exam.exam_id, serializedQs, facultyId);
 
       if (questionsRes.error) {
@@ -4335,6 +4388,29 @@ export function ExamBuilderWizard({
                         placeholder={`Enter instructions for ${typeLabels[qType] || qType.replace(/_/g, " ")} (optional)...`}
                         className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 focus:outline-none resize-y"
                       />
+                      {(qType === "Identification" || qType === "Essay") && (
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1">
+                          <label className="text-[11px] font-bold text-slate-600">
+                            Answer Letter-Case Requirement:
+                          </label>
+                          <select
+                            value={customCaseRules[qType] || "NONE"}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setCustomCaseRules((prev) => ({
+                                ...prev,
+                                [qType]: val,
+                              }));
+                            }}
+                            className="bg-white border border-slate-200 rounded-lg px-2.5 py-1 text-[11px] font-bold text-slate-800 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 focus:outline-none cursor-pointer"
+                          >
+                            <option value="NONE">No Case Requirement (Accept Any Case)</option>
+                            <option value="UPPERCASE">UPPERCASE (All Capital Letters)</option>
+                            <option value="LOWERCASE">lowercase (All Small Letters)</option>
+                            <option value="FIRST_LETTER_UPPERCASE">First Letter Uppercase (e.g., Manila)</option>
+                          </select>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -4800,15 +4876,39 @@ export function ExamBuilderWizard({
 
                               {/* IDENTIFICATION EDITOR */}
                               {q.question_type === "Identification" && (
-                                <div className="space-y-1.5 pt-1">
-                                  <label className="text-xs font-extrabold text-slate-600 block">Expected Text Answer:</label>
-                                  <input
-                                    type="text"
-                                    placeholder="Type expected text answer..."
-                                    value={cleanCorrectAnswer(q.correctAnswer)}
-                                    onChange={(e) => updateIdCorrectAnswer(e.target.value, globalIdx)}
-                                    className="w-full max-w-md bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-800 px-3 py-2 rounded-xl focus:outline-emerald-500"
-                                  />
+                                <div className="space-y-2.5 pt-1">
+                                  <div className="flex flex-col sm:flex-row sm:items-end gap-3">
+                                    <div className="flex-1 space-y-1.5">
+                                      <label className="text-xs font-extrabold text-slate-600 block">Expected Text Answer:</label>
+                                      <input
+                                        type="text"
+                                        placeholder="Type expected text answer..."
+                                        value={cleanCorrectAnswer(q.correctAnswer)}
+                                        onChange={(e) => updateIdCorrectAnswer(e.target.value, globalIdx)}
+                                        className="w-full max-w-md bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-800 px-3 py-2 rounded-xl focus:outline-emerald-500"
+                                      />
+                                    </div>
+                                    <div className="space-y-1.5">
+                                      <label className="text-[11px] font-extrabold text-slate-600 block">
+                                        Letter-Case Requirement (Optional):
+                                      </label>
+                                      <select
+                                        value={q.case_rule || "NONE"}
+                                        onChange={(e) => {
+                                          const val = e.target.value as any;
+                                          const updated = [...questions];
+                                          updated[globalIdx] = { ...updated[globalIdx], case_rule: val };
+                                          setQuestions(updated);
+                                        }}
+                                        className="bg-slate-50 border border-slate-200 text-xs font-bold text-slate-800 px-3 py-2 rounded-xl focus:outline-emerald-500 cursor-pointer"
+                                      >
+                                        <option value="NONE">Follow Test-Type Instruction / Any Case</option>
+                                        <option value="UPPERCASE">UPPERCASE (All Capital Letters)</option>
+                                        <option value="LOWERCASE">lowercase (All Small Letters)</option>
+                                        <option value="FIRST_LETTER_UPPERCASE">First Letter Uppercase (e.g., Manila)</option>
+                                      </select>
+                                    </div>
+                                  </div>
                                 </div>
                               )}
 
@@ -4860,10 +4960,10 @@ export function ExamBuilderWizard({
 
                               {/* ESSAY EDITOR */}
                               {q.question_type === "Essay" && (
-                                <div className="space-y-2 pt-1">
-                                  <div className="bg-emerald-50/70 border border-emerald-200/80 rounded-xl p-3 flex items-center justify-between gap-3 text-xs">
-                                    <span className="font-bold text-emerald-900">Minimum Word Limitation:</span>
-                                    <div className="flex items-center gap-1.5">
+                                <div className="space-y-2.5 pt-1">
+                                  <div className="bg-emerald-50/70 border border-emerald-200/80 rounded-xl p-3 flex flex-wrap items-center justify-between gap-3 text-xs">
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-bold text-emerald-900">Minimum Word Limitation:</span>
                                       <input
                                         type="number"
                                         min="0"
@@ -4872,6 +4972,24 @@ export function ExamBuilderWizard({
                                         className="w-20 bg-white border border-emerald-300 rounded-lg text-center font-extrabold text-emerald-950 py-1"
                                       />
                                       <span className="font-bold text-emerald-800">words min</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-bold text-emerald-900">Letter-Case Requirement:</span>
+                                      <select
+                                        value={q.case_rule || "NONE"}
+                                        onChange={(e) => {
+                                          const val = e.target.value as any;
+                                          const updated = [...questions];
+                                          updated[globalIdx] = { ...updated[globalIdx], case_rule: val };
+                                          setQuestions(updated);
+                                        }}
+                                        className="bg-white border border-emerald-300 rounded-lg px-2.5 py-1 text-xs font-bold text-emerald-950 focus:outline-emerald-500 cursor-pointer"
+                                      >
+                                        <option value="NONE">Follow Test-Type Instruction / Any Case</option>
+                                        <option value="UPPERCASE">UPPERCASE (All Capital Letters)</option>
+                                        <option value="LOWERCASE">lowercase (All Small Letters)</option>
+                                        <option value="FIRST_LETTER_UPPERCASE">First Letter Uppercase</option>
+                                      </select>
                                     </div>
                                   </div>
                                 </div>

@@ -9,6 +9,11 @@ import {
 } from "lucide-react";
 import { saveStudentAnswers, submitStudentExam, logStudentWarning, keepAliveStudentExam } from "@/app/actions/student";
 import { Latex } from "@/app/components/Latex";
+import {
+  CASE_RULE_LABELS,
+  resolveQuestionCaseRule,
+  evaluateAnswerCaseCompliance,
+} from "@/lib/caseSensitivity";
 
 interface Question {
   question_id: number;
@@ -28,6 +33,7 @@ interface TakeExamClientProps {
     questions: Question[];
     testTypeInstructions?: Record<string, string>;
     testTypeTitles?: Record<string, string>;
+    testTypeCaseRules?: Record<string, string>;
     savedAnswers: { question_id: number; submitted_response: string }[];
     examTitle: string;
     courseTitle: string;
@@ -1907,19 +1913,57 @@ export function TakeExamClient({
                 )}
 
                 {/* 3. Identification */}
-                {currentQuestion.question_type === "Identification" && (
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Your Response:</label>
-                    <input
-                      type="text"
-                      value={answers[currentQuestion.question_id] || ""}
-                      onChange={(e) => handleAnswerChange(currentQuestion.question_id, e.target.value)}
-                      onBlur={handleTextBlur}
-                      placeholder="Type your response here..."
-                      className="w-full bg-slate-900 border border-slate-800 focus:bg-slate-900 focus:ring-2 focus:ring-rose-500/20 focus:border-rose-600 text-sm font-semibold text-slate-100 placeholder:text-slate-500 px-4 py-3 rounded-xl transition-all"
-                    />
-                  </div>
-                )}
+                {currentQuestion.question_type === "Identification" && (() => {
+                  const idResponse = answers[currentQuestion.question_id] || "";
+                  const activeCaseRule = resolveQuestionCaseRule({
+                    questionType: currentQuestion.question_type,
+                    explicitQuestionRule: currentParsed?.case_rule,
+                    explicitTestTypeRule:
+                      initialData.testTypeCaseRules?.[currentQuestion.question_type] ||
+                      currentParsed?.type_case_rule,
+                    questionInstructionText:
+                      currentParsed?.type_instruction ?? currentParsed?.instruction ?? currentParsed?.instructions,
+                    questionPromptText: currentParsed?.text || currentQuestion.question_text,
+                    testTypeInstructionText: currentSection?.instruction,
+                  });
+                  const idCaseCheck =
+                    activeCaseRule !== "NONE" && idResponse.trim() !== ""
+                      ? evaluateAnswerCaseCompliance(idResponse, activeCaseRule)
+                      : { compliant: true, explanation: null };
+
+                  return (
+                    <div className="space-y-2.5">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <label className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                          Your Response:
+                        </label>
+                        {activeCaseRule !== "NONE" && (
+                          <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/30">
+                            Required Format: {CASE_RULE_LABELS[activeCaseRule]}
+                          </span>
+                        )}
+                      </div>
+                      <input
+                        type="text"
+                        value={idResponse}
+                        onChange={(e) => handleAnswerChange(currentQuestion.question_id, e.target.value)}
+                        onBlur={handleTextBlur}
+                        placeholder="Type your response here..."
+                        className={`w-full bg-slate-900 border focus:bg-slate-900 focus:ring-2 text-sm font-semibold text-slate-100 placeholder:text-slate-500 px-4 py-3 rounded-xl transition-all ${
+                          !idCaseCheck.compliant
+                            ? "border-amber-500/70 focus:ring-amber-500/20 focus:border-amber-500"
+                            : "border-slate-800 focus:ring-rose-500/20 focus:border-rose-600"
+                        }`}
+                      />
+                      {!idCaseCheck.compliant && idCaseCheck.explanation && (
+                        <div className="bg-amber-950/70 border border-amber-500/40 rounded-xl p-3 text-xs text-amber-200 flex items-start gap-2">
+                          <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                          <span>{idCaseCheck.explanation}</span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
 
                 {/* 4. Matching Type */}
                 {currentQuestion.question_type === "Matching_Type" && currentParsed?.premises && (
@@ -1956,20 +2000,42 @@ export function TakeExamClient({
                   const wordCount = essayText.trim() ? essayText.trim().split(/\s+/).filter(Boolean).length : 0;
                   const minWords = currentParsed?.min_words ?? 0;
                   const meetsMinWords = minWords === 0 || wordCount >= minWords;
+                  const activeCaseRule = resolveQuestionCaseRule({
+                    questionType: currentQuestion.question_type,
+                    explicitQuestionRule: currentParsed?.case_rule,
+                    explicitTestTypeRule:
+                      initialData.testTypeCaseRules?.[currentQuestion.question_type] ||
+                      currentParsed?.type_case_rule,
+                    questionInstructionText:
+                      currentParsed?.type_instruction ?? currentParsed?.instruction ?? currentParsed?.instructions,
+                    questionPromptText: currentParsed?.text || currentQuestion.question_text,
+                    testTypeInstructionText: currentSection?.instruction,
+                  });
+                  const essayCaseCheck =
+                    activeCaseRule !== "NONE" && essayText.trim() !== ""
+                      ? evaluateAnswerCaseCompliance(essayText, activeCaseRule)
+                      : { compliant: true, explanation: null };
 
                   return (
                     <div className="space-y-3">
-                      <div className="flex items-center justify-between">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
                         <label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Your Essay Response:</label>
-                        {minWords > 0 && (
-                          <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border transition-all ${
-                            meetsMinWords 
-                              ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30" 
-                              : "bg-amber-500/10 text-amber-400 border-amber-500/30 animate-pulse"
-                          }`}>
-                            {meetsMinWords ? "✓ Minimum limit met" : `⚠️ Minimum limit: ${wordCount} / ${minWords} words`}
-                          </span>
-                        )}
+                        <div className="flex flex-wrap items-center gap-2">
+                          {activeCaseRule !== "NONE" && (
+                            <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/30">
+                              Required Format: {CASE_RULE_LABELS[activeCaseRule]}
+                            </span>
+                          )}
+                          {minWords > 0 && (
+                            <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border transition-all ${
+                              meetsMinWords 
+                                ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30" 
+                                : "bg-amber-500/10 text-amber-400 border-amber-500/30 animate-pulse"
+                            }`}>
+                              {meetsMinWords ? "✓ Minimum limit met" : `⚠️ Minimum limit: ${wordCount} / ${minWords} words`}
+                            </span>
+                          )}
+                        </div>
                       </div>
 
                       <textarea
@@ -1978,8 +2044,19 @@ export function TakeExamClient({
                         onBlur={handleTextBlur}
                         placeholder="Write your detailed answer response here..."
                         rows={7}
-                        className="w-full bg-slate-900 border border-slate-800 focus:bg-slate-900 focus:ring-2 focus:ring-rose-500/20 focus:border-rose-600 text-sm font-semibold text-slate-100 placeholder:text-slate-500 p-4 rounded-xl transition-all resize-y outline-none"
+                        className={`w-full bg-slate-900 border focus:bg-slate-900 focus:ring-2 text-sm font-semibold text-slate-100 placeholder:text-slate-500 p-4 rounded-xl transition-all resize-y outline-none ${
+                          !essayCaseCheck.compliant
+                            ? "border-amber-500/70 focus:ring-amber-500/20 focus:border-amber-500"
+                            : "border-slate-800 focus:ring-rose-500/20 focus:border-rose-600"
+                        }`}
                       />
+
+                      {!essayCaseCheck.compliant && essayCaseCheck.explanation && (
+                        <div className="bg-amber-950/70 border border-amber-500/40 rounded-xl p-3 text-xs text-amber-200 flex items-start gap-2">
+                          <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                          <span>{essayCaseCheck.explanation}</span>
+                        </div>
+                      )}
 
                       <div className="flex items-center justify-between text-xs text-slate-400 font-medium">
                         <span>Word Count: <strong className="text-slate-200">{wordCount}</strong> words</span>

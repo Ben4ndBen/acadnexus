@@ -657,6 +657,7 @@ export async function saveExamConfig(formData: FormData) {
           __resultSettings: parsedTos.resultSettings,
           __testTypeInstructions: parsedTos.testTypeInstructions || {},
           __testTypeTitles: parsedTos.testTypeTitles || {},
+          __testTypeCaseRules: parsedTos.testTypeCaseRules || {},
         };
         await db.tableOfSpecifications.upsert({
           where: { exam_id: examId },
@@ -1234,11 +1235,13 @@ export async function gradeEssayAnswer(
     const answer = await db.studentAnswer.findUnique({
       where: { answer_id: answerId },
       include: {
+        question: true,
         studentExam: {
           include: {
             exam: {
               include: {
                 questionBank: true,
+                tableOfSpecifications: true,
               },
             },
             student: true,
@@ -1266,7 +1269,46 @@ export async function gradeEssayAnswer(
     const previousTotalScore = answer.studentExam.total_score;
     const examTitle = answer.studentExam.exam.title;
     const studentUserId = answer.studentExam.student_id;
-    const studentExamId = answer.student_exam_id;
+    const studentExamId = answer.studentExam.student_id ? answer.student_exam_id : answer.student_exam_id;
+
+    // Enforce case-sensitivity rule on Essay if specified by instructor
+    let finalPointsAwarded = pointsAwarded;
+    let finalIsCorrect = isCorrect;
+    try {
+      const { resolveQuestionCaseRule, evaluateAnswerCaseCompliance } = await import("@/lib/caseSensitivity");
+      const qRecord = answer.question;
+      const examObj = answer.studentExam.exam;
+      let parsedQ: any = {};
+      if (qRecord?.question_text && qRecord.question_text.trim().startsWith("{")) {
+        try {
+          parsedQ = JSON.parse(qRecord.question_text);
+        } catch {}
+      }
+      let testTypeInstruction = "";
+      let explicitTypeCaseRule = "";
+      if (examObj.tos_file_path && examObj.tos_file_path.trim().startsWith("{")) {
+        try {
+          const parsedTos = JSON.parse(examObj.tos_file_path);
+          testTypeInstruction = parsedTos.testTypeInstructions?.Essay || "";
+          explicitTypeCaseRule = parsedTos.testTypeCaseRules?.Essay || "";
+        } catch {}
+      }
+      const caseRule = resolveQuestionCaseRule({
+        questionType: qRecord?.question_type || "Essay",
+        explicitQuestionRule: parsedQ.case_rule,
+        explicitTestTypeRule: explicitTypeCaseRule || parsedQ.type_case_rule,
+        questionInstructionText: parsedQ.type_instruction || parsedQ.instruction || parsedQ.instructions,
+        questionPromptText: parsedQ.text || qRecord?.question_text,
+        testTypeInstructionText: testTypeInstruction,
+      });
+      if (caseRule !== "NONE") {
+        const compliance = evaluateAnswerCaseCompliance(answer.submitted_response || "", caseRule);
+        if (!compliance.compliant) {
+          finalPointsAwarded = 0;
+          finalIsCorrect = false;
+        }
+      }
+    } catch {}
 
     let updatedPenalizedScore = previousTotalScore;
     let allGradingComplete = false;
@@ -1277,8 +1319,8 @@ export async function gradeEssayAnswer(
       await tx.studentAnswer.update({
         where: { answer_id: answerId },
         data: {
-          is_correct: isCorrect,
-          points_awarded: pointsAwarded,
+          is_correct: finalIsCorrect,
+          points_awarded: finalPointsAwarded,
           last_updated_at: new Date(),
         },
       });
