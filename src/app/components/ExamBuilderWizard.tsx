@@ -295,7 +295,32 @@ export function getRevisionCardStyle(correctedCount: number, totalCount: number)
 
 // Deserialization helper
 function deserializeQuestions(dbQuestions: any[]): QuestionState[] {
-  return dbQuestions.map(q => {
+  const getOrderIdx = (rawText: any): number | null => {
+    if (!rawText || typeof rawText !== "string") return null;
+    const trimmed = rawText.trim();
+    if (trimmed.startsWith("{")) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (typeof parsed.order_index === "number" && !isNaN(parsed.order_index)) {
+          return parsed.order_index;
+        }
+      } catch {}
+    }
+    return null;
+  };
+
+  const orderedDbQuestions = [...dbQuestions].sort((a, b) => {
+    const idxA = getOrderIdx(a.question_text);
+    const idxB = getOrderIdx(b.question_text);
+    if (idxA !== null && idxB !== null && idxA !== idxB) {
+      return idxA - idxB;
+    }
+    if (idxA !== null && idxB === null) return -1;
+    if (idxA === null && idxB !== null) return 1;
+    return (a.question_id || 0) - (b.question_id || 0);
+  });
+
+  return orderedDbQuestions.map(q => {
     let text = q.question_text;
     let options: string[] = [];
     let premises: string[] = [];
@@ -417,14 +442,15 @@ function deserializeQuestions(dbQuestions: any[]): QuestionState[] {
 
 // Serialization helper
 function serializeQuestions(questions: QuestionState[]) {
-  return questions.map(q => {
+  return questions.map((q, idx) => {
     let question_text = q.text;
     let correct_answer = q.correctAnswer;
 
-    // Build standard JSON wrapper to hold metadata like images and taxonomy level
+    // Build standard JSON wrapper to hold metadata like images, taxonomy level, and creator arrangement order
     const serializedData: Record<string, any> = {
       text: q.text,
       taxonomy_level: q.taxonomy_level || "KNOWLEDGE / REMEMBERING",
+      order_index: idx,
     };
     if (q.image_url) {
       serializedData.image_url = q.image_url;
@@ -3764,6 +3790,11 @@ export function ExamBuilderWizard({
                         <span className="bg-white w-5 h-5 rounded-full shadow-md" />
                       </button>
                     </div>
+                    <p className="text-[11px] text-slate-500 font-medium leading-tight">
+                      {randomizeItems
+                        ? "ON: Questions are randomized within each test type only (test types stay in sequence)."
+                        : "OFF: Questions are displayed in the exact order arranged by the exam creator."}
+                    </p>
                   </div>
                 </div>
 

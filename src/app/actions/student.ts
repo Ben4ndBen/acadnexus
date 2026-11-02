@@ -24,6 +24,78 @@ function shuffleWithSeed<T>(array: T[], seed: number): T[] {
   return shuffled;
 }
 
+// Extract creator's explicit order_index from serialized question_text JSON if present
+function getQuestionOrderIndex(questionText: string): number | null {
+  if (!questionText) return null;
+  const trimmed = questionText.trim();
+  if (trimmed.startsWith("{")) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (typeof parsed.order_index === "number" && !isNaN(parsed.order_index)) {
+        return parsed.order_index;
+      }
+    } catch {}
+  }
+  return null;
+}
+
+/**
+ * Orders examination questions for a student's exam session:
+ * - Preserves the creator's arrangement and test-type sequence.
+ * - Keeps all questions grouped by their test type (never mixes different test types).
+ * - If randomizeItems is OFF: displays questions in the exact order arranged by the exam creator.
+ * - If randomizeItems is ON: deterministically randomizes questions within each test type only,
+ *   using studentExamId so refreshes/reconnections keep the exact same order for the session.
+ */
+function orderQuestionsForStudentExam<
+  T extends { question_id: number; question_text: string; question_type: string }
+>(dbQuestions: T[], randomizeItems: boolean, studentExamId: number): T[] {
+  // 1. Sort by creator's explicit order_index (if saved) with fallback to question_id ascending
+  const creatorOrdered = [...dbQuestions].sort((a, b) => {
+    const idxA = getQuestionOrderIndex(a.question_text);
+    const idxB = getQuestionOrderIndex(b.question_text);
+    if (idxA !== null && idxB !== null && idxA !== idxB) {
+      return idxA - idxB;
+    }
+    if (idxA !== null && idxB === null) return -1;
+    if (idxA === null && idxB !== null) return 1;
+    return a.question_id - b.question_id;
+  });
+
+  // 2. Group questions by their test type while preserving the original sequence of test types
+  const testTypeSequence: string[] = [];
+  const groupedByType = new Map<string, T[]>();
+
+  for (const q of creatorOrdered) {
+    const typeKey = q.question_type || "Multiple_Choice";
+    if (!groupedByType.has(typeKey)) {
+      testTypeSequence.push(typeKey);
+      groupedByType.set(typeKey, []);
+    }
+    groupedByType.get(typeKey)!.push(q);
+  }
+
+  // 3. If Randomize Questions is turned OFF, return questions in the exact creator order
+  if (!randomizeItems) {
+    const ordered: T[] = [];
+    for (const typeKey of testTypeSequence) {
+      ordered.push(...(groupedByType.get(typeKey) || []));
+    }
+    return ordered;
+  }
+
+  // 4. If Randomize Questions is turned ON, randomize within each test type only
+  const randomizedByGroup: T[] = [];
+  testTypeSequence.forEach((typeKey, groupIdx) => {
+    const groupQuestions = groupedByType.get(typeKey) || [];
+    const groupSeed = studentExamId * 1009 + (groupIdx + 1) * 137;
+    const shuffledGroup = shuffleWithSeed(groupQuestions, groupSeed);
+    randomizedByGroup.push(...shuffledGroup);
+  });
+
+  return randomizedByGroup;
+}
+
 export async function startStudentExam(examId: number, studentId: number) {
   try {
     // 0. Authenticate caller and verify ownership
@@ -270,6 +342,7 @@ export async function startStudentExam(examId: number, studentId: number) {
     // 5. Fetch questions from question bank (exclude correct_answer to prevent inspection)
     const dbQuestions = await db.questionBank.findMany({
       where: { exam_id: examId },
+      orderBy: { question_id: "asc" },
       select: {
         question_id: true,
         question_text: true,
@@ -278,10 +351,12 @@ export async function startStudentExam(examId: number, studentId: number) {
       },
     });
 
-    // Shuffle questions deterministically based on student_exam_id if randomize_items is enabled
-    const questions = exam.randomize_items
-      ? shuffleWithSeed(dbQuestions, studentExam.student_exam_id)
-      : dbQuestions;
+    // Order questions by test type and randomize within each test type only when randomize_items is enabled
+    const questions = orderQuestionsForStudentExam(
+      dbQuestions,
+      Boolean(exam.randomize_items),
+      studentExam.student_exam_id
+    );
 
     const savedAnswers = studentExam.studentAnswers.map((ans) => ({
       question_id: ans.question_id,
@@ -1172,7 +1247,9 @@ export async function getStudentExamResultDetails({
             course: true,
             examTargets: true,
             tableOfSpecifications: true,
-            questionBank: true,
+            questionBank: {
+              orderBy: { question_id: "asc" },
+            },
           },
         },
         studentAnswers: {
@@ -1210,7 +1287,11 @@ export async function getStudentExamResultDetails({
     }
 
     const exam = studentExam.exam;
-    const questions = exam.questionBank || [];
+    const questions = orderQuestionsForStudentExam(
+      exam.questionBank || [],
+      Boolean(exam.randomize_items),
+      studentExam.student_exam_id
+    );
     const maxPoints = questions.reduce((sum, q) => sum + (q.points || 0), 0);
 
     const visibility = parseExamResultSettings({

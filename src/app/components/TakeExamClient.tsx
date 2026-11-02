@@ -49,7 +49,48 @@ export function TakeExamClient({
   // Mode: 'gate' | 'exam' | 'warning' | 'lockout' | 'success' | 'submitting' | 'timeout_offline'
   const [mode, setMode] = useState<"gate" | "exam" | "warning" | "lockout" | "success" | "submitting" | "timeout_offline">("gate");
   
-  const [currentQuestionIdx, setCurrentQuestionIdx] = useState<number>(0);
+  const sessionStateKey = `exam_session_state_${initialData.studentExamId}`;
+
+  // Lock question order for this student's exam session so refreshing or reconnecting never alters the order
+  const [examQuestions] = useState<Question[]>(() => {
+    try {
+      if (typeof window !== "undefined") {
+        const stored = localStorage.getItem(`exam_session_state_${initialData.studentExamId}`);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed?.questionOrderIds) && parsed.questionOrderIds.length === initialData.questions.length) {
+            const qMap = new Map(initialData.questions.map((q) => [q.question_id, q]));
+            const restored = parsed.questionOrderIds
+              .map((id: number) => qMap.get(Number(id)))
+              .filter((q: Question | undefined): q is Question => Boolean(q));
+            if (restored.length === initialData.questions.length) {
+              return restored;
+            }
+          }
+        }
+      }
+    } catch {}
+    return initialData.questions;
+  });
+
+  const [currentQuestionIdx, setCurrentQuestionIdx] = useState<number>(() => {
+    try {
+      if (typeof window !== "undefined") {
+        const stored = localStorage.getItem(`exam_session_state_${initialData.studentExamId}`);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (
+            typeof parsed?.currentQuestionIdx === "number" &&
+            parsed.currentQuestionIdx >= 0 &&
+            parsed.currentQuestionIdx < initialData.questions.length
+          ) {
+            return parsed.currentQuestionIdx;
+          }
+        }
+      }
+    } catch {}
+    return 0;
+  });
   const timerBackupKey = `exam_timer_${initialData.studentExamId}`;
   const [remainingSeconds, setRemainingSeconds] = useState<number>(() => {
     let initialSec = initialData.remainingSeconds;
@@ -118,7 +159,34 @@ export function TakeExamClient({
   }, 0);
 
   // Flagged/Bookmarked Questions: Record<question_id, boolean>
-  const [flagged, setFlagged] = useState<Record<number, boolean>>({});
+  const [flagged, setFlagged] = useState<Record<number, boolean>>(() => {
+    try {
+      if (typeof window !== "undefined") {
+        const stored = localStorage.getItem(`exam_session_state_${initialData.studentExamId}`);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (parsed?.flagged && typeof parsed.flagged === "object") {
+            return parsed.flagged;
+          }
+        }
+      }
+    } catch {}
+    return {};
+  });
+
+  // Persist question order, active question index, and flagged state for session consistency across refreshes
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        sessionStateKey,
+        JSON.stringify({
+          questionOrderIds: examQuestions.map((q) => q.question_id),
+          currentQuestionIdx,
+          flagged,
+        })
+      );
+    } catch {}
+  }, [sessionStateKey, examQuestions, currentQuestionIdx, flagged]);
 
   const remainingSecondsRef = useRef(remainingSeconds);
   const lastTickRef = useRef<number>(typeof performance !== "undefined" ? performance.now() : Date.now());
@@ -633,7 +701,7 @@ export function TakeExamClient({
         console.warn("Failed to write to local storage mirror:", err);
       }
 
-      const targetQuestion = initialData.questions.find(
+      const targetQuestion = examQuestions.find(
         (q) => q.question_id === questionId
       );
       const isTextType =
@@ -729,6 +797,7 @@ export function TakeExamClient({
         localStorage.removeItem(violationsKey);
         localStorage.removeItem(localBackupKey);
         localStorage.removeItem(timerBackupKey);
+        localStorage.removeItem(sessionStateKey);
         setMode("success");
       } else {
         // Network or server submission issue: handle safely with offline retry
@@ -753,6 +822,7 @@ export function TakeExamClient({
       await submitStudentExam(initialData.studentExamId, "Cheating_Lockout", currentAnswersArray);
       localStorage.removeItem(localBackupKey);
       localStorage.removeItem(timerBackupKey);
+      localStorage.removeItem(sessionStateKey);
     } catch (err) {
       console.error("Lockout submission failed:", err);
     }
@@ -810,6 +880,7 @@ export function TakeExamClient({
         localStorage.removeItem(violationsKey);
         localStorage.removeItem(localBackupKey);
         localStorage.removeItem(timerBackupKey);
+        localStorage.removeItem(sessionStateKey);
         setMode("success");
       } else {
         alert(res.error || "Submission failed. Please check your internet connection and try again.");
@@ -855,7 +926,7 @@ export function TakeExamClient({
   };
 
   // --- Helper parsing of questions ---
-  const currentQuestion = initialData.questions[currentQuestionIdx];
+  const currentQuestion = examQuestions[currentQuestionIdx];
 
   const parseQuestionText = (q: Question) => {
     if (q.question_type === "Multiple_Choice" || q.question_type === "Matching_Type" || q.question_type === "Fill_In_The_Blanks" || q.question_type === "Essay" || q.question_text.trim().startsWith("{")) {
@@ -941,8 +1012,8 @@ export function TakeExamClient({
   const timeLimitUrgent = remainingSeconds < 60;
 
   // Calculate answer stats for confirm submit dialog
-  const totalQuestions = initialData.questions.length;
-  const answeredCount = initialData.questions.filter((q) => {
+  const totalQuestions = examQuestions.length;
+  const answeredCount = examQuestions.filter((q) => {
     const ans = answers[q.question_id];
     if (!ans) return false;
     if (q.question_type === "Matching_Type") {
@@ -1296,7 +1367,7 @@ export function TakeExamClient({
 
   // F. SUCCESS SUBMISSION SCREEN (SHOW INITIAL SCORES OR RESPECT HIDDEN RESULT SETTINGS)
   if (mode === "success") {
-    const totalPossible = initialData.questions.reduce((sum, q) => sum + q.points, 0);
+    const totalPossible = examQuestions.reduce((sum, q) => sum + q.points, 0);
     const effectiveScore = submissionResult?.totalScore ?? (finalScore ?? 0);
     const scorePct = totalPossible > 0 ? Math.round((effectiveScore / totalPossible) * 100) : 0;
     const isTimeout = submissionResult?.trigger === "Timeout";
@@ -1305,7 +1376,7 @@ export function TakeExamClient({
     const scorePenaltyRate = submissionResult?.scorePenaltyPoints ?? initialData.scorePenaltyPoints;
     const violationsCount = submissionResult?.violationsCount ?? 0;
     const hasPenalty = penaltyPoints > 0;
-    const hasEssay = initialData.questions.some((q) => q.question_type === "Essay");
+    const hasEssay = examQuestions.some((q) => q.question_type === "Essay");
     
     return (
       <div className="min-h-screen bg-[#0F172A] text-slate-100 flex items-center justify-center p-6 font-sans select-none">
@@ -1841,7 +1912,7 @@ export function TakeExamClient({
 
             {/* Grid list */}
             <div className="grid grid-cols-4 gap-2.5">
-              {initialData.questions.map((q, idx) => {
+              {examQuestions.map((q, idx) => {
                 const isCurrent = currentQuestionIdx === idx;
                 const isFlagged = flagged[q.question_id];
                 const ans = answers[q.question_id];
