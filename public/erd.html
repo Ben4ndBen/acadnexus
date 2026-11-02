@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AcadNexus — Complete Database ERD (Production Specification)</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      margin: 0;
+      padding: 32px;
+      background: #0f172a;
+      color: #f8fafc;
+    }
+    header {
+      background: #1e293b;
+      padding: 24px 32px;
+      border-radius: 12px;
+      box-shadow: 0 4px 6px -1px rgba(0,0,0,0.3);
+      margin-bottom: 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-left: 6px solid #38bdf8;
+    }
+    h1 {
+      margin: 0 0 6px 0;
+      font-size: 24px;
+      color: #38bdf8;
+    }
+    p {
+      margin: 0;
+      color: #94a3b8;
+      font-size: 14px;
+    }
+    .card {
+      background: #ffffff;
+      border-radius: 12px;
+      padding: 32px;
+      box-shadow: 0 4px 6px -1px rgba(0,0,0,0.3);
+      overflow-x: auto;
+    }
+    .btn {
+      background: #0284c7;
+      color: #ffffff;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 14px;
+      cursor: pointer;
+      text-decoration: none;
+    }
+    .btn:hover {
+      background: #0369a1;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>AcadNexus — Complete Production Entity Relationship Diagram (ERD)</h1>
+      <p>Batanes State College &bull; Unified Relational Model with Explicit Program Chair &amp; Department Chair</p>
+    </div>
+    <button class="btn" onclick="window.print()">Print / Export PDF</button>
+  </header>
+
+  <div class="card">
+    <pre class="mermaid">
+erDiagram
+    %% -----------------------------------------
+    %% 1. USER INHERITANCE (POLYMORPHIC ROLES)
+    %% -----------------------------------------
+    USERS ||--o| STUDENTS : "specializes (1:1)"
+    USERS ||--o| FACULTY : "specializes (1:1)"
+    USERS ||--o| PROGRAM_CHAIRS : "specializes (1:1)"
+    USERS ||--o| DEPARTMENT_CHAIRS : "specializes (1:1)"
+    USERS ||--o| DIRECTORS : "specializes (1:1)"
+    USERS ||--o{ AUDIT_LOGS : "generates audit events (1:N)"
+    USERS ||--o{ NOTIFICATIONS : "receives real-time alerts (1:N)"
+
+    %% -----------------------------------------
+    %% 2. ACADEMIC GOVERNANCE & ENROLLMENT
+    %% -----------------------------------------
+    DEPARTMENTS ||--|{ ACADEMIC_PROGRAMS : "offers (1:N)"
+    DEPARTMENTS ||--|{ FACULTY : "employs (1:N)"
+    DEPARTMENTS ||--o| DEPARTMENT_CHAIRS : "overseen by (1:1)"
+
+    ACADEMIC_PROGRAMS ||--|{ STUDENTS : "enrolls (1:N)"
+    ACADEMIC_PROGRAMS ||--o| PROGRAM_CHAIRS : "chaired by (1:1)"
+    ACADEMIC_PROGRAMS ||--o{ EXAM_TARGETS : "targets (1:N)"
+
+    STUDENTS ||--|{ STUDENT_COURSES : "enrolled in (1:N)"
+    COURSES ||--|{ STUDENT_COURSES : "student roster (1:N)"
+
+    FACULTY ||--|{ FACULTY_COURSES : "assigned to (1:N)"
+    COURSES ||--|{ FACULTY_COURSES : "faculty teaching load (1:N)"
+
+    %% -----------------------------------------
+    %% 3. EXAMS, TOS & COMPLIANCE PORTFOLIO
+    %% -----------------------------------------
+    COURSES ||--|{ EXAMINATIONS : "assesses course (1:N)"
+    FACULTY ||--|{ EXAMINATIONS : "creates (1:N)"
+    FACULTY ||--o{ FACULTY_PORTFOLIOS : "tracks compliance (1:N)"
+
+    EXAMINATIONS ||--o| TABLE_OF_SPECIFICATIONS : "guided by TOS (1:1)"
+    EXAMINATIONS ||--|{ EXAM_TARGETS : "schedules cohorts (1:N)"
+    EXAMINATIONS ||--|{ QUESTION_BANK : "contains questions (1:N)"
+    COURSES ||--o{ QUESTION_BANK : "question bank pool (1:N)"
+    EXAMINATIONS ||--o| APPROVAL_WORKFLOWS : "routed through (1:1)"
+
+    %% -----------------------------------------
+    %% 4. THREE-TIER APPROVAL WORKFLOW
+    %% -----------------------------------------
+    PROGRAM_CHAIRS ||--o{ APPROVAL_WORKFLOWS : "Stage 1: Item Review (1:N)"
+    DEPARTMENT_CHAIRS ||--o{ APPROVAL_WORKFLOWS : "Stage 2: Dept Sign-off (1:N)"
+    DIRECTORS ||--o{ APPROVAL_WORKFLOWS : "Stage 3: DI Clearance (1:N)"
+
+    %% -----------------------------------------
+    %% 5. TESTING, OVERRIDES & SCORING
+    %% -----------------------------------------
+    STUDENTS ||--|{ STUDENT_EXAMS : "takes exam session (1:N)"
+    EXAMINATIONS ||--|{ STUDENT_EXAMS : "exam sessions (1:N)"
+
+    STUDENTS ||--o{ STUDENT_OVERRIDES : "receives override (1:N)"
+    EXAMINATIONS ||--o{ STUDENT_OVERRIDES : "overridden for (1:N)"
+
+    STUDENT_EXAMS ||--|{ STUDENT_ANSWERS : "records answers (1:N)"
+    QUESTION_BANK ||--|{ STUDENT_ANSWERS : "grades against (1:N)"
+
+    %% -----------------------------------------
+    %% FIELD ATTRIBUTES & KEYS
+    %% -----------------------------------------
+    USERS {
+        int user_id PK
+        string institutional_id UK "Unique Student/Faculty ID"
+        string password_hash
+        enum role "Student, Faculty, ProgramChair, Chair, Director"
+        boolean is_active
+        string username UK
+    }
+
+    STUDENTS {
+        int student_id PK,FK "FK to USERS.user_id"
+        string first_name
+        string last_name
+        int program_id FK "FK to ACADEMIC_PROGRAMS"
+        int year_level
+        string section
+    }
+
+    FACULTY {
+        int faculty_id PK,FK "FK to USERS.user_id"
+        string first_name
+        string last_name
+        string institutional_email
+        int department_id FK "FK to DEPARTMENTS"
+    }
+
+    PROGRAM_CHAIRS {
+        int prog_chair_id PK,FK "FK to USERS.user_id"
+        int program_id FK "FK to ACADEMIC_PROGRAMS (1:1)"
+        boolean is_program_chair "true"
+    }
+
+    DEPARTMENT_CHAIRS {
+        int dept_chair_id PK,FK "FK to USERS.user_id"
+        int department_id FK "FK to DEPARTMENTS (1:1)"
+        boolean is_program_chair "false"
+    }
+
+    DIRECTORS {
+        int director_id PK,FK "FK to USERS.user_id"
+        string first_name
+        string last_name
+        string title "Director for Instruction"
+    }
+
+    DEPARTMENTS {
+        int department_id PK
+        string department_name "e.g. Computing & Industrial Technology"
+    }
+
+    ACADEMIC_PROGRAMS {
+        int program_id PK
+        string program_code UK "e.g. BSIT, BSCS, BSED"
+        string program_name
+        int department_id FK "FK to DEPARTMENTS"
+    }
+
+    COURSES {
+        int course_id PK
+        string course_code UK "e.g. IT 101, ENT 403"
+        string course_title
+        string syllabus_file_path
+    }
+
+    STUDENT_COURSES {
+        int student_id PK,FK "FK to STUDENTS"
+        int course_id PK,FK "FK to COURSES"
+        timestamp enrolled_at
+    }
+
+    FACULTY_COURSES {
+        int faculty_id PK,FK "FK to FACULTY"
+        int course_id PK,FK "FK to COURSES"
+        timestamp assigned_at
+    }
+
+    EXAMINATIONS {
+        int exam_id PK
+        string title "e.g. Midterm Examination in ENT 403"
+        int course_id FK "FK to COURSES"
+        int faculty_id FK "FK to FACULTY"
+        int time_limit_minutes
+        enum current_status "Draft, Pending_PC, Pending_Chair, Approved, Returned"
+        string term "Prelim, Midterm, Semi-Final, Final"
+        date exam_date
+    }
+
+    TABLE_OF_SPECIFICATIONS {
+        int tos_id PK
+        int exam_id UK,FK "FK to EXAMINATIONS (1:1)"
+        int target_total_items
+        text topic_plans_json "Topic hours, percentages, Bloom taxonomy"
+        text learning_outcomes_json
+    }
+
+    EXAM_TARGETS {
+        int target_id PK
+        int exam_id FK "FK to EXAMINATIONS"
+        int program_id FK "FK to ACADEMIC_PROGRAMS"
+        int year_level
+        string section
+        date scheduled_date
+        time start_time
+        time end_time
+    }
+
+    QUESTION_BANK {
+        int question_id PK
+        int exam_id FK "FK to EXAMINATIONS"
+        text question_text
+        enum question_type "MCQ, True/False, ID, Matching, Essay, Blanks"
+        text correct_answer
+        int points
+        int course_id FK "FK to COURSES"
+    }
+
+    APPROVAL_WORKFLOWS {
+        int workflow_id PK
+        int exam_id UK,FK "FK to EXAMINATIONS (1:1)"
+        int reviewed_by_prog_chair_id FK "FK to PROGRAM_CHAIRS (Tier 1)"
+        enum prog_chair_review_status "Pending, Approved, Returned"
+        text prog_chair_comments
+        int reviewed_by_dept_chair_id FK "FK to DEPARTMENT_CHAIRS (Tier 2)"
+        enum dept_chair_review_status "Pending, Approved, Returned"
+        text dept_chair_comments
+        int reviewed_by_di_id FK "FK to DIRECTORS (Tier 3 Clearance)"
+        enum di_review_status "Hold, Approved, Pass_Through"
+    }
+
+    STUDENT_EXAMS {
+        int student_exam_id PK
+        int student_id FK "FK to STUDENTS"
+        int exam_id FK "FK to EXAMINATIONS"
+        timestamp started_at
+        timestamp submitted_at
+        int total_score
+        enum submission_trigger "Manual, Timeout, Cheating_Lockout"
+        int violations_count "Fullscreen/Tab switch strike counter"
+    }
+
+    STUDENT_ANSWERS {
+        int answer_id PK
+        int student_exam_id FK "FK to STUDENT_EXAMS"
+        int question_id FK "FK to QUESTION_BANK"
+        text submitted_response
+        boolean is_correct
+        int points_awarded
+    }
+
+    STUDENT_OVERRIDES {
+        int override_id PK
+        int student_id FK "FK to STUDENTS (Who gets the override)"
+        int exam_id FK "FK to EXAMINATIONS (Which exam is reopened)"
+        timestamp new_start_time
+        timestamp new_end_time
+        boolean is_active
+    }
+
+    FACULTY_PORTFOLIOS {
+        int portfolio_id PK
+        int faculty_id FK "FK to FACULTY (Instructor compliance record)"
+        string academic_year
+        int semester
+        int total_exams_created
+        decimal compliance_percentage
+    }
+
+    AUDIT_LOGS {
+        bigint log_id PK
+        int user_id FK "FK to USERS (Who performed the action)"
+        text action_performed
+        string ip_address
+        timestamp timestamp
+    }
+
+    NOTIFICATIONS {
+        int notification_id PK
+        int user_id FK "FK to USERS (Recipient of the notification)"
+        string title
+        text message
+        boolean is_read
+    }
+    </pre>
+  </div>
+
+  <script>
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: 'neutral',
+      er: {
+        useMaxWidth: false,
+        layoutDirection: 'TB'
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AcadNexus — Conceptual Framework (IPO Model)</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      margin: 0;
+      padding: 32px;
+      background: #f8fafc;
+      color: #0f172a;
+    }
+    header {
+      background: #ffffff;
+      padding: 24px 32px;
+      border-radius: 12px;
+      margin-bottom: 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-left: 6px solid #0284c7;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    h1 { margin: 0 0 6px 0; font-size: 24px; color: #0369a1; }
+    p { margin: 0; color: #64748b; font-size: 14px; }
+    .card {
+      background: #ffffff;
+      border-radius: 12px;
+      padding: 32px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      overflow-x: auto;
+      margin-bottom: 24px;
+    }
+    .btn-print {
+      background: #0284c7;
+      color: #ffffff;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 14px;
+      cursor: pointer;
+    }
+    .btn-print:hover { background: #0369a1; }
+    @media print {
+      body { background: #ffffff; padding: 0; }
+      header, .btn-print { display: none; }
+      .card { box-shadow: none; padding: 0; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>AcadNexus — Conceptual Framework (IPO Model)</h1>
+      <p>Aligned with the System Scope and Limitations &bull; Batanes State College</p>
+    </div>
+    <button class="btn-print" onclick="window.print()">Print / Export PDF</button>
+  </header>
+
+  <div class="card">
+    <pre class="mermaid">
+flowchart LR
+    subgraph INPUT ["INPUT"]
+        I1["<b>Faculty Requirements:</b><br/>• Test Questions (MCQ, T/F, ID, Matching, Essay)<br/>• TOS Topic Plans & Teaching Hours<br/>• Exam Term (Prelim, Midterm, Final), Dates & Timers<br/>• LaTeX Mathematical / Scientific Formulas"]
+        I2["<b>Student Inputs:</b><br/>• Authentication Credentials<br/>• Active Test-Taking Responses & Answers"]
+        I3["<b>Administrative & Curricular Data:</b><br/>• Academic Departments & Programs<br/>• Director-Assigned Faculty Loads (FACULTY_COURSES)<br/>• Official Student Class Rosters (Year Level & Section)"]
+        I4["<b>Reviewer & Governance Data:</b><br/>• Program Chair Item-Level Feedback Comments<br/>• Department Chair Syllabus & Compliance Sign-offs<br/>• Director for Instruction Clearances or Written Holds"]
+    end
+
+    subgraph PROCESS ["PROCESS"]
+        P1["<b>TOS & Curriculum Alignment:</b><br/>• Automated weighting of topics from instructional hours<br/>• Distribution across Bloom's 6 Cognitive Taxonomy Levels"]
+        P2["<b>Multi-Tier Quality Approval Workflow:</b><br/>• Stage-1 Item Audit by Program Chair<br/>• Stage-2 Department Compliance Sign-off by Dept Chair<br/>• Stage-3 Final Clearance or Written Hold by Director<br/>• Real-time notification dispatching upon status changes"]
+        P3["<b>Secure Test Delivery & Proctoring Controls:</b><br/>• Personalized cohort filtering (Program, Year, Section, Course)<br/>• Enforcing HTML5 Fullscreen lockdown mode<br/>• 10-second heartbeat autosave & clock synchronization<br/>• Tab-switch & window blur 3-strike violation lockout"]
+        P4["<b>Automated Assessment & Results Compilation:</b><br/>• Instant auto-grading for objective question types<br/>• Flagging subjective essay questions for manual scoring<br/>• Score tallying and faculty compliance portfolio logging"]
+    end
+
+    subgraph OUTPUT ["OUTPUT"]
+        O1["<b>Personalized Examination Delivery:</b><br/>• Dynamic Examination Feed (Active, Upcoming, Completed)<br/>• Distraction-free, color-coded exam navigation interface"]
+        O2["<b>Official College Documents:</b><br/>• Official BSC Printable Examination Questionnaire Papers<br/>• High-fidelity Table of Specifications (TOS) Sheets with formal seals & signatories"]
+        O3["<b>Performance & Grading Analytics:</b><br/>• Instant objective score breakdowns for students<br/>• Class Master Grading Sheets with Excel export for faculty<br/>• School-Wide Departmental Compliance Maps (FACULTY_PORTFOLIOS)"]
+        O4["<b>Governance & Security Audit Trails:</b><br/>• Itemized revision comments and workflow status histories<br/>• Immutable System Action Logs (AUDIT_LOGS) for cheating lockouts & logins"]
+    end
+
+    INPUT --> PROCESS --> OUTPUT
+    </pre>
+  </div>
+
+  <script>
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: 'neutral',
+      flowchart: { useMaxWidth: false }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,203 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 950" width="100%" height="100%">
+  <defs>
+    <style>
+      .title { font-family: 'Segoe UI', -apple-system, Roboto, sans-serif; font-size: 32px; font-weight: 800; fill: #0f172a; }
+      .subtitle { font-family: 'Segoe UI', -apple-system, Roboto, sans-serif; font-size: 16px; font-weight: 500; fill: #64748b; }
+      .header-pill { font-family: 'Segoe UI', -apple-system, Roboto, sans-serif; font-size: 20px; font-weight: 800; fill: #ffffff; letter-spacing: 2px; }
+      .sec-title { font-family: 'Segoe UI', -apple-system, Roboto, sans-serif; font-size: 15px; font-weight: 700; fill: #0369a1; }
+      .bullet { font-family: 'Segoe UI', -apple-system, Roboto, sans-serif; font-size: 13px; font-weight: 400; fill: #334155; }
+      .bullet-bold { font-weight: 600; fill: #0f172a; }
+      .arrow { stroke: #0284c7; stroke-width: 4; fill: none; stroke-linecap: round; }
+      .arrow-head { fill: #0284c7; }
+    </style>
+    <filter id="shadow" x="-5%" y="-3%" width="110%" height="108%" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#0f172a" flood-opacity="0.08" />
+    </filter>
+    <linearGradient id="boxGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#f0f9ff" />
+      <stop offset="100%" stop-color="#e0f2fe" />
+    </linearGradient>
+    <linearGradient id="headerGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#0284c7" />
+      <stop offset="100%" stop-color="#0369a1" />
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1600" height="950" fill="#ffffff" />
+
+  <!-- Top Title Banner -->
+  <text x="800" y="55" text-anchor="middle" class="title">Conceptual Framework (IPO Model)</text>
+  <text x="800" y="85" text-anchor="middle" class="subtitle">AcadNexus: Batanes State College Academic Examination and Quality Assurance System</text>
+
+  <!-- ============================================================ -->
+  <!-- BOX 1: INPUT                                                 -->
+  <!-- ============================================================ -->
+  <g transform="translate(60, 120)">
+    <!-- Card Container -->
+    <rect width="440" height="780" rx="16" fill="url(#boxGrad)" stroke="#bae6fd" stroke-width="2" filter="url(#shadow)" />
+    
+    <!-- Header Pill -->
+    <rect x="130" y="-22" width="180" height="44" rx="22" fill="url(#headerGrad)" />
+    <text x="220" y="7" text-anchor="middle" class="header-pill">INPUT</text>
+
+    <!-- Content -->
+    <g transform="translate(28, 45)">
+      <!-- Section 1 -->
+      <text x="0" y="20" class="sec-title">Faculty Requirements &amp; Exam Data:</text>
+      <circle cx="6" cy="40" r="3" fill="#0284c7" />
+      <text x="16" y="44" class="bullet">Test Questions (MCQ, T/F, ID, Matching, Essay)</text>
+      <circle cx="6" cy="62" r="3" fill="#0284c7" />
+      <text x="16" y="66" class="bullet">TOS Topic Plans, Target Items &amp; Teaching Hours</text>
+      <circle cx="6" cy="84" r="3" fill="#0284c7" />
+      <text x="16" y="88" class="bullet">Exam Terms (Prelim, Midterm, Final), Dates &amp; Timers</text>
+      <circle cx="6" cy="106" r="3" fill="#0284c7" />
+      <text x="16" y="110" class="bullet">LaTeX Mathematical &amp; Scientific Formula Codes</text>
+
+      <!-- Section 2 -->
+      <text x="0" y="155" class="sec-title">Student Inputs:</text>
+      <circle cx="6" cy="175" r="3" fill="#0284c7" />
+      <text x="16" y="179" class="bullet">Unique Institutional Authentication Credentials</text>
+      <circle cx="6" cy="197" r="3" fill="#0284c7" />
+      <text x="16" y="201" class="bullet">Active Exam Responses &amp; Answer Selections</text>
+      <circle cx="6" cy="219" r="3" fill="#0284c7" />
+      <text x="16" y="223" class="bullet">Review Flags &amp; Autosave Status Tokens</text>
+
+      <!-- Section 3 -->
+      <text x="0" y="268" class="sec-title">Administrative &amp; Curricular Hierarchy:</text>
+      <circle cx="6" cy="288" r="3" fill="#0284c7" />
+      <text x="16" y="292" class="bullet">College Departments, Programs &amp; Course Codes</text>
+      <circle cx="6" cy="310" r="3" fill="#0284c7" />
+      <text x="16" y="314" class="bullet">Director-Assigned Faculty Teaching Loads</text>
+      <circle cx="6" cy="332" r="3" fill="#0284c7" />
+      <text x="16" y="336" class="bullet">Student Class Rosters (Program, Year &amp; Section)</text>
+
+      <!-- Section 4 -->
+      <text x="0" y="381" class="sec-title">Reviewer &amp; Governance Feedback:</text>
+      <circle cx="6" cy="401" r="3" fill="#0284c7" />
+      <text x="16" y="405" class="bullet">Program Chair Item-Level Review Comments</text>
+      <circle cx="6" cy="423" r="3" fill="#0284c7" />
+      <text x="16" y="427" class="bullet">Department Chair Syllabus &amp; TOS Sign-Offs</text>
+      <circle cx="6" cy="445" r="3" fill="#0284c7" />
+      <text x="16" y="449" class="bullet">Director for Instruction Clearances or Written Holds</text>
+    </g>
+  </g>
+
+  <!-- Arrow 1: Input to Process -->
+  <g>
+    <line x1="510" y1="510" x2="570" y2="510" class="arrow" />
+    <polygon points="570,503 585,510 570,517" class="arrow-head" />
+  </g>
+
+  <!-- ============================================================ -->
+  <!-- BOX 2: PROCESS                                               -->
+  <!-- ============================================================ -->
+  <g transform="translate(580, 120)">
+    <!-- Card Container -->
+    <rect width="440" height="780" rx="16" fill="url(#boxGrad)" stroke="#bae6fd" stroke-width="2" filter="url(#shadow)" />
+    
+    <!-- Header Pill -->
+    <rect x="130" y="-22" width="180" height="44" rx="22" fill="url(#headerGrad)" />
+    <text x="220" y="7" text-anchor="middle" class="header-pill">PROCESS</text>
+
+    <!-- Content -->
+    <g transform="translate(28, 45)">
+      <!-- Section 1 -->
+      <text x="0" y="20" class="sec-title">TOS &amp; Curriculum Alignment Engine:</text>
+      <circle cx="6" cy="40" r="3" fill="#0284c7" />
+      <text x="16" y="44" class="bullet">Automated topic weightings from teaching hours</text>
+      <circle cx="6" cy="62" r="3" fill="#0284c7" />
+      <text x="16" y="66" class="bullet">Item allocation across Bloom's 6 Cognitive Levels</text>
+      <circle cx="6" cy="84" r="3" fill="#0284c7" />
+      <text x="16" y="88" class="bullet">Total item sum and percentage balance validation</text>
+
+      <!-- Section 2 -->
+      <text x="0" y="133" class="sec-title">Multi-Tier Quality Approval Workflow:</text>
+      <circle cx="6" cy="153" r="3" fill="#0284c7" />
+      <text x="16" y="157" class="bullet">Stage 1: Program Chair Question Item Audit</text>
+      <circle cx="6" cy="175" r="3" fill="#0284c7" />
+      <text x="16" y="179" class="bullet">Stage 2: Department Chair Syllabus Sign-off</text>
+      <circle cx="6" cy="197" r="3" fill="#0284c7" />
+      <text x="16" y="201" class="bullet">Stage 3: Director Final Clearance or Written Hold</text>
+      <circle cx="6" cy="219" r="3" fill="#0284c7" />
+      <text x="16" y="223" class="bullet">Real-time alerts on status transitions (Approved/Return)</text>
+
+      <!-- Section 3 -->
+      <text x="0" y="268" class="sec-title">Secure Test Delivery &amp; Proctoring Controls:</text>
+      <circle cx="6" cy="288" r="3" fill="#0284c7" />
+      <text x="16" y="292" class="bullet">Cohort filtering by Program, Year, Section &amp; Course</text>
+      <circle cx="6" cy="310" r="3" fill="#0284c7" />
+      <text x="16" y="314" class="bullet">Distraction-free HTML5 Fullscreen lockdown mode</text>
+      <circle cx="6" cy="332" r="3" fill="#0284c7" />
+      <text x="16" y="336" class="bullet">10s heartbeat autosave &amp; clock freeze recovery</text>
+      <circle cx="6" cy="354" r="3" fill="#0284c7" />
+      <text x="16" y="358" class="bullet">Tab-switch/blur 3-strike violation lockout monitor</text>
+
+      <!-- Section 4 -->
+      <text x="0" y="403" class="sec-title">Automated Assessment &amp; Compilation:</text>
+      <circle cx="6" cy="423" r="3" fill="#0284c7" />
+      <text x="16" y="427" class="bullet">Instant auto-scoring for objective question types</text>
+      <circle cx="6" cy="445" r="3" fill="#0284c7" />
+      <text x="16" y="449" class="bullet">Flagging subjective essay items for instructor grading</text>
+      <circle cx="6" cy="467" r="3" fill="#0284c7" />
+      <text x="16" y="471" class="bullet">Score compilation and faculty turnaround logging</text>
+    </g>
+  </g>
+
+  <!-- Arrow 2: Process to Output -->
+  <g>
+    <line x1="1030" y1="510" x2="1090" y2="510" class="arrow" />
+    <polygon points="1090,503 1105,510 1090,517" class="arrow-head" />
+  </g>
+
+  <!-- ============================================================ -->
+  <!-- BOX 3: OUTPUT                                                -->
+  <!-- ============================================================ -->
+  <g transform="translate(1100, 120)">
+    <!-- Card Container -->
+    <rect width="440" height="780" rx="16" fill="url(#boxGrad)" stroke="#bae6fd" stroke-width="2" filter="url(#shadow)" />
+    
+    <!-- Header Pill -->
+    <rect x="130" y="-22" width="180" height="44" rx="22" fill="url(#headerGrad)" />
+    <text x="220" y="7" text-anchor="middle" class="header-pill">OUTPUT</text>
+
+    <!-- Content -->
+    <g transform="translate(28, 45)">
+      <!-- Section 1 -->
+      <text x="0" y="20" class="sec-title">Personalized Examination Workspaces:</text>
+      <circle cx="6" cy="40" r="3" fill="#0284c7" />
+      <text x="16" y="44" class="bullet">Dynamic Exam Feed (Active, Upcoming, Completed)</text>
+      <circle cx="6" cy="62" r="3" fill="#0284c7" />
+      <text x="16" y="66" class="bullet">Distraction-free color-coded question navigation grid</text>
+      <circle cx="6" cy="84" r="3" fill="#0284c7" />
+      <text x="16" y="88" class="bullet">Individualized testing duration allocation</text>
+
+      <!-- Section 2 -->
+      <text x="0" y="133" class="sec-title">Official Institutional Documents:</text>
+      <circle cx="6" cy="153" r="3" fill="#0284c7" />
+      <text x="16" y="157" class="bullet">BSC Printable Examination Questionnaire Papers</text>
+      <circle cx="6" cy="175" r="3" fill="#0284c7" />
+      <text x="16" y="179" class="bullet">Standardized Table of Specifications (TOS) Sheets</text>
+      <circle cx="6" cy="197" r="3" fill="#0284c7" />
+      <text x="16" y="201" class="bullet">Institutional college seals &amp; formal signatory blocks</text>
+
+      <!-- Section 3 -->
+      <text x="0" y="246" class="sec-title">Performance &amp; Grading Analytics:</text>
+      <circle cx="6" cy="266" r="3" fill="#0284c7" />
+      <text x="16" y="270" class="bullet">Instant objective score breakdowns for students</text>
+      <circle cx="6" cy="288" r="3" fill="#0284c7" />
+      <text x="16" y="292" class="bullet">Class Master Grading Sheets with Excel export</text>
+      <circle cx="6" cy="310" r="3" fill="#0284c7" />
+      <text x="16" y="314" class="bullet">School-Wide Departmental Compliance Maps</text>
+
+      <!-- Section 4 -->
+      <text x="0" y="359" class="sec-title">Governance &amp; Security Audit Trails:</text>
+      <circle cx="6" cy="379" r="3" fill="#0284c7" />
+      <text x="16" y="383" class="bullet">Itemized revision feedback &amp; status histories</text>
+      <circle cx="6" cy="401" r="3" fill="#0284c7" />
+      <text x="16" y="405" class="bullet">Director digital approval signatures &amp; holds</text>
+      <circle cx="6" cy="423" r="3" fill="#0284c7" />
+      <text x="16" y="427" class="bullet">Immutable Audit Logs (AUDIT_LOGS) for incidents</text>
+    </g>
+  </g>
+</svg>
