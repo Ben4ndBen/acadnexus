@@ -835,20 +835,10 @@ export async function submitStudentExam(
         let pointsAwarded: number | null = 0;
 
         if (q.question_type === "Essay") {
-          if (caseRule !== "NONE" && response.trim() !== "") {
-            const compliance = evaluateAnswerCaseCompliance(response, caseRule);
-            if (!compliance.compliant) {
-              // Essay violates instructor's specified letter-case requirement -> award 0 points
-              isCorrect = false;
-              pointsAwarded = 0;
-            } else {
-              isCorrect = null;
-              pointsAwarded = null;
-            }
-          } else {
-            isCorrect = null;
-            pointsAwarded = null;
-          }
+          // Preserve manual-grading workflow for Essay: never auto-award full points on capitalization alone.
+          // Instructor evaluates the essay against grading criteria AND the active letter-case requirement.
+          isCorrect = null;
+          pointsAwarded = null;
         } else if (q.question_type === "Identification") {
           const cleanedExpected = unwrapAnswerKey(correct);
           const idEval = gradeIdentificationQuestion({
@@ -1601,8 +1591,8 @@ export async function getStudentExamResultDetails({
       }
 
       const isEssay = q.question_type === "Essay";
-      const isPending = isEssay && !caseViolation && (ans?.points_awarded === null || ans?.points_awarded === undefined);
-      const isInstructorGraded = isEssay && !caseViolation && ans?.points_awarded !== null && ans?.points_awarded !== undefined;
+      const isPending = isEssay && (ans?.points_awarded === null || ans?.points_awarded === undefined);
+      const isInstructorGraded = isEssay && ans?.points_awarded !== null && ans?.points_awarded !== undefined;
 
       if (isPending) {
         pendingQuestionsCount += 1;
@@ -1625,8 +1615,8 @@ export async function getStudentExamResultDetails({
         questionType: q.question_type,
         pointsPossible: q.points,
         submittedResponse: submittedResp,
-        pointsAwarded: ans?.points_awarded ?? (caseViolation ? 0 : null),
-        isCorrect: ans?.is_correct ?? (caseViolation ? false : null),
+        pointsAwarded: ans?.points_awarded ?? (caseViolation && !isEssay ? 0 : null),
+        isCorrect: ans?.is_correct ?? (caseViolation && !isEssay ? false : null),
         isPending,
         isInstructorGraded,
         caseRule,

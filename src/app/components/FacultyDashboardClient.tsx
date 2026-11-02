@@ -921,7 +921,7 @@ export function FacultyDashboardClient({
         const drafts: Record<number, number> = {};
         res.paper.exam.questions.forEach((q: any) => {
           if (q.question_type === "Essay" && q.answer_id) {
-            drafts[q.answer_id] = q.points_awarded !== null ? q.points_awarded : (q.points || 10);
+            drafts[q.answer_id] = q.points_awarded !== null ? q.points_awarded : (q.caseViolation ? 0 : (q.points || 10));
           }
         });
         setEssayPointsDraft(drafts);
@@ -6474,6 +6474,17 @@ export function FacultyDashboardClient({
                                               </span>
                                             )}
                                           </div>
+                                          {q.caseRule && q.caseRule !== "NONE" && (
+                                            <div className={`text-[11px] font-bold px-2.5 py-1.5 rounded-lg border ${
+                                              q.caseViolation
+                                                ? "bg-rose-50 border-rose-200 text-rose-800"
+                                                : "bg-emerald-50 border-emerald-200 text-emerald-800"
+                                            }`}>
+                                              {q.caseViolation
+                                                ? q.caseExplanation || "Violated required letter case (0 points awarded)."
+                                                : `Letter-case requirement satisfied (${q.caseRule === "UPPERCASE" ? "UPPERCASE" : q.caseRule === "LOWERCASE" ? "lowercase" : "First Letter Uppercase"}).`}
+                                            </div>
+                                          )}
                                         </div>
                                       )}
 
@@ -6579,6 +6590,23 @@ export function FacultyDashboardClient({
                                               )}
                                             </div>
                                           </div>
+
+                                          {q.caseRule && q.caseRule !== "NONE" && (
+                                            <div className={`p-2.5 rounded-xl border text-xs ${
+                                              q.caseViolation
+                                                ? "bg-rose-50 border-rose-200 text-rose-900"
+                                                : "bg-emerald-50 border-emerald-200 text-emerald-900"
+                                            }`}>
+                                              <div className="font-black text-[11px] uppercase tracking-wider mb-0.5">
+                                                Letter-Case Requirement ({q.caseRule === "UPPERCASE" ? "UPPERCASE" : q.caseRule === "LOWERCASE" ? "lowercase" : "First Letter Uppercase"})
+                                              </div>
+                                              <p className="font-semibold leading-relaxed">
+                                                {q.caseViolation
+                                                  ? q.caseExplanation || "This essay answer violated the required letter case. Zero (0) points are enforced."
+                                                  : "Capitalization requirement satisfied. Evaluate the content against your essay grading criteria."}
+                                              </p>
+                                            </div>
+                                          )}
 
                                           {/* Interactive Grading Panel */}
                                           <div className="p-3 bg-amber-50/80 border border-amber-200/90 rounded-xl flex flex-wrap items-center justify-between gap-3 print:hidden">
@@ -6953,6 +6981,23 @@ export function FacultyDashboardClient({
                                 )}
                               </div>
                             </div>
+
+                            {q.caseRule && q.caseRule !== "NONE" && (
+                              <div className={`p-3 rounded-xl border text-xs ${
+                                q.caseViolation
+                                  ? "bg-rose-50 border-rose-200 text-rose-900"
+                                  : "bg-emerald-50 border-emerald-200 text-emerald-900"
+                              }`}>
+                                <div className="font-black text-[11px] uppercase tracking-wider mb-0.5">
+                                  Letter-Case Requirement ({q.caseRule === "UPPERCASE" ? "UPPERCASE" : q.caseRule === "LOWERCASE" ? "lowercase" : "First Letter Uppercase"})
+                                </div>
+                                <p className="font-semibold leading-relaxed">
+                                  {q.caseViolation
+                                    ? q.caseExplanation || "This essay answer violated the required letter case. Zero (0) points are enforced."
+                                    : "Capitalization requirement satisfied. Evaluate the content against your essay grading criteria."}
+                                </p>
+                              </div>
+                            )}
 
                             {/* Interactive Grading Panel */}
                             <div className="p-3.5 bg-amber-50/90 border border-amber-200 rounded-xl flex flex-wrap items-center justify-between gap-3">

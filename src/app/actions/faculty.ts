@@ -1448,6 +1448,7 @@ export async function getStudentExamPaper(studentExamId: number) {
           include: {
             course: true,
             questionBank: true,
+            tableOfSpecifications: true,
             examTargets: {
               include: {
                 program: true,
@@ -1505,6 +1506,21 @@ export async function getStudentExamPaper(studentExamId: number) {
     }
     const finalTotalScore = Math.max(0, rawItemsScore - penaltyPoints);
 
+    const { resolveQuestionCaseRule, evaluateAnswerCaseCompliance, gradeIdentificationQuestion } = await import("@/lib/caseSensitivity");
+    let testTypeInstructions: Record<string, string> = {};
+    let testTypeCaseRules: Record<string, string> = {};
+    if (studentExam.exam?.tos_file_path && studentExam.exam.tos_file_path.trim().startsWith("{")) {
+      try {
+        const parsedTos = JSON.parse(studentExam.exam.tos_file_path);
+        if (parsedTos && typeof parsedTos.testTypeInstructions === "object") {
+          testTypeInstructions = parsedTos.testTypeInstructions;
+        }
+        if (parsedTos && typeof parsedTos.testTypeCaseRules === "object") {
+          testTypeCaseRules = parsedTos.testTypeCaseRules;
+        }
+      } catch {}
+    }
+
     return {
       success: true,
       paper: {
@@ -1542,6 +1558,43 @@ export async function getStudentExamPaper(studentExamId: number) {
           course: studentExam.exam.course,
           questions: questions.map((q) => {
             const ans = answers.find((a) => a.question_id === q.question_id);
+            const submittedResp = ans?.submitted_response || "";
+
+            let parsedQText: any = {};
+            if (q.question_text && q.question_text.trim().startsWith("{")) {
+              try {
+                parsedQText = JSON.parse(q.question_text);
+              } catch {}
+            }
+
+            const caseRule = resolveQuestionCaseRule({
+              questionType: q.question_type,
+              explicitQuestionRule: parsedQText.case_rule,
+              explicitTestTypeRule: testTypeCaseRules[q.question_type] || parsedQText.type_case_rule,
+              questionInstructionText: parsedQText.type_instruction ?? parsedQText.instruction ?? parsedQText.instructions,
+              questionPromptText: typeof parsedQText.text === "string" ? parsedQText.text : q.question_text,
+              testTypeInstructionText: testTypeInstructions[q.question_type],
+            });
+
+            let caseViolation = false;
+            let caseExplanation: string | null = null;
+            if (q.question_type === "Identification" && caseRule !== "NONE" && submittedResp.trim() !== "") {
+              const idEval = gradeIdentificationQuestion({
+                submittedResponse: submittedResp,
+                correctAnswer: q.correct_answer || "",
+                points: q.points,
+                caseRule,
+              });
+              caseViolation = idEval.caseViolation;
+              caseExplanation = idEval.caseExplanation;
+            } else if (q.question_type === "Essay" && caseRule !== "NONE" && submittedResp.trim() !== "") {
+              const compliance = evaluateAnswerCaseCompliance(submittedResp, caseRule);
+              if (!compliance.compliant) {
+                caseViolation = true;
+                caseExplanation = compliance.explanation;
+              }
+            }
+
             return {
               question_id: q.question_id,
               question_text: q.question_text,
@@ -1550,9 +1603,12 @@ export async function getStudentExamPaper(studentExamId: number) {
               points: q.points,
               topic: q.topic,
               answer_id: ans?.answer_id || null,
-              submitted_response: ans?.submitted_response || "",
+              submitted_response: submittedResp,
               is_correct: ans?.is_correct ?? null,
               points_awarded: ans?.points_awarded ?? null,
+              caseRule,
+              caseViolation,
+              caseExplanation,
             };
           }),
         },
