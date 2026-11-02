@@ -930,15 +930,47 @@ export function TakeExamClient({
   // --- Helper parsing of questions ---
   const currentQuestion = examQuestions[currentQuestionIdx];
 
+  const [enlargedImage, setEnlargedImage] = useState<{ url: string; questionNum: number } | null>(null);
+  const [imageZoom, setImageZoom] = useState<number>(1);
+
+  // Close any open image viewer when switching between questions so images never carry over
+  useEffect(() => {
+    setEnlargedImage(null);
+    setImageZoom(1);
+  }, [currentQuestionIdx]);
+
+  // Preload all attached question images into browser memory so they remain accessible throughout the exam
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    examQuestions.forEach((q) => {
+      if (q.question_text && q.question_text.trim().startsWith("{")) {
+        try {
+          const parsed = JSON.parse(q.question_text);
+          const url = parsed.image_url || parsed.imageUrl || parsed.image;
+          if (typeof url === "string" && url.trim() !== "") {
+            const img = new window.Image();
+            img.src = url.trim();
+          }
+        } catch {}
+      }
+    });
+  }, [examQuestions]);
+
   const parseQuestionText = (q: Question) => {
     if (q.question_type === "Multiple_Choice" || q.question_type === "Matching_Type" || q.question_type === "Fill_In_The_Blanks" || q.question_type === "Essay" || q.question_text.trim().startsWith("{")) {
       try {
-        return JSON.parse(q.question_text);
+        const parsed = JSON.parse(q.question_text);
+        const resolvedImg = parsed.image_url || parsed.imageUrl || parsed.image || "";
+        return {
+          ...parsed,
+          text: typeof parsed.text === "string" ? parsed.text : (parsed.text ?? q.question_text),
+          image_url: typeof resolvedImg === "string" ? resolvedImg.trim() : "",
+        };
       } catch {
-        return { text: q.question_text, options: [], premises: [], blanks: [] };
+        return { text: q.question_text, options: [], premises: [], blanks: [], image_url: "" };
       }
     }
-    return { text: q.question_text, options: [], premises: [], blanks: [] };
+    return { text: q.question_text, options: [], premises: [], blanks: [], image_url: "" };
   };
 
   const currentParsed = currentQuestion ? parseQuestionText(currentQuestion) : null;
@@ -1774,14 +1806,46 @@ export function TakeExamClient({
                 />
               </div>
 
-              {/* Attached Image Asset */}
+              {/* Attached Image Asset for this specific question */}
               {currentParsed?.image_url && (
-                <div className="my-4 bg-slate-900/20 border border-slate-800/80 rounded-2xl p-2 max-w-xl overflow-hidden">
-                  <img 
-                    src={currentParsed.image_url} 
-                    alt="Question asset" 
-                    className="w-full h-auto max-h-[300px] object-contain rounded-xl"
-                  />
+                <div
+                  key={`question-image-box-${currentQuestion.question_id}`}
+                  className="my-4 bg-slate-900/50 border border-slate-800/90 rounded-2xl p-3 sm:p-4 space-y-2.5 overflow-hidden"
+                >
+                  <div className="relative group flex items-center justify-center bg-slate-950/60 rounded-xl p-2 border border-slate-800/60 overflow-hidden">
+                    <img
+                      key={`question-image-${currentQuestion.question_id}`}
+                      src={currentParsed.image_url}
+                      alt={`Attached figure for Question ${currentQuestionIdx + 1}`}
+                      onClick={() => {
+                        setImageZoom(1);
+                        setEnlargedImage({
+                          url: currentParsed.image_url,
+                          questionNum: currentQuestionIdx + 1,
+                        });
+                      }}
+                      className="w-auto max-w-full h-auto max-h-[420px] object-contain rounded-lg mx-auto block cursor-zoom-in transition-transform duration-200"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between gap-2 px-1">
+                    <span className="text-[11px] font-semibold text-slate-400">
+                      Attached Figure for Question {currentQuestionIdx + 1}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setImageZoom(1);
+                        setEnlargedImage({
+                          url: currentParsed.image_url,
+                          questionNum: currentQuestionIdx + 1,
+                        });
+                      }}
+                      className="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-400 hover:text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 px-3 py-1 rounded-lg transition-colors cursor-pointer"
+                    >
+                      <Maximize2 className="w-3.5 h-3.5" />
+                      <span>Click to Enlarge Image</span>
+                    </button>
+                  </div>
                 </div>
               )}
 
@@ -2201,6 +2265,90 @@ export function TakeExamClient({
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* 4. ENLARGED QUESTION IMAGE VIEWER MODAL (IN-PORTAL LIGHTBOX) */}
+      {enlargedImage && (
+        <div
+          onClick={() => {
+            setEnlargedImage(null);
+            setImageZoom(1);
+          }}
+          className="fixed inset-0 bg-black/85 flex flex-col items-center justify-between p-4 sm:p-6 z-50 animate-in fade-in duration-150 backdrop-blur-sm"
+        >
+          {/* Top bar with Question label and Zoom / Close controls */}
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-5xl bg-[#1E293B] border border-slate-700/80 rounded-2xl px-4 py-3 flex flex-wrap items-center justify-between gap-3 shadow-xl"
+          >
+            <div className="flex items-center gap-2.5">
+              <span className="bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 text-xs font-black uppercase tracking-wider px-2.5 py-1 rounded-lg">
+                Question {enlargedImage.questionNum} Figure
+              </span>
+              <span className="text-xs text-slate-400 font-medium hidden sm:inline">
+                Use zoom controls below to inspect image details clearly
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setImageZoom((z) => Math.max(0.5, Number((z - 0.25).toFixed(2))))}
+                className="bg-slate-800 hover:bg-slate-700 text-slate-200 font-black text-xs px-3 py-1.5 rounded-lg border border-slate-700 cursor-pointer transition-colors"
+                title="Zoom Out"
+              >
+                −
+              </button>
+              <button
+                type="button"
+                onClick={() => setImageZoom(1)}
+                className="bg-slate-900 hover:bg-slate-800 text-slate-300 font-mono font-bold text-xs px-2.5 py-1.5 rounded-lg border border-slate-700 cursor-pointer transition-colors"
+                title="Reset Zoom"
+              >
+                {Math.round(imageZoom * 100)}%
+              </button>
+              <button
+                type="button"
+                onClick={() => setImageZoom((z) => Math.min(3, Number((z + 0.25).toFixed(2))))}
+                className="bg-slate-800 hover:bg-slate-700 text-slate-200 font-black text-xs px-3 py-1.5 rounded-lg border border-slate-700 cursor-pointer transition-colors"
+                title="Zoom In"
+              >
+                +
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setEnlargedImage(null);
+                  setImageZoom(1);
+                }}
+                className="ml-2 inline-flex items-center gap-1.5 bg-rose-600 hover:bg-rose-700 text-white font-black text-xs px-3.5 py-1.5 rounded-lg cursor-pointer transition-colors"
+              >
+                <X className="w-4 h-4" />
+                <span>Close</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Scrollable / Zoomable Image Viewport */}
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="flex-1 w-full max-w-5xl my-3 bg-slate-950/80 border border-slate-800 rounded-2xl overflow-auto flex items-center justify-center p-4 shadow-2xl"
+          >
+            <img
+              src={enlargedImage.url}
+              alt={`Enlarged figure for Question ${enlargedImage.questionNum}`}
+              style={{
+                transform: `scale(${imageZoom})`,
+                transformOrigin: "center center",
+              }}
+              className="max-w-full max-h-[78vh] w-auto h-auto object-contain rounded-lg transition-transform duration-150"
+            />
+          </div>
+
+          <p className="text-[11px] text-slate-400 font-medium">
+            Click outside the image or press Close to return to Question {enlargedImage.questionNum}
+          </p>
         </div>
       )}
 

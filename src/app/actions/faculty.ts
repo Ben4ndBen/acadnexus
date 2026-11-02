@@ -1616,14 +1616,33 @@ export async function uploadQuestionAttachment(facultyId: number, formData: Form
 
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
-    const uploadDir = join(process.cwd(), "public", "uploads", "questions");
-    await mkdir(uploadDir, { recursive: true });
-    const uniqueFilename = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, "_")}`;
-    const absolutePath = join(uploadDir, uniqueFilename);
-    await writeFile(absolutePath, buffer);
 
-    const fileUrl = `/uploads/questions/${uniqueFilename}`;
-    return { success: true, url: fileUrl };
+    let fileUrl = "";
+    try {
+      const uploadDir = join(process.cwd(), "public", "uploads", "questions");
+      await mkdir(uploadDir, { recursive: true });
+      const uniqueFilename = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, "_")}`;
+      const absolutePath = join(uploadDir, uniqueFilename);
+      await writeFile(absolutePath, buffer);
+      fileUrl = `/uploads/questions/${uniqueFilename}`;
+    } catch {
+      // Ignore read-only filesystem errors when running in serverless environments; dataUrl is used
+    }
+
+    const ext = file.name.split(".").pop()?.toLowerCase() || "png";
+    const mimeType =
+      file.type && file.type.startsWith("image/")
+        ? file.type
+        : ext === "jpg" || ext === "jpeg"
+        ? "image/jpeg"
+        : ext === "webp"
+        ? "image/webp"
+        : ext === "gif"
+        ? "image/gif"
+        : "image/png";
+    const dataUrl = `data:${mimeType};base64,${buffer.toString("base64")}`;
+
+    return { success: true, url: dataUrl, filePath: fileUrl || undefined };
   } catch (err: any) {
     console.error("Error in uploadQuestionAttachment:", err);
     return { error: err.message || "Failed to upload file." };

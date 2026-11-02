@@ -3,10 +3,11 @@
 import { useState, useEffect } from "react";
 import { 
   CheckCircle2, Clock, ShieldAlert, Award, AlertCircle, 
-  Printer, BookOpen, Sparkles, ArrowLeft, Download, RefreshCw
+  Printer, BookOpen, Sparkles, ArrowLeft, Download, RefreshCw, Maximize2, X
 } from "lucide-react";
 import Link from "next/link";
 import { StudentExamResultData, submitStudentExam } from "@/app/actions/student";
+import { Latex } from "@/app/components/Latex";
 
 interface StudentExamResultContentProps {
   data: StudentExamResultData;
@@ -22,6 +23,23 @@ export function StudentExamResultContent({
   const [unsyncedAnswers, setUnsyncedAnswers] = useState<{ question_id: number; submitted_response: string }[]>([]);
   const [isSyncingBackup, setIsSyncingBackup] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  const [enlargedImage, setEnlargedImage] = useState<{ url: string; questionNum: number } | null>(null);
+
+  const parseQuestionContent = (rawText: string) => {
+    if (!rawText) return { text: "", image_url: "" };
+    const trimmed = rawText.trim();
+    if (trimmed.startsWith("{")) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        const img = parsed.image_url || parsed.imageUrl || parsed.image || "";
+        return {
+          text: typeof parsed.text === "string" ? parsed.text : (parsed.text ?? rawText),
+          image_url: typeof img === "string" ? img.trim() : "",
+        };
+      } catch {}
+    }
+    return { text: rawText, image_url: "" };
+  };
 
   useEffect(() => {
     try {
@@ -412,6 +430,7 @@ export function StudentExamResultContent({
             const isInstructorGraded = ans.isInstructorGraded;
             const isCorrect = ans.isCorrect === true;
             const isPartial = ans.pointsAwarded !== null && ans.pointsAwarded > 0 && ans.pointsAwarded < ans.pointsPossible;
+            const parsedQ = parseQuestionContent(ans.questionText);
 
             return (
               <div
@@ -487,10 +506,31 @@ export function StudentExamResultContent({
                   </div>
                 </div>
 
-                {/* Question Text */}
-                <div className="text-xs sm:text-sm font-semibold text-slate-800 leading-relaxed">
-                  {ans.questionText}
+                {/* Question Text & Attached Image */}
+                <div className="text-xs sm:text-sm font-semibold text-slate-800 leading-relaxed whitespace-pre-wrap">
+                  <Latex text={parsedQ.text} />
                 </div>
+
+                {parsedQ.image_url && (
+                  <div className="my-2 bg-slate-50 border border-slate-200 rounded-2xl p-3 space-y-2 max-w-xl">
+                    <img
+                      src={parsedQ.image_url}
+                      alt={`Question ${ans.questionNumber} figure`}
+                      onClick={() => setEnlargedImage({ url: parsedQ.image_url, questionNum: ans.questionNumber })}
+                      className="w-auto max-w-full h-auto max-h-72 object-contain rounded-lg mx-auto block cursor-zoom-in"
+                    />
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => setEnlargedImage({ url: parsedQ.image_url, questionNum: ans.questionNumber })}
+                        className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-600 hover:text-slate-900 bg-white border border-slate-200 px-2.5 py-1 rounded-lg shadow-2xs cursor-pointer"
+                      >
+                        <Maximize2 className="w-3 h-3" />
+                        <span>Enlarge Image</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 {/* Student Response */}
                 <div className="bg-slate-50 border border-slate-100 rounded-xl p-3 text-xs space-y-1">
@@ -540,6 +580,40 @@ export function StudentExamResultContent({
           </Link>
         )}
       </div>
+
+      {/* Enlarged Question Image Lightbox */}
+      {enlargedImage && (
+        <div
+          onClick={() => setEnlargedImage(null)}
+          className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 sm:p-6 z-50 backdrop-blur-xs"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white border border-slate-200 rounded-3xl p-4 sm:p-6 max-w-4xl w-full space-y-4 shadow-2xl"
+          >
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <span className="text-xs sm:text-sm font-extrabold text-slate-900">
+                Question {enlargedImage.questionNum} — Attached Image
+              </span>
+              <button
+                type="button"
+                onClick={() => setEnlargedImage(null)}
+                className="inline-flex items-center gap-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs px-3 py-1.5 rounded-xl cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+                <span>Close</span>
+              </button>
+            </div>
+            <div className="bg-slate-50 rounded-2xl p-4 flex items-center justify-center overflow-auto max-h-[75vh]">
+              <img
+                src={enlargedImage.url}
+                alt={`Enlarged Question ${enlargedImage.questionNum} figure`}
+                className="max-w-full max-h-[70vh] w-auto h-auto object-contain rounded-lg"
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

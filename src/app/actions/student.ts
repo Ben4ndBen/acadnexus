@@ -171,6 +171,57 @@ function extractTestTypeMetadata(
   return { testTypeInstructions, testTypeTitles };
 }
 
+/**
+ * Ensures any local `/uploads/...` question image paths are embedded as persistent data URIs
+ * so attached images remain accessible throughout the student's examination session (even offline).
+ */
+async function resolveQuestionImageUrls<T extends { question_text: string }>(questions: T[]): Promise<T[]> {
+  try {
+    const { readFile } = await import("fs/promises");
+    const { join } = await import("path");
+
+    return await Promise.all(
+      questions.map(async (q) => {
+        if (!q.question_text || typeof q.question_text !== "string" || !q.question_text.trim().startsWith("{")) {
+          return q;
+        }
+        try {
+          const parsed = JSON.parse(q.question_text);
+          const rawUrl = parsed.image_url || parsed.imageUrl || parsed.image || "";
+          if (typeof rawUrl === "string" && rawUrl.startsWith("/uploads/")) {
+            const relPath = rawUrl.replace(/^\/+/, "");
+            const absPath = join(process.cwd(), "public", relPath);
+            const buf = await readFile(absPath);
+            const ext = rawUrl.split(".").pop()?.toLowerCase() || "png";
+            const mime =
+              ext === "jpg" || ext === "jpeg"
+                ? "image/jpeg"
+                : ext === "webp"
+                ? "image/webp"
+                : ext === "gif"
+                ? "image/gif"
+                : "image/png";
+            parsed.image_url = `data:${mime};base64,${buf.toString("base64")}`;
+            return {
+              ...q,
+              question_text: JSON.stringify(parsed),
+            };
+          } else if (typeof rawUrl === "string" && rawUrl.trim() !== "" && !parsed.image_url) {
+            parsed.image_url = rawUrl.trim();
+            return {
+              ...q,
+              question_text: JSON.stringify(parsed),
+            };
+          }
+        } catch {}
+        return q;
+      })
+    );
+  } catch {
+    return questions;
+  }
+}
+
 export async function startStudentExam(examId: number, studentId: number) {
   try {
     // 0. Authenticate caller and verify ownership
@@ -427,11 +478,12 @@ export async function startStudentExam(examId: number, studentId: number) {
     });
 
     // Order questions by test type and randomize within each test type only when randomize_items is enabled
-    const questions = orderQuestionsForStudentExam(
+    const orderedQuestions = orderQuestionsForStudentExam(
       dbQuestions,
       Boolean(exam.randomize_items),
       studentExam.student_exam_id
     );
+    const questions = await resolveQuestionImageUrls(orderedQuestions);
 
     const { testTypeInstructions, testTypeTitles } = extractTestTypeMetadata(exam, dbQuestions);
 
@@ -1366,11 +1418,12 @@ export async function getStudentExamResultDetails({
     }
 
     const exam = studentExam.exam;
-    const questions = orderQuestionsForStudentExam(
+    const orderedQuestions = orderQuestionsForStudentExam(
       exam.questionBank || [],
       Boolean(exam.randomize_items),
       studentExam.student_exam_id
     );
+    const questions = await resolveQuestionImageUrls(orderedQuestions);
     const maxPoints = questions.reduce((sum, q) => sum + (q.points || 0), 0);
 
     const visibility = parseExamResultSettings({

@@ -4667,11 +4667,12 @@ export function ExamBuilderWizard({
                                   <div className="flex flex-wrap items-center gap-3">
                                     <input
                                       type="file"
-                                      accept="image/png, image/jpeg, image/jpg, image/webp"
+                                      accept="image/png, image/jpeg, image/jpg, image/webp, image/gif"
                                       id={`question-img-${globalIdx}`}
                                       className="hidden"
                                       onChange={async (e) => {
                                         const file = e.target.files?.[0];
+                                        e.target.value = "";
                                         if (!file) return;
                                         setUploadingImage(true);
                                         const formData = new FormData();
@@ -4679,9 +4680,13 @@ export function ExamBuilderWizard({
                                         try {
                                           const res = await uploadQuestionAttachment(facultyId, formData);
                                           if (res.success && res.url) {
-                                            const updated = [...questions];
-                                            updated[globalIdx].image_url = res.url;
+                                            const updated = questions.map((item, idx) =>
+                                              idx === globalIdx ? { ...item, image_url: res.url } : item
+                                            );
                                             setQuestions(updated);
+                                            autoSaveExamData(updated);
+                                          } else if (res.error) {
+                                            setSaveStatus({ type: "error", message: res.error });
                                           }
                                         } catch (err) {
                                           console.error(err);
@@ -4692,19 +4697,25 @@ export function ExamBuilderWizard({
                                     />
                                     <button
                                       type="button"
+                                      disabled={uploadingImage}
                                       onClick={() => document.getElementById(`question-img-${globalIdx}`)?.click()}
-                                      className="inline-flex items-center gap-2 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 hover:text-slate-900 text-xs font-bold px-3 py-1.5 rounded-xl shadow-2xs cursor-pointer transition-colors"
+                                      className="inline-flex items-center gap-2 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 hover:text-slate-900 text-xs font-bold px-3 py-1.5 rounded-xl shadow-2xs cursor-pointer transition-colors disabled:opacity-50"
                                     >
                                       <Upload className="w-3.5 h-3.5 text-emerald-600" />
-                                      <span>Upload PNG or Photo</span>
+                                      <span>{q.image_url ? "Replace Image" : "Upload PNG or Photo"}</span>
                                     </button>
                                     {q.image_url && (
                                       <button
                                         type="button"
                                         onClick={() => {
-                                          const updated = [...questions];
-                                          delete updated[globalIdx].image_url;
+                                          const updated = questions.map((item, idx) => {
+                                            if (idx !== globalIdx) return item;
+                                            const copy = { ...item };
+                                            delete copy.image_url;
+                                            return copy;
+                                          });
                                           setQuestions(updated);
+                                          autoSaveExamData(updated);
                                         }}
                                         className="text-rose-600 text-xs font-bold hover:underline cursor-pointer"
                                       >
@@ -4714,8 +4725,13 @@ export function ExamBuilderWizard({
                                   </div>
 
                                   {q.image_url && (
-                                    <div className="w-full max-w-xs rounded-xl border border-slate-200 overflow-hidden bg-white p-2">
-                                      <img src={q.image_url} alt="Question Asset" className="w-full h-auto max-h-40 object-contain rounded-lg" />
+                                    <div className="w-full max-w-md rounded-2xl border border-slate-200 overflow-hidden bg-white p-3 shadow-2xs">
+                                      <img
+                                        key={`builder-img-${q.question_id || globalIdx}`}
+                                        src={q.image_url}
+                                        alt={`Attached figure for Question ${displayItemNum}`}
+                                        className="w-auto max-w-full h-auto max-h-60 object-contain rounded-lg mx-auto block"
+                                      />
                                     </div>
                                   )}
 
