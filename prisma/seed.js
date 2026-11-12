@@ -18,7 +18,6 @@ async function main() {
   // Hashing default password
   const salt = await bcrypt.genSalt(10);
   const passwordHash = await bcrypt.hash("password123", salt);
-  const studentPasswordHash = await bcrypt.hash("dukay", salt);
 
   // 1. Clear existing database entries in correct topological order
   console.log("Cleaning up existing data...");
@@ -580,6 +579,9 @@ async function main() {
   ];
 
   for (const s of initialStudents) {
+    const sParts = s.inst_id.split("-");
+    const sPassword = (sParts.length >= 2 && sParts[1]) ? sParts[1].trim() : s.inst_id;
+    const studentPasswordHash = await bcrypt.hash(sPassword, salt);
     const sUser = await prisma.user.create({
       data: {
         institutional_id: s.inst_id,

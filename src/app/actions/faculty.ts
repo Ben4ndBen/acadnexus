@@ -3254,9 +3254,11 @@ export async function enrollStudentInCourse(
       }
     } else {
       // 3. User does not exist: Provision new Student user account
-      // Initial default password is set to 'dukay'
+      // Initial default password is set to the 4-digit middle code from ID (e.g. 2025-1234-AB -> 1234)
+      const idParts = formattedId.split("-");
+      const initialStudentPassword = idParts.length >= 2 && idParts[1] ? idParts[1].trim() : formattedId;
       const salt = await bcrypt.genSalt(10);
-      const defaultPasswordHash = await bcrypt.hash("dukay", salt);
+      const defaultPasswordHash = await bcrypt.hash(initialStudentPassword, salt);
 
       // Determine default program if not specified
       let programId = data.programId ? Number(data.programId) : undefined;
