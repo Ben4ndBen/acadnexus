@@ -1016,7 +1016,7 @@ export function ExamBuilderWizard({
   const filteredAndSortedStudents = useMemo(() => {
     return assignedStudents
       .filter(s => {
-        if (studentProgramFilter !== "ALL" && s.program_code !== studentProgramFilter) return false;
+        if (studentProgramFilter !== "ALL" && s.program_code?.toLowerCase() !== studentProgramFilter.toLowerCase()) return false;
         if (hasMajors && studentMajorFilter !== "ALL" && (s.section || "General") !== studentMajorFilter) return false;
         if (studentYearFilter !== "ALL" && String(s.year_level) !== studentYearFilter) return false;
         if (studentSearch.trim()) {
@@ -1084,13 +1084,15 @@ export function ExamBuilderWizard({
     setSaveStatus({ type: "saving", message: "Auto-saving subject selection and updating title..." });
 
     try {
-      const res = await getAssignedStudentsForCourse(newId);
+      const res = await getAssignedStudentsForCourse(newId, facultyId);
       let newStudentIds: number[] = [];
       if (res.success && res.students) {
         setAssignedStudents(res.students);
         newStudentIds = [];
         setSelectedStudentIds([]);
       }
+      setStudentYearFilter("ALL");
+      setStudentSearch("");
 
       // Auto-save updated subject & title configuration to DB immediately
       const configData = new FormData();
@@ -3838,8 +3840,8 @@ export function ExamBuilderWizard({
                   </div>
                 ) : assignedStudents.length === 0 ? (
                   <div className="p-6 text-center bg-amber-50/60 border border-amber-200/80 rounded-2xl space-y-1">
-                    <p className="text-xs font-bold text-amber-800">No class students currently enrolled in this subject.</p>
-                    <p className="text-[11px] text-amber-600">Students added to this class in the Student Class tab will appear here and become eligible for exam assignment.</p>
+                    <p className="text-xs font-bold text-amber-800">No students currently registered in this program.</p>
+                    <p className="text-[11px] text-amber-600">Students registered in this academic program will appear here and become eligible for exam assignment.</p>
                   </div>
                 ) : filteredAndSortedStudents.length === 0 ? (
                   <div className="p-6 text-center bg-slate-50 border border-slate-200 rounded-2xl">

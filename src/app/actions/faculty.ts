@@ -788,58 +788,97 @@ export async function getAssignedStudentsForCourse(courseId: number, facultyId?:
         where: { faculty_id: facultyId, course_id: courseId },
       });
       if (!isCourseAssigned) {
-        return { success: true, students: [] };
+        const user = await db.user.findUnique({
+          where: { user_id: facultyId },
+          include: { chair: true, director: true },
+        });
+        if (!user?.chair && !user?.director) {
+          return { success: true, students: [] };
+        }
       }
     }
 
-    const targetPrograms = await getTargetProgramsForCourseAndFaculty(courseId, facultyId);
+    const course = await db.course.findUnique({
+      where: { course_id: courseId },
+      select: { course_id: true, course_code: true, course_title: true },
+    });
 
-    const whereCondition: any = { course_id: courseId };
-    if (targetPrograms && targetPrograms.length > 0) {
-      whereCondition.student = {
-        program: {
-          program_code: { in: targetPrograms },
-        },
-      };
+    let targetPrograms: string[] = [];
+    if (course) {
+      const determined = determineProgramCodeFromCourseOrExam({ course });
+      if (determined) {
+        targetPrograms = [determined];
+      }
     }
 
-    // Fetch strictly students who are enrolled in this class (StudentCourse)
-    const enrollments = await db.studentCourse.findMany({
-      where: whereCondition,
-      include: {
-        student: {
-          include: {
-            user: true,
-            program: true,
-          },
+    if (targetPrograms.length === 0) {
+      targetPrograms = await getTargetProgramsForCourseAndFaculty(courseId, facultyId);
+    }
+
+    const targetCodesSet = new Set<string>();
+    for (const p of targetPrograms) {
+      targetCodesSet.add(p);
+      targetCodesSet.add(p.toUpperCase());
+      targetCodesSet.add(p.toLowerCase());
+      if (p.toUpperCase() === "BSINFOTECH") {
+        targetCodesSet.add("BSInfoTech");
+      }
+      if (p.toUpperCase() === "BSIT") {
+        targetCodesSet.add("BSIT");
+      }
+    }
+    const expandedPrograms = Array.from(targetCodesSet);
+
+    // Build the query to fetch all students belonging to the specific program(s).
+    // Year level is not automated here because the faculty can freely choose/filter year levels (1-4).
+    const orConditions: any[] = [];
+    if (expandedPrograms.length > 0) {
+      orConditions.push({
+        program: {
+          program_code: { in: expandedPrograms },
         },
+      });
+    }
+
+    // Also include any students explicitly enrolled in this course via StudentCourse
+    orConditions.push({
+      studentCourses: {
+        some: { course_id: courseId },
+      },
+    });
+
+    const studentsList = await db.student.findMany({
+      where: orConditions.length > 1 ? { OR: orConditions } : orConditions[0] || {},
+      include: {
+        user: true,
+        program: true,
       },
       orderBy: [
-        { student: { program: { program_code: "asc" } } },
-        { student: { year_level: "asc" } },
-        { student: { last_name: "asc" } },
-        { student: { first_name: "asc" } },
+        { program: { program_code: "asc" } },
+        { year_level: "asc" },
+        { last_name: "asc" },
+        { first_name: "asc" },
       ],
     });
 
     const seenStudentIds = new Set<number>();
     const students: any[] = [];
 
-    for (const e of enrollments) {
-      if (!e.student || !e.student.user) continue;
-      if (seenStudentIds.has(e.student.student_id)) continue;
-      seenStudentIds.add(e.student.student_id);
+    for (const s of studentsList) {
+      if (!s || !s.user) continue;
+      if (seenStudentIds.has(s.student_id)) continue;
+      seenStudentIds.add(s.student_id);
 
       students.push({
-        student_id: e.student.student_id,
-        institutional_id: e.student.user.institutional_id,
-        first_name: e.student.first_name,
-        middle_name: e.student.middle_name,
-        last_name: e.student.last_name,
-        program_code: e.student.program?.program_code || "GEN",
-        program_name: e.student.program?.program_name || "General Program",
-        year_level: e.student.year_level,
-        section: e.student.section,
+        student_id: s.student_id,
+        institutional_id: s.user.institutional_id,
+        first_name: s.first_name,
+        middle_name: s.middle_name,
+        last_name: s.last_name,
+        program_code: s.program?.program_code || "GEN",
+        program_name: s.program?.program_name || "General Program",
+        year_level: s.year_level,
+        section: s.section,
       });
     }
 
