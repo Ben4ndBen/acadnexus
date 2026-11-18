@@ -6,180 +6,396 @@
   <title>AcadNexus — Complete Database ERD (Production Specification)</title>
   <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
   <style>
+    :root {
+      --bg: #0b1120;
+      --card-bg: #1e293b;
+      --card-header: #334155;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --primary: #0284c7;
+      --primary-light: #38bdf8;
+      --primary-dark: #0369a1;
+      --accent: #10b981;
+      --border: #334155;
+      --code-bg: #0f172a;
+    }
+    * { box-sizing: border-box; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       margin: 0;
-      padding: 32px;
-      background: #0f172a;
-      color: #f8fafc;
+      padding: 24px;
+      background: var(--bg);
+      color: var(--text-main);
+      line-height: 1.5;
     }
     header {
-      background: #1e293b;
+      background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
       padding: 24px 32px;
-      border-radius: 12px;
-      box-shadow: 0 4px 6px -1px rgba(0,0,0,0.3);
+      border-radius: 14px;
       margin-bottom: 24px;
       display: flex;
       justify-content: space-between;
       align-items: center;
-      border-left: 6px solid #38bdf8;
+      border-left: 6px solid var(--primary-light);
+      box-shadow: 0 10px 15px -3px rgba(0,0,0,0.5);
+      border-top: 1px solid rgba(255,255,255,0.05);
     }
-    h1 {
+    .header-info h1 {
       margin: 0 0 6px 0;
       font-size: 24px;
-      color: #38bdf8;
+      color: var(--primary-light);
+      display: flex;
+      align-items: center;
+      gap: 10px;
     }
-    p {
+    .header-info p {
       margin: 0;
-      color: #94a3b8;
+      color: var(--text-muted);
       font-size: 14px;
     }
-    .card {
-      background: #ffffff;
-      border-radius: 12px;
-      padding: 32px;
-      box-shadow: 0 4px 6px -1px rgba(0,0,0,0.3);
-      overflow-x: auto;
+    .badge {
+      display: inline-block;
+      padding: 3px 8px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      border-radius: 6px;
+      background: rgba(56, 189, 248, 0.15);
+      color: var(--primary-light);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+    }
+    .actions {
+      display: flex;
+      gap: 12px;
     }
     .btn {
-      background: #0284c7;
+      background: var(--primary);
       color: #ffffff;
       border: none;
-      padding: 12px 24px;
+      padding: 10px 20px;
       border-radius: 8px;
       font-weight: 600;
-      font-size: 14px;
+      font-size: 13px;
       cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s;
       text-decoration: none;
     }
     .btn:hover {
-      background: #0369a1;
+      background: var(--primary-dark);
+      transform: translateY(-1px);
+    }
+    .btn-secondary {
+      background: #334155;
+      color: #cbd5e1;
+    }
+    .btn-secondary:hover {
+      background: #475569;
+      color: #ffffff;
+    }
+    .tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+    .tab-btn {
+      background: var(--card-bg);
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+      padding: 10px 16px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .tab-btn:hover {
+      background: #2d3748;
+      color: #ffffff;
+    }
+    .tab-btn.active {
+      background: var(--primary);
+      color: #ffffff;
+      border-color: var(--primary);
+      box-shadow: 0 4px 6px -1px rgba(2, 132, 199, 0.4);
+    }
+    .tab-content {
+      display: none;
+    }
+    .tab-content.active {
+      display: block;
+    }
+    .card {
+      background: #ffffff;
+      color: #0f172a;
+      border-radius: 14px;
+      padding: 28px;
+      box-shadow: 0 10px 25px -5px rgba(0,0,0,0.5);
+      overflow-x: auto;
+      margin-bottom: 24px;
+    }
+    .card h2 {
+      margin: 0 0 12px 0;
+      color: #0369a1;
+      font-size: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .card p.desc {
+      margin: 0 0 20px 0;
+      color: #475569;
+      font-size: 14px;
+      border-bottom: 1px solid #e2e8f0;
+      padding-bottom: 12px;
+    }
+    .mermaid {
+      display: flex;
+      justify-content: center;
+      background: #ffffff;
+      padding: 16px 0;
+    }
+    .legend-box {
+      display: flex;
+      gap: 20px;
+      flex-wrap: wrap;
+      background: #f1f5f9;
+      padding: 12px 18px;
+      border-radius: 8px;
+      font-size: 12px;
+      color: #334155;
+      margin-bottom: 20px;
+      border-left: 4px solid var(--primary);
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .legend-tag {
+      font-weight: 700;
+      font-family: monospace;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 11px;
+    }
+    .tag-pk { background: #fee2e2; color: #991b1b; }
+    .tag-fk { background: #dbeafe; color: #1e40af; }
+    .tag-uk { background: #fef3c7; color: #92400e; }
+    
+    /* Data Dictionary Table */
+    .dictionary-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      margin-top: 16px;
+      text-align: left;
+    }
+    .dictionary-table th {
+      background: #0f172a;
+      color: #f8fafc;
+      padding: 10px 14px;
+      font-weight: 600;
+      border: 1px solid #334155;
+    }
+    .dictionary-table td {
+      padding: 9px 14px;
+      border: 1px solid #e2e8f0;
+      color: #1e293b;
+    }
+    .dictionary-table tr:nth-child(even) {
+      background: #f8fafc;
+    }
+    .table-section-title {
+      background: #0284c7 !important;
+      color: #ffffff !important;
+      font-weight: 700;
+      font-size: 14px;
+    }
+    .code-pill {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      background: #f1f5f9;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 12px;
+      color: #0369a1;
+      font-weight: 600;
+    }
+
+    @media print {
+      body { background: #ffffff; color: #000000; padding: 0; }
+      header, .tabs, .actions, .legend-box { display: none !important; }
+      .tab-content { display: block !important; page-break-after: always; }
+      .card { box-shadow: none; border-radius: 0; padding: 0; }
     }
   </style>
 </head>
 <body>
+
   <header>
-    <div>
-      <h1>AcadNexus — Complete Production Entity Relationship Diagram (ERD)</h1>
-      <p>Batanes State College &bull; Unified Relational Model with Explicit Program Chair &amp; Department Chair</p>
+    <div class="header-info">
+      <h1>
+        AcadNexus — Complete Database ERD (Production Specification)
+        <span class="badge">Prisma &bull; PostgreSQL 16</span>
+      </h1>
+      <p>Batanes State College &bull; Academic Examination & Portal System Relational Data Architecture</p>
     </div>
-    <button class="btn" onclick="window.print()">Print / Export PDF</button>
+    <div class="actions">
+      <a href="/flowcharts.html" class="btn btn-secondary">&larr; View Flowcharts</a>
+      <button class="btn" onclick="window.print()">Print / Export PDF</button>
+    </div>
   </header>
 
-  <div class="card">
-    <pre class="mermaid">
+  <div class="tabs">
+    <button class="tab-btn active" onclick="showTab('tab-all')">Complete Unified ERD (All 22 Entities)</button>
+    <button class="tab-btn" onclick="showTab('tab-users')">1. Auth &amp; Polymorphic Roles (TPT)</button>
+    <button class="tab-btn" onclick="showTab('tab-academic')">2. Academic Hierarchy &amp; Rosters</button>
+    <button class="tab-btn" onclick="showTab('tab-exams')">3. Examination Engine &amp; TOS</button>
+    <button class="tab-btn" onclick="showTab('tab-workflows')">4. 3-Tier Approval Workflow</button>
+    <button class="tab-btn" onclick="showTab('tab-testing')">5. Student Testing, Security &amp; Overrides</button>
+    <button class="tab-btn" onclick="showTab('tab-compliance')">6. Governance, Compliance &amp; Audit Logs</button>
+    <button class="tab-btn" onclick="showTab('tab-dictionary')">Data Dictionary &amp; Constraints</button>
+  </div>
+
+  <!-- TAB: ALL ENTITIES -->
+  <div id="tab-all" class="tab-content active">
+    <div class="card">
+      <h2>
+        <span>Comprehensive System Relational Model</span>
+        <span class="badge">22 Tables / Models &bull; PostgreSQL Normalized</span>
+      </h2>
+      <p class="desc">
+        Complete entity relationship diagram for the entire AcadNexus platform. Includes Table-per-Type (TPT) role specialization, academic hierarchy, examination engine, automated anti-cheating monitoring, three-tier signoff workflow, and compliance auditing.
+      </p>
+
+      <div class="legend-box">
+        <div class="legend-item"><span class="legend-tag tag-pk">PK</span> Primary Key</div>
+        <div class="legend-item"><span class="legend-tag tag-fk">FK</span> Foreign Key</div>
+        <div class="legend-item"><span class="legend-tag tag-uk">UK</span> Unique Constraint</div>
+        <div class="legend-item"><code>||--o|</code> 1 to 0..1 (Polymorphic Role / Optional)</div>
+        <div class="legend-item"><code>||--|{</code> 1 to 1..N (Mandatory One-to-Many)</div>
+        <div class="legend-item"><code>||--o{</code> 1 to 0..N (Optional One-to-Many)</div>
+      </div>
+
+      <pre class="mermaid">
 erDiagram
-    %% -----------------------------------------
-    %% 1. USER INHERITANCE (POLYMORPHIC ROLES)
-    %% -----------------------------------------
-    USERS ||--o| STUDENTS : "specializes (1:1)"
-    USERS ||--o| FACULTY : "specializes (1:1)"
-    USERS ||--o| PROGRAM_CHAIRS : "specializes (1:1)"
-    USERS ||--o| DEPARTMENT_CHAIRS : "specializes (1:1)"
-    USERS ||--o| DIRECTORS : "specializes (1:1)"
-    USERS ||--o{ AUDIT_LOGS : "generates audit events (1:N)"
-    USERS ||--o{ NOTIFICATIONS : "receives real-time alerts (1:N)"
+    %% =========================================================
+    %% 1. USER IDENTITY & POLYMORPHIC SPECIALIZATION (TPT)
+    %% =========================================================
+    USERS ||--o| STUDENTS : "specializes to (1:1)"
+    USERS ||--o| FACULTY : "specializes to (1:1)"
+    USERS ||--o| CHAIRS : "specializes to (1:1)"
+    USERS ||--o| DIRECTORS : "specializes to (1:1)"
+    USERS ||--o{ AUDIT_LOGS : "logs actions (1:N)"
+    USERS ||--o{ NOTIFICATIONS : "receives alerts (1:N)"
 
-    %% -----------------------------------------
-    %% 2. ACADEMIC GOVERNANCE & ENROLLMENT
-    %% -----------------------------------------
-    DEPARTMENTS ||--|{ ACADEMIC_PROGRAMS : "offers (1:N)"
-    DEPARTMENTS ||--|{ FACULTY : "employs (1:N)"
-    DEPARTMENTS ||--o| DEPARTMENT_CHAIRS : "overseen by (1:1)"
+    %% =========================================================
+    %% 2. ACADEMIC HIERARCHY & ENROLLMENT ROSTERS
+    %% =========================================================
+    DEPARTMENTS ||--|{ ACADEMIC_PROGRAMS : "houses programs (1:N)"
+    DEPARTMENTS ||--|{ FACULTY : "employs instructors (1:N)"
+    DEPARTMENTS ||--o{ CHAIRS : "department administration (1:N)"
 
-    ACADEMIC_PROGRAMS ||--|{ STUDENTS : "enrolls (1:N)"
-    ACADEMIC_PROGRAMS ||--o| PROGRAM_CHAIRS : "chaired by (1:1)"
-    ACADEMIC_PROGRAMS ||--o{ EXAM_TARGETS : "targets (1:N)"
+    ACADEMIC_PROGRAMS ||--|{ STUDENTS : "enrolls cohorts (1:N)"
+    ACADEMIC_PROGRAMS ||--o| CHAIRS : "chaired by (1:1 UK)"
+    ACADEMIC_PROGRAMS ||--o{ EXAM_TARGETS : "targets program (1:N)"
 
-    STUDENTS ||--|{ STUDENT_COURSES : "enrolled in (1:N)"
-    COURSES ||--|{ STUDENT_COURSES : "student roster (1:N)"
+    STUDENTS ||--|{ STUDENT_COURSES : "student enrollment (1:N)"
+    COURSES ||--|{ STUDENT_COURSES : "course roster (1:N)"
 
-    FACULTY ||--|{ FACULTY_COURSES : "assigned to (1:N)"
-    COURSES ||--|{ FACULTY_COURSES : "faculty teaching load (1:N)"
+    FACULTY ||--|{ FACULTY_COURSES : "assigned teaching load (1:N)"
+    COURSES ||--|{ FACULTY_COURSES : "faculty assignment (1:N)"
 
-    %% -----------------------------------------
-    %% 3. EXAMS, TOS & COMPLIANCE PORTFOLIO
-    %% -----------------------------------------
+    %% =========================================================
+    %% 3. EXAMINATION ENGINE, TOS & QUESTION BANK
+    %% =========================================================
     COURSES ||--|{ EXAMINATIONS : "assesses course (1:N)"
-    FACULTY ||--|{ EXAMINATIONS : "creates (1:N)"
+    FACULTY ||--|{ EXAMINATIONS : "authors examination (1:N)"
     FACULTY ||--o{ FACULTY_PORTFOLIOS : "tracks compliance (1:N)"
 
-    EXAMINATIONS ||--o| TABLE_OF_SPECIFICATIONS : "guided by TOS (1:1)"
+    EXAMINATIONS ||--o| TABLE_OF_SPECIFICATIONS : "guided by TOS (1:1 UK)"
     EXAMINATIONS ||--|{ EXAM_TARGETS : "schedules cohorts (1:N)"
-    EXAMINATIONS ||--|{ QUESTION_BANK : "contains questions (1:N)"
-    COURSES ||--o{ QUESTION_BANK : "question bank pool (1:N)"
-    EXAMINATIONS ||--o| APPROVAL_WORKFLOWS : "routed through (1:1)"
+    EXAMINATIONS ||--o{ QUESTION_BANK : "contains questions (1:N)"
+    COURSES ||--o{ QUESTION_BANK : "course question pool (1:N)"
+    EXAMINATIONS ||--o| APPROVAL_WORKFLOWS : "routed through (1:1 UK)"
 
-    %% -----------------------------------------
-    %% 4. THREE-TIER APPROVAL WORKFLOW
-    %% -----------------------------------------
-    PROGRAM_CHAIRS ||--o{ APPROVAL_WORKFLOWS : "Stage 1: Item Review (1:N)"
-    DEPARTMENT_CHAIRS ||--o{ APPROVAL_WORKFLOWS : "Stage 2: Dept Sign-off (1:N)"
-    DIRECTORS ||--o{ APPROVAL_WORKFLOWS : "Stage 3: DI Clearance (1:N)"
+    %% =========================================================
+    %% 4. THREE-TIER APPROVAL WORKFLOW & SIGNATURES
+    %% =========================================================
+    CHAIRS ||--o{ APPROVAL_WORKFLOWS : "Prog Chair Tier-1 Audit (1:N)"
+    CHAIRS ||--o{ APPROVAL_WORKFLOWS : "Dept Chair Tier-2 Sign-off (1:N)"
+    DIRECTORS ||--o{ APPROVAL_WORKFLOWS : "DI Tier-3 Clearance (1:N)"
 
-    %% -----------------------------------------
-    %% 5. TESTING, OVERRIDES & SCORING
-    %% -----------------------------------------
-    STUDENTS ||--|{ STUDENT_EXAMS : "takes exam session (1:N)"
-    EXAMINATIONS ||--|{ STUDENT_EXAMS : "exam sessions (1:N)"
+    %% =========================================================
+    %% 5. STUDENT TESTING SESSIONS, OVERRIDES & SCORING
+    %% =========================================================
+    STUDENTS ||--o{ STUDENT_EXAMS : "takes exam session (1:N)"
+    EXAMINATIONS ||--o{ STUDENT_EXAMS : "student sessions (1:N)"
 
-    STUDENTS ||--o{ STUDENT_OVERRIDES : "receives override (1:N)"
+    STUDENTS ||--o{ STUDENT_OVERRIDES : "receives accommodation (1:N)"
     EXAMINATIONS ||--o{ STUDENT_OVERRIDES : "overridden for (1:N)"
 
-    STUDENT_EXAMS ||--|{ STUDENT_ANSWERS : "records answers (1:N)"
+    STUDENT_EXAMS ||--|{ STUDENT_ANSWERS : "records item answers (1:N)"
     QUESTION_BANK ||--|{ STUDENT_ANSWERS : "grades against (1:N)"
 
-    %% -----------------------------------------
-    %% FIELD ATTRIBUTES & KEYS
-    %% -----------------------------------------
+    %% =========================================================
+    %% ENTITY SPECIFICATIONS & COLUMN SCHEMAS
+    %% =========================================================
     USERS {
         int user_id PK
         string institutional_id UK "Unique Student/Faculty ID"
+        string username UK "Deterministic faculty username"
         string password_hash
-        enum role "Student, Faculty, ProgramChair, Chair, Director"
+        enum role "Student, Faculty, Chair, ProgramChair, Director"
         boolean is_active
-        string username UK
+        string supabase_uid UK "Supabase Auth UID mapping"
+        boolean require_password_update "Default false"
+        text signature "Base64 or digital signature URL"
     }
 
     STUDENTS {
         int student_id PK,FK "FK to USERS.user_id"
         string first_name
+        string middle_name "Nullable"
         string last_name
         int program_id FK "FK to ACADEMIC_PROGRAMS"
-        int year_level
-        string section
+        int year_level "1 to 4"
+        string section "e.g. BSIT 3-A"
     }
 
     FACULTY {
         int faculty_id PK,FK "FK to USERS.user_id"
         string first_name
+        string middle_name "Nullable"
         string last_name
-        string institutional_email
+        string institutional_email "Nullable"
+        string profile_image "Nullable URL"
         int department_id FK "FK to DEPARTMENTS"
+        boolean has_seen_course_assignment "Default false"
     }
 
-    PROGRAM_CHAIRS {
-        int prog_chair_id PK,FK "FK to USERS.user_id"
-        int program_id FK "FK to ACADEMIC_PROGRAMS (1:1)"
-        boolean is_program_chair "true"
-    }
-
-    DEPARTMENT_CHAIRS {
-        int dept_chair_id PK,FK "FK to USERS.user_id"
-        int department_id FK "FK to DEPARTMENTS (1:1)"
-        boolean is_program_chair "false"
+    CHAIRS {
+        int chair_id PK,FK "FK to USERS.user_id"
+        int department_id FK "FK to DEPARTMENTS, Nullable"
+        int program_id UK,FK "FK to ACADEMIC_PROGRAMS, Nullable"
+        boolean is_program_chair "True if Program Chair"
     }
 
     DIRECTORS {
         int director_id PK,FK "FK to USERS.user_id"
-        string first_name
-        string last_name
+        string first_name "Nullable"
+        string middle_name "Nullable"
+        string last_name "Nullable"
         string title "Director for Instruction"
     }
 
     DEPARTMENTS {
         int department_id PK
-        string department_name "e.g. Computing & Industrial Technology"
+        string department_name "e.g. Computing & Technology"
     }
 
     ACADEMIC_PROGRAMS {
@@ -193,46 +409,58 @@ erDiagram
         int course_id PK
         string course_code UK "e.g. IT 101, ENT 403"
         string course_title
-        string syllabus_file_path
+        string syllabus_file_path "Nullable"
     }
 
     STUDENT_COURSES {
-        int student_id PK,FK "FK to STUDENTS"
-        int course_id PK,FK "FK to COURSES"
+        int student_id PK,FK "FK to STUDENTS.student_id"
+        int course_id PK,FK "FK to COURSES.course_id"
         timestamp enrolled_at
     }
 
     FACULTY_COURSES {
-        int faculty_id PK,FK "FK to FACULTY"
-        int course_id PK,FK "FK to COURSES"
+        int faculty_id PK,FK "FK to FACULTY.faculty_id"
+        int course_id PK,FK "FK to COURSES.course_id"
         timestamp assigned_at
     }
 
     EXAMINATIONS {
         int exam_id PK
-        string title "e.g. Midterm Examination in ENT 403"
+        string title "e.g. Midterm Examination in IT 101"
         int course_id FK "FK to COURSES"
         int faculty_id FK "FK to FACULTY"
-        int time_limit_minutes
-        enum current_status "Draft, Pending_PC, Pending_Chair, Approved, Returned"
+        text tos_file_path "Path/reference to TOS"
+        int time_limit_minutes "Strict timer in minutes"
+        boolean randomize_items "Default true"
+        enum current_status "Draft, Pending_Prog_Chair, Pending_Chair, Pending_DI, Approved, Returned"
+        int time_penalty_seconds "Default 60"
+        int score_penalty_points "Default 2"
+        string academic_year "e.g. 2025-2026"
         string term "Prelim, Midterm, Semi-Final, Final"
-        date exam_date
+        string semester "1st or 2nd Semester"
+        date exam_date "Scheduled date"
+        string document_reference "Document code"
+        intArray selected_student_ids "Selective roster targeting"
+        boolean is_archived "Default false"
     }
 
     TABLE_OF_SPECIFICATIONS {
         int tos_id PK
-        int exam_id UK,FK "FK to EXAMINATIONS (1:1)"
-        int target_total_items
-        text topic_plans_json "Topic hours, percentages, Bloom taxonomy"
-        text learning_outcomes_json
+        int exam_id UK,FK "FK to EXAMINATIONS.exam_id (1:1)"
+        int target_total_items "Default 50"
+        text topic_plans_json "Bloom taxonomy, hours, weights"
+        text learning_outcomes_json "Nullable"
+        text tos_file_url "Nullable"
+        timestamp created_at
+        timestamp updated_at
     }
 
     EXAM_TARGETS {
         int target_id PK
         int exam_id FK "FK to EXAMINATIONS"
         int program_id FK "FK to ACADEMIC_PROGRAMS"
-        int year_level
-        string section
+        int year_level "Target year level"
+        string section "Target section"
         date scheduled_date
         time start_time
         time end_time
@@ -240,25 +468,35 @@ erDiagram
 
     QUESTION_BANK {
         int question_id PK
-        int exam_id FK "FK to EXAMINATIONS"
+        int exam_id FK "FK to EXAMINATIONS, Nullable"
+        int course_id FK "FK to COURSES, Nullable"
         text question_text
-        enum question_type "MCQ, True/False, ID, Matching, Essay, Blanks"
-        text correct_answer
-        int points
-        int course_id FK "FK to COURSES"
+        enum question_type "Multiple_Choice, True_False, ID, Matching, Essay, Blanks"
+        text correct_answer "Key or option structure"
+        int points "Points awarded"
+        string topic "Nullable"
+        int year_level "Nullable"
     }
 
     APPROVAL_WORKFLOWS {
         int workflow_id PK
-        int exam_id UK,FK "FK to EXAMINATIONS (1:1)"
-        int reviewed_by_prog_chair_id FK "FK to PROGRAM_CHAIRS (Tier 1)"
+        int exam_id UK,FK "FK to EXAMINATIONS.exam_id (1:1)"
+        int reviewed_by_prog_chair_id FK "FK to CHAIRS (Tier 1)"
         enum prog_chair_review_status "Pending, Approved, Returned"
-        text prog_chair_comments
-        int reviewed_by_dept_chair_id FK "FK to DEPARTMENT_CHAIRS (Tier 2)"
-        enum dept_chair_review_status "Pending, Approved, Returned"
-        text dept_chair_comments
-        int reviewed_by_di_id FK "FK to DIRECTORS (Tier 3 Clearance)"
-        enum di_review_status "Hold, Approved, Pass_Through"
+        text prog_chair_comments "Nullable"
+        timestamp prog_chair_action_timestamp "Nullable"
+        text prog_chair_signature "Nullable"
+        int reviewed_by_chair_id FK "FK to CHAIRS (Tier 2)"
+        enum chair_review_status "Pending, Approved, Returned"
+        text chair_comments "Nullable"
+        timestamp chair_action_timestamp "Nullable"
+        text chair_signature "Nullable"
+        int reviewed_by_di_id FK "FK to DIRECTORS (Tier 3)"
+        enum di_review_status "Hold, Approved, Pass_Through_Approved"
+        timestamp di_action_timestamp "Nullable"
+        text di_comments "Nullable"
+        text di_signature "Nullable"
+        text faculty_signature "Nullable"
     }
 
     STUDENT_EXAMS {
@@ -266,9 +504,10 @@ erDiagram
         int student_id FK "FK to STUDENTS"
         int exam_id FK "FK to EXAMINATIONS"
         timestamp started_at
-        timestamp submitted_at
-        int total_score
+        timestamp submitted_at "Nullable"
+        int total_score "Default 0"
         enum submission_trigger "Manual, Timeout, Cheating_Lockout"
+        int remaining_seconds "Nullable, disconnection recovery"
         int violations_count "Fullscreen/Tab switch strike counter"
     }
 
@@ -276,32 +515,123 @@ erDiagram
         int answer_id PK
         int student_exam_id FK "FK to STUDENT_EXAMS"
         int question_id FK "FK to QUESTION_BANK"
-        text submitted_response
-        boolean is_correct
-        int points_awarded
+        text submitted_response "Student input"
+        boolean is_correct "Nullable"
+        int points_awarded "Nullable"
+        timestamp last_updated_at "Autosave timestamp"
     }
 
     STUDENT_OVERRIDES {
         int override_id PK
-        int student_id FK "FK to STUDENTS (Who gets the override)"
-        int exam_id FK "FK to EXAMINATIONS (Which exam is reopened)"
+        int student_id FK "FK to STUDENTS"
+        int exam_id FK "FK to EXAMINATIONS"
         timestamp new_start_time
         timestamp new_end_time
-        boolean is_active
+        boolean is_active "Default true"
     }
 
     FACULTY_PORTFOLIOS {
         int portfolio_id PK
-        int faculty_id FK "FK to FACULTY (Instructor compliance record)"
-        string academic_year
-        int semester
+        int faculty_id FK "FK to FACULTY"
+        string academic_year "e.g. 2025-2026"
+        int semester "1 or 2"
         int total_exams_created
         decimal compliance_percentage
     }
 
     AUDIT_LOGS {
         bigint log_id PK
-        int user_id FK "FK to USERS (Who performed the action)"
+        int user_id FK "FK to USERS"
+        text action_performed "Event description"
+        string ip_address "IPv4 or IPv6"
+        timestamp timestamp
+    }
+
+    NOTIFICATIONS {
+        int notification_id PK
+        int user_id FK "FK to USERS"
+        string title
+        text message
+        boolean is_read "Default false"
+        timestamp created_at
+    }
+
+    SYSTEM_SETTINGS {
+        string key PK "e.g. active_school_year, active_semester"
+        text value
+    }
+      </pre>
+    </div>
+  </div>
+
+  <!-- TAB: AUTH & ROLES -->
+  <div id="tab-users" class="tab-content">
+    <div class="card">
+      <h2>1. User Authentication &amp; Polymorphic Roles (Table-per-Type)</h2>
+      <p class="desc">
+        Demonstrates the centralized Table-per-Type (TPT) inheritance strategy where the core <code>USERS</code> table houses authentication credentials and Supabase Auth mapping, while specialized child tables store role-specific domain attributes with <code>ON DELETE CASCADE</code> foreign keys.
+      </p>
+
+      <pre class="mermaid">
+erDiagram
+    USERS ||--o| STUDENTS : "specializes to (1:1)"
+    USERS ||--o| FACULTY : "specializes to (1:1)"
+    USERS ||--o| CHAIRS : "specializes to (1:1)"
+    USERS ||--o| DIRECTORS : "specializes to (1:1)"
+    USERS ||--o{ AUDIT_LOGS : "logs actions (1:N)"
+    USERS ||--o{ NOTIFICATIONS : "receives (1:N)"
+
+    USERS {
+        int user_id PK
+        string institutional_id UK "Unique Student/Faculty ID"
+        string username UK "Deterministic faculty username"
+        string password_hash
+        enum role "Student, Faculty, Chair, ProgramChair, Director"
+        boolean is_active
+        string supabase_uid UK "Supabase Auth UID mapping"
+        boolean require_password_update "Default false"
+        text signature "Base64 or digital signature URL"
+    }
+
+    STUDENTS {
+        int student_id PK,FK "FK to USERS.user_id"
+        string first_name
+        string middle_name "Nullable"
+        string last_name
+        int program_id FK "FK to ACADEMIC_PROGRAMS"
+        int year_level "1 to 4"
+        string section "e.g. BSIT 3-A"
+    }
+
+    FACULTY {
+        int faculty_id PK,FK "FK to USERS.user_id"
+        string first_name
+        string middle_name "Nullable"
+        string last_name
+        string institutional_email "Nullable"
+        string profile_image "Nullable URL"
+        int department_id FK "FK to DEPARTMENTS"
+        boolean has_seen_course_assignment "Default false"
+    }
+
+    CHAIRS {
+        int chair_id PK,FK "FK to USERS.user_id"
+        int department_id FK "FK to DEPARTMENTS, Nullable (Dept Chair)"
+        int program_id UK,FK "FK to ACADEMIC_PROGRAMS, Nullable (Prog Chair)"
+        boolean is_program_chair "True if Program Chair, False if Dept Chair"
+    }
+
+    DIRECTORS {
+        int director_id PK,FK "FK to USERS.user_id"
+        string first_name "Nullable"
+        string middle_name "Nullable"
+        string last_name "Nullable"
+        string title "Director for Instruction"
+    }
+
+    AUDIT_LOGS {
+        bigint log_id PK
+        int user_id FK "FK to USERS"
         text action_performed
         string ip_address
         timestamp timestamp
@@ -309,12 +639,1155 @@ erDiagram
 
     NOTIFICATIONS {
         int notification_id PK
-        int user_id FK "FK to USERS (Recipient of the notification)"
+        int user_id FK "FK to USERS"
         string title
         text message
         boolean is_read
+        timestamp created_at
     }
-    </pre>
+      </pre>
+    </div>
+  </div>
+
+  <!-- TAB: ACADEMIC HIERARCHY -->
+  <div id="tab-academic" class="tab-content">
+    <div class="card">
+      <h2>2. Academic Governance, Curriculum &amp; Enrollment Rosters</h2>
+      <p class="desc">
+        Depicts the institutional hierarchy linking Departments, Academic Programs, Courses, and student/faculty enrollment junction tables.
+      </p>
+
+      <pre class="mermaid">
+erDiagram
+    DEPARTMENTS ||--|{ ACADEMIC_PROGRAMS : "offers (1:N)"
+    DEPARTMENTS ||--|{ FACULTY : "employs (1:N)"
+    DEPARTMENTS ||--o{ CHAIRS : "administers (1:N)"
+
+    ACADEMIC_PROGRAMS ||--|{ STUDENTS : "enrolls (1:N)"
+    ACADEMIC_PROGRAMS ||--o| CHAIRS : "program chair (1:1 UK)"
+    ACADEMIC_PROGRAMS ||--o{ EXAM_TARGETS : "targets (1:N)"
+
+    STUDENTS ||--|{ STUDENT_COURSES : "enrolled in (1:N)"
+    COURSES ||--|{ STUDENT_COURSES : "roster (1:N)"
+
+    FACULTY ||--|{ FACULTY_COURSES : "assigned to teach (1:N)"
+    COURSES ||--|{ FACULTY_COURSES : "teaching assignment (1:N)"
+
+    DEPARTMENTS {
+        int department_id PK
+        string department_name "e.g. Computing & Technology"
+    }
+
+    ACADEMIC_PROGRAMS {
+        int program_id PK
+        string program_code UK "e.g. BSIT"
+        string program_name
+        int department_id FK "FK to DEPARTMENTS"
+    }
+
+    COURSES {
+        int course_id PK
+        string course_code UK "e.g. IT 101"
+        string course_title
+        string syllabus_file_path "Nullable"
+    }
+
+    STUDENT_COURSES {
+        int student_id PK,FK "FK to STUDENTS.student_id"
+        int course_id PK,FK "FK to COURSES.course_id"
+        timestamp enrolled_at
+    }
+
+    FACULTY_COURSES {
+        int faculty_id PK,FK "FK to FACULTY.faculty_id"
+        int course_id PK,FK "FK to COURSES.course_id"
+        timestamp assigned_at
+    }
+
+    STUDENTS {
+        int student_id PK,FK
+        string first_name
+        string last_name
+        int program_id FK
+        int year_level
+        string section
+    }
+
+    FACULTY {
+        int faculty_id PK,FK
+        string first_name
+        string last_name
+        int department_id FK
+    }
+
+    CHAIRS {
+        int chair_id PK,FK
+        int department_id FK
+        int program_id UK,FK
+        boolean is_program_chair
+    }
+      </pre>
+    </div>
+  </div>
+
+  <!-- TAB: EXAMS & TOS -->
+  <div id="tab-exams" class="tab-content">
+    <div class="card">
+      <h2>3. Examination Engine, Table of Specifications (TOS) &amp; Question Bank</h2>
+      <p class="desc">
+        Illustrates the core test authoring subsystem where faculty configure test metadata, define cognitive distribution via Table of Specifications (TOS), schedule exam cohorts, and author test items in the reusable question bank pool.
+      </p>
+
+      <pre class="mermaid">
+erDiagram
+    COURSES ||--|{ EXAMINATIONS : "assesses (1:N)"
+    FACULTY ||--|{ EXAMINATIONS : "authors (1:N)"
+    EXAMINATIONS ||--o| TABLE_OF_SPECIFICATIONS : "guided by TOS (1:1 UK)"
+    EXAMINATIONS ||--|{ EXAM_TARGETS : "schedules cohorts (1:N)"
+    EXAMINATIONS ||--o{ QUESTION_BANK : "contains questions (1:N)"
+    COURSES ||--o{ QUESTION_BANK : "course question bank (1:N)"
+
+    EXAMINATIONS {
+        int exam_id PK
+        string title "e.g. Midterm Examination in IT 101"
+        int course_id FK "FK to COURSES"
+        int faculty_id FK "FK to FACULTY"
+        text tos_file_path "Attached TOS file"
+        int time_limit_minutes "Strict timer in minutes"
+        boolean randomize_items "Default true"
+        enum current_status "Draft, Pending_Prog_Chair, Pending_Chair, Pending_DI, Approved, Returned"
+        int time_penalty_seconds "Default 60"
+        int score_penalty_points "Default 2"
+        string academic_year "e.g. 2025-2026"
+        string term "Prelim, Midterm, Semi-Final, Final"
+        string semester "1st or 2nd Semester"
+        date exam_date
+        string document_reference "Document code"
+        intArray selected_student_ids "Selective targeting"
+        boolean is_archived "Default false"
+    }
+
+    TABLE_OF_SPECIFICATIONS {
+        int tos_id PK
+        int exam_id UK,FK "FK to EXAMINATIONS (1:1)"
+        int target_total_items "Default 50"
+        text topic_plans_json "Bloom taxonomy, hours, weights"
+        text learning_outcomes_json "Nullable"
+        text tos_file_url "Nullable"
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    EXAM_TARGETS {
+        int target_id PK
+        int exam_id FK "FK to EXAMINATIONS"
+        int program_id FK "FK to ACADEMIC_PROGRAMS"
+        int year_level "Target year level"
+        string section "Target section"
+        date scheduled_date
+        time start_time
+        time end_time
+    }
+
+    QUESTION_BANK {
+        int question_id PK
+        int exam_id FK "FK to EXAMINATIONS, Nullable"
+        int course_id FK "FK to COURSES, Nullable"
+        text question_text
+        enum question_type "Multiple_Choice, True_False, ID, Matching, Essay, Blanks"
+        text correct_answer "Answer key / structure"
+        int points "Points awarded"
+        string topic "Nullable"
+        int year_level "Nullable"
+    }
+      </pre>
+    </div>
+  </div>
+
+  <!-- TAB: WORKFLOWS -->
+  <div id="tab-workflows" class="tab-content">
+    <div class="card">
+      <h2>4. Three-Tier Approval Workflow State Machine &amp; Digital Signatures</h2>
+      <p class="desc">
+        Outlines the sequential quality assurance and institutional clearance pipeline: Stage 1 (Program Chair curriculum audit) &rarr; Stage 2 (Department Chair departmental sign-off) &rarr; Stage 3 (Director for Instruction clearance with pass-through optimization).
+      </p>
+
+      <pre class="mermaid">
+erDiagram
+    EXAMINATIONS ||--o| APPROVAL_WORKFLOWS : "routed through (1:1 UK)"
+    CHAIRS ||--o{ APPROVAL_WORKFLOWS : "Stage 1: Prog Chair Review (1:N)"
+    CHAIRS ||--o{ APPROVAL_WORKFLOWS : "Stage 2: Dept Chair Review (1:N)"
+    DIRECTORS ||--o{ APPROVAL_WORKFLOWS : "Stage 3: DI Clearance (1:N)"
+
+    APPROVAL_WORKFLOWS {
+        int workflow_id PK
+        int exam_id UK,FK "FK to EXAMINATIONS.exam_id (1:1)"
+        int reviewed_by_prog_chair_id FK "FK to CHAIRS (Stage 1)"
+        enum prog_chair_review_status "Pending, Approved, Returned"
+        text prog_chair_comments "Revision notes or approval remarks"
+        timestamp prog_chair_action_timestamp "Timestamp"
+        text prog_chair_signature "Digital signature string/URL"
+        int reviewed_by_chair_id FK "FK to CHAIRS (Stage 2)"
+        enum chair_review_status "Pending, Approved, Returned"
+        text chair_comments "Revision notes or approval remarks"
+        timestamp chair_action_timestamp "Timestamp"
+        text chair_signature "Digital signature string/URL"
+        int reviewed_by_di_id FK "FK to DIRECTORS (Stage 3)"
+        enum di_review_status "Hold, Approved, Pass_Through_Approved"
+        timestamp di_action_timestamp "Timestamp"
+        text di_comments "Hold reason or clearance remarks"
+        text di_signature "Digital signature string/URL"
+        text faculty_signature "Author digital signature"
+    }
+
+    CHAIRS {
+        int chair_id PK,FK
+        int department_id FK
+        int program_id UK,FK
+        boolean is_program_chair
+    }
+
+    DIRECTORS {
+        int director_id PK,FK
+        string first_name
+        string last_name
+        string title
+    }
+
+    EXAMINATIONS {
+        int exam_id PK
+        string title
+        enum current_status "Draft, Pending_Prog_Chair, Pending_Chair, Pending_DI, Approved, Returned"
+    }
+      </pre>
+    </div>
+  </div>
+
+  <!-- TAB: TESTING & OVERRIDES -->
+  <div id="tab-testing" class="tab-content">
+    <div class="card">
+      <h2>5. Student Testing Engine, Anti-Cheating Safeguards &amp; Overrides</h2>
+      <p class="desc">
+        Tracks real-time student test sessions, incremental answer persistence, disconnection recovery with frozen clocks, focus-violation strike counters, and individualized administrative reschedule overrides.
+      </p>
+
+      <pre class="mermaid">
+erDiagram
+    STUDENTS ||--o{ STUDENT_EXAMS : "takes exam session (1:N)"
+    EXAMINATIONS ||--o{ STUDENT_EXAMS : "exam sessions (1:N)"
+
+    STUDENTS ||--o{ STUDENT_OVERRIDES : "receives override (1:N)"
+    EXAMINATIONS ||--o{ STUDENT_OVERRIDES : "overridden for (1:N)"
+
+    STUDENT_EXAMS ||--|{ STUDENT_ANSWERS : "records item answers (1:N)"
+    QUESTION_BANK ||--|{ STUDENT_ANSWERS : "grades against (1:N)"
+
+    STUDENT_EXAMS {
+        int student_exam_id PK
+        int student_id FK "FK to STUDENTS.student_id"
+        int exam_id FK "FK to EXAMINATIONS.exam_id"
+        timestamp started_at
+        timestamp submitted_at "Nullable"
+        int total_score "Default 0"
+        enum submission_trigger "Manual, Timeout, Cheating_Lockout"
+        int remaining_seconds "Nullable, preserved on disconnect"
+        int violations_count "Fullscreen/Tab switch strike counter"
+    }
+
+    STUDENT_ANSWERS {
+        int answer_id PK
+        int student_exam_id FK "FK to STUDENT_EXAMS.student_exam_id"
+        int question_id FK "FK to QUESTION_BANK.question_id"
+        text submitted_response "Student response"
+        boolean is_correct "Nullable"
+        int points_awarded "Nullable"
+        timestamp last_updated_at "Autosaved timestamp"
+    }
+
+    STUDENT_OVERRIDES {
+        int override_id PK
+        int student_id FK "FK to STUDENTS.student_id"
+        int exam_id FK "FK to EXAMINATIONS.exam_id"
+        timestamp new_start_time "Reopened window start"
+        timestamp new_end_time "Reopened window deadline"
+        boolean is_active "Default true"
+    }
+
+    QUESTION_BANK {
+        int question_id PK
+        text question_text
+        enum question_type "Multiple_Choice, True_False, ID, Matching, Essay, Blanks"
+        text correct_answer
+        int points
+    }
+
+    STUDENTS {
+        int student_id PK,FK
+        string first_name
+        string last_name
+        string section
+    }
+
+    EXAMINATIONS {
+        int exam_id PK
+        string title
+        int time_penalty_seconds "Deducted per violation"
+        int score_penalty_points "Points deducted per violation"
+    }
+      </pre>
+    </div>
+  </div>
+
+  <!-- TAB: COMPLIANCE & AUDITING -->
+  <div id="tab-compliance" class="tab-content">
+    <div class="card">
+      <h2>6. Institutional Governance, Faculty Portfolios &amp; System Logs</h2>
+      <p class="desc">
+        Details system-wide accountability records, including term compliance portfolios for faculty, immutable audit logs with IP tracking, and real-time alerts.
+      </p>
+
+      <pre class="mermaid">
+erDiagram
+    FACULTY ||--o{ FACULTY_PORTFOLIOS : "tracks compliance (1:N)"
+    USERS ||--o{ AUDIT_LOGS : "logs actions (1:N)"
+    USERS ||--o{ NOTIFICATIONS : "receives (1:N)"
+
+    FACULTY_PORTFOLIOS {
+        int portfolio_id PK
+        int faculty_id FK "FK to FACULTY.faculty_id"
+        string academic_year "e.g. 2025-2026"
+        int semester "1 or 2"
+        int total_exams_created "Count of exams authored"
+        decimal compliance_percentage "Syllabus/TOS compliance rate"
+    }
+
+    AUDIT_LOGS {
+        bigint log_id PK
+        int user_id FK "FK to USERS.user_id"
+        text action_performed "Description of security event"
+        string ip_address "Client IP address"
+        timestamp timestamp "Default now()"
+    }
+
+    NOTIFICATIONS {
+        int notification_id PK
+        int user_id FK "FK to USERS.user_id"
+        string title
+        text message
+        boolean is_read "Default false"
+        timestamp created_at
+    }
+
+    SYSTEM_SETTINGS {
+        string key PK "e.g. active_school_year, active_semester"
+        text value
+    }
+
+    USERS {
+        int user_id PK
+        string institutional_id UK
+        enum role
+    }
+
+    FACULTY {
+        int faculty_id PK,FK
+        string first_name
+        string last_name
+    }
+      </pre>
+    </div>
+  </div>
+
+  <!-- TAB: DATA DICTIONARY -->
+  <div id="tab-dictionary" class="tab-content">
+    <div class="card">
+      <h2>Database Data Dictionary &amp; Column Reference</h2>
+      <p class="desc">
+        Complete reference manual for all 22 database tables, column data types, constraints, default values, and relational keys.
+      </p>
+
+      <!-- Table: USERS -->
+      <table class="dictionary-table">
+        <thead>
+          <tr>
+            <th colspan="5" class="table-section-title">USERS (Database Map: USERS) — Core Identity &amp; Auth</th>
+          </tr>
+          <tr>
+            <th style="width: 20%;">Column Name</th>
+            <th style="width: 18%;">Data Type</th>
+            <th style="width: 12%;">Constraints</th>
+            <th style="width: 15%;">Default</th>
+            <th>Description &amp; Business Rules</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>user_id</code></td>
+            <td><code>INTEGER</code></td>
+            <td><span class="legend-tag tag-pk">PK</span> Auto-increment</td>
+            <td>Next sequence</td>
+            <td>Unique surrogate primary key for all system accounts.</td>
+          </tr>
+          <tr>
+            <td><code>institutional_id</code></td>
+            <td><code>VARCHAR(50)</code></td>
+            <td><span class="legend-tag tag-uk">UK</span> NOT NULL</td>
+            <td>—</td>
+            <td>Institutional matriculation or employee number (e.g., <code>2023-1002</code>, <code>FAC-001</code>).</td>
+          </tr>
+          <tr>
+            <td><code>username</code></td>
+            <td><code>VARCHAR(50)</code></td>
+            <td><span class="legend-tag tag-uk">UK</span> NULLABLE</td>
+            <td>NULL</td>
+            <td>Deterministic login username generated for faculty (e.g., <code>miAgCa</code>).</td>
+          </tr>
+          <tr>
+            <td><code>password_hash</code></td>
+            <td><code>VARCHAR(255)</code></td>
+            <td>NOT NULL</td>
+            <td>—</td>
+            <td>Bcrypt hashed password credential.</td>
+          </tr>
+          <tr>
+            <td><code>role</code></td>
+            <td><code>ENUM (Role)</code></td>
+            <td>NOT NULL</td>
+            <td>—</td>
+            <td>Access control role: <code>Student</code>, <code>Faculty</code>, <code>Chair</code>, <code>ProgramChair</code>, <code>Director</code>.</td>
+          </tr>
+          <tr>
+            <td><code>is_active</code></td>
+            <td><code>BOOLEAN</code></td>
+            <td>NOT NULL</td>
+            <td><code>true</code></td>
+            <td>Account active toggle for administrative suspension or withdrawal.</td>
+          </tr>
+          <tr>
+            <td><code>supabase_uid</code></td>
+            <td><code>VARCHAR</code></td>
+            <td><span class="legend-tag tag-uk">UK</span> NULLABLE</td>
+            <td>NULL</td>
+            <td>Foreign reference to Supabase Auth UUID (<code>auth.users.id</code>) for JWT &amp; Realtime session sync.</td>
+          </tr>
+          <tr>
+            <td><code>require_password_update</code></td>
+            <td><code>BOOLEAN</code></td>
+            <td>NOT NULL</td>
+            <td><code>false</code></td>
+            <td>Flag forcing the user to change temporary credentials upon initial login.</td>
+          </tr>
+          <tr>
+            <td><code>signature</code></td>
+            <td><code>TEXT</code></td>
+            <td>NULLABLE</td>
+            <td>NULL</td>
+            <td>Base64 encoded digital signature image string or storage URL for document endorsement.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- Table: STUDENTS -->
+      <table class="dictionary-table">
+        <thead>
+          <tr>
+            <th colspan="5" class="table-section-title">STUDENTS (Database Map: STUDENTS) — Student Profile</th>
+          </tr>
+          <tr>
+            <th style="width: 20%;">Column Name</th>
+            <th style="width: 18%;">Data Type</th>
+            <th style="width: 12%;">Constraints</th>
+            <th style="width: 15%;">Default</th>
+            <th>Description &amp; Business Rules</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>student_id</code></td>
+            <td><code>INTEGER</code></td>
+            <td><span class="legend-tag tag-pk">PK</span> <span class="legend-tag tag-fk">FK</span></td>
+            <td>—</td>
+            <td>1:1 foreign key referencing <code>USERS.user_id</code> with <code>ON DELETE CASCADE</code>.</td>
+          </tr>
+          <tr>
+            <td><code>first_name</code></td>
+            <td><code>VARCHAR(100)</code></td>
+            <td>NOT NULL</td>
+            <td>—</td>
+            <td>Legal first name.</td>
+          </tr>
+          <tr>
+            <td><code>middle_name</code></td>
+            <td><code>VARCHAR(100)</code></td>
+            <td>NULLABLE</td>
+            <td>NULL</td>
+            <td>Legal middle name.</td>
+          </tr>
+          <tr>
+            <td><code>last_name</code></td>
+            <td><code>VARCHAR(100)</code></td>
+            <td>NOT NULL</td>
+            <td>—</td>
+            <td>Legal surname.</td>
+          </tr>
+          <tr>
+            <td><code>program_id</code></td>
+            <td><code>INTEGER</code></td>
+            <td><span class="legend-tag tag-fk">FK</span> NOT NULL</td>
+            <td>—</td>
+            <td>Foreign key referencing <code>ACADEMIC_PROGRAMS.program_id</code>.</td>
+          </tr>
+          <tr>
+            <td><code>year_level</code></td>
+            <td><code>INTEGER</code></td>
+            <td>NOT NULL</td>
+            <td>—</td>
+            <td>Current academic year level (1 = 1st Year, 2 = 2nd Year, etc.).</td>
+          </tr>
+          <tr>
+            <td><code>section</code></td>
+            <td><code>VARCHAR(100)</code></td>
+            <td>NOT NULL</td>
+            <td>—</td>
+            <td>Class cohort identifier (e.g., <code>BSIT 3-A</code>).</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- Table: FACULTY -->
+      <table class="dictionary-table">
+        <thead>
+          <tr>
+            <th colspan="5" class="table-section-title">FACULTY (Database Map: FACULTY) — Instructor Profile</th>
+          </tr>
+          <tr>
+            <th style="width: 20%;">Column Name</th>
+            <th style="width: 18%;">Data Type</th>
+            <th style="width: 12%;">Constraints</th>
+            <th style="width: 15%;">Default</th>
+            <th>Description &amp; Business Rules</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>faculty_id</code></td>
+            <td><code>INTEGER</code></td>
+            <td><span class="legend-tag tag-pk">PK</span> <span class="legend-tag tag-fk">FK</span></td>
+            <td>—</td>
+            <td>1:1 foreign key referencing <code>USERS.user_id</code> with <code>ON DELETE CASCADE</code>.</td>
+          </tr>
+          <tr>
+            <td><code>first_name</code></td>
+            <td><code>VARCHAR(100)</code></td>
+            <td>NOT NULL</td>
+            <td>—</td>
+            <td>Instructor first name.</td>
+          </tr>
+          <tr>
+            <td><code>middle_name</code></td>
+            <td><code>VARCHAR(100)</code></td>
+            <td>NULLABLE</td>
+            <td>NULL</td>
+            <td>Instructor middle name.</td>
+          </tr>
+          <tr>
+            <td><code>last_name</code></td>
+            <td><code>VARCHAR(100)</code></td>
+            <td>NOT NULL</td>
+            <td>—</td>
+            <td>Instructor last name.</td>
+          </tr>
+          <tr>
+            <td><code>institutional_email</code></td>
+            <td><code>VARCHAR(255)</code></td>
+            <td>NULLABLE</td>
+            <td>NULL</td>
+            <td>Official institutional email address (e.g., <code>faculty@bsc.edu.ph</code>).</td>
+          </tr>
+          <tr>
+            <td><code>profile_image</code></td>
+            <td><code>VARCHAR(255)</code></td>
+            <td>NULLABLE</td>
+            <td>NULL</td>
+            <td>Avatar profile image file path or public URL.</td>
+          </tr>
+          <tr>
+            <td><code>department_id</code></td>
+            <td><code>INTEGER</code></td>
+            <td><span class="legend-tag tag-fk">FK</span> NOT NULL</td>
+            <td>—</td>
+            <td>Foreign key referencing <code>DEPARTMENTS.department_id</code>.</td>
+          </tr>
+          <tr>
+            <td><code>has_seen_course_assignment</code></td>
+            <td><code>BOOLEAN</code></td>
+            <td>NOT NULL</td>
+            <td><code>false</code></td>
+            <td>Acknowledgement flag for newly assigned courses/teaching loads.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- Table: CHAIRS -->
+      <table class="dictionary-table">
+        <thead>
+          <tr>
+            <th colspan="5" class="table-section-title">CHAIRS (Database Map: CHAIRS) — Department &amp; Program Chairs</th>
+          </tr>
+          <tr>
+            <th style="width: 20%;">Column Name</th>
+            <th style="width: 18%;">Data Type</th>
+            <th style="width: 12%;">Constraints</th>
+            <th style="width: 15%;">Default</th>
+            <th>Description &amp; Business Rules</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>chair_id</code></td>
+            <td><code>INTEGER</code></td>
+            <td><span class="legend-tag tag-pk">PK</span> <span class="legend-tag tag-fk">FK</span></td>
+            <td>—</td>
+            <td>1:1 foreign key referencing <code>USERS.user_id</code> with <code>ON DELETE CASCADE</code>.</td>
+          </tr>
+          <tr>
+            <td><code>department_id</code></td>
+            <td><code>INTEGER</code></td>
+            <td><span class="legend-tag tag-fk">FK</span> NULLABLE</td>
+            <td>NULL</td>
+            <td>Foreign key to <code>DEPARTMENTS</code> for Department Chairpersons.</td>
+          </tr>
+          <tr>
+            <td><code>program_id</code></td>
+            <td><code>INTEGER</code></td>
+            <td><span class="legend-tag tag-fk">FK</span> <span class="legend-tag tag-uk">UK</span> NULLABLE</td>
+            <td>NULL</td>
+            <td>Unique foreign key to <code>ACADEMIC_PROGRAMS</code> for Program Chairpersons.</td>
+          </tr>
+          <tr>
+            <td><code>is_program_chair</code></td>
+            <td><code>BOOLEAN</code></td>
+            <td>NOT NULL</td>
+            <td><code>false</code></td>
+            <td>Discriminator: <code>true</code> = Program Chair (Stage 1), <code>false</code> = Dept Chair (Stage 2).</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- Table: DIRECTORS -->
+      <table class="dictionary-table">
+        <thead>
+          <tr>
+            <th colspan="5" class="table-section-title">DIRECTORS (Database Map: DIRECTORS) — Director for Instruction</th>
+          </tr>
+          <tr>
+            <th style="width: 20%;">Column Name</th>
+            <th style="width: 18%;">Data Type</th>
+            <th style="width: 12%;">Constraints</th>
+            <th style="width: 15%;">Default</th>
+            <th>Description &amp; Business Rules</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>director_id</code></td>
+            <td><code>INTEGER</code></td>
+            <td><span class="legend-tag tag-pk">PK</span> <span class="legend-tag tag-fk">FK</span></td>
+            <td>—</td>
+            <td>1:1 foreign key referencing <code>USERS.user_id</code> with <code>ON DELETE CASCADE</code>.</td>
+          </tr>
+          <tr>
+            <td><code>first_name</code></td>
+            <td><code>VARCHAR(100)</code></td>
+            <td>NULLABLE</td>
+            <td>NULL</td>
+            <td>Director's first name.</td>
+          </tr>
+          <tr>
+            <td><code>middle_name</code></td>
+            <td><code>VARCHAR(100)</code></td>
+            <td>NULLABLE</td>
+            <td>NULL</td>
+            <td>Director's middle name.</td>
+          </tr>
+          <tr>
+            <td><code>last_name</code></td>
+            <td><code>VARCHAR(100)</code></td>
+            <td>NULLABLE</td>
+            <td>NULL</td>
+            <td>Director's last name.</td>
+          </tr>
+          <tr>
+            <td><code>title</code></td>
+            <td><code>VARCHAR(100)</code></td>
+            <td>NULLABLE</td>
+            <td>"Director for Instruction"</td>
+            <td>Official institutional administrative title.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- Table: EXAMINATIONS -->
+      <table class="dictionary-table">
+        <thead>
+          <tr>
+            <th colspan="5" class="table-section-title">EXAMINATIONS (Database Map: EXAMINATIONS) — Core Test Definitions</th>
+          </tr>
+          <tr>
+            <th style="width: 20%;">Column Name</th>
+            <th style="width: 18%;">Data Type</th>
+            <th style="width: 12%;">Constraints</th>
+            <th style="width: 15%;">Default</th>
+            <th>Description &amp; Business Rules</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>exam_id</code></td>
+            <td><code>INTEGER</code></td>
+            <td><span class="legend-tag tag-pk">PK</span> Auto-increment</td>
+            <td>Next sequence</td>
+            <td>Primary key for examination instances.</td>
+          </tr>
+          <tr>
+            <td><code>title</code></td>
+            <td><code>VARCHAR(150)</code></td>
+            <td>NOT NULL</td>
+            <td>—</td>
+            <td>Descriptive title (e.g., <code>Midterm Examination in ENT 403</code>).</td>
+          </tr>
+          <tr>
+            <td><code>course_id</code></td>
+            <td><code>INTEGER</code></td>
+            <td><span class="legend-tag tag-fk">FK</span> NOT NULL</td>
+            <td>—</td>
+            <td>Foreign key referencing <code>COURSES.course_id</code>.</td>
+          </tr>
+          <tr>
+            <td><code>faculty_id</code></td>
+            <td><code>INTEGER</code></td>
+            <td><span class="legend-tag tag-fk">FK</span> NOT NULL</td>
+            <td>—</td>
+            <td>Foreign key referencing author in <code>FACULTY.faculty_id</code>.</td>
+          </tr>
+          <tr>
+            <td><code>tos_file_path</code></td>
+            <td><code>TEXT</code></td>
+            <td>NOT NULL</td>
+            <td>—</td>
+            <td>File system or bucket storage reference to the uploaded TOS document.</td>
+          </tr>
+          <tr>
+            <td><code>time_limit_minutes</code></td>
+            <td><code>INTEGER</code></td>
+            <td>NOT NULL</td>
+            <td>—</td>
+            <td>Allocated testing duration in minutes.</td>
+          </tr>
+          <tr>
+            <td><code>randomize_items</code></td>
+            <td><code>BOOLEAN</code></td>
+            <td>NOT NULL</td>
+            <td><code>true</code></td>
+            <td>Permutes test questions per student to inhibit visual plagiarism.</td>
+          </tr>
+          <tr>
+            <td><code>current_status</code></td>
+            <td><code>ENUM (ExamStatus)</code></td>
+            <td>NOT NULL</td>
+            <td><code>Draft</code></td>
+            <td>State machine: <code>Draft</code>, <code>Pending_Program_Chair</code>, <code>Pending_Chair</code>, <code>Pending_DI</code>, <code>Approved</code>, <code>Returned</code>.</td>
+          </tr>
+          <tr>
+            <td><code>time_penalty_seconds</code></td>
+            <td><code>INTEGER</code></td>
+            <td>NOT NULL</td>
+            <td><code>60</code></td>
+            <td>Seconds deducted automatically from student timer per full-screen/tab-switch exit.</td>
+          </tr>
+          <tr>
+            <td><code>score_penalty_points</code></td>
+            <td><code>INTEGER</code></td>
+            <td>NOT NULL</td>
+            <td><code>2</code></td>
+            <td>Score points docked per anti-cheating strike.</td>
+          </tr>
+          <tr>
+            <td><code>academic_year</code></td>
+            <td><code>VARCHAR(20)</code></td>
+            <td>NULLABLE</td>
+            <td>NULL</td>
+            <td>Academic school year (e.g., <code>2025-2026</code>).</td>
+          </tr>
+          <tr>
+            <td><code>term</code></td>
+            <td><code>VARCHAR(50)</code></td>
+            <td>NULLABLE</td>
+            <td>NULL</td>
+            <td>Examination period: <code>Prelim</code>, <code>Midterm</code>, <code>Semi-Final</code>, <code>Final</code>.</td>
+          </tr>
+          <tr>
+            <td><code>semester</code></td>
+            <td><code>VARCHAR(50)</code></td>
+            <td>NULLABLE</td>
+            <td>NULL</td>
+            <td>Semester term (e.g., <code>1st Semester</code>).</td>
+          </tr>
+          <tr>
+            <td><code>exam_date</code></td>
+            <td><code>DATE</code></td>
+            <td>NULLABLE</td>
+            <td>NULL</td>
+            <td>Target calendar administration date.</td>
+          </tr>
+          <tr>
+            <td><code>document_reference</code></td>
+            <td><code>VARCHAR(100)</code></td>
+            <td>NULLABLE</td>
+            <td>NULL</td>
+            <td>Formal institutional document control tracking ID.</td>
+          </tr>
+          <tr>
+            <td><code>selected_student_ids</code></td>
+            <td><code>INTEGER[]</code></td>
+            <td>NOT NULL</td>
+            <td><code>[]</code></td>
+            <td>Array of specific student IDs for special batch testing.</td>
+          </tr>
+          <tr>
+            <td><code>is_archived</code></td>
+            <td><code>BOOLEAN</code></td>
+            <td>NOT NULL</td>
+            <td><code>false</code></td>
+            <td>Archive soft-delete flag.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- Table: TABLE_OF_SPECIFICATIONS -->
+      <table class="dictionary-table">
+        <thead>
+          <tr>
+            <th colspan="5" class="table-section-title">TABLE_OF_SPECIFICATIONS (Database Map: TABLE_OF_SPECIFICATIONS)</th>
+          </tr>
+          <tr>
+            <th style="width: 20%;">Column Name</th>
+            <th style="width: 18%;">Data Type</th>
+            <th style="width: 12%;">Constraints</th>
+            <th style="width: 15%;">Default</th>
+            <th>Description &amp; Business Rules</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>tos_id</code></td>
+            <td><code>INTEGER</code></td>
+            <td><span class="legend-tag tag-pk">PK</span> Auto-increment</td>
+            <td>Next sequence</td>
+            <td>Primary key for TOS records.</td>
+          </tr>
+          <tr>
+            <td><code>exam_id</code></td>
+            <td><code>INTEGER</code></td>
+            <td><span class="legend-tag tag-fk">FK</span> <span class="legend-tag tag-uk">UK</span> NOT NULL</td>
+            <td>—</td>
+            <td>1:1 foreign key referencing <code>EXAMINATIONS.exam_id</code> with <code>ON DELETE CASCADE</code>.</td>
+          </tr>
+          <tr>
+            <td><code>target_total_items</code></td>
+            <td><code>INTEGER</code></td>
+            <td>NOT NULL</td>
+            <td><code>50</code></td>
+            <td>Sum of all items intended across topics.</td>
+          </tr>
+          <tr>
+            <td><code>topic_plans_json</code></td>
+            <td><code>TEXT</code></td>
+            <td>NOT NULL</td>
+            <td>—</td>
+            <td>Structured JSON array detailing topic hours, percentages, and cognitive level breakdowns (Remembering, Understanding, Applying, Analyzing, Evaluating, Creating).</td>
+          </tr>
+          <tr>
+            <td><code>learning_outcomes_json</code></td>
+            <td><code>TEXT</code></td>
+            <td>NULLABLE</td>
+            <td>NULL</td>
+            <td>JSON payload of Intended Learning Outcomes (ILOs) mapped to curriculum syllabi.</td>
+          </tr>
+          <tr>
+            <td><code>tos_file_url</code></td>
+            <td><code>TEXT</code></td>
+            <td>NULLABLE</td>
+            <td>NULL</td>
+            <td>Public/authenticated storage link to uploaded TOS spreadsheet or PDF.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- Table: APPROVAL_WORKFLOWS -->
+      <table class="dictionary-table">
+        <thead>
+          <tr>
+            <th colspan="5" class="table-section-title">APPROVAL_WORKFLOWS (Database Map: APPROVAL_WORKFLOWS) — 3-Tier Quality Review</th>
+          </tr>
+          <tr>
+            <th style="width: 20%;">Column Name</th>
+            <th style="width: 18%;">Data Type</th>
+            <th style="width: 12%;">Constraints</th>
+            <th style="width: 15%;">Default</th>
+            <th>Description &amp; Business Rules</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>workflow_id</code></td>
+            <td><code>INTEGER</code></td>
+            <td><span class="legend-tag tag-pk">PK</span> Auto-increment</td>
+            <td>Next sequence</td>
+            <td>Primary key for workflow entries.</td>
+          </tr>
+          <tr>
+            <td><code>exam_id</code></td>
+            <td><code>INTEGER</code></td>
+            <td><span class="legend-tag tag-fk">FK</span> <span class="legend-tag tag-uk">UK</span> NOT NULL</td>
+            <td>—</td>
+            <td>1:1 foreign key referencing <code>EXAMINATIONS.exam_id</code> with <code>ON DELETE CASCADE</code>.</td>
+          </tr>
+          <tr>
+            <td><code>reviewed_by_prog_chair_id</code></td>
+            <td><code>INTEGER</code></td>
+            <td><span class="legend-tag tag-fk">FK</span> NULLABLE</td>
+            <td>NULL</td>
+            <td>Foreign key to <code>CHAIRS.chair_id</code> for Stage 1 Program Chair reviewer.</td>
+          </tr>
+          <tr>
+            <td><code>prog_chair_review_status</code></td>
+            <td><code>ENUM (ReviewStatus)</code></td>
+            <td>NULLABLE</td>
+            <td><code>Pending</code></td>
+            <td><code>Pending</code>, <code>Approved</code>, or <code>Returned</code>.</td>
+          </tr>
+          <tr>
+            <td><code>prog_chair_comments</code></td>
+            <td><code>TEXT</code></td>
+            <td>NULLABLE</td>
+            <td>NULL</td>
+            <td>Feedback comments or revision instructions from Program Chair.</td>
+          </tr>
+          <tr>
+            <td><code>prog_chair_signature</code></td>
+            <td><code>TEXT</code></td>
+            <td>NULLABLE</td>
+            <td>NULL</td>
+            <td>Cryptographic or digital image stamp of Program Chair.</td>
+          </tr>
+          <tr>
+            <td><code>reviewed_by_chair_id</code></td>
+            <td><code>INTEGER</code></td>
+            <td><span class="legend-tag tag-fk">FK</span> NULLABLE</td>
+            <td>NULL</td>
+            <td>Foreign key to <code>CHAIRS.chair_id</code> for Stage 2 Department Chair reviewer.</td>
+          </tr>
+          <tr>
+            <td><code>chair_review_status</code></td>
+            <td><code>ENUM (ReviewStatus)</code></td>
+            <td>NOT NULL</td>
+            <td><code>Pending</code></td>
+            <td><code>Pending</code>, <code>Approved</code>, or <code>Returned</code>.</td>
+          </tr>
+          <tr>
+            <td><code>chair_comments</code></td>
+            <td><code>TEXT</code></td>
+            <td>NULLABLE</td>
+            <td>NULL</td>
+            <td>Department Chair remarks.</td>
+          </tr>
+          <tr>
+            <td><code>chair_signature</code></td>
+            <td><code>TEXT</code></td>
+            <td>NULLABLE</td>
+            <td>NULL</td>
+            <td>Department Chair digital endorsement signature.</td>
+          </tr>
+          <tr>
+            <td><code>reviewed_by_di_id</code></td>
+            <td><code>INTEGER</code></td>
+            <td><span class="legend-tag tag-fk">FK</span> NULLABLE</td>
+            <td>NULL</td>
+            <td>Foreign key referencing <code>DIRECTORS.director_id</code> for Stage 3 DI clearance.</td>
+          </tr>
+          <tr>
+            <td><code>di_review_status</code></td>
+            <td><code>ENUM (DIStatus)</code></td>
+            <td>NOT NULL</td>
+            <td><code>Hold</code></td>
+            <td><code>Hold</code>, <code>Approved</code>, or <code>Pass_Through_Approved</code> (auto-live upon Chair approval unless held).</td>
+          </tr>
+          <tr>
+            <td><code>di_comments</code></td>
+            <td><code>TEXT</code></td>
+            <td>NULLABLE</td>
+            <td>NULL</td>
+            <td>Written remarks explaining clearance or hold justification.</td>
+          </tr>
+          <tr>
+            <td><code>di_signature</code></td>
+            <td><code>TEXT</code></td>
+            <td>NULLABLE</td>
+            <td>NULL</td>
+            <td>Director for Instruction digital endorsement signature.</td>
+          </tr>
+          <tr>
+            <td><code>faculty_signature</code></td>
+            <td><code>TEXT</code></td>
+            <td>NULLABLE</td>
+            <td>NULL</td>
+            <td>Faculty author formal digital signature upon submission.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- Table: STUDENT_EXAMS & STUDENT_ANSWERS -->
+      <table class="dictionary-table">
+        <thead>
+          <tr>
+            <th colspan="5" class="table-section-title">STUDENT_EXAMS &amp; STUDENT_ANSWERS — Testing Session &amp; Response Ledger</th>
+          </tr>
+          <tr>
+            <th style="width: 20%;">Column Name</th>
+            <th style="width: 18%;">Data Type</th>
+            <th style="width: 12%;">Constraints</th>
+            <th style="width: 15%;">Default</th>
+            <th>Description &amp; Business Rules</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>student_exam_id</code></td>
+            <td><code>INTEGER</code></td>
+            <td><span class="legend-tag tag-pk">PK</span> Auto-increment</td>
+            <td>Next sequence</td>
+            <td>Surrogate primary key for student test sessions.</td>
+          </tr>
+          <tr>
+            <td><code>student_id</code></td>
+            <td><code>INTEGER</code></td>
+            <td><span class="legend-tag tag-fk">FK</span> NOT NULL</td>
+            <td>—</td>
+            <td>Foreign key referencing <code>STUDENTS.student_id</code>.</td>
+          </tr>
+          <tr>
+            <td><code>exam_id</code></td>
+            <td><code>INTEGER</code></td>
+            <td><span class="legend-tag tag-fk">FK</span> NOT NULL</td>
+            <td>—</td>
+            <td>Foreign key referencing <code>EXAMINATIONS.exam_id</code>.</td>
+          </tr>
+          <tr>
+            <td><code>started_at</code></td>
+            <td><code>TIMESTAMP</code></td>
+            <td>NOT NULL</td>
+            <td>Current time</td>
+            <td>Timestamp when student initialized testing session.</td>
+          </tr>
+          <tr>
+            <td><code>submitted_at</code></td>
+            <td><code>TIMESTAMP</code></td>
+            <td>NULLABLE</td>
+            <td>NULL</td>
+            <td>Timestamp when session concluded.</td>
+          </tr>
+          <tr>
+            <td><code>total_score</code></td>
+            <td><code>INTEGER</code></td>
+            <td>NOT NULL</td>
+            <td><code>0</code></td>
+            <td>Sum of awarded points across objective and graded subjective questions.</td>
+          </tr>
+          <tr>
+            <td><code>submission_trigger</code></td>
+            <td><code>ENUM (SubmissionType)</code></td>
+            <td>NOT NULL</td>
+            <td>—</td>
+            <td>Trigger cause: <code>Manual</code> (student submitted), <code>Timeout</code> (timer expired), or <code>Cheating_Lockout</code>.</td>
+          </tr>
+          <tr>
+            <td><code>remaining_seconds</code></td>
+            <td><code>INTEGER</code></td>
+            <td>NULLABLE</td>
+            <td>NULL</td>
+            <td>Cached countdown clock saved during unexpected disconnections/device shutdown.</td>
+          </tr>
+          <tr>
+            <td><code>violations_count</code></td>
+            <td><code>INTEGER</code></td>
+            <td>NOT NULL</td>
+            <td><code>0</code></td>
+            <td>Cumulative count of tab switches or full-screen exits.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- Table: STUDENT_OVERRIDES -->
+      <table class="dictionary-table">
+        <thead>
+          <tr>
+            <th colspan="5" class="table-section-title">STUDENT_OVERRIDES (Database Map: STUDENT_OVERRIDES) — Special Accommodations</th>
+          </tr>
+          <tr>
+            <th style="width: 20%;">Column Name</th>
+            <th style="width: 18%;">Data Type</th>
+            <th style="width: 12%;">Constraints</th>
+            <th style="width: 15%;">Default</th>
+            <th>Description &amp; Business Rules</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>override_id</code></td>
+            <td><code>INTEGER</code></td>
+            <td><span class="legend-tag tag-pk">PK</span> Auto-increment</td>
+            <td>Next sequence</td>
+            <td>Primary key for override entries.</td>
+          </tr>
+          <tr>
+            <td><code>student_id</code></td>
+            <td><code>INTEGER</code></td>
+            <td><span class="legend-tag tag-fk">FK</span> NOT NULL</td>
+            <td>—</td>
+            <td>Foreign key referencing <code>STUDENTS.student_id</code> with <code>ON DELETE CASCADE</code>.</td>
+          </tr>
+          <tr>
+            <td><code>exam_id</code></td>
+            <td><code>INTEGER</code></td>
+            <td><span class="legend-tag tag-fk">FK</span> NOT NULL</td>
+            <td>—</td>
+            <td>Foreign key referencing <code>EXAMINATIONS.exam_id</code> with <code>ON DELETE CASCADE</code>.</td>
+          </tr>
+          <tr>
+            <td><code>new_start_time</code></td>
+            <td><code>TIMESTAMP</code></td>
+            <td>NOT NULL</td>
+            <td>—</td>
+            <td>Reopened start window timestamp.</td>
+          </tr>
+          <tr>
+            <td><code>new_end_time</code></td>
+            <td><code>TIMESTAMP</code></td>
+            <td>NOT NULL</td>
+            <td>—</td>
+            <td>Reopened end deadline timestamp.</td>
+          </tr>
+          <tr>
+            <td><code>is_active</code></td>
+            <td><code>BOOLEAN</code></td>
+            <td>NOT NULL</td>
+            <td><code>true</code></td>
+            <td>Active flag. Unique constraint ensures one active override per <code>(student_id, exam_id)</code>.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
   </div>
 
   <script>
@@ -326,6 +1799,18 @@ erDiagram
         layoutDirection: 'TB'
       }
     });
+
+    function showTab(tabId) {
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+      
+      const target = document.getElementById(tabId);
+      if (target) {
+        target.classList.add('active');
+      }
+
+      event.currentTarget.classList.add('active');
+    }
   </script>
 </body>
 </html>
