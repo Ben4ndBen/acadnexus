@@ -108,10 +108,7 @@ export default async function LoginPage() {
           {/* Framework Legal Compliance Footnote */}
           <div className="text-center pt-2">
             <p className="text-[11px] text-neutral-400 leading-5 transition-colors duration-300 hover:text-neutral-500">
-              © 2026 Batanes State College. Unified Role Routing Architecture. <br />
-              <span className="text-neutral-400 font-semibold hover:text-[#7A151A] hover:underline hover:underline-offset-2 cursor-pointer transition-all duration-200">Privacy Charter</span>
-              &nbsp;&bull;&nbsp;
-              <span className="text-neutral-400 font-semibold hover:text-[#7A151A] hover:underline hover:underline-offset-2 cursor-pointer transition-all duration-200">Audit & Security Desk</span>
+              © 2026 Batanes State College. Unified Role Routing Architecture.
             </p>
           </div>
 
